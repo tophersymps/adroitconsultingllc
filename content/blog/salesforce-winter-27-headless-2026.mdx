@@ -1,0 +1,151 @@
+---
+title: "Winter '27 Went Headless: What Builds Change Now"
+slug: salesforce-winter-27-headless-2026
+excerpt: "Every Salesforce capability is now reachable as an API, an MCP tool, or a CLI command. Build it once and an app, a person, or an agent can all call it."
+category: Salesforce
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 14, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [Salesforce, Winter '27, Agentforce, Flow, Headless]
+bannerImage: /banners/salesforce-winter-27-headless-2026.webp
+ogImage: /banners/salesforce-winter-27-headless-2026-og.jpg
+---
+
+Winter '27 is generally available as of October 12, 2026, and it is not a feature drop. It is an architectural reset. Salesforce's own developer guide says the headline out loud: under the hood the release runs on a headless architecture, and every major capability is now available as an API, a Model Context Protocol (MCP) tool, or a CLI command. Any authenticated caller can use it, whether that caller is an app, a human, or an AI agent.[^1]
+
+Read that sentence again, because it changes how you should think about almost every build on the platform from here forward. For fifteen years the practical question in a Salesforce implementation was "which surface do I build for?" The answer forced a choice between a Lightning page, an Experience Cloud portal, an API integration, or a flow triggered by a button. Winter '27 collapses that choice. You build the capability once, and the same Flow, Apex action, or agent is reachable everywhere at once. The implementation skill shifts from wiring a single surface to designing a capability that is safe and useful across every surface at the same time.
+
+This article walks the changes a client-facing team actually has to act on. It is organized around the four layers that moved most in this release: the headless tooling that exposes your work everywhere, the Flow security and resilience changes you must adopt now, the Apex room and agent tooling that arrived with API version 68, and the API and security deadlines that land on a calendar whether you plan for them or not.
+
+## One capability, three surfaces, an agent on top
+
+The cleanest way to read Winter '27 is "build once, show everywhere." The mechanism is the smaller pieces that already existed. Salesforce hosted MCP servers went GA in Summer '26, and they let an external AI client call flows, Apex, and Data 360 under a caller's permissions.[^2] Winter '27 stretches that into a full platform posture. MCP now works in both directions. Your Agentforce agents can call MCP tools from the outside, and any MCP client, from Claude to ChatGPT to Cursor, can call your agents as tools.[^3]
+
+The shift that matters most is not the connector type. It is the assumption it breaks. If the same Flow builder logic, the same Apex invocable method, and the same agent are all callable from a CLI command and from an MCP tool, then nobody should be building a one-off REST endpoint just to give an agent access to a capability that already exists inside the org. The reuse is no longer a refactor you do on a rainy day. It is the default shape of the platform.
+
+The Headless Experience Layer (HXL) makes the point concrete and it is in beta. You define a rich UI once, as a widget, and render it natively inside Agentforce, Claude, and Slackbot with the same widget definition.[^4] The snow-report example in the official guide wires an Apex invocable method to a custom Lightning type, which maps to an HXL widget through four pieces of metadata that reference each other by name. The result is one action whose output shows up as an interactive card no matter which client the user is talking to.[^5]
+
+For a client-facing team, the practical consequence is a rule: when you design a new capability, ask first which surface it lives on, then expose it in a way the other surfaces can call without a bespoke bridge. If you are building a flow that produces a useful result, an agent running in Slack or an app running in a browser should be able to invoke the same logic, not a re-implementation of it.
+
+![Winter '27 headless architecture: one Flow or Apex capability is exposed three ways, as an API, as an MCP tool, and as a CLI command, and an app, a human user, and an AI agent can all call the same capability through any of those surfaces.](</diagrams/salesforce-winter-27-headless-2026/1-headless-three-surfaces.png>)
+
+## Flow grew a security default and a resilience reflex
+
+The most important Flow change in Winter '27 is not a feature. It closes a hole that has been quietly leaking data for years. It is the new run context option, User Context Enforces User Permissions, available on screen flows and autolaunched flows saved at API version 68 or later.[^6]
+
+Here is the old behavior, stated plainly because it is a genuine vulnerability. If you configured a flow to run in user context, and that flow was then called by another flow, by Apex, or by some other automation running in system context, the called flow inherited the elevated permissions of its caller. So a screen flow designed to respect the running user's object-level access and sharing rules could, at runtime, run with system context privileges the moment a system-context process invoked it. That is precisely the failure a data leak in production is made of.[^7]
+
+The v68 option forces the flow to run strictly with the running user's object-level access and sharing rules no matter how it is invoked. Salesforce states the intent directly: it prevents security leaks. To get it, save the flow with API version 68.0 or later, open the properties, and under How to Run the Flow select the new User Context option. Do this for every flow you currently run in user context, and add it to your standard for every new autolaunched or screen flow that touches user data.[^6]
+
+The second Flow change is a resilience reflex. Record-triggered flows now retry automatically when they hit a record lock error during transaction initialization. The flow waits ten seconds and tries again, giving the lock time to release.[^8] Any team that has watched a flow fail with UNABLE_TO_LOCK_ROW because two processes touched the same record at the same moment will recognize how much silent support work this removes. It is one less class of 2am pager page, and it is automatic.
+
+The rest of the Flow tooling push is about making complex flows testable instead of feared. Flow Test Mode (beta) gives record-triggered and autolaunched flows a unified space to run a one-off test scenario, save it, add assertions, and rerun it later as regression coverage.[^9] The most useful piece is mock outputs. In Test Mode you can tell an Action or Subflow element to return a predefined JSON result instead of actually calling the external service, which means you can validate your flow's logic and deliberately trigger fault paths without depending on a rate-limited API or a down sandbox downstream.[^10] For client teams that ship flows into production and pray, this is the first realistic path to a repeatable flow test suite that does not require a live external dependency to exist.
+
+Flow Builder in Winter '27 also autogenerates element labels as you build, catches missing required fields and field-length errors at save time instead of at runtime, and surfaces the Agent Action panel so you can see what an agent will do without leaving the canvas.[^11] None of those are glamorous. Together they move the pain of maintaining a complex flow from "figure out why it broke in production" to "see the problem before you save."
+
+![Flow user-context fix in Winter '27: before, a flow configured to run in user context inherited the elevated system permissions of a system-context caller and could leak data; after, the User Context Enforces User Permissions option in API version 68 forces the flow to run strictly with the running user's object-level access and sharing rules no matter how it is called.](</diagrams/salesforce-winter-27-headless-2026/2-flow-user-context.png>)
+
+## Apex got room to work and an on-ramp to agents
+
+Apex in Winter '27 is a needed upgrade to the ceiling. The heap limit rises from 6 MB to 10 MB for synchronous transactions and from 12 MB to 25 MB for asynchronous transactions, and the new limits are turned on automatically.[^12] If you have ever deleted a working chunk of code purely to fit a result into the heap, this is the permission to stop. If you deploy from a Winter '27 sandbox into a Summer '26 production org, keep the Summer '26 limit enforced in the sandbox until production upgrades, so your builds and your production runtime measure the same ceiling.[^12]
+
+The Salesforce CLI adds async scaffolding that bakes in best practice. New Batchable and Queueable values for the template flag generate async Apex that follows platform conventions, and the Queueable template attaches a Finalizer so your post-job logic runs even after an unhandled exception.[^13] For teams that hand-write Queueable classes and forget the Finalizer until a job silently dies, this is a template worth adopting as the default.
+
+Winter '27 also gives Apex developers their first real integration-test escape hatch. Integration tests, in developer preview, let you call a real external service from a scratch org instead of relying on a mock that can hide a broken named credential or payload. They are not available in production orgs or sandboxes, and they do not count toward code coverage.[^14] That matches exactly the testing gap a consultant hits: unit tests prove your code's logic, but nobody proves the callout actually works until it runs in production. Standalone callout tests you can run deliberately bridge that gap, even if they are not part of the CI coverage metric.
+
+Two Apex features are worth a mention for what they enable rather than what they fix. The Apex Symbol API returns the same type information the Apex compiler uses, and the official guide points at it as a way to ground a coding agent before it writes Apex.[^15] And ApexGuru, surfaced through the Salesforce DX MCP server scale-products toolset, lets a coding agent scan Apex for performance antipatterns from inside Agentforce Vibes, Claude Code, or Cursor, at no extra cost for Unlimited Edition, Signature Success Plan, and Scale Test customers.[^16] The pattern across both is the same as the release's thesis: the platform's own tooling is now designed to be driven by an agent, not just by a person in an IDE.
+
+## Agents became reusable, moveable, and exposable
+
+Winter '27 is where Agentforce stops being a screen you configure and starts being a library of capabilities. Three changes matter to a client implementation.
+
+First, agents are MCP tools now. In Setup you open a custom MCP server, add a tool with Agentforce Agent as the backing type, pick the agent, and publish. An external MCP client, Claude, ChatGPT, or Cursor, sends a request and your agent handles it with its own instructions, actions, and knowledge sources. Every call runs as the authenticated user, so sharing rules, field-level security, and Einstein Trust Layer policies still apply.[^17] Salesforce's own guidance sharpens the design rule: external models pick tools based on name and description, so make each tool task-specific. One sales agent can back a Schedule a Meeting tool and a Forecast Deal tool instead of a single generic sales agent, and you update the description whenever the agent's instructions change.[^18]
+
+Second, multi-agent orchestration is generally available. You connect an orchestrator agent to specialized agents and declare a specialist as a connected subagent, then hand off to it like any other subagent.[^19] This is the pattern a mature implementation needs: a concierge agent that routes to a menu specialist, a claims specialist, an underwriting specialist, each doing one job well instead of one bloated agent trying to do everything. Winter '27 also adds deterministic escalation through a top-level escalate statement, so an agent hands a conversation to a human when a condition is met rather than hoping the model decides to.[^20]
+
+Third, moving agents between orgs got dramatically simpler, and this one deserves attention because it is a deployment gap every team hits. Starting in API version 68, an agent is described by two metadata types, AiAgentDefinition and AiAgentDefinitionVersion, and you no longer list every planner, plugin, Apex class, flow, and prompt template by hand. One retrieve command pulls a version with its dependencies in a single pass.[^21] If you have ever spent an afternoon reassembling an agent by hand after a sandbox refresh or an environment promotion, this is the fix that makes agent code genuinely portable.
+
+![Agents as MCP tools in Winter '27: an external client such as Claude, ChatGPT, or Cursor calls your Agentforce agent as a tool and every call runs with the authenticated user's sharing rules and field-level security; in the other direction, your Agentforce agent can call external MCP server tools as actions.](</diagrams/salesforce-winter-27-headless-2026/3-agents-as-mcp-tools.png>)
+
+## The calendar of API and security deadlines
+
+Winter '27 ships API version 68.0, which is the date anchor the rest of the platform moves on. Around that anchor, four deadlines arrive whether you plan for them or not. A client-facing team should put these on an actual calendar this week.
+
+The nearest is November 1 for the CLI, but it is really October 28. The Salesforce CLI no longer prints access tokens, SFDX auth URLs, or passwords from commands like org display. The temporary workaround that restored the old output goes away on October 28, 2026. A build script that reads an access token from org display JSON gets a redacted value instead, and the failure surfaces later as a 401.[^22] Audit your CI jobs now, and switch to the explicit sf org auth show-access-token style commands where a secret is genuinely needed.
+
+Next is December 1, 2026. Beginning that date, every user who authenticates with the SOAP API login() call needs the Use Any API Auth user permission, in all orgs. Users without it get an error.[^23] This is a step toward the bigger retirement: SOAP login() in API versions 31.0 through 64.0 retires in Summer '27.[^24] If any of your client's integrations still authenticate with a username and password over SOAP, the migration to OAuth with external client apps is not an option. It is a deadline with a date.
+
+Then the version floor climbs. SOAP, REST, and Bulk API versions 31.0 through 40.0 are being retired. They stop getting security updates and bug fixes in Summer '27 and calls to them fail in Summer '28.[^25] This is the recurring cost of the platform: old versions accrete in middleware and scripts and eventually break.
+
+![The Winter '27 API and security deadline calendar: October 28 2026 the CLI stops printing secrets, December 1 2026 the Use Any API Auth permission is enforced for SOAP login, Summer 2027 SOAP login in API versions 31 through 64 retires, and Summer 2027 then Summer 2028 REST SOAP and Bulk API versions 31 through 40 are deprecated then retired.](</diagrams/salesforce-winter-27-headless-2026/4-deadline-calendar.png>)
+
+Search your client's integrations, ETL jobs, and middleware for hard-coded versions in that range now, and move anything you find to a current version. Winter '27 helps by letting you replace a numbered version segment in a REST URI with latest, which routes to the newest version the org supports, useful for scripts and internal tools even if production integrations stay pinned to a contract they depend on.[^26]
+
+Two release updates land in this release's window and can quietly break existing builds. Profile filtering is enforced in Winter '27: with it on, users can only see their own profile name unless they hold the View All Profiles permission, so any Apex, flow, or integration that queries or displays profile names for other users must be tested before your instance updates.[^27] And the connected-apps shift is underway: Salesforce ends support for connected apps in Summer '27, and the release update lets you migrate connected apps to external client apps at your own pace from inside App Manager.[^28] The credential governance article on this site covers why that migration matters; the short version is that unsupported authentication infrastructure is risk you are paying for. The org-side posture change behind all of these dates, deny by default on who can authenticate and see data, is the same shift we walked through in [the identity seam piece](/field-notes/salesforce-integration-seams-2026), where the retirement calendar forces each inbound and outbound integration to make an explicit auth decision.
+
+## Headless is a test of reuse discipline, not a new product
+
+The readback for a client team is not "learn the new Winter '27 features." It is "the platform now expects you to build capabilities that are safe to call from anywhere, and it gives you the tools to do so." The headless architecture rewards the implementation discipline that has always been the hard part: name a capability once, put its logic in one place, and expose it so an app, a person, and an agent all reach the same authoritative version.
+
+The concrete to-do list from this release is short and concrete. Save flows that run in user context at API version 68 and adopt the Enforces User Permissions option, because the alternative is a data leak you cannot see until it happens. Give up the heap-budget gymnastics in Apex and let the new limits do their job, but keep the Summer '26 ceiling in any sandbox that targets an older production org. Start treating your agents as task-specific MCP tools and adopt the AiAgentDefinition metadata so agents move between environments without a rebuild. Put the four deadlines, October 28 for the CLI, December 1 for Use Any API Auth, Summer '27 for SOAP login(), and Summer '27 and '28 for API versions 31 through 40, on a calendar with an owner for each.
+
+None of this is a reason to rebuild what already works. It is a reason to stop building the old way for what comes next. The platform is now headless by default, and a team that designs for every surface at once will be well ahead of one that treats the new surfaces as one more integration to bolt on later.
+
+[^1]: Salesforce Developer Blog, "The Salesforce Developer's Guide to the Winter '27 Release" (October 5, 2026). The headless architecture statement: "Every major Salesforce capability is available as an API, a Model Context Protocol (MCP) tool, or a CLI command. Any authenticated caller can use it, whether that's an app, a human, or an AI agent." [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^2]: The Salesforce Developer's Guide to the Summer '26 Release (June 8, 2026). Hosted MCP Servers GA. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/06/the-salesforce-developers-guide-to-the-summer-26-release)
+
+[^3]: Winter '27 Developer Guide, "Salesforce MCP updates." [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^4]: Winter '27 Developer Guide, "Headless Experience Layer (Beta)." [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^5]: Winter '27 Developer Guide, the snow-report widget example wiring an Apex action to a custom Lightning type and an HXL widget through four reference-by-name metadata pieces. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^6]: Salesforce Admins Blog, Jen's Top Winter '27 Release Features For Admins (October 5, 2026), Flow Builder section: "Enforce user permissions regardless how a Flow runs." [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)
+
+[^7]: Jen's Top Winter '27 Admin Features, the explanation that user-context flows previously inherited elevated system-level permissions from a system-context caller (another flow, Apex, or other automation). [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)
+
+[^8]: Jen's Top Winter '27 Admin Features, "Flows now retry automatically on record lock errors," waits ten seconds and retries. [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)
+
+[^9]: Winter '27 Developer Guide, "Flow and Process Run-Time Changes in API Version 68.0" and Jen's Top Winter '27 Admin Features, "Debug and test flows from one place with Test Mode (Beta)." [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)
+
+[^10]: Jen's Top Winter '27 Admin Features, "Test Flows in isolation with mock outputs for Action and Subflow Elements (Beta)." [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)
+
+[^11]: Jen's Top Winter '27 Admin Features, Flow Builder improvements: autogenerated element labels, save-time required-field and field-length validation, and Agent Action panel in Flow Builder. [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)
+
+[^12]: Winter '27 Developer Guide, "Handle larger payloads with higher heap limits". 6 to 10 MB synchronously, 12 to 25 MB asynchronously, turned on automatically, with the cross-version deploy note. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^13]: Winter '27 Developer Guide, "Scaffold async Apex with built-in best practices". new Batchable and Queueable template flag values, Finalizer on the Queueable template. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^14]: Winter '27 Developer Guide, "Test real callouts with Apex integration tests (Developer Preview)". scratch org only, not production or sandboxes, does not count toward coverage, @IntegrationTest annotation. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^15]: Winter '27 Developer Guide, "Look up Apex types with the Apex Symbol API (Beta)." [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^16]: Winter '27 Developer Guide, "Scan Apex for performance antipatterns with ApexGuru". the scale-products toolset, no extra cost for Unlimited Edition, Signature Success Plan, and Scale Test customers. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^17]: Winter '27 Developer Guide, "Expose your Agentforce agents as MCP tools". external client calls run as the authenticated user with sharing rules, field-level security, and Einstein Trust Layer policies applied. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^18]: Winter '27 Developer Guide, the tool task-specificity tip ("external models choose tools based only on the name and description... make each tool task-specific"). [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^19]: Winter '27 Developer Guide, "Delegate to specialist agents with Multi-Agent Orchestration (GA)". connected_subagent, handoff, delegate_escalation. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^20]: Winter '27 Developer Guide, Agent Script updates. expression functions including json_path, else if chains, and the top-level escalate statement for deterministic escalation. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^21]: Winter '27 Developer Guide, "Deploy agents between orgs with simplified metadata types". AiAgentDefinition and AiAgentDefinitionVersion, one retrieve with dependencies, both orgs on API version 68. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^22]: Winter '27 Developer Guide, "Move off the temporary secrets workaround". SF_TEMP_SHOW_SECRETS goes away October 28, 2026. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^23]: Winter '27 Developer Guide, "Assign Use Any API Auth before December 1, 2026." [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^24]: Winter '27 Developer Guide, SOAP login() in API versions 31.0 through 64.0 retires in Summer '27; move to OAuth with external client apps. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^25]: Winter '27 Developer Guide, "Plan for the retirement of API versions 31.0 through 40.0". Summer '27 deprecation, Summer '28 retirement. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^26]: Winter '27 Developer Guide, "Use latest instead of a numbered REST API version." [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)
+
+[^27]: Jen's Top Winter '27 Admin Features, "Enable Profile Filtering (Release Update)". enforced in Winter '27, users see only their own profile name unless they hold View All Profiles, test Apex/flows/integrations that query profile names for other users. [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)
+
+[^28]: Jen's Top Winter '27 Admin Features, "Migrate All Connected Apps to External Client Apps (Release Update)". Salesforce ends support for connected apps in Summer '27; migrate from App Manager. [admin.salesforce.com](https://admin.salesforce.com/blog/2026/jens-top-winter-27-release-features-for-admins)

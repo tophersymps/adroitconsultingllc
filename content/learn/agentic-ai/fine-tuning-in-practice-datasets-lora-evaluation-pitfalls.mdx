@@ -1,0 +1,105 @@
+---
+title: "Lesson 65: Fine-tuning in Practice: Datasets, LoRA, Evaluation, and Pitfalls"
+slug: fine-tuning-in-practice-datasets-lora-evaluation-pitfalls
+series: "agentic-ai"
+lesson: 65
+excerpt: "Deciding you need to fine-tune is only the first move. This lesson is the manual for doing it well: how to shape a dataset that actually teaches a model, how Low-Rank Adaptation (LoRA) makes training affordable on a single GPU by freezing the model and updating a few million parameters instead of billions, how to evaluate a tuned model against a held-out set before you trust it, and the pitfalls that sink fine-tuning projects in practice."
+date: "October 10, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [LLMs, Fine-tuning, LoRA, Evaluation, Machine Learning]
+---
+
+Lesson 64 handed you the decision framework: when the gap is a durable behavior, a fixed output format, a consistent voice, or a narrow domain skill, and you have labeled examples, fine-tuning is the tool. This lesson assumes you made that call and now face the harder question that follows. You have decided to fine-tune. What do you actually do? The honest answer is that the training run is the least of it. The dataset decides whether the model learns anything, LoRA decides whether the training fits in your budget, evaluation decides whether you can trust the result, and the pitfalls decide whether the whole project quietly dies after weeks of expensive compute.
+
+So the practical order matters. Build the data first, because it is the single highest-leverage input. Spend the training efficiently, because full retraining is rarely justified. Prove the result with a measurement you trust before you let it near production. And know the traps that end projects, because most fine-tuning failures are not training failures at all. They are data and evaluation failures wearing a training costume.
+
+## The dataset is the model
+
+There is a blunt rule that shows up across every serious guide to fine-tuning: the quality of the tuned model is bounded by the quality of the examples you give it. No amount of clever training can manufacture behavior that is not present in the data, and bad examples will teach bad behavior as reliably as good ones teach good behavior. OpenAI's supervised fine-tuning documentation puts the workflow as four parts: build a training dataset that defines what good looks like, upload it, run the job against a base model, then evaluate the result. [^1] The first step is the one that gets skipped in the rush to train, and it is the one that decides everything after it.
+
+On volume, the vendor guidance is more forgiving than the instinct to hoard data. The minimum number of examples for fine-tuning is ten, but the documentation is explicit that you start seeing improvements around fifty to one hundred examples, and it recommends starting with fifty carefully built demonstrations rather than scraping together whatever you can find. [^1] This runs against the intuition that more data is always better. For supervised fine-tuning, a small set of clean, representative examples that mirror real production prompts beats a large set of noisy, duplicated, off-distribution ones. If fifty well-crafted examples do not move the needle, the guidance is to reconsider the task or the prompt before adding more training data, because more of the wrong data compounds the wrong behavior. [^1]
+
+What actually makes an example good? It should be realistic, meaning as close as possible to the prompts your deployed application will actually receive, and it should pair each prompt with the output you want the model to produce, ideally a human-generated ground truth rather than something a weaker model wrote. [^1] The data format is JSONL, one complete JSON object per line, using the chat messages structure with roles for the user, the assistant, and optionally a system message. [^1] You write a prompt, the exact assistant response you want, and the model learns to reproduce that response under that prompt. The same shape appears across vendors. Microsoft Foundry's fine-tuning documentation asks you to save separate training and validation files with one conversation per line, and the JSON structure reads the same way. [^2]
+
+There is a second flavor worth naming because it appears in the same documentation set. Supervised fine-tuning gives the model pairs of prompt and desired output. Direct preference optimization, or DPO, gives it a correct and an incorrect response for the same prompt and asks it to learn which to prefer. [^1] Supervised fine-tuning suits classification, format generation, and instruction-following fixes. DPO suits getting a voice, tone, or emphasis right, where a contrast between a good and a bad answer teaches the target more sharply than a single target does. [^1] Keep both in your vocabulary; the dataset you need depends on which behavior you are installing.
+
+![Supervised fine-tuning learns to reproduce a single target response for a prompt, while direct preference optimization compares a good and a bad answer and learns which to prefer. SFT suits classification, format and instruction-following; DPO suits voice and tone. Start with roughly 50 to 100 clean examples.](</diagrams/fine-tuning-in-practice-datasets-lora-evaluation-pitfalls/1-sft-vs-dpo.png>)
+
+## The worked example: a support tone problem
+
+Run the dataset through a concrete case to make it visible. A company runs an agent that writes customer-facing support replies. The general model answers accurately but in a flat, mechanical voice that reads like a liability waiver. The team decides to fine-tune for tone and format. They collect real, manually reviewed examples from their support team, not generated ones, because a tone skill is exactly the kind of thing a weaker model reproduces badly. Each example follows the JSONL chat shape:
+
+```
+{"messages":[{"role":"system","content":"You write short, warm support replies for Acme. End every reply with one clear next action."},{"role":"user","content":"My invoice is showing a charge I don't recognize."},{"role":"assistant","content":"Thanks for flagging that. I checked your account and the charge on file is the monthly plan. Reply CONFIRM and I will send the itemized breakdown."}]}
+```
+
+They build about seventy of these across the common cases their agent actually sees, which is over the fifty-example starting line the documentation recommends. [^1] Before training they split off a held-out set of curated examples that never touch the training run, mirroring the Microsoft guidance to keep validation and final test examples out of the training set. [^2] This set is the immovable ruler they will use to measure change. They train, they evaluate against the ruler, and they decide on that basis, not on vibes.
+
+## LoRA: training a fraction of the model
+
+Full fine-tuning updates every parameter of the base model. For a large model that means training billions of values, which demands the kind of GPU and memory budget most teams do not have for a single adaptation task. Parameter-efficient fine-tuning exists precisely to break that requirement. Low-Rank Adaptation, LoRA, is the best-known member of that family, and its core idea is compact enough to hold in one sentence: you freeze the original model and train a small set of low-rank update matrices instead. [^3]
+
+Here is what that means mechanically. Instead of updating the full weight matrix W during training, LoRA keeps W frozen and learns a small change to it that it represents as the product of two smaller matrices, A and B. The adapted weight becomes W plus the product of B and A. [^3] Because A and B are far smaller than W, the number of trainable parameters collapses. The IBM overview of LoRA uses GPT-3 as the reference point: full fine-tuning of the model would train roughly 175 billion parameters, while LoRA brings the trainable count down to about 18 million, and cutting those gradients and optimizer states is what reduces the GPU memory requirement by roughly two thirds. [^3] That is the difference between a training job that requires a research cluster and one that fits on a single GPU.
+
+The bet LoRA makes is that the change a fine-tune needs is low rank, meaning it can be expressed with far fewer degrees of freedom than the full parameter count. The original LoRA paper argued exactly this, that the weight update during adaptation has a low intrinsic rank, so a compact set of matrices captures most of it. [^4] LoRA places these small matrices inside model layers, and you choose where they go. In the Hugging Face PEFT library, which injects LoRA adapters into a model, the common knobs are visible: r is the rank of the update matrices, where a lower rank means fewer trainable parameters, target_modules names which attention or feedforward blocks receive the update matrices, and lora_alpha is the scaling factor applied to the update. [^3] Lower rank trains faster and lighter, but shaving the rank too far can cost accuracy, because the smaller update cannot represent as much change. Rank is a hyperparameter worth tuning rather than assuming. [^3]
+
+For an agent team, the practical upshot is that fine-tuning against your own data no longer requires a budget line for a GPU cluster. You freeze the base model, inject a low-rank adapter, train a few million parameters on a well-shaped dataset, and you can swap that adapter onto the base model at inference time without retraining the whole thing. [^3] You can even keep multiple adapters for different behaviors and change them per request, which is a capability full fine-tuning does not give you cheaply.
+
+![LoRA keeps the base weight matrix W frozen and adds a trained low-rank product B times A, giving an adapted weight of W plus BA. At GPT-3 scale that drops trainable parameters from about 175 billion to about 18 million and cuts GPU memory by roughly two thirds.](</diagrams/fine-tuning-in-practice-datasets-lora-evaluation-pitfalls/2-lora-adapter.png>)
+
+## Evaluation: prove the change before you trust it
+
+The most expensive mistake in fine-tuning is judging the result by how the training went. Loss on the training set is nearly useless for that judgment, because a model can memorize the examples it was shown and look great on those exact prompts while failing the moment it sees something new. The vendor guidance is unambiguous on the sequence: set up evaluation first, and only invest in fine-tuning once you have a reliable way to determine whether the tuned model beats the base model. [^1] OpenAI phrases it directly as "good evals first," because without a measurement you cannot tell whether the training helped, hurt, or did nothing at all.
+
+That measurement is a held-out set. You keep a batch of examples out of the training data entirely, as close to your real deployment conditions as you can make them, and you score the model against those prompts. [^5] The set must stay immutable through repeated experiments, because the moment eval examples influence the training data, the measurement leaks and stops meaning anything. Fireworks's fine-tuning best practices make the same point in their data-curation section: partition the data with care to avoid leakage and maintain an immutable evaluation set that represents how the model will be used. [^5]
+
+Two signals work together. The first is validation loss, computed on the held-out validation set the platform tracks during training. Microsoft's Foundry documentation gives the read that matters: if training loss keeps falling while validation loss rises, you are overfitting, and you should inspect the failing validation examples. [^2] A model that separates those two curves is memorizing the training data instead of learning a transferable behavior. The second signal is task-level scoring on your held-out set, the actual thing you care about, accuracy on classification, validity of the JSON format, correct tone on a rubric, rather than a generic loss number. Compare the tuned model against the base model on the identical held-out set after every run. If the tuned model does not beat the base on your own task metric, the training did not earn its keep, regardless of how low the reported loss went.
+
+![A line chart shows training loss falling while validation loss rises once the model starts overfitting. Score the model on an immutable held-out set, and only trust the training if the tuned model beats the base model on your own task metric.](</diagrams/fine-tuning-in-practice-datasets-lora-evaluation-pitfalls/3-evaluation-overfitting.png>)
+
+## The pitfalls that kill fine-tuning projects
+
+The failure modes worth memorizing are mostly not about the gradient math. They are about data, measurement, and scope.
+
+Overfitting on a small dataset is the classic. When the set is tiny, the model memorizes its narrow examples and generalizes poorly to anything the examples did not cover. [^5] The mitigations line up with the tooling in this lesson: use a parameter-efficient method like LoRA so there is less capacity to overfit, apply regularization such as dropout, and if you augment with synthetic data, stress-test that data against adversarial prompts to confirm it actually helps generalization rather than distorting it. [^5] More epochs, paradoxically, deepen the problem, which is why Microsoft flags that extra passes give the model more chances to learn but also increase overfitting. [^2]
+
+Data leakage is quieter and destructive. If any validation or test example sneaks into the training set, your eval numbers look artificially great while the real-world performance is worse, because the model has seen the answer to your test before. [^2][^5] The fix is process, not cleverness: carve the held-out set first, then never let it touch the training pipeline. Near-duplicate training examples are a subtler version of the same disease. Fireworks recommends hashing and semantic-similarity checks to strip duplicates, because redundant data skews gradient updates and inflates the effective sample size. [^5]
+
+Catastrophic forgetting shows up when you adapt a general model into a narrow specialist. The model can lose part of its broad capability while it learns the specialist behavior, and that loss is quiet until something in the general case breaks. It is the same trap lesson 64 flagged for fine-tuning generally, and it is more likely the more aggressively you train. [^6] The defense is evaluation beyond your happy path: include general, out-of-domain prompts in your held-out set so you catch the regression instead of shipping it.
+
+The scope trap is the one that wastes the most money. Fine-tuning is a poor way to add facts, because anything the model learns at training time freezes at that moment, and only another training run updates it. [^6] A team that fine-tunes to teach the model the contents of a document set is using the expensive tool for a job retrieval does for free, and every new document forces a retrain. If your failure is stale knowledge, that is a retrieval problem from lesson 64, not a fine-tuning problem.
+
+There is also a platform reality worth knowing. Hosted fine-tuning services run safety and moderation checks on trained models, and a model that fails enough evaluated examples in a safety category can be blocked from deployment by the platform. [^1] That is not a reason to avoid fine-tuning. It is a reason to run your own evaluations too, because the platform's checks cover its safety rules, not your use case. [^1]
+
+## The pattern to take away
+
+The whole practical workflow reduces to a numbered sequence you can run against any behavior gap.
+
+1. Define the behavior precisely. Name the output format, voice, or domain skill you are installing, in a sentence a reviewer can check.
+2. Build a small, clean dataset of fifty to a hundred realistic prompt-and-output pairs, using human ground truth where the behavior is subtle. [^1]
+3. Carve an immutable held-out set first, keep it out of training, and make it representative of real deployment. [^2][^5]
+4. Freeze the base model and train a low-rank adapter with LoRA rather than doing full retraining. Tune the rank. [^3][^4]
+5. Evaluate the tuned model against the base model on the same held-out set, using both validation loss and your own task metric. Stop when the tuned model clears the base on what you actually care about. [^1][^2][^5]
+6. Keep general prompts in the eval set to catch regression, and leave facts out of the weights entirely, handing them to retrieval instead. [^6]
+
+If any step comes back empty, the answer is to go back, not to train harder. No dataset that defines good, no eval that proves change, and no amount of compute will rescue the project.
+
+## Try it
+
+Take a behavior problem you actually have and run it through the loop on paper, no training needed yet. Write the one-sentence definition of the behavior. Draft ten prompt-and-output pairs by hand, using real inputs you have seen, and mark which ones are hard ground truth versus easy format work. Now decide two things about the plan: what held-out set would you trust as a ruler, and which of the failure modes above is the one most likely to hurt you first given how you would source data? Write two or three sentences each, then compare your held-out and pitfall answers against the worked example in this lesson. The value is not producing a training job. It is finding out whether you could even define success precisely enough to measure it, because that is the gate everything else depends on.
+
+## What's next
+
+This lesson covered how to practice fine-tuning on text: shaping a teaching dataset, adapting a model cheaply with LoRA, and proving the result with evaluation. The next lesson turns the agent's senses beyond text. Lesson 66 covers multimodal agents, the systems that read vision, listen to audio, and pull structure out of documents. If this lesson made you comfortable tuning how a model reasons about structured text, the multimodal material is where the input stops being just tokens and starts being images, sound, and raw files.
+
+## Summary
+
+Fine-tuning in practice is a data and evaluation discipline more than a training exercise. The dataset sets the ceiling on what the model can learn, and a small set of fifty to a hundred realistic, human-grounded examples beats a large pile of noisy ones, formatted as JSONL chat messages. [^1] LoRA makes the adaptation affordable by freezing the base model and training low-rank update matrices instead of billions of parameters, dropping GPT-3-scale training from 175 billion trainable parameters to about 18 million and cutting GPU memory by roughly two thirds. [^3] Evaluation must come first: an immutable held-out set, representative of deployment, scored against both validation loss and your own task metric, with the tuned model compared to the base model so you can prove the change. [^1][^2][^5] The pitfalls are mostly data and scope failures: overfitting on small sets, data leakage from eval examples contaminating training, catastrophic forgetting of general capability, and using fine-tuning to add facts it cannot keep current, which is a retrieval job from lesson 64. [^2][^5][^6]
+
+[^1]: OpenAI, "Supervised fine-tuning," OpenAI API documentation. https://developers.openai.com/api/docs/guides/supervised-fine-tuning
+[^2]: "Fine-tune a model with supervised fine-tuning in Microsoft Foundry," Microsoft Learn. https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/fine-tuning
+[^3]: "What is LoRA (Low-Rank Adaptation)?," IBM Think. https://www.ibm.com/think/topics/lora
+[^4]: Edward Hu et al., "LoRA: Low-Rank Adaptation of Large Language Models," arXiv:2106.09685. https://arxiv.org/abs/2106.09685
+[^5]: "LLM Fine-Tuning: Deep Dive & Best Practices," Fireworks AI. https://fireworks.ai/blog/llm-fine-tuning
+[^6]: "Fine-Tuning vs Retrieval Augmented Generation," Vectara. https://www.vectara.com/blog/fine-tuning-vs-retrieval-augmented-generation

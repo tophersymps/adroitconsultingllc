@@ -221,6 +221,15 @@ describe("build-audio.js --bitrate is allowlisted + argv-only (CWE-78, t_78e2828
       "#!/bin/sh\nprintf '%s\\0' \"$@\" > \"$RECORD_ARGV_TO\"\nexit 1\n",
       { mode: 0o755 },
     );
+    if (process.platform === "win32") {
+      fs.copyFileSync(process.execPath, path.join(binDir, "python.exe"));
+      const engDir = path.join(dir, "scripts", "tts", "engines");
+      fs.mkdirSync(engDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(engDir, "engine_kokoro.py"),
+        'require("fs").writeFileSync(process.env.RECORD_ARGV_TO, process.argv.slice(1).join("\\0") + "\\0");\nprocess.exit(1);\n',
+      );
+    }
     return dir;
   }
 

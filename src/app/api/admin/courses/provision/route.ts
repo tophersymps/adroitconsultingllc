@@ -14,7 +14,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { checkOrigin, checkRateLimit, getClientIp } from "@/lib/api-security";
 import { seriesExists } from "@/lib/course-readiness";
 import type { CourseRow } from "@/shared/contracts-course-catalog";
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       ? body.title.trim().slice(0, 200)
       : seriesSlug;
 
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
 
   try {
     // Idempotent: a row already exists → return it, don't duplicate.

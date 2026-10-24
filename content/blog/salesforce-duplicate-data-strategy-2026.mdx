@@ -1,0 +1,102 @@
+---
+title: Duplicate Data Is a Design Problem
+slug: salesforce-duplicate-data-strategy-2026
+excerpt: "Duplicates are designed in before the first rule runs. Matching rules, duplicate rules, org-wide jobs, and a Data Cloud identity model fix it."
+category: Salesforce
+categoryColor: "sf"
+categoryGradient: "from-sky-500 to-sky-600"
+date: "October 18, 2026"
+author: Jimmy Olsen
+authorInitials: JO
+readTime: 12
+tags: [Salesforce, Data Quality, Duplicate Management, Matching Rules, Data Cloud]
+bannerImage: /banners/salesforce-duplicate-data-strategy-2026.webp
+ogImage: /banners/salesforce-duplicate-data-strategy-2026-og.jpg
+---
+
+Duplicate records are treated as a cleanup chore, and that is why they keep coming back. By the time an admin runs a quarterly merge, the duplicates already did the damage: a rep quoted two different prices because the account existed twice, an email went out twice to the same person under two contacts, and a report overstated pipeline because the same deal was counted on both records. The average Salesforce org carries duplicates in about 18% of its records, and industry data puts the duplicate rate across CRM systems at 10 to 30% in most organizations, climbing to 40% or higher after a merger or a large data import [^8][^7]. The cleanup mental model never fixes the root cause, because the root cause is not a data entry problem. It is a design problem.
+
+This article is the duplicate strategy that actually holds: where duplicates come from, how matching and duplicate rules work together, where they silently fail, how an org-wide job surfaces the backlog, and how Data Cloud rethinks the whole question with a key ring instead of a golden record. Every claim is cited to the Salesforce docs and verified sources, and each section ends with a decision a client team can make this week.
+
+## Why Duplicates Are a Cost Center, Not a Hygiene Issue
+
+The figure that changes the conversation is what bad data costs. Gartner estimates poor data quality costs an average organization $12.9 million a year, and the per-record benchmark for a CRM duplicate is around $100 when you count wasted outreach, duplicate sends, reporting errors, and the labor to find and fix it later [^7]. Run the math on your own org: 50,000 records at a 10% duplicate rate means 5,000 duplicates, and at a common per-duplicate cost of $96 to identify, review, and merge each one, that is roughly $480,000 sitting as cleanup cost inside the database before anyone touches it [^9]. The rate is worse right after the events that build data fast: purchased lists overlap an existing database by 20 to 50%, trade-show imports land 30 to 40% of records already present, and M&A data migrations carry 30 to 60% cross-system overlaps [^7].
+
+![Duplicate records carry a measurable tax: about 18% of records in the average Salesforce org are duplicates at roughly $100 each, about 92% are created at the moment of initial entry, and the average organization loses $12.9 million a year to poor data quality](</diagrams/salesforce-duplicate-data-strategy-2026/1-duplicate-tax.png>)
+
+The origin story matters more than the rate. About 92% of duplicate records are created during initial entry or registration, when a rep or a system creates a new record instead of first searching for the one that exists [^9]. That sentence is the whole strategy in miniature. If the guardrail lives at the moment of creation, most duplicates never materialize. If it does not, every downstream system inherits the problem, and 70% of organizations report struggling with duplicate or inconsistent data specifically because they lack matching technology that works for them [^9].
+
+Start with the baseline. Before buying a tool or building a rule, run the duplicate report and a manual sample to get your true rate per object (account, contact, lead). The number decides the cure: an org at 5% needs entry-time prevention; an org at 40% needs a one-time backlog cleanup before prevention can hold. Treat the baseline as a release gate, not an exploratory query.
+
+## Matching Rules and Duplicate Rules Are Two Jobs That Ship Together
+
+Salesforce split the problem into two deliberate pieces, and misreading the split is the most common implementation error. A **matching rule** decides whether two records are candidates for being the same. A **duplicate rule** decides what happens when a match is found: block the save, or allow it and alert. A matching rule with no duplicate rule does nothing at save time, because the matching rule is only the "how do we identify them" half [^10][^2]. You pair them in Setup under Data, Duplicate Management.
+
+### What a Matching Rule Actually Computes
+
+A matching rule is an equation over field comparisons, not a single "same name" check. When you activate one, Salesforce applies one or more match keys to existing records, and the rule only considers duplicates among records that share a key. Two records that do not share a match key are never compared at all, which is the performance trick and the reason a poorly keyed rule returns nothing [^2]. The standard rules for accounts, contacts, leads, and person accounts ship with carefully tuned methods per field [^10].
+
+The contact and lead standard matching rule shows the design. First Name compares with Exact, Initials, Jaro-Winkler distance (a fuzzy similarity score), Metaphone 3 (phonetic matching), and Name Variant, and if a record has both first and last name populated, the rule transposes them to catch a swapped-name entry mistake [^10]. Title compares with Acronym, Exact, and Kullback-Leibler distance, so "VP" matches "Vice President" [^10]. Mailing Street breaks into four weighted segments, street name at 50% of the field's score, street number at 20%, street suffix at 15%, and suite number at 15%, and sums them, so "123 Market St, Ste 100" versus "123 Market Dr, Ste 300" scores 70 of a possible 80 and is correctly not a match [^10]. The lesson for your own rule building is that each field earns its own matching method, and a rule that throws the whole record into one string compare is throwing away the tuning.
+
+![Each field in a matching rule compares with its own tuned methods: first name uses exact, initials, Jaro-Winkler, Metaphone 3, and name variant; title uses acronym and Kullback-Leibler; mailing street splits into weighted segments so a near-miss stays a near-miss](</diagrams/salesforce-duplicate-data-strategy-2026/3-how-matching-computes.png>)
+
+### What a Duplicate Rule Does With the Match
+
+Once a matching rule identifies candidates, the duplicate rule picks the response. You decide whether a new or updated record is blocked outright or saved with a warning listing possible duplicates, and you can apply severity differently per action: block create and block an update that would create a duplicate, or allow with an alert [^10][^4]. Record-level security matters here. The duplicate rule has a setting that scopes it to only records the current user can access under sharing rules, versus all records regardless of access, and the docs are blunt that if you skip this, the sharing rules decide whether the rule finds anything at all [^4].
+
+The limits shape the design. You can run up to five active duplicate rules per object, and each duplicate rule can carry up to three matching rules, with one active matching rule per object at a time. Across multiple duplicate rules you can include up to five active matching rules per object [^1]. Keep the object's rule set small and legible. A wall of five overlapping rules becomes unmaintainable, and the docs note that if the first duplicate rule finds a match, later rules skip that record, so ordering rules with Block before Allow is the recommended pattern [^3].
+
+![Matching rules and duplicate rules ship as a pair: a matching rule decides whether two records are the same using a field equation and match keys, then a duplicate rule chooses whether to block the save or allow it with an alert](</diagrams/salesforce-duplicate-data-strategy-2026/2-two-jobs.png>)
+
+## Where Duplicate Rules Silently Fail
+
+The mechanics are sound, but Salesforce documents a precise list of places where duplicate rules do not run or get overridden, and a strategy that ignores the list has blind spots. Records created through Quick Create, Community Self-Registration, or Lightning Sync are not subject to the rule, and nor are records brought in by Einstein Activity Capture [^1]. A lead converted to a contact or account does not trigger the rule unless Use Apex Lead Convert is enabled, and a manual merge or an Undelete bypasses it entirely [^1]. The data import tools and the Salesforce APIs override the rule settings, so a bulk load or an integration creating records gets no alert and is not stopped [^1]. That last one is the big one for the directive's data-layer angle: an API that creates Accounts on every order will happily mint duplicates with zero friction, because the duplicate rule is silently overridden on the API path.
+
+Two more gaps hide in the docs. If the user saving the record does not have access to a field referenced by the matching rule, the rule does not work as expected for that user, so field-level security can quietly disable your duplicate protection for a whole profile [^1]. And a duplicate rule only runs on edited records when the edited fields are included in the matching rule; edit a custom field that is not in any matching rule and the rule does not fire [^1].
+
+Treat these as an audit checklist, not trivia. For every entry point in the org (UI, import, each integration, Experience Cloud self-registration, lead conversion), name which duplicate control catches it. The default answer for the API entry points is "none", which is exactly why a strategy that only configures rules in Setup still has 92% of its duplicates coming in through the front door disguised as new records.
+
+![Duplicate rules have documented blind spots: they do not run on Quick Create, community self-registration, Lightning Sync, lead conversion, undelete, or manual merges, and the data import tools and APIs override them entirely with no alert](</diagrams/salesforce-duplicate-data-strategy-2026/4-silent-failures.png>)
+
+## The Org-Wide Backup: Duplicate Jobs and Record Sets
+
+Entry-time rules cannot clean the records already in the system, and they cannot see duplicates that share no match key. That is the job of the duplicate job, which Salesforce runs org-wide to surface sets of duplicates [^2]. A duplicate job lists duplicates across the org, groups them into duplicate record sets, and lets you merge the members, and the sets are the unit of work [^2]. Each matching rule run can reassign up to 100 duplicates into a record set, and a cross-object rule, for example contacts that duplicate leads, includes the duplicates on the other object in the same set [^1].
+
+The cadence is the design decision. Run a duplicate job as a scheduled batch on a regular rhythm, monthly for a stable org, weekly during a data migration or an integration rollout, and let the duplicate record sets become a standing work queue for the data owner instead of a fire drill. Convert leads before the set is created if you want them excluded, because a converted lead is not included in the set [^1].
+
+Set an owner. A duplicate job that produces sets nobody reviews is a report, not a strategy. Assign one person or team to disposition each set, merge where it is clearly the same entity, and mark the ambiguous ones with a decision rather than leaving them open. The merge itself is where field-level discipline arrives: pick the survivor record, carry over the meaningful values, and confirm the related records (cases, opportunities, activities) move with it before you click merge, because the merge permanently folds the duplicate into the survivor.
+
+## Data Cloud: A Key Ring Instead of a Golden Record
+
+Up to here the model is merge-into-one. Data Cloud, and its Data 360 rebrand, changes that contract, and the shift matters for any client building a customer data platform on top of a duplicated CRM. Identity resolution is the engine that generates a unified profile from source profile data, and its output is deliberately not a merged "best" record [^5]. Salesforce is explicit: unified profiles are keys that unlock your data, not golden records, and identity resolution does not pick winning values or override any existing source data [^5].
+
+Think of a unified profile as a ring of keys. Each key opens a different source record, and the whole ring identifies the one person or business those records describe, without requiring you to collapse them into a single record [^5]. The two-stage process is matching then reconciliation. Match rules decide whether two records represent the same person using exact comparisons on identifiers like email and fuzzy matches for name variations and phonetic similarity, and reconciliation rules then resolve conflicts and decide which source takes precedence in the unified profile when data contradicts [^6]. For a client team, the practical consequence is that identity resolution does not delete the duplicate; it links it, so the source records stay intact and queryable through the unified object [^6].
+
+![Data Cloud identity resolution turns multiple source records into a unified profile that behaves like a key ring, not a golden record: match rules link the records, reconciliation rules settle conflicts, and no source record is overwritten or collapsed into one best record](</diagrams/salesforce-duplicate-data-strategy-2026/5-key-ring.png>)
+
+There are two implications worth stating plainly. First, Data Cloud does not excuse you from cleaning the CRM. The unified profile is built from whatever source data flows in, so garbage identifiers in the source produce a weaker key ring, not a smarter one. Second, the identity work belongs separated from the CRM access plane, which is a separate governance decision the Data Cloud strategy guide covers in its own right. For the full implementation sequence, the [Data 360 identity-resolution patterns](/field-notes/data-360-implementation-patterns) drill into the matching-to-reconciliation pipeline and the credit cost of identity resolution. The matching-and-reconciliation pattern is the Data Cloud echo of the CRM matching-rule story: decide what "same person" means, key it tightly, and review the identity graph when a link looks wrong.
+
+## A Workable Sequence
+
+The strategy that ships is not a tool purchase and not a single rule. It is a sequence that matches the way duplicates accumulate.
+
+1. **Baseline.** Measure your true duplicate rate per object with a report and a manual sample. This sets the cure and gives you a before number.
+2. **Prevent at the door.** Configure matching and duplicate rules for account, contact, and lead, tuned per field with the standard matching methods as the starting point, and order Block-before-Allow across objects.
+3. **Close the silent gaps.** Audit every API, import, and self-registration entry point and add explicit duplicate handling there, because the rules do not fire on those paths.
+4. **Clean the backlog with a job.** Run scheduled duplicate jobs, owner the record sets, and work the queue to a stable monthly rate.
+5. **Align the Data Cloud identity model.** Map reconciliation rules so the unified profile reflects agreed source-of-truth precedence, and audit the identity graph as new sources land.
+
+Duplicate data is a design problem because every system the org builds, a Flow that updates "the" account, an Agentforce action that answers from customer records, the Data Cloud profile an experience is personalized on, inherits whatever the data model decided about what counts as the same person. The org that answers that question deliberately, at every entry point and in the identity layer, stops paying the duplicate tax instead of periodically sweeping it under the rug.
+
+---
+
+[^1]: Salesforce Help, "Things to Know About Duplicate Rules." [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=sales.duplicate_rules_overview.htm&type=5)
+[^2]: Salesforce Help, "Duplicate Detection and Handling Process." [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=sales.duplicate_detection_and_handling.htm&type=5)
+[^3]: Salesforce Help, "Customize Duplicate Rules." [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=sales.duplicate_rules_create.htm&type=5)
+[^4]: Salesforce Help, "Manage Duplicate Leads and Contacts in Salesforce." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005386514&language=en_US&type=1)
+[^5]: Salesforce Help, "About Identity Resolution." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution.htm&language=en_US&type=5)
+[^6]: Dave Norris, "Building a Complete View of Your Customers with Data Cloud and Identity Resolution," Salesforce Developers Blog, October 2024. [developer.salesforce.com](https://developer.salesforce.com/blogs/2024/10/data-cloud-and-identity-resolution)
+[^7]: "The Real Cost of Duplicate Data: Calculate What Bad Records Cost Your Business." [dedupfuzzy.com](https://dedupfuzzy.com/blog/cost-of-duplicate-data-business-impact)
+[^8]: "CRM Data Accuracy Statistics." [getgangly.com](https://getgangly.com/blog/crm-adoption-statistics)
+[^9]: "What Is Salesforce Duplicate Management?" [nektar.ai](https://nektar.ai/salesforce-duplicate-management/)
+[^10]: "Resolve and Prevent Duplicate Data in Salesforce," Trailhead Salesforce Admin. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/sales_admin_duplicate_management/sales_admin_duplicate_management_unit_2)

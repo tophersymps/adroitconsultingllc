@@ -1,0 +1,120 @@
+---
+title: "Lesson 71: Enterprise Agent Platforms: Serving, Control Plane, and Data Plane"
+slug: enterprise-agent-platforms-serving-control-plane-data-plane
+series: "agentic-ai"
+lesson: 71
+excerpt: "A single agent is a program you can run on a laptop. An enterprise agent platform is the infrastructure that lets hundreds of them run safely, governed, and at scale. This lesson breaks a platform into the three planes the industry has converged on: the serving plane that hosts your model and runs inference, the control plane that governs identity, policy, and lifecycle, and the data plane where agents actually reason, call tools, and move context. You will learn what each plane owns, why the separation between them is the load-bearing idea, and how to read any vendor's platform through this lens."
+date: "October 16, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Agent Platform, Serving Plane, Control Plane, Data Plane, Inference, Governance, Enterprise AI]
+---
+
+A single agent is a program you can run on a laptop. You give it a model, a few tools, and a loop, and it works. The moment you need a hundred of them, each with its own identity, its own budget, its own access to company data, and its own audit trail, the program stops being the hard part. The hard part becomes the infrastructure that hosts them, governs them, and keeps them from stepping on each other. That infrastructure is the enterprise agent platform.
+
+This lesson gives you the mental model for reading any such platform. The industry has converged on a three-plane split: a serving plane that hosts your model and runs inference, a control plane that governs identity, policy, and lifecycle, and a data plane where agents actually do their work. Once you can see a platform as these three planes, you can look at any vendor's marketing and figure out what it actually gives you, what it leaves out, and where your own system needs to fill the gap.
+
+## The three planes, and where the idea comes from
+
+The vocabulary is not new. It comes from networking, where the control plane and data plane have been separated for decades. In a network, the control plane decides how traffic should be handled, and the data plane actually moves it. [^1] The same separation carries over to agent infrastructure almost unchanged. The agent runtime, whether that is a managed service, an orchestration framework, or a custom script, is the execution layer: it reasons, plans, and calls tools. The control plane is the governance layer that sits above and across those runtimes, applying policy, enforcing identity, metering cost, and keeping an audit record, independent of which runtime the assets are called from. [^1]
+
+Snowflake states the split in the same terms. In distributed systems, the data plane is where work happens: requests are processed, data moves, functions run, and applications respond. The control plane governs how that work is configured and managed. For AI agents, the data plane is where each agent reasons, calls tools, retrieves context, writes outputs, and completes tasks. The control plane sits above those agent runtimes, applying identity, policy, monitoring, and lifecycle controls across them. [^2]
+
+The third plane, serving, is the layer that hosts the model and runs inference. Red Hat's blueprint for cloud-native agents makes the distinction crisp: the model is a stateless inference service, and the harness turns it into an agent by owning the loop, the memory, the context window, and the tool calls. [^3] The serving plane is where that inference service lives, whether it is a local model server, a cloud endpoint, or a cluster of GPU workers behind a gateway.
+
+So the three planes answer three different questions. The serving plane answers "where does the model run and how do requests reach it." The control plane answers "who is allowed to do what, and how do we know it happened." The data plane answers "where does the agent's actual work, its reasoning, its tool calls, and its context, take place." A platform is the thing that provides all three in a coherent, operated whole.
+
+![The three planes of an enterprise agent platform: the serving plane hosts the model and runs inference, the control plane governs identity and policy, and the data plane is where the agent reasons, calls tools, and moves context.](</diagrams/enterprise-agent-platforms-serving-control-plane-data-plane/1-three-planes-overview.png>)
+
+## The serving plane: hosting the model and running inference
+
+Start with serving, because it is the plane most people already understand from building with an API. The serving plane is the layer that hosts your model and executes inference requests. It is the vLLM workers on a GPU cluster, the managed endpoint you call, the local model server on your own hardware. [^3]
+
+The key idea in a modern serving plane is that the model is a stateless service. It does not remember anything between requests. It takes a prompt, produces a completion, and forgets. The agent's memory, its loop, its context window, and its tool calls all live in the harness, which is a separate component. [^3] This separation is what lets you swap the model behind an agent without touching the agent's logic, and it is what lets a platform route different requests to different models based on cost and capability.
+
+Red Hat's blueprint shows how a real serving plane is built. It contains a gateway, semantic routing, a scheduler, and model workers. [^3] An inference request crosses three routing tiers on its way to an accelerator, and each tier answers a different question. The first tier, the egress router, answers where a query may go, which is a security decision. The second, semantic routing, answers which model should serve it, which is a cost decision based on intent and complexity. The third, the replica router, answers which replica executes it, which is an efficiency decision based on cache locality and load. [^3] Collapsing these into one router would put one component in charge of three concerns that change at different speeds and answer to different teams. [^3]
+
+![An inference request crosses three routing tiers in the serving plane: the egress router decides where a query may go for security, semantic routing picks the model by cost, and the replica router picks the replica by efficiency before the request reaches an accelerator.](</diagrams/enterprise-agent-platforms-serving-control-plane-data-plane/2-serving-plane-routing-tiers.png>)
+
+The serving plane also carries the gateway that fronts the model. LiteLLM describes the shift this way: the gateway is no longer just routing model calls, it is routing agent work. [^4] In the model stack, the gateway handled routing, fallbacks, logging, spend tracking, auth, and billing across inference providers. [^4] As agents become the dominant use case, that same gateway has to manage agent sessions, schedules, memory, and runtimes, not just model calls. [^4] The serving plane is where that gateway lives, and it is the plane that decides which model serves which request and at what cost.
+
+## The control plane: governance, identity, and lifecycle
+
+The control plane is the plane most enterprises are missing, and it is the one that makes the difference between a demo and a production system. It is the governance and coordination layer that manages how agents access context, use tools, follow policy, and take authorized action across systems. [^2]
+
+Snowflake's definition is precise. An agentic control plane is the centralized layer that deploys, operates, monitors, and governs AI agents across an organization. It provides a shared way to manage agent identity, enforce runtime policy, observe behavior, register versions, supply governed context, and control access to tools. [^2] Without it, agents tend to inherit the limits of the environment where they were built. Each has its own logs, its own access model, its own evaluation method, and its own tool permissions. As adoption spreads, the organization ends up with many agent runtimes and no consistent way to see which agents exist, what data they accessed, what actions they attempted, or which policies governed those actions. [^2]
+
+The control plane's core functions cluster into a few jobs. First, it enforces governance and policy at runtime. An agent policy has limited value if it exists only in a design document or a prompt template. At runtime, the control plane evaluates whether an agent should retrieve a table, call an external tool, send a message, update a record, or escalate to a human reviewer. [^2] A customer service agent might be allowed to summarize a case history without approval, but a refund, an account change, or a disclosure of sensitive information requires additional checks. [^2]
+
+Second, it gives agents a verifiable identity. An enterprise agent needs an identity separate from the user, the model, and the application hosting it. Without that identity, you cannot answer basic audit questions: which agent accessed the data, which user authorized the session, which service account called the tool, which policy allowed the action. [^2] This identity is what makes just-in-time access possible, where an agent gets permission to read approved supplier data during a sourcing workflow but not to touch unrelated contract repositories or send purchase orders without approval. [^2]
+
+Third, it standardizes observability across the agent lifecycle. A trace for an agentic workflow might include retrieval steps, tool calls, intermediate reasoning artifacts, policy checks, approvals, retries, failures, and final outputs. [^2] The control plane consumes that telemetry and applies it across agents, workflows, and environments, so the enterprise gets a consistent record of behavior from development through testing, deployment, runtime monitoring, and retirement. [^2]
+
+MuleSoft adds the economic argument for why the control plane must be a separate, portable layer rather than something you rent from each runtime vendor. When governance lives in native cloud constructs, it is non-transferable. Every policy definition, every audit configuration, every rate limit rule is authored in a proprietary schema that only has meaning inside that cloud. [^1] A multi-cloud portfolio running agents across two hyperscalers requires two separate governance stacks, written in two policy languages, audited through two dashboards, with no unified view across either. [^1] The tooling that appears free at signup becomes the lock-in mechanism at exit. [^1] The answer is an asset-aware control plane that governs by what the asset is, an agent, an MCP server, a model, an API, a data connector, rather than by who built it or which cloud it runs on. [^1]
+
+## The data plane: where the agent does its work
+
+The data plane is the plane where the agent's actual work happens. It is where each agent reasons, calls tools, retrieves context, writes outputs, and completes tasks. [^2] In a network, the data plane moves the traffic. In an agent platform, the data plane is where the agent moves through its task: it reads from a database, calls a tool, gets a result, reasons about it, and writes an output.
+
+The data plane is also where the agent's context lives. An agent does not work on raw data alone. It needs business definitions, relationships, permissions, policies, and task-specific context on every request. [^5] GoodData's serving plane makes this point directly: agents need more than raw data, they need governed context, and without a layer designed for that workload, agent traffic can become slow, expensive, or disruptive to the underlying data platforms. [^5] A single business task can generate tens or hundreds of short-lived data operations as an agent investigates, reasons, and decides what to ask next, and when many agents operate simultaneously, intermittent human querying becomes continuous, high-concurrency machine demand. [^5]
+
+The data plane is where the separation from the control plane matters most. The control plane decides and governs; the data plane executes. LanceDB's architecture doc states it plainly: the control plane governs the system and the data plane executes the work. The control plane is responsible for configuration, service discovery, identity integration, policy, and cluster lifecycle. It determines how the system should behave, but it is not the layer serving data or executing queries, that is the role of the data plane. [^6]
+
+This is the load-bearing idea of the whole lesson. The control plane and the data plane are separate because they change at different speeds and answer to different teams. The control plane is where policy, identity, and audit live, and it must be stable and consistent. The data plane is where throughput, latency, and tool execution live, and it must scale and move fast. If you merge them, you get a system where every policy change risks the data path, and every data-path change risks your governance. The separation is what makes each plane independently operable.
+
+![The control plane governs policy, identity, and audit and must stay stable, while the data plane executes throughput, latency, and tool calls and must scale fast; they stay separate because they change at different speeds and answer to different teams.](</diagrams/enterprise-agent-platforms-serving-control-plane-data-plane/3-control-vs-data-plane.png>)
+
+## Reading a platform through the three planes
+
+The practical value of this model is that it gives you a checklist for evaluating any agent platform, whether it is a vendor product or your own stack. Ask three questions.
+
+**Where is the serving plane, and can I swap the model?** A platform that locks you to one model vendor has a weak serving plane. A platform that fronts models behind a gateway, with routing, fallbacks, and spend tracking, gives you the freedom to change models as the market moves. [^4] If the model is a stateless service behind a gateway, you can route cheap requests to a small model and hard ones to a capable one, and you can change the pool without rewriting your agents. [^3]
+
+**Where is the control plane, and is it portable?** A platform that only governs agents it built itself has a weak control plane. The test is whether the same policy applies to an agent you did not build, running on a runtime you do not own. [^1] If governance is asset-aware, attached to the agent, the MCP server, the model endpoint, or the API rather than to a network perimeter or a vendor schema, then it survives migration and multi-cloud deployment without policy drift. [^1]
+
+**Where is the data plane, and does it carry governed context?** A platform that gives agents raw database access without business semantics, permissions, and context is a data plane that will produce wrong answers. [^5] The data plane should enforce access at the field and row level, keep business definitions consistent, and isolate agent traffic from human workloads. [^5]
+
+## Worked example: a support-escalation agent on a platform
+
+Walk a concrete case through the three planes to make them real. A company runs a customer-support agent that reads case history, summarizes it, and, when a case meets certain criteria, drafts a refund recommendation for a human to approve.
+
+The serving plane hosts the model and routes the request. The agent's summary request is low-risk, so semantic routing sends it to a small, cheap model. The refund-drafting request is higher-stakes, so routing sends it to a more capable model. [^3] Both requests pass through the same gateway, which handles auth, spend tracking, and logging. [^4] The model is stateless: it sees a prompt, produces a completion, and forgets. The agent's memory of the case lives in the harness, not in the model. [^3]
+
+The control plane governs the action. The agent has a verifiable identity separate from the user who initiated the session. [^2] When the agent tries to read case history, the control plane checks whether this agent, for this user, in this workflow, is allowed to read that table. It is. When the agent tries to draft a refund, the control plane applies runtime policy: a refund requires additional checks, so the agent's output is flagged for human approval rather than executed. [^2] Every step, the retrieval, the tool call, the policy check, the approval, lands in the audit trail. [^2]
+
+The data plane carries the work. The agent reads case history from the customer database, but it does not get raw rows. It gets governed context: the business definition of a case, the permission boundary that says this agent may read case data but not payment data, and the field-level access that hides sensitive fields. [^5] The agent reasons over that context, calls the summarization tool, and writes its draft output. The data plane moves the data and the tool results; the control plane decides what the agent was allowed to touch; the serving plane decided which model did the reasoning.
+
+The result is a system where each plane does one job. The serving plane is fast and swappable. The control plane is stable and auditable. The data plane is governed and context-rich. None of them can do the others' job, and that is exactly the point.
+
+![A support-escalation agent walks through the three planes: the serving plane routes the low-risk summary to a small model and the refund draft to a capable one, the control plane checks identity and flags the refund for human approval, and the data plane delivers governed context with field-level access.](</diagrams/enterprise-agent-platforms-serving-control-plane-data-plane/4-support-escalation-agent.png>)
+
+## The pattern to take away
+
+The three-plane model is a lens, and the pattern for using it is consistent:
+
+1. **Separate the planes deliberately.** Serving hosts the model, control governs the agent, data carries the work. Do not let one component own all three concerns, because they change at different speeds and answer to different teams. [^3]
+2. **Treat the model as a stateless service.** Put the loop, memory, and context in the harness, and front the model with a gateway so you can swap and route it. [^3][^4]
+3. **Make the control plane portable and asset-aware.** Govern by what the asset is, not by who built it or which cloud it runs on, so policy survives migration. [^1]
+4. **Give the data plane governed context.** Agents need business definitions, permissions, and task context, not raw tables, and the data plane should enforce access at the field and row level. [^5]
+5. **Read every platform through the lens.** Ask where the serving, control, and data planes are, and what each one actually gives you. The gaps are where you have to build.
+
+If you walk away with one skill from this lesson, it is the ability to look at any agent platform and name its three planes. That skill turns vendor marketing into an architecture you can evaluate, and it tells you where your own system needs to fill the gaps.
+
+## Try it
+
+Take the agent platform you are using or considering, whether that is a managed service, an open-source stack, or your own infrastructure, and map it to the three planes. Write down where the serving plane is: which model or models it hosts, whether they sit behind a gateway, and whether you can swap them without rewriting your agents. Then find the control plane: how does it enforce policy at runtime, how does it give agents a verifiable identity, and is that governance portable or locked to one vendor? Last, locate the data plane: does the agent get raw data or governed context, and where are the field-level and row-level access controls enforced? For each plane, name one thing the platform does well and one gap you would have to fill yourself. You should end with a one-sentence read of the platform, for example "this platform has a strong serving plane but a weak control plane, so I need to build governance." Training yourself to see the three planes is the whole value of the lesson, and it is a skill you build by applying it to every platform you touch.
+
+## What's next
+
+This lesson gave you the lens for reading a platform: the serving plane that hosts the model, the control plane that governs identity and policy, and the data plane where agents do their work. The next lesson steps from reading a platform to building one. Lesson 72 covers building the platform itself: the control plane, the data plane, the gateway, and the policy layer, and how you assemble those pieces into a system you can operate. If this lesson was about recognizing the three planes, the next one is about constructing them.
+
+## Summary
+
+An enterprise agent platform is the infrastructure that hosts, governs, and operates agents at scale, and the industry has converged on a three-plane split. [^2] The serving plane hosts the model and runs inference, treating the model as a stateless service behind a gateway that routes requests by security, cost, and efficiency. [^3][^4] The control plane is the governance layer that enforces runtime policy, gives agents a verifiable identity, standardizes observability, and manages lifecycle, and it must be portable and asset-aware to avoid vendor lock-in. [^1][^2] The data plane is where agents reason, call tools, retrieve context, and write outputs, and it must carry governed context with field-level and row-level access control rather than raw data. [^2][^5] The separation between control and data planes is the load-bearing idea: control governs and stays stable, data executes and scales fast, and merging them makes each plane harder to operate. [^6] Read any platform through this lens, name its three planes, and build where the gaps are.
+
+[^1]: MuleSoft, "A Framework for Architecting Agent Control Plane" (Aug 12, 2026). https://blogs.mulesoft.com/agentic-perspectives/a-framework-for-architecting-agent-control-plane/
+[^2]: Snowflake, "The Agentic Control Plane: Governing AI Agents at Scale." https://www.snowflake.com/en/artificial-intelligence/ai-governance/control-plane/
+[^3]: Red Hat Developer, "Architect an open blueprint for cloud-native AI agents" (Jul 20, 2026). https://developers.redhat.com/articles/2026/07/20/architect-open-blueprint-cloud-native-ai-agents
+[^4]: LiteLLM, "A Unified Agent Control Plane" (Jun 10, 2026). https://litellm.vercel.app/blog/agents-are-the-new-llms
+[^5]: GoodData.AI, "GoodData.AI Launches the Agentic Serving Plane" (Oct 6, 2026). https://www.gooddata.ai/press-releases/gooddata-ai-launches-the-agentic-serving-plane-a-new-category-of-enterprise-data-infrastructure-for-ai-agents/
+[^6]: LanceDB, "Architecture" (LanceDB Enterprise docs). https://docs.lancedb.com/enterprise/architecture

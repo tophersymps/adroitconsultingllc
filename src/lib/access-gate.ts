@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { accessSeam } from "@/lib/access";
 import { parseQuizName } from "@/lib/quiz";
 import { findSeriesForLessonSlug } from "@/lib/learn";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 
 /** 403 body used when a course is not accessible to the caller. */
 const DENIED = NextResponse.json(
@@ -34,7 +35,11 @@ export async function denySeriesNotAccessible(
       return null;
     }
     return DENIED;
-  } catch {
+  } catch (err) {
+    // R2-5: a token-route failure is a classified state, not a denial. Let the
+    // sentinel reach the route so it can answer its guest payload (200), while
+    // every other loader error still fails closed.
+    if (isDbTokenUnavailable(err)) throw err;
     // Fail closed: a DB/loader error must not grant access.
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

@@ -1,0 +1,188 @@
+---
+title: "Data Architect LV-3B: Virtualization Scenarios: Connect vs Copy, OData, External Data Sources"
+slug: day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext
+series: salesforce-data-architect
+lesson: 34
+excerpt: "Given a customer scenario, decide when to use virtualized data and describe virtualized data options, choosing between Salesforce Connect (OData, cross-org, and custom adapters) and copying data into Salesforce for specific scenarios. This lesson is the scenario half of the virtualization pair. Where lesson 33 taught you the mechanics of External Objects, Salesforce Connect adapters, and Data Connect, lesson 34 turns virtualization into a decision method: a four-question scenario lens that tells you whether a given dataset should be connected live or copied, then a walk through the three main adapters (cross-org, OData, and custom) applied to real customer scenarios, a copy-first scenario, and the hybrid design that copies one subset and virtualizes the rest. Every decision is grounded in the same four variables: does the data have to stay put, how volatile is it, how much of it does the platform actually need, and does the platform need to validate, automate, and report on it at native speed. Covers the read-only reality of most adapters, external latency and rate limits, and Data Connect as the analytical-scale complement. Includes worked scenarios mirroring the three in-lesson quiz questions, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.\"
+date: "October 15, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Salesforce, Data Architecture, Virtualization, Salesforce Connect, External Objects, OData, Cross-Org, Custom Adapter, Connect vs Copy, LDV, Certification]
+---
+
+Lesson 33 gave you the tool. You know what virtualization is, how Salesforce Connect exposes external data through External Objects, what each adapter targets, and the hard constraints that come with reaching data you do not own. This lesson, requirement lv-3b of the Large Data Volume (LDV) Considerations domain, is about using that tool under exam pressure. [^1]
+
+The exam phrase the requirement as a decision: given a customer scenario, decide when to use virtualized data and describe the virtualized data options, choosing between Salesforce Connect (OData, cross-org, custom adapters) and copying data into Salesforce for specific scenarios. [^1] That is not a definition question. That is a judgment question. A customer hands you a situation with constraints, and you say whether each dataset should be connected live, copied, or split across both. The cert rewards the architect who can read a scenario and pick correctly.
+
+So this lesson is a method, not a list. You will learn the four-question lens that decides connect versus copy for any dataset. You will run the three named adapters (cross-org, OData, custom) against concrete customer scenarios and see which fits which. You will see the case for copying even though it duplicates, and the hybrid that does both to different parts of the same story. And you will keep the constraints from lesson 33 in view the whole time, because they are what make a scenario answer live or die.
+
+## The scenario lens: four questions before any tool
+
+Before you reach for Salesforce Connect or a data loader, you make a judgement. The whole connect-versus-copy decision reduces to four questions you run against each dataset. [^1][^3] Answer them and the path reveals itself. This is the skill the exam is really testing, and I want you to hold it as a sequence you can run in your head during a scenario question.
+
+Question one: does the data need to stay in the source? Residency, ownership, and compliance can force data to remain where it lives. [^1][^2] Some data must stay on premises or in its country of origin. Some belongs to a partner that will not release a copy. If the data cannot move because of a hard residency or ownership constraint, virtualization is the only option that satisfies the requirement at all. A copy would violate the constraint, so there is nothing to decide. [^2]
+
+Question two: how volatile is it? [^1] Data that changes every minute, every hour, or continuously does not survive a copy. A nightly snapshot answers last night's question, not today's order. When freshness is the whole point, and the source owns the truth, you virtualize and accept the latency. When the data is stable, the value does not leak out of a copy, so you have the freedom to put it where you want. [^3]
+
+Question three: how much of it does the platform need? Volume decides economics. Copying ten billion rows into Salesforce just so users can read a few thousand per day wastes storage, inflates data volume, and damages performance, and the integration guidance is explicit that unnecessary replication is a cost to avoid. [^3] If the platform only needs a narrow slice, you either virtualize the large remote whole or copy only the slice. If the platform genuinely needs most or all of the data natively, copy is justified by the usage.
+
+Question four: does the platform need to validate, automate, and report at speed? [^1] This is the decisive one. External Objects are read by default, support only lookup, external lookup, and indirect lookup relationships, have no validation rules and no roll-up summaries, and their speed is whatever the source gives them. [^4][^5] If the requirement is native automation, flows, approvals, validation rules, or high-speed reporting over the data, an External Object fights you. [^1] Copying the data into a custom object puts it on the native engine, with indexes, sharing, flows, validation, and reports running at local speed. [^3] When the platform must own the data to act on it fast, you copy. When it only needs to see it, you virtualize. [^1]
+
+Run all four and the two facts that matter snap into place: can I copy it, and should I? The "can I" comes from residency, ownership, and volume. The "should I" comes from volatility and the platform's need for native speed. Connect wins when you cannot copy or when the value of a copy is destroyed by staleness. Copy wins when the data is stable and the platform must act on it natively at speed. And when different parts of the same story answer differently, you get the hybrid, which the exam rewards at least as often as the pure calls.
+
+![The four-question scenario lens: run each dataset through residency, volatility, volume, and the need for native speed, then route it to connect, copy, or hybrid](</diagrams/day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext/1-four-question-lens.png>)
+
+## The cross-org scenario: one org needs the other's data live
+
+The cleanest virtualization scenario on the exam is the parent-subsidiary case, and it is the first in-lesson quiz question. A parent org is authoritative for Accounts and changes constantly; a subsidiary org needs to view them live in Salesforce. [^1] What is the best approach? The cross-org adapter. [^6]
+
+Here is the reasoning the exam rewards. The parent is authoritative for the Accounts, which means the parent owns the truth and any copy the subsidiary holds is by definition secondary. The data changes constantly, which means a periodic copy is stale before it is useful. [^1] The subsidiary does not need to run native automation or heavy reporting on the raw Account rows; it needs to see the current Accounts, live, in the context of its own work. That profile is a textbook virtualize: residency-bound to the parent as owner, volatile, and needing only a live view. [^1][^2]
+
+The cross-org adapter is the right mechanism because the source is another Salesforce org. It uses Lightning Platform REST API calls to reach the provider org's records, and setup is point-and-click: you create a cross-org external data source, validate it, and sync the objects you need. [^6] The provider's Accounts become External Objects in the subsidiary org. Users see them in list views, record pages, lookups, and reports, live, with no copy sitting in the subsidiary going stale. [^2][^6]
+
+Two of the wrong answers are traps the exam uses heavily. A nightly copy into the subsidiary (or a weekly CSV export) is stale by construction, because the parent changes constantly and any snapshot answers an old version of the question. [^1] Merging the two orgs is a far larger change than the requirement asks for; the scenario only needs the subsidiary to view Accounts, not to merge the entire environments. [^1] So the answer that satisfies both constraints, live access and no wholesale org change, is exposing the parent's Accounts through the cross-org adapter. [^6]
+
+One detail from lesson 33 carries straight into this scenario: when the cross-org adapter syncs the provider's objects, relationship and lookup fields arrive in the subsidiary as text fields holding record IDs, not names. [^7] If the subsidiary needs a real relationship between those Accounts and its own records, you create external lookups, sync both sides, and change the ID text fields to External Lookup Relationship fields. [^7] It is friction, but it is the price of not copying, and an architect who knows it up front is not surprised at build time.
+
+## The OData scenario: keep data in the ERP, show it live
+
+The second adapter the requirement names, OData, fits the ERP integration case, and it is the scenario the exam loves to layer. [^1] A company runs an ERP that exposes its data as an OData service, and that order or inventory data must remain in the ERP for compliance. Salesforce users still need to see order status live. [^1][^2]
+
+Read the lens. Residency is hard: the data must remain in the ERP for compliance, so a copy into Salesforce would violate the constraint. [^1][^2] That single fact settles it. Volume and volatility may also push the same way, but residency alone forces virtualization. The mechanism is Salesforce Connect with the OData adapter, which connects to any external system exposing an OData producer. [^2] You register the external data source, sync it so the ERP's tables become External Objects, and set the External ID to the ERP's unique key for each entity. [^5] Users in Salesforce then see order status live, pulled on demand from the ERP, with no copy in Salesforce to go stale or to violate residency. [^2][^5]
+
+The OData adapter supports OData versions 2.0, 4.0, and 4.01, and with 4.0 and 4.01 you can use External Change Data Capture to track changes to the external data and build automation on them. [^5] That is the closest the read path gets to reactive, and it matters for a scenario where the order status flows into downstream automation without a full copy.
+
+Now the flip side, because this is where the exam gets you. Residency forces virtualization, but it does not remove the platform's need to act on data at speed. If the same customer also needs Salesforce to run fast reports, approvals, and validation over the order data with native tools, those needs argue for a copy, and virtualization alone cannot deliver them. [^1] The correct answer in a scenario that combines both is usually the hybrid, not a pure connect. I will build that exact hybrid in the next section, because it is the exam's favorite design.
+
+## The copy scenario: the platform must own it
+
+Virtualization is not always the answer, and the second in-lesson quiz question tests whether you know when to copy. [^1] The scenario that argues for copying is the one where the platform must run approvals, validation, and fast reports on the data, because those demands point squarely at the native engine. [^1]
+
+Watch the decision flip. An External Object has no validation rules, no roll-up summaries, and only lookup-style relationships, and its speed is whatever the source provides. [^4][^5] If the requirement is that Salesforce validates the data against business rules, runs approval flows, and reports on it at high speed, an External Object gives you a live dependency instead of the native engine. [^1] That is the case where copying is correct even though it duplicates. [^3] You load the data into a custom object, where validation rules, flows, approvals, sharing, indexes, and reports all run natively. [^3]
+
+The copying argument firms up when you add a slow source. If the source system is slow and the data is stable, copying is doubly correct. [^1] The data is stable, so a copy does not lose value by sitting there. The source is slow, so a live dependency would make every Salesforce access wait on a sluggish ERP. A scheduled copy decouples Salesforce from the source's availability and gives the platform the native speed it needs. [^1]
+
+This is the anti-trap. Two scenarios in the same question explicitly should NOT be copied. Data that must remain only in the source for residency cannot be copied at all, because the copy violates the constraint. [^1][^2] Data that changes every second and is only ever read is the textbook virtualize, because any copy is instantly stale and the read-only need is happy with a live view. [^1] The exam's Q2 pairs those as the two correct copy scenarios against these as the two that must not be copied, so hold the pattern: copy for native speed on stable data, virtualize for residency and high-volatility read-only data. [^1]
+
+![Connect vs Copy: score each dataset on residency, volatility, volume, the platform's need for native speed, and write needs, then route it to the mechanism that fits](</diagrams/day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext/2-connect-vs-copy.png>)
+
+## The hybrid scenario: copy the hot subset, virtualize the history
+
+The third in-lesson quiz question is the one that rewards a real architect, because both named approaches are half right. [^1] A company needs live visibility of volatile ERP order history, but Salesforce must run fast reports only on active orders. What is the best design? [^1]
+
+Read it as two datasets with different answers. The full order history is large and volatile, and the company needs live visibility into it. That part pushes to virtualization, and copying all of it would waste storage and inflate the org for data that is mostly never acted on. [^1][^3] The active orders are a small, stable, hot subset that Salesforce must report on at speed. That part pushes to copying, because fast native reports are exactly what an External Object cannot deliver. [^1][^4]
+
+The best design is the hybrid: copy the small, stable active orders into a native object for fast reporting, and virtualize the large volatile full history through an External Object for live visibility. [^1] You get the native speed and reporting over the subset that matters operationally, and you get the live, no-copy access to the history without bloating storage. Each dataset goes to the mechanism that serves it best. [^1][^3]
+
+The wrong answers all overreach in one direction. Copying all order history into Salesforce wastes storage on data the platform never needs at native speed, and drags in the whole volatile store as a sync burden. [^1] Virtualizing everything, including the active orders, loses the native reporting speed that the active subset specifically needs. [^1][^4] And disabling reporting on orders avoids the question entirely instead of answering it. [^1] The hybrid is the balanced answer, and recognizing when a scenario is really two datasets with different needs is the architect skill the question exists to test.
+
+This hybrid pattern generalizes. Whenever a single customer story has a large volatile remote body and a small stable hot subset that the platform must act on, the design is the same: virtualize the body, copy the subset. [^1] It bounds storage, keeps the hot data native, and gives live access to everything else. [^3]
+
+![The hybrid design: copy the small stable active orders into a native object for fast reporting, and virtualize the large volatile full order history through an External Object for live visibility](</diagrams/day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext/3-hybrid-design.png>)
+
+## The custom adapter scenario: the source is not OData
+
+The requirement names a third adapter, custom, and the scenario it fits closes the gap the packaged adapters leave. [^1] Occasionally the external source is not OData, is not another Salesforce org, and does not match any packaged adapter (for example, a custom internal platform that exposes only a private HTTP API). Salesforce Connect cannot reach it with a standard adapter. [^2]
+
+The answer is a custom adapter built with the Apex Connector Framework. [^2] You write Apex against Salesforce Connect's interfaces to define how the adapter queries the external store, how it maps the source's tables and columns to External Objects and fields, and how it fills the External ID. [^5][^8] Once you implement the connector, you register it as an external data source and expose the required objects, and users and flows interact with them as External Objects like any other adapter. [^2]
+
+The custom adapter is the most flexible and the most work, and the exam expects you to reach for it only when none of the packaged adapters fit. [^2] A scenario that describes a bespoke or legacy HTTP-only source, where the data must stay put and be seen live, is pointing at a custom adapter. A scenario with an OData producer or a second Salesforce org is pointing at a packaged adapter, and picking custom there would be over-engineering. The architect skill is matching the adapter family to the source type and the constraints, not defaulting to the most powerful tool.
+
+![Pick the adapter by source type: cross-org for another Salesforce org, OData for an OData producer, and a custom Apex adapter for anything no packaged adapter reaches](</diagrams/day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext/4-adapters-by-source.png>)
+
+## The constraints that decide the answer
+
+Every scenario answer sits on the constraints from lesson 33, and the exam's traps are built from underestimating them. Keep these four in the front of your mind while you read any virtualization question. [^4]
+
+Most adapters are read-oriented. External Object records are read-only by default, and write support is adapter-dependent and not always available. [^2][^4] The OData adapter can support writes when the OData service does, the cross-org adapter can write back through the provider's API, and a custom adapter does whatever you code it to do. [^2][^6] But the common case, and the safe default for the exam, is read-only. If a scenario says users must edit the data heavily, virtualization with a read-only adapter is the wrong call; you need copying, or a write-enabled adapter where one is supported. [^1][^4]
+
+External systems have latency and rate limits. Every access to an External Object is a live callout to the external system, so query performance depends entirely on the source: its response time, its rate limits, and how well it handles filtered queries. [^4][^5] Slow sources surface as slow Salesforce pages, list views that hang, and reports that fail or time out. [^4][^5] If the scenario involves heavy access or a sluggish source, you factor in the latency or you choose copying to decouple. [^1]
+
+Large volatile remote data that the platform never needs all of should not all be copied. Copying a huge, constantly changing remote store just because the platform might touch some of it wastes storage and sync cost and inflates data volume. [^1][^3] The hybrid exists precisely to bound this: copy only what the platform must own at speed, virtualize the rest. [^1]
+
+And write needs matter. If users must edit the data, read-only virtualization is not enough, and the scenario either needs a write-enabled adapter or a copy. [^4] Aligning the mechanism to the actual need is the whole job.
+
+## Data Connect: the analytical-scale complement
+
+Salesforce Connect handles the transactional case: a user, a flow, or a report pulls a live record. It is record-by-record and interactive. There is a second class of sharing, analytical scale, where the volume is too large to serve interactively, and the requirement names Data Connect for it. [^1]
+
+Data Connect lives in the Data 360 platform (the exam and much current literature still call it Data Connect) and is the zero-copy, analytical-scale sharing story. [^3][^10] It uses data shares, data share targets, and data pipelines to integrate Salesforce with external data lakes and warehouses such as Snowflake, Google BigQuery, Databricks, and Amazon Redshift, letting either side query the other's data in place without duplicating it. [^10] This is virtualization at the analytics tier, not the record tier. When a warehouse must consume Salesforce data at scale, or Salesforce analytics must consume a warehouse at scale, zero-copy sharing lets both sides read the same data in place rather than replicate tens of billions of rows into a second store. [^10]
+
+Use it when the need is analytical rather than transactional. [^1] Salesforce Connect serves a live record lookup or a filtered list. Data Connect serves the large, non-interactive sharing between platforms. A complete virtualization answer names both tiers. The distinction matters because the exam can present a scenario where the consumer is a warehouse, and the right tool is Data Connect, not a record adapter.
+
+## Config walkthrough: deciding connect versus copy, then building it
+
+Here is the numbered walkthrough the exam expects you to reason through when a scenario gives you real datasets to classify and a mechanism to build. [^1]
+
+1. Score each dataset on the four variables. Run every dataset in the scenario through residency, volatility, volume, required features, and write needs. [^1][^3] Decide connect versus copy versus hybrid for each one before touching a tool. Residency-bound, volatile, or huge remote data that only needs to be seen virtualizes. Stable data the platform must validate, automate, or report on at native speed copies. Split a dataset that does both into a hot copied subset and a large virtualized body. [^1]
+
+2. For the virtualized sets, pick the adapter by source type. [^2] Cross-org for another Salesforce org, OData for an OData producer, custom Apex for anything no packaged adapter reaches. Create the external data source and set the adapter in its Type field.
+
+3. Sync and define External Objects. For cross-org, validate and sync the provider org's objects, which become External Objects in the subscriber. [^6] For OData, register the external data source, sync the producer's tables, and set the External ID to the source entity key. [^5] For a custom adapter, register the adapter and expose the required objects, with the External ID filled by the connector. [^5][^8] If a source has no natural unique key, synthesize one before you can virtualize it. [^4]
+
+4. Build the hybrid or copy path. For a hybrid, load the small stable hot subset into a native object with your normal load and sync pattern, and virtualize the remainder. [^1][^3] For a pure copy, run the sync pattern that keeps the native object current, and keep it owned by the platform.
+
+5. Monitor the external dependency. Watch external latency, rate limits, and source availability, because every External Object access is a live callout. [^4][^5] Design filtered queries, pagination, and caching where the source cannot keep up, and plan the user experience around the source's real performance. [^4][^5]
+
+## The three exam traps
+
+Trap one, choosing virtualization when users must edit the data heavily. Most adapters are read-oriented or limited-write, so a scenario where the platform must create, edit, or delete records cannot default to a read-only External Object. [^2][^4] If write is required, the answer is copying, or a write-enabled adapter where the source supports it. [^4]
+
+Trap two, ignoring external latency and rate limits. A scenario that points at a slow or rate-limited source for heavy access will surface that dependency as slow Salesforce pages and failed or timed-out reports. [^4][^5] Copying decouples Salesforce from the source. [^1] The exam rewards the architect who factors the source's performance into the mechanism choice.
+
+Trap three, copying a huge volatile remote dataset the platform never needs all of, wasting storage and sync cost. [^1] If the platform only needs a slice or a live view, copying the entire volatile store inflates the org for data that is mostly never used. [^3] Virtualize the large remote whole, or copy only the small hot subset in a hybrid. [^1]
+
+![The three exam traps: virtualizing when users must edit heavily, ignoring external latency and rate limits, and copying a huge volatile remote dataset the platform never needs all of](</diagrams/day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext/5-three-exam-traps.png>)
+
+## Worked example: the orders scenario in full
+
+Put the whole method together on the exam's hybrid scenario. [^1] A company needs live visibility of volatile ERP order history, and Salesforce must run fast reports only on active orders.
+
+Run the lens on the full order history. Residency is flexible, the ERP will release data, so we could copy. Volatility is high, the history changes constantly. Volume is large, the whole history is too big to copy economically onto the platform just for occasional visibility. The platform's need is a live view of the history, not native reporting on every row. That profile virtualizes. [^1][^3] The OData adapter is the mechanism, because the ERP exposes an OData producer. [^2]
+
+Run the lens on the active orders. That subset is small and stable, the few orders currently being fulfilled. The platform must run fast reports over them at native speed, which means validation, reporting, and possibly flows. That profile copies: the active subset goes into a native object through the sync pattern, where the platform reports and acts at native speed. [^1][^3][^4]
+
+The design is the hybrid: copy the active orders, virtualize the history. [^1] Salesforce gets fast native reporting over exactly what it reports on, and live access to the full history without bloating storage. [^1][^3] Copying everything wastes storage on the volatile store. [^1] Virtualizing the active orders loses the native speed. [^1][^4] The balanced answer satisfies both halves of the requirement, which is why the hybrid is the exam's favorite design.
+
+Counter it with the parent-subsidiary scenario to see the pure connect. There, the data must stay in the parent as owner and is highly volatile, and the subsidiary only needs a live view, so there is no native-speed need large enough to justify a copy. [^1][^6] The cross-org adapter gives the live view without copying. [^6] The lesson is not "always hybrid". It is "read each dataset through the four questions and route it to the mechanism that fits." [^1]
+
+## Try it for yourself
+
+In two Developer Edition orgs, stand up the cross-org scenario with the parent-subsidiary pattern, which is the easiest virtualization to reach because the provider is another org you control. In the provider org, create a simple custom object to act as the authoritative Accounts, give it a unique external key, and populate a few rows. In the subscriber org, create a cross-org external data source pointing at the provider, validate and sync it so the source object becomes an External Object, and confirm the External ID came across.
+
+Then add the write test. Update an External Object record from the subscriber and confirm the change landed in the provider and fired its validation rules and flows. Then try the hybrid reasoning on data you can inspect: put a small set of "active" rows into a native object and leave the larger "history" out as an External Object, and confirm reports run natively over the active set while the history stays live. The point is to feel the four-question lens produce a concrete design on data small enough to verify, and to live inside both the live read path and the copy path until the choice becomes instinct.
+
+## What's next
+
+You can now read a scenario and decide between connecting and copying with a clear method. You can score each dataset on residency, volatility, volume, required features, and write needs, and route it to the right mechanism. [^1][^3] You can apply the cross-org adapter to a parent-subsidiary case where one org must see another's data live. You can apply the OData adapter to a residency-bound ERP whose data must stay put while Salesforce sees it live. [^1][^2] You can apply the custom adapter when the source is neither OData nor Salesforce. [^2] You know when copying is correct even though it duplicates, when the platform must validate, automate, and report at native speed. [^1] You know the hybrid, copying the stable hot subset and virtualizing the large volatile whole, as the design that bounds storage while keeping what matters native. [^1] And you know the constraints that decide every answer: read-oriented adapters, live latency and rate limits, and the cost of copying data the platform never needs.
+
+Lesson 35 of 42 is up next: data quality at load, covering validation, dedup, transformation, stewardship, and testing (mg-1a). Where this lesson decided whether data enters the org at all, and by what mechanism, lesson 35 is about how that data arrives clean. You will learn to validate records against quality rules before they land, deduplicate so the same entity is not stored twice, transform data into the shape the org expects, assign stewardship so someone owns the quality outcome, and test the whole load pipeline so defects are caught before they become bad data. If lesson 34 decided what gets in, lesson 35 decides whether what gets in is any good.
+
+## Related Requirements
+
+- Lesson 33 of 42 (lv-3a): Virtualized data fundamentals: External Objects, Salesforce Connect, Data Connect
+- Lesson 31 of 42 (lv-2a): Archiving and purging fundamentals
+- Lesson 8 of 42 (dm-4b): Big Object scenarios: when to use, when not
+- Lesson 24 of 42 (sm-4b): Multi-org data scenarios: when to consolidate vs integrate
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Large Data Volume Considerations (20%) domain and the objective to decide when to use virtualized data and describe the virtualized data options, choosing between Salesforce Connect (OData, cross-org, custom adapters) and copying for specific scenarios, and the guidance to virtualize residency-bound or volatile data while copying data the platform must validate, automate, and report on at speed. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+
+[^2]: Access External Data With Salesforce Connect, Salesforce Help. States that Salesforce Connect lets users view, search, and modify data stored outside the org through External Objects accessed in real time via callouts, that the data is never stale and only what is needed is accessed, that External Object records are read-only by default with write capability depending on the adapter, and that a custom Apex adapter can reach stores no packaged adapter covers. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.salesforce_connect.htm&language=en_US&type=5)
+
+[^3]: Data Integration with Salesforce, Salesforce Architects decision guides. Recommends avoiding unnecessary data replication and considering data virtualization with Salesforce Connect unless the data absolutely needs to reside in Salesforce, and discusses copying data into the org when the platform must own it natively. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/decision-guides/guide/data-integration.html)
+
+[^4]: External Objects in Salesforce Connect, Salesforce Help. Documents that External Objects are read-only by default, that unsupported features include validation rules and roll-up summaries, that only lookup, external lookup, and indirect lookup relationships are available, that each External Object must have an External ID, and that performance depends on the external source's response time and rate limits. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.platform_connect_considerations_compatibility.htm&language=en_US&type=5)
+
+[^5]: OData Adapters for Salesforce Connect, Salesforce Help. Documents OData versions 2.0, 4.0, and 4.01, that Salesforce performs an OData callout each time an External Object is accessed, that the External ID derives from the OData service entity key, and that External Change Data Capture works with OData 4.0 and 4.01. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.odata_adapter_about.htm&language=en_US&type=5)
+
+[^6]: Access Data in Another Salesforce Org with the Cross-Org Adapter, Salesforce Help. Explains that the cross-org adapter uses Lightning Platform REST API calls to access records in another Salesforce org, that setup is point-and-click, and that synchronization maps the provider's objects to External Objects in the subscriber. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.salesforce_connect_xorg.htm&language=en_US&type=5)
+
+[^7]: Sync Considerations for Salesforce Connect Cross-Org Adapter, Salesforce Help. Documents that hierarchical, lookup, and master-detail relationship fields become text fields in the subscriber org holding IDs not names, and that external lookup relationships in the subscriber org mirror provider relationships. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.xorg_considerations_sync.htm&language=en_US&type=5)
+
+[^8]: External IDs for External Objects in Salesforce Connect, Salesforce Help. States each External Object has an External ID standard field whose values uniquely identify each record, derived from the OData entity key or, for custom adapters, from the DataSource.Column named ExternalId. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.apex_external_id.htm&language=en_US&type=5)
+
+[^10]: Zero-Copy and Sharing, Salesforce. Explains zero-copy integration between Salesforce Data 360 and external data platforms such as Snowflake, Google BigQuery, Databricks, and Amazon Redshift, covering data federation and data sharing so both sides read the same data in place without moving or duplicating it. [salesforce.com](https://www.salesforce.com/data/zero-copy-partner-network/guide/)
+
+[^9]: External Object Relationships, Salesforce Help. Defines lookup, external lookup, and indirect lookup relationships for External Objects. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.external_object_relationships.htm&language=en_US&type=5)

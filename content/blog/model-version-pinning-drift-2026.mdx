@@ -1,0 +1,102 @@
+---
+title: "Pinning a Model Is a Timer, Not a Lock"
+slug: model-version-pinning-drift-2026
+excerpt: "Pinning a model version is a timer, not a lock. Providers repoint aliases, swap infrastructure behind dated snapshots, and retire versions on a schedule."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 12, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [AI Infrastructure, Model Lifecycle, MLOps, Model Drift, Production AI, Reliability]
+bannerImage: "/banners/model-version-pinning-drift-2026.webp"
+ogImage: "/banners/model-version-pinning-drift-2026-og.jpg"
+---
+
+A fraud detection agent needs to score how suspicious a transaction is. Its `compute_risk_score` tool returns a number from 0 to 10, and an `8` is clearly alarming, so the agent blocks the transaction. Then the team ships a new version of the tool that takes more signals into account and widens the scale to 0 to 100. Same service, same agent, same transaction, plus one deploy.
+
+When the agent resumes, it loads its execution history from the session store, sees the stored tool result `8`, and reads that result against the tool description now in front of it, which says the score runs 0 to 100. An 8 out of a hundred reads as nearly clean. The agent lets the transaction through. It does not crash, does not warn, does not log an error. It just makes the wrong decision with total confidence.[^1]
+
+That failure had nothing to do with the model changing. It was a tool schema change, and the LLM re-interpreted its own history under new semantics. But it is the perfect frame for the problem this article is about, because the same silent misreading happens when the model itself drifts. You pin `claude-sonnet-4-5` into your config, call it stable, and move on to shipping features. What you have actually done is start a timer, not buy a static artifact. The version string you locked points at a snapshot with its own deprecation and its own behavioral drift, and when either moves, your prompts, your parsers, and your invoices all move with it, usually without a crash to tell you it happened.
+
+## The pin feels like discipline. It is a handrail over a moving surface.
+
+Locking a dependency version is the right instinct in any normal engineering culture. It prevents drift, makes builds reproducible, and lets you upgrade on your schedule instead of the vendor's. Applied to a model, the instinct looks like it works for the first several months. Outputs are stable, latency is predictable, evals hold their tolerance bands, and the service you expose to customers does not regress.[^2]
+
+What is invisible during those months is the accumulation of implicit contract. Every prompt you tune against a specific model is a running hypothesis about how that model parses instructions, how literally it follows formatting rules, and how it handles ambiguity when two parts of a prompt conflict. Teams that moved from GPT-4o to GPT-5.1 discovered this the hard way: JSON extraction prompts that had produced clean output for a year started returning conversational preamble, and `json.loads()` began throwing on roughly 15 percent of calls. The newer model took the instruction "respond with JSON" more literally and more strictly about what counts as valid JSON. Neither model was wrong. They just disagreed about unwritten rules, and the disagreement lived in the 5 to 15 percent tail the evals were never built to catch, because the old behavior was never the thing under test.[^2]
+
+The core error is treating the version string as if it were the artifact. A model ID is an address that happens to carry a name, and what sits behind that address changes more than most teams assume. Two distinct mechanisms move the ground under you. The first is alias re-pointing, where the same ID silently resolves to a new model. The second is drift inside the boundary of even a truly pinned snapshot, where infrastructure changes shift outputs without the version number moving at all.
+
+## Mechanism one: the alias repoints, and your ID is not the snapshot you think it is
+
+Providers draw a sharp line between an alias and a snapshot, and the difference decides how much your pin actually pins.
+
+On the Anthropic platform, model IDs like `claude-sonnet-4-6` are pinned snapshots. The documentation is explicit: the ID maps to a single fixed snapshot, Anthropic does not update the weights or configuration of an existing model ID, and when an updated version ships it gets a new ID. That is a real pin.[^3]
+
+But older models in the same product line sit behind convenience aliases. `claude-sonnet-4-5` is not a snapshot; it is a pointer that resolves to the most recent dated snapshot for that minor version. The alias and the dateless pin behave completely differently, and the docs call this out because the confusion is common and consequential.[^3]
+
+The same split exists everywhere. A 2026 audit of nine first-party providers and seven inference hosts found that all nine expose versioned or dated identifiers through their APIs, but only two of nine publish a central mapping from alias names to the dated snapshots those aliases currently resolve to. Five of nine even document a snapshot-pinnable identifier that will not silently change, and the gap between "you can pin" and "you know what you are currently pinned to" is exactly where alias drift hides.[^4]
+
+The DeepSeek case is the cleanest illustration in the audit. The API identifier `deepseek-chat` has been continuously available since May 2024, yet it has resolved to a succession of underlying systems across ten documented releases over nineteen months: V2 through V3.2, with experimental variants along the way. A stable identifier, a moving model. Anyone who pinned `deepseek-chat` and assumed the meaning stayed fixed was operating on the version string as a social convention rather than a contract.[^4]
+
+![The alias re-pointing timeline: one stable identifier like deepseek-chat stays continuously available while ten different model releases are served behind it over nineteen months, so pinning the alias pins a moving target rather than a fixed snapshot](</diagrams/model-version-pinning-drift-2026/1-alias-repointing.png>)
+
+The audit's overall finding is measured and damning at the same time. Across the nine providers, the mean transparency score was 16.4 out of a possible 37, roughly 44 percent, ranging from a high of 23 for OpenAI to a low of 8 for Meta. Seven of nine publish quantitative safety metrics, and six publish per-version safety comparisons, so the documentation volume is real. But the mechanism that connects a published evaluation to the artifact actually being served is missing: zero of nine expose a verifiable API-to-evaluation round-trip, and only one, Anthropic, names the exact pinned snapshot its evaluation ran on, and even that is partial because some dangerous-capability numbers are maxima across multiple internal snapshots.[^4][^5]
+
+The result is what the audit authors call transparency without verifiability. Providers publish a great deal, and none of it proves the model you call is the model that was evaluated. The inference hosts are no better: six of seven scored three of four transparency criteria, with Together AI the sole provider that discloses quantization at the model level, while Groq serves the same open weights at an undisclosed precision.[^4]
+
+![The chain of custody from a published safety evaluation to the deployed model, showing where it breaks: most providers name a family, one names a pinned snapshot, and none supports an externally verifiable round-trip back to what the API actually serves](</diagrams/model-version-pinning-drift-2026/2-chain-of-custody.png>)
+
+The upstream consequence for an engineering leader is this: when you read a model card and trust it, you are trusting a document that the provider has not wired to the thing it describes. That is acceptable for a first pass, and it is structural for anything load-bearing. It is the reason a pinning strategy needs its own measurement layer rather than a belief layer.
+
+## Mechanism two: even a pinned snapshot drifts from underneath
+
+The second mechanism is subtler, because it operates inside the boundary a pin was supposed to make stable. Anthropic's own docs are unusually direct about this. Model weights are fixed for a given ID, but the serving infrastructure around the model can change over time: the request router, safety classifiers, and sampling logic. Occasionally those infrastructure updates produce minor differences in observable behavior even when the model ID and the weights have not changed. If you notice unexpected behavioral changes on a previously stable model ID, the docs say, an infrastructure update is the most likely cause.[^3]
+
+That single sentence collapses the comforting fiction of a pin. A model is not just weights; it is weights plus the entire serving stack that turns a request into a response. The weights are immutable, but the stack is not, and the behavior you promised your users is produced by the stack.
+
+This is where the agent twist makes drift expensive rather than merely annoying. Because an agent holds state across many calls, and because your code is the manual the LLM uses to interpret its own execution history, a small change in how the model formats output, or a tool description that grew more precise, or a guardrail that now treats a previously granted approval differently, can recompute the meaning of everything the agent already did.[^1] Add a validation step at the start of a pipeline, and an execution already midway through finds itself in a pipeline that no longer matches the path it took to get there.[^1]
+
+The failure mode is silent. A crash is painful but visible; you page someone, they fix it, and you learn. Silent reinterpretation produces a plausible wrong answer that flows straight into production, and it is far more common than the emergency because it rarely looks like an emergency. The teams that catch it early are the ones that treat "did this model's behavior move" as an operational metric with its own monitoring, rather than a one-time migration project.
+
+![The silent corruption walkthrough: a risk score tool's scale widens from 0 to 10 to 0 to 100 after a deploy, and the agent reloads its stored result of 8 and reads it as nearly clean, letting a fraudulent transaction through without any crash or warning](</diagrams/model-version-pinning-drift-2026/3-silent-corruption.png>)
+
+## Retirement is the date on the timer
+
+Even a perfectly pinned snapshot eventually stops being served. Deprecation schedules vary by provider and by tier, and the range is wide enough that it is a planning input, not a detail.
+
+OpenAI publishes its minimum notice periods and they scale with how close to the frontier the model is. Generally available models get at least six months of notice before retirement. Specialized variants of general models get at least three months. Preview models, the ones with `preview` in the name like `computer-use-preview`, may be retired with as little as two weeks of notice, and OpenAI's docs explicitly advise against using preview models for business-critical production workloads unless you can migrate on short notice.[^6]
+
+That preview tier is the trap within the trap. Its behavior can change with two weeks of runway, and OpenAI's own guidance is a direct warning that it is a research surface, not a production dependency. If you pin a preview model for its capability, you have accepted a rolling, two-week migration obligation as a permanent cost of doing business.
+
+The consequence of these schedules is what practitioners call the ship-and-pin trap. Pinning is correct in the short term and accumulates cost in the long term, because the work to re-qualify a prompt, a parser, and an eval against the successor model all lands at once when the deprecation email arrives. Anthropic retires model strings on a roughly twelve-month cadence after a successor ships, and the implicit contract you accumulated against the old model does not migrate automatically. The teams that migrate calmly are the ones that never let a full year pass without running the next tier against their prompt portfolio. They treat "does the next model pass our evals" as an operational metric, not a project.[^2]
+
+## What running stable actually looks like
+
+Nothing in this article argues against pinning version strings. Pinning is the correct default. The argument is against treating the pin as a stable system and stopping there. Once you accept that the pin is a handrail over a moving surface, the operating model becomes practical and mostly unglamorous. Four practices cover the ground.
+
+Treat the snapshot as the unit of truth, not the alias. Prefer dated or dateless pin identifiers that the provider documents as immutable, and record which identifier is a pointer versus a fixed snapshot. This is the same discipline as promoting a model through a registry: you commit to an immutable artifact, not to whatever the name currently routes to, as we covered in [Promote Models Like You Promote Code](/field-notes/model-registry-promotion-pipeline-2026). When you write down your current pin, you should also be able to name the known next tier and the provider's published retirement date for the version you are on. If you cannot name both in a sentence, the migration does not exist yet as a plan.[^2][^3]
+
+Run a behavioral drift canary, not just scheduled evals. A scheduled re-qualification is a point-in-time check; a canary is the continuous version. Practitioners find that a curated suite of fifty to a hundred carefully chosen prompts covering your most critical paths, run daily or weekly against the pin and against the current flagship, catches more regressions than thousands of synthetic examples, because synthetic suites test what the author imagined would break rather than what actually breaks in production. You watch two signals at once: drift inside the pin, and divergence from the frontier that tells you how much the next migration will cost.[^2]
+
+Build dual-track prompts where it matters. Every prompt that is load-bearing is maintained against at least two model tiers at once: the current pin and the successor you expect to migrate to. This is a shared prompt body with a small per-model adapter layer for the parts that differ, version-controlled like code and evaluated against both tiers in CI. The gate is no longer "does this pass on our model," it is "does this pass on both tiers," and a prompt that regresses on the successor is treated the same way as a failing test, as a warning that the gap is widening.[^2]
+
+Pin executions, not just models. When the model or the tooling that interprets execution history can change mid-flight, the fix is a semantic version boundary on the whole execution, not just the model string. Immutable deployments, where a new version ships alongside the old one rather than replacing it, and pinning each execution to the version it started on, eliminate the silent reinterpretation that opens when a running agent meets a changed manual. When a mismatch does occur, it should fail loudly during replay, turning a silent wrong answer into an explicit signal someone can fix. This is the discipline that turns version-aware execution into an infrastructure property instead of a hope.[^1]
+
+The pattern across all four is the same move: you stop treating the model as something you choose once and instead treat it as something you continuously re-measure. That is not an admission of defeat. It is the difference between a system that happens to work and a system you can trust to keep working on a schedule you set, rather than one the vendor sets for you.
+
+## The meta-point for anyone operating a pipeline
+
+Every production AI system is a claim that the model you pinned behaves the way you measured it. The measurement has a half-life, because the artifact, the stack behind it, and the schedule that retires it all move. The teams that stay stable are the ones running a measurement loop that keeps the claim honest.
+
+That is the same reason our own writer pipeline checks diagram facts against the article text before it ships, and why a fabricated version claim gets caught only when a reviewer re-opens the actual releases page instead of trusting the pin. The principle generalizes: a version string is an address, and addresses are worth re-verifying against what they actually resolve to, on a schedule, before you bet a transaction on them.
+
+![The model-stability operating loop: pin the snapshot, run a drift canary against the pin and the next tier, keep dual-track prompts, and pin executions so an agent never re-interprets its own history under new semantics](</diagrams/model-version-pinning-drift-2026/4-model-stability-loop.png>)
+
+[^1]: Restate, "Updating AI Agents safely in production" (March 11, 2026). The fraud-detection example where a tool's scale widens from 0 to 10 to 0 to 100 and the agent re-interprets a stored result of 8 as nearly clean; the four mechanisms that let an LLM misread its own execution history (schema descriptions, prompts, guardrails, tool removals); and the immutable-deployments plus pinned-executions rule that makes versioning an infrastructure property rather than an application concern.
+[^2]: Ship-and-Pin Trap (Tian Pan, April 23, 2026). Pinning as a silent timer; the GPT-4o to GPT-5.1 JSON extraction failure with `json.loads()` throwing on roughly 15 percent of calls; the three buckets of hidden dependency accruing under a pin; and the scheduled re-qualification, 50 to 100 case drift canary, and dual-track prompt portfolio counter-practices.
+[^3]: Anthropic, "Model IDs and versioning" (platform docs, accessed October 12, 2026). Model IDs map to a single fixed snapshot; Anthropic does not update the weights or configuration of an existing model ID; older models sit behind convenience aliases like `claude-sonnet-4-5` that resolve to the most recent dated snapshot; and serving infrastructure (router, safety classifiers, sampling logic) can change and produce minor behavioral differences even when the ID and weights are unchanged.
+[^4]: Abraham & Bucknall, "Silent Updates: Measuring and Closing the Post-Deployment Disclosure Gap" (arXiv:2608.11803, August 12, 2026). The Silent Updates Scorecard across nine first-party providers and seven inference hosts; mean first-party score 16.4 / 44 percent with a range of 23 (OpenAI) to 8 (Meta); zero of nine exposing a verifiable API-to-evaluation round-trip; only Anthropic naming a pinned evaluated snapshot, and only partially; no provider version-binding content policy; six of seven hosts scoring three of four transparency criteria; Together AI as the sole host disclosing quantization while Groq serves the same open weights at undisclosed precision.
+[^5]: OpenAI, "GPT-5 System Card" (2025, as analyzed in the Silent Updates audit). A forty-page report with per-category not_unsafe scores, but referencing family-level identifiers gpt-5-thinking and gpt-5-main rather than a pinned dated snapshot, so an auditor cannot map the evaluated system to a specific served deployment.
+[^6]: OpenAI, "Deprecations" (API docs, accessed October 12, 2026). Minimum notice periods: generally available models at least six months, specialized variants at least three months, preview models potentially as little as two weeks, with the docs advising against preview models for business-critical production workloads.

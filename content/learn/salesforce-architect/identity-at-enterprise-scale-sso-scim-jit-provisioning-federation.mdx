@@ -1,0 +1,148 @@
+---
+title: "Lesson 67: Identity at Enterprise Scale: SSO, SCIM, JIT Provisioning, and Federation"
+slug: identity-at-enterprise-scale-sso-scim-jit-provisioning-federation
+series: "salesforce-architect"
+lesson: 67
+excerpt: "How enterprise teams manage who their users are across many systems. Single sign-on and federated identity let one set of credentials work everywhere, while SCIM and just-in-time provisioning keep user records in sync without manual administration."
+date: "October 13, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Identity, Security]
+---
+
+# Lesson 67: Identity at Enterprise Scale: SSO, SCIM, JIT Provisioning, and Federation
+
+Lesson 66 showed you how to take a build from a developer's machine to a monitored, released production system. This lesson is about the layer that decides whether anyone can get into that system at all. Identity is the answer to two questions every enterprise org has to answer at scale: who are your users, and how do you keep their records correct across every system they touch?
+
+The security lessons earlier in this course covered the inside of the org: profiles, permission sets, the sharing model, and how a person proves who they are. This lesson turns outward and upward. It is about the identity layer that sits above a single org, the machinery that lets one set of credentials work across Salesforce and a dozen other applications, and the automation that keeps user records in sync without a human typing them in. The Salesforce certification that owns this territory is the Identity and Access Management Architect, and its exam guide is a useful map of what an architect is actually accountable for: single sign-on, user provisioning, and the federation that ties identity domains together. [^1]
+
+## Define the terms first
+
+Identity work is full of overlapping acronyms, and the fastest way to get lost is to treat them as interchangeable. They are not. Get the definitions straight and the architecture falls into place.
+
+**Identity** is the set of attributes that make a person or a system recognizable: a username, an email, a unique identifier, the groups they belong to. In an enterprise, identity is not owned by any single application. It is owned by an identity provider.
+
+**Identity provider (IdP)** is the system that is the source of truth for who a user is and how they authenticate. It stores the credentials, verifies them, and issues assertions or tokens that other systems trust. In a typical enterprise this is the corporate directory or a dedicated identity service.
+
+**Service provider (SP)** is the application that trusts the identity provider. Salesforce is a service provider when it accepts assertions from your corporate identity provider. It can also act as an identity provider itself, issuing assertions to other applications.
+
+**Single sign-on (SSO)** is the experience where a user authenticates once against the identity provider and then reaches multiple applications without logging in again. The user logs in to the identity provider, and each application trusts that login.
+
+**Federation** is the trust relationship that makes SSO possible across domains. Two organizations, or two systems, agree that one will vouch for users and the other will accept that vouching. Federation is the architecture; SSO is the experience it produces.
+
+**SCIM** (System for Cross-domain Identity Management) is the protocol for provisioning, the automated creation and management of user records. It is how a user account appears in Salesforce without someone creating it by hand.
+
+**Just-in-time (JIT) provisioning** is a different way to create user records: the account is created automatically the first time the user logs in through SSO, based on the attributes in the login assertion.
+
+The distinction that matters most: **SSO answers "can this person get in?" and provisioning answers "does a record for this person exist?"** They are separate problems that often get solved together, and an architect who conflates them will design a system that authenticates people who have no record, or creates records for people who should not be there.
+
+![SSO and provisioning answer two separate questions: can this person get in, and does a record for this person exist, and conflating them breaks the architecture](</diagrams/identity-at-enterprise-scale-sso-scim-jit-provisioning-federation/1-sso-vs-provisioning.png>)
+
+## The identity provider is the source of truth
+
+The single most important architectural decision in enterprise identity is choosing where the source of truth lives. In a well-run enterprise, it does not live in Salesforce. It lives in the identity provider, and Salesforce is one of many service providers that trust it.
+
+This is a reversal of the default. A small org creates users directly in Salesforce, and Salesforce is the source of truth for those users. At enterprise scale that breaks down, because the same person exists in Salesforce, the HR system, the finance system, and a dozen SaaS applications. If each system holds its own copy of the person and manages it independently, the copies drift. A person leaves the company and their Salesforce account stays active because nobody remembered to deactivate it. That is a security hole, and it is the exact failure mode enterprise identity exists to prevent.
+
+The fix is to make the identity provider authoritative and treat every application, including Salesforce, as a consumer of identity. The identity provider knows who the person is, whether they are still employed, and what groups they belong to. Salesforce learns about the person through SSO (for authentication) and through provisioning (for the user record). When the person leaves, the identity provider stops issuing assertions and the provisioning system deactivates the account. The deactivation happens because the source of truth changed, not because someone remembered to do it.
+
+Salesforce supports this model directly. You can configure Salesforce as a service provider that trusts an external identity provider, and you can use SCIM to keep user records in sync with that provider. [^2] The architecture is: identity provider owns the person, SCIM keeps the Salesforce user record current, and SSO lets the person in.
+
+## Single sign-on: SAML and the Federation ID
+
+Single sign-on lets a user authenticate once against a trusted identity provider and then reach multiple applications, including Salesforce, without logging in again. Salesforce Identity implements SSO with SAML. [^3]
+
+The mental model is a service-provider arrangement. An external identity provider is the source of truth for who a user is. Salesforce is the service provider that trusts assertions from that identity provider. When you set up SSO, you create a SAML single sign-on setting in Salesforce using the information from your identity provider, including the identity provider's certificate and issuer, and you decide how the SAML assertion identifies the user. [^4]
+
+The link between the identity provider's view of a person and the Salesforce user record is the **Federation ID**. This is a field on the Salesforce User object that stores the identifier the identity provider uses for that person. When a SAML assertion arrives, Salesforce matches it to a user by the Federation ID. This is the attribute that associates the Salesforce user with the third-party identity provider. [^3]
+
+The Federation ID is the load-bearing detail in SSO design. If it is not set consistently, SSO fails in a confusing way: the user authenticates fine at the identity provider, but Salesforce cannot find a matching user and the login fails. Getting the Federation ID right, and making sure it is populated for every user, is the difference between SSO that works and SSO that produces a steady stream of support tickets.
+
+SAML is the protocol Salesforce uses for inbound SSO, but the identity layer also speaks OpenID Connect, which is the modern protocol built on OAuth 2.0. The distinction matters when you are choosing how a system talks to Salesforce. SAML is the classic enterprise choice for browser-based SSO. OpenID Connect is the choice for modern applications and for Salesforce acting as an identity provider to other systems. Both solve the same core problem: one login, trusted across applications.
+
+## SCIM: automated provisioning
+
+SSO gets a person in, but it does not create their record. That is what provisioning is for, and SCIM is the standard way to do it at scale.
+
+SCIM is the open standard System for Cross-domain Identity Management. Salesforce describes it plainly: you can provision and manage your Salesforce user identities across systems with SCIM, and the Salesforce implementation provides extensions to the SCIM 2.0 specification so that you can edit and manage Salesforce user properties using REST API operations. [^2]
+
+The practical shape of SCIM is a set of REST endpoints. To manage Salesforce user objects with SCIM, you send REST API create, read, update, and disable operations to SCIM endpoints, and you must supply an OAuth 2.0 access token to perform those operations. [^2] The identity provider, or a provisioning service working on its behalf, calls these endpoints to create a user, update their profile, add them to a group, or deactivate them.
+
+One detail is worth holding onto because it surprises people: in Salesforce you deactivate user objects rather than deleting them. Deactivating a user sets their active status to false, which means they cannot log in, but the record still exists and can be queried. To let the user back in, you reactivate the account. [^2] This is deliberate. Salesforce keeps the record for audit and historical integrity, and SCIM reflects that by mapping the identity provider's "remove" to a deactivation rather than a deletion.
+
+SCIM is the right tool when you need the user record to exist before the user ever logs in, or when you need to manage attributes, groups, and entitlements continuously. It is the mechanism that keeps the Salesforce user record a faithful mirror of the identity provider.
+
+## Just-in-time provisioning: create on first login
+
+Just-in-time provisioning takes a different approach. Instead of creating the user record ahead of time, Salesforce creates it automatically the first time the user logs in through SAML SSO, using the attributes carried in the SAML assertion.
+
+The flow is simple. A user who has no Salesforce record yet clicks the SSO link, authenticates at the identity provider, and the SAML assertion arrives at Salesforce. Salesforce sees there is no matching user, so it creates one on the spot, populating fields from the assertion attributes, and logs the user in. The next time the user logs in, the record already exists and JIT just matches them to it.
+
+JIT is attractive because it removes the provisioning step entirely. There is no SCIM integration to build, no batch job to run, no user record to create ahead of time. The user appears the moment they first need access. For a small population, or a pilot, or a partner community where you do not know who will show up, JIT is the fastest path to a working system.
+
+The tradeoff is control. With JIT, the record is created from whatever the assertion contains, and if the assertion does not carry the right attributes, the record is incomplete. You also have to decide what happens to the user's access when they leave. JIT creates records but does not automatically deactivate them, so a departed user's record can linger unless something else removes it. JIT is a provisioning convenience, not a lifecycle management system.
+
+The architect's rule of thumb: **use SCIM when you need the record to exist ahead of time and stay continuously in sync, and use JIT when you want the record to appear on first login and you can tolerate the lighter control.** Many enterprises use both, SCIM for the employee population and JIT for a partner or customer population that is harder to predict.
+
+![A comparison of SCIM, which creates a user record ahead of time and keeps it in sync, and just-in-time provisioning, which creates the record on first login with lighter control](</diagrams/identity-at-enterprise-scale-sso-scim-jit-provisioning-federation/2-scim-vs-jit.png>)
+
+## Federation: trust across domains
+
+Federation is the trust relationship underneath all of this. It is what lets one organization's identity provider vouch for users to another organization's applications, and it is what makes SSO work across company boundaries.
+
+The clearest example is a partner portal. Your company runs Salesforce, and your partners run their own identity systems. You do not want to create accounts for every partner employee, and you do not want to manage their passwords. Federation lets each partner's identity provider authenticate their own people and send assertions to your Salesforce org, which trusts them. The partner owns the identity; you own the access. When a partner employee leaves the partner company, the partner's identity provider stops issuing assertions, and that person loses access to your portal without you doing anything.
+
+Salesforce supports this through federated authentication. When your company's identity provider initiates login, Salesforce automatically provides SSO for sites using SAML. [^5] The trust is established by exchanging certificates and configuring the identity provider relationship, and from then on the identity provider's assertions are accepted as proof of identity.
+
+Federation is the reason enterprise identity scales. It does not require every organization to share a single directory. It requires them to trust each other's directories, which is a much lighter commitment. The identity provider remains the source of truth for its own users, and each service provider decides how much access to grant based on the assertions it receives.
+
+## Putting it together: the identity architecture
+
+The pieces fit into a coherent architecture. The identity provider is the source of truth. SSO, through SAML or OpenID Connect, authenticates the user and gets them in. SCIM keeps the user record in sync with the identity provider. JIT creates records on first login where that is the right fit. Federation extends the trust across organizational boundaries.
+
+![The enterprise identity architecture with the identity provider as the source of truth, SSO and SCIM for employees, and federation with just-in-time provisioning for partners](</diagrams/identity-at-enterprise-scale-sso-scim-jit-provisioning-federation/3-identity-architecture.png>)
+
+The architect's job is to choose the right combination for each population, and the decision tree is straightforward:
+
+1. **Employees.** The corporate identity provider is the source of truth. Use SSO for authentication and SCIM for provisioning, so the Salesforce user record mirrors the directory and deactivates when the person leaves.
+2. **Partners.** Use federation so each partner's identity provider authenticates their own people. Decide between SCIM and JIT based on whether you need records ahead of time. JIT is often the right fit because you cannot predict who will show up.
+3. **Customers.** These are usually external users in an Experience Cloud community, and the identity decision depends on whether they authenticate through the community's own identity or through a partner identity provider. The provisioning choice follows the same logic.
+
+The trap to avoid is treating identity as a single solution. A one-size-fits-all SSO setup that works for employees will not fit a partner population, and a JIT-only approach that works for a pilot will not scale to a workforce of thousands where you need records to exist before day one.
+
+![A decision tree for choosing provisioning per population: employees use SSO with SCIM, partners use federation with SCIM or JIT, and customers follow derived identity logic](</diagrams/identity-at-enterprise-scale-sso-scim-jit-provisioning-federation/4-provisioning-decision-tree.png>)
+
+## Worked example: an enterprise rollout
+
+A company with 4,000 employees and 200 partner firms is moving to Salesforce. They want employees to log in through the corporate identity provider, and they want partners to reach a portal without the company managing partner accounts. Here is the identity design.
+
+1. **Make the identity provider the source of truth.** The corporate directory is the identity provider. Salesforce is configured as a service provider that trusts it. No employee accounts are created by hand in Salesforce. [^4]
+2. **Set up SSO with the Federation ID.** Create the SAML single sign-on setting in Salesforce using the identity provider's certificate and issuer. Populate the Federation ID on every employee user record so the SAML assertion can match each person. [^3] [^4]
+3. **Provision employees with SCIM.** Connect the identity provider to Salesforce's SCIM endpoints. When a new employee is hired, SCIM creates their Salesforce user record. When they change roles, SCIM updates their profile and groups. When they leave, SCIM deactivates the record. The Salesforce user list stays a faithful mirror of the directory. [^2]
+4. **Federate the partners.** Configure each partner's identity provider to send SAML assertions to the Salesforce portal. The partner authenticates their own people, and Salesforce trusts the assertions. The company never manages partner passwords. [^5]
+5. **Use JIT for the partner population.** Because the company cannot predict which partner employees will need access, enable just-in-time provisioning so a partner user's record is created the first time they log in through the federated SSO. The record appears on demand, and the partner's identity provider controls who is allowed to authenticate. [^6]
+6. **Keep the two populations separate.** Employees get SCIM-provisioned records tied to the corporate directory. Partners get JIT-created records tied to their own identity providers. The two flows never mix, and the deactivation behavior is correct for each: employees deactivate when they leave the company, partners lose access when their identity provider stops vouching for them.
+
+The result is an identity layer where the company manages its own people and lets partners manage theirs, with no manual user administration and no stale accounts.
+
+## Try it
+
+You are asked to design identity for a mid-size company moving to Salesforce. They have 1,500 employees, a corporate identity provider, and a small group of 30 consultants from three partner firms who need access to a project portal.
+
+1. Which population gets SCIM provisioning, and why?
+2. Which population is a better fit for just-in-time provisioning, and what is the tradeoff you accept by choosing it?
+3. What is the Federation ID, and why does getting it wrong break SSO in a confusing way?
+4. A consultant leaves their firm. How does the consultant lose access to the portal, and why does no one at the company have to do anything?
+
+A reasonable answer: the 1,500 employees get SCIM provisioning, because their records need to exist ahead of time and stay continuously in sync with the corporate directory, including deactivation when they leave. The 30 consultants are a better fit for JIT, because the company cannot predict who will show up and the records can be created on first login; the tradeoff is lighter control over the record's attributes and lifecycle. The Federation ID is the field on the Salesforce User object that links the Salesforce user to the identity provider's identifier, and if it is not set consistently, the SAML assertion cannot match a user, so the user authenticates at the identity provider but the Salesforce login fails. When a consultant leaves their firm, the partner's identity provider stops issuing assertions, so the consultant can no longer authenticate to the portal, and no one at the company has to deactivate anything because the access is controlled by the partner's identity provider.
+
+## What's next
+
+You can now design the identity layer for an enterprise: an identity provider as the source of truth, SSO through SAML and the Federation ID, SCIM for continuous provisioning, JIT for on-demand records, and federation for trust across company boundaries. The next lesson shifts from who can get into the system to what happens when the system itself fails. Lesson 68 covers **disaster recovery: backup, restore, RTO, and RPO**. You will see how enterprise teams plan for the worst, how they define how much data they can afford to lose and how fast they must recover, and how they turn those targets into backup and restore strategies and recovery drills. That is the layer that decides whether the system you just learned to secure and deploy survives an outage.
+
+[^1]: help.salesforce.com. [Salesforce Certified Identity and Access Management Architect Exam Guide](https://help.salesforce.com/s/articleView?id=005298969&language=en_US&type=1). Defines the role and its exam domains: identity and access management strategy, single sign-on, user provisioning, and federation.
+[^2]: help.salesforce.com. [Manage Salesforce User Identities with SCIM](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.identity_scim_overview.htm&type=5). Explains that SCIM is the open standard System for Cross-domain Identity Management, that the Salesforce implementation extends the SCIM 2.0 specification, that you manage user objects with REST API create, read, update, and disable operations, that you must supply an OAuth 2.0 access token, and that you deactivate user objects rather than deleting them.
+[^3]: trailhead.salesforce.com. [Set Up Single Sign-On for Your Internal Users](https://trailhead.salesforce.com/content/learn/modules/identity_login/identity_login_sso). Explains that Salesforce Identity implements SSO with SAML and that the Federation ID is the attribute that associates the Salesforce user with the third-party identity provider.
+[^4]: help.salesforce.com. [Step 2: Create a SAML Single Sign-On Setting in Salesforce](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.sso_service_provider_configuration.htm&type=5). Explains how to create the SAML single sign-on setting using the identity provider's certificate and issuer and how to decide how the SAML assertion identifies the user.
+[^5]: help.salesforce.com. [Single Sign-On for Portals and Sites](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.sso_sites_portals_about.htm&type=5). Explains that federated authentication is available and that Salesforce automatically provides SSO for sites using SAML when the identity provider initiates login.
+[^6]: help.salesforce.com. [Enable Just-in-Time Provisioning](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.sso_jit_enable_jit.htm&type=5). Explains how to enable just-in-time provisioning for a SAML single sign-on setting, which creates a user account the first time the user logs in with SAML.

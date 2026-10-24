@@ -5,7 +5,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import type {
   AdminCourseListRow,
   CourseRow,
@@ -16,7 +16,7 @@ export async function GET() {
   if (!gate.ok) return gate.response;
 
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
 
     const [coursesRes, countsRes] = await Promise.all([
       service

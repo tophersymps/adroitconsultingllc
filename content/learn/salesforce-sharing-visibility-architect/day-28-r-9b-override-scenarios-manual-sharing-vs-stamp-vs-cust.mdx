@@ -1,0 +1,154 @@
+---
+title: "Override Scenarios: Manual Sharing vs Stamp vs Custom Logic"
+slug: day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust
+series: salesforce-sharing-visibility-architect
+lesson: 28
+excerpt: "How to pick the right record access override for a given scenario: manual sharing for one-off human grants, a stamp plus criteria rule for repeatable value-based access, and Apex Managed Sharing when the access depends on runtime computation a field cannot represent."
+date: 2026-10-10
+author: Jimmy Olsen
+readTime: "14 min read"
+tags: [salesforce, sharing, visibility, architect, manual-sharing, sharing-rules, apex-managed-sharing, rowcause, stamp, override]
+---
+
+Lesson 27 handed you the two declarative mechanisms for shaping a single record's access beyond the baseline: the stored stamp and the computed rollup, and it tore apart the trade-off between going stale and costing compute. This lesson takes the next step. The exam objective r-9b asks you to pick the override mechanism for a scenario. That is not a trade-off question, it is a classification question. You read a requirement and decide which of three tools produces it: a manual share, a stamp lived behind a criteria rule, or custom Apex logic. Get the classification right and the rest of the design mostly follows.[^1]
+
+The reason this earns its own objective under Access to Records is that the three mechanisms solve different problems and you will fail the scenario questions if you reach for them interchangeably. Manual sharing is for the rare, human, one-off grant where an owner decides today that one colleague should see one record. A stamp plus criteria rule is for the repeatable rule where access follows an identifiable value on the record, and it is the declarative workhorse. Apex Managed Sharing is the escalation you reserve for access that depends on runtime computation or data no field can represent, and it carries real upkeep. This lesson defines each, works a scenario through the decision guide, walks the configuration, and drills the exam traps.[^1]
+
+## Define the terms
+
+**Override mechanism.** One of the tools that grants access to a specific record or class of records beyond what org-wide defaults, the role hierarchy, and standard sharing rules already produce. The three this lesson owns are manual sharing, stamping plus a criteria rule, and Apex Managed Sharing. The exam asks you to classify a scenario into exactly one of these. Each is a distinct decision, not a spectrum, which is why the exam can test it cleanly.[^1]
+
+**Manual share (manual sharing).** A share row a record owner creates on a single record through the Share button, granting a user or group Read, Read/Write, or (in the supported cases) Owner access to that one record. It is visible in the record's sharing panel as a manual share row. Creating one requires that the owner be allowed to do so: the profile or permission set must carry the "user can share" (typically expressed as the Share access setting on object permissions) permission, and the object's sharing model must permit manual sharing. Manual shares are owner-initiated, per-record, and ad hoc. They do not scale and they are not reusable, so they are the right tool for the rare human decision and the wrong tool for population or criteria access.[^2][^3]
+
+**Stamp (stamped field).** The act of writing a security-relevant value onto a record so a rule can later read it. The value is often the identity of a group or an access category (region, tier, process) that a criteria-based sharing rule maps to access. A stamp is stored and queryable, and crucially it needs something to keep it in sync as the underlying facts change. In lesson 27 you saw the stored versus computed axis; here the stamp is one of the three classifier buckets, paired with a criteria rule, and it is the answer when access should follow a repeatable value the platform can read.[^4]
+
+**Criteria-based sharing rule.** The rule that selects records by a condition on field values and grants a group access to every match. It materializes share rows at save time and goes stale until recalculation. When you choose "stamp + criteria rule," the stamp puts the value on the record and the rule turns that value into access. The rule cannot act on a value that is absent or stale, so the stamp and the rule are one mechanism, not two.[^4][^5]
+
+**Apex Managed Sharing.** Programmatic sharing where Apex code explicitly creates share rows (through the sharing API and the `Share` object) to grant access, using a managed or custom RowCause and the highest access level the group should earn. It is the mechanism for access that depends on runtime computation or on data that cannot be stamped onto the record. It requires reconciliation: code that deletes stale share rows so access does not outlive its reason, and it typically requires Modify All data permission because the code must be able to delete existing share rows it does not own. Apex-Managed Sharing without reconciliation is a grant leak, and the exam treats the absence of reconciliation as a design flaw.[^6][^7]
+
+**RowCause.** The field on a share row that records why the share exists. Manual shares and rule-derived shares carry their own system RowCause values. When code creates shares, it sets a managed (or custom) RowCause. Because the RowCause distinguishes who or what produced a grant, it is how reconciliation code identifies the rows it created and may delete, versus rows it must leave alone. A distinct RowCause is the contract that makes programmatic cleanup safe and is the reason the exam asks about it.[^6]
+
+**Cleanup job (stale-share hygiene).** A periodic process that deletes manual shares, team shares, or rule shares that no longer serve a purpose. Manual shares accumulate without an owner noticing, because nothing expires them on their own. A scheduled job that reclaims stale manual shares keeps the sharing table healthy: it bounds row counts, protects performance, and prevents over-access. The exam rewards an architect who includes cleanup in the design rather than treating sharing rows as write-only.[^8]
+
+## Why it matters for the exam and for real builds
+
+The scenario questions in requirement r-9b hand you a requirement and three mechanisms. The tempting trap is to solve every requirement with the biggest hammer, or to fall back on manual sharing because it is the most obvious button. Both are wrong for the exam and wrong in production. The reason the objective exists is that the correct mechanism is the smallest one that fully and honestly meets the need, and choosing it is a design decision with real consequences for licensing, data volume, and security.
+
+Manual sharing looks easy but scales terribly. If you answer every scenario with "just share it," you invent hundreds of per-record grants that no one audits, that no business rule explains, and that survive long after the colleague who needed the record has moved on. At volume this corrupts the sharing table and quietly over-grants. The stamp plus criteria rule is the maintainable middle: it encodes the reason on the record and expresses the grant as a recalculable rule, so the access survives personnel changes and is explainable to an auditor. Apex is the most powerful and the most expensive to operate, because someone has to write the reconciliation and test every path.
+
+The exam wants you to make this classification the way you would in front of a client: name the nature of the need first, then let the nature choose the mechanism. One-off human decision, manual share. Repeatable by a field or process value, stamp plus criteria rule. Computed or external, Apex with reconciliation. Everything else in the lesson is the supporting evidence for that one frame.[^1]
+
+![The three override mechanisms side by side: manual sharing for one-off owner-initiated grants, a stamp plus criteria rule for repeatable value-based access, and custom Apex logic for computed access, each with its strengths and upkeep costs](</diagrams/day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust/1-three-mechanisms.png>)
+
+## The decision guide, first
+
+Hold the three-way decision explicitly before you touch any configuration. This is the whole objective in one screen, and the exam's correct answers all fall out of it.
+
+**One-off, owner-initiated, per-record human decision: manual sharing.** A colleague needs to see this one account, and the business reason is specific and temporary. The owner shares the single record. Small, fast, and exactly correct, as long as you accept that it will not scale and that you will clean it up later.
+
+**Repeatable by an identifiable field or process value: stamp + criteria rule.** Any record whose Type equals VIP goes to the VIP group. The requirement is a rule over a class of records, not a one-off about one record. You stamp the value (Type equals VIP) and point a criteria-based sharing rule at it. Declarative, maintainable, recalculable, and the reason the exam favors it for repeatable access.
+
+**Computed or external, a field cannot represent the answer: Apex Managed Sharing.** Access depends on runtime computation, an external system, or logic that no stored field can express. You cannot stamp it because there is no value to stamp. You write Apex that computes access and creates share rows, and you build reconciliation into the same code.
+
+### Why "stamp + criteria rule" beats the alternatives for repeatable access
+
+The exam repeatedly tests a requirement that is clearly a rule ("any record whose Type is VIP is visible to the VIP group") and offers manual sharing per record, an Apex per record, an Account Team, and the stamp plus criteria rule as options. The correct answer is the stamp plus criteria rule, and it is worth being precise about why the others fail, because the exam trap is the reflex.
+
+Manual sharing per record fails because the requirement is not about a single record, it is about a class. To meet it manually you would open every matching record and click Share, which does not scale, does not react to new records, and has no rule to recalculate. Apex per record fails for a different reason: the requirement is perfectly expressible declaratively. Any record with Type equal VIP, there is the condition, there is the value, there is the group. Writing code for a rule the platform already expresses declaratively adds maintenance and reconciliation for no benefit. An Account Team fails because teams are per-record, ad-hoc groupings that do not express a population rule; they are the same class of problem as manual sharing, attached to accounts specifically.
+
+The stamp plus criteria rule expresses the exact requirement: the Type value is the stamp, the rule reads Type equals VIP, the grant targets the VIP group, and recalculation keeps it current as records are added and as Type values change. It scales to any record count, it reacts to new records on recalc, and it is explainable. That is why it is the default answer for any repeatable-by-value scenario.[^4]
+
+## Mechanism one: manual sharing
+
+The Share button on a record is the most direct override in Salesforce, and the least appropriate at volume. An owner who needs a colleague to see a single record can open the record, click Share, add the user or group, and choose an access level. The result is a manual share row for that one record. The colleague sees it, the owner has solved the immediate need, and no further configuration exists.
+
+Two permissions make it possible. The owner must have the "user can share" style permission on their profile or permission set, which governs whether they can share records they own; and the sharing model for the object must permit manual sharing (OWD while in a public read model, the share button unavailable in private models that fully block it). Granting these permissions is a policy decision an architect documents, because the ability to create shares is itself an access control. If every owner can hand out access on demand, that is a capability to bound and to audit.[^2][^3]
+
+The protectively correct use is the rare, ad-hoc, human decision where the business process genuinely has no rule. A specific colleague needs this one account for the review, and the reason is a one-off. Manual sharing is the smallest mechanism that meets it. The exam rewards recognizing when that is genuinely the answer (question one in the quiz is exactly this case) and penalizes reaching for it for population access.
+
+Manual sharing carries two structural costs. It does not scale, because you create a grant per record and there is no rule to recalculate when records change. And it accumulates, because nothing expires a manual share on its own. An owner who shared a record to help a colleague last quarter is not prompted to revoke it. This is why the healthy design pairs manual sharing with a cleanup job that periodically reviews and deletes stale or ownerless manual shares, keeping the sharing table from bloating and from leaking access it no longer justifies.[^8]
+
+### A worked example
+
+A sales director needs, for one week, to see a deal ledger that belongs to a colleague so she can sign off on the renewal. The requirement is a single record, a single human decision, and a temporary reason. The correct mechanism is a manual share: the owner opens the Opportunity, clicks Share, grants the director Read Only, and notes the reason on the share. No rule, no code, no OWD change. That is exactly what manual sharing exists for. If the same team needed to see all renewal-flagged opportunities permanently, the mechanism would change to a stamp plus criteria rule, because that is now a population rule, not a one-off.[^2]
+
+![Manual sharing flow: the record owner, who has the user-can-share permission, clicks Share on a single record to grant a user or group read or edit access, writing a manual share row for that one record](</diagrams/day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust/2-manual-sharing.png>)
+
+## Mechanism two: stamp + criteria rule
+
+The mainstay of declarative read access is the stamp followed by a criteria-based sharing rule. It is the answer whenever access should follow an identifiable value on the record, and the exam tests it constantly for repeatable requirements.
+
+You establish the value that encodes the requirement. It can be a field the business already maintains (record type, region, status), or a dedicated field you keep in sync. In lesson 27 you saw both the record-type stamp and the custom-field stamp. Here the emphasis is on recognizing when the requirement calls for this pattern at all, and then wiring it. The stamp is the "what determines access" answer; the rule is the "who gets access" answer.
+
+The criteria-based sharing rule selects records where the stamped value matches, and grants the target group the chosen access level. It materializes share rows at save time, and it goes stale until recalculation. So the mechanism is declarative, maintainable, and recalculable: change the value on a record and the rule stops granting (or grants) after recalc; add a new record stamped with the value and it appears after recalc; reclassify the group and the rule follows. This is the property that makes it the right choice for repeatable, value-driven access.[^4][^5]
+
+The ongoing duty is sync: something must keep the stamp current. If the value the rule reads goes stale, the rule acts on the wrong data. A record that stops qualifying but keeps its stamp continues to receive access past the reason for it. So the design includes the mechanism that maintains the stamp, a flow, a record type the process sets, or a field update, plus a recalc plan and a test of the negative case.
+
+### A worked example
+
+An org has a requirement that any Case whose Type is Priority is visible to the Priority team, regardless of owner, and that the grant react as records are added and priorities change. The architect uses the record type as the stamp: the support process already sets Priority cases to the Priority record type, which drives the page layout and workflow the user sees, so the stamp stays in sync as a byproduct of work, not as a task. A criteria-based sharing rule on Case selects records where Record Type equals Priority and grants the Priority team Read/Write. New Priority cases appear after recalc, reclassified cases drop out after recalc, and no manual grants or code exist. This is the stamp plus criteria rule doing exactly what the requirement asks, declaratively and recalculably.[^4]
+
+When the category is not a record type, the architect adds a dedicated field and maintains it. The requirement "any record whose VIP flag is set is visible to the VIP group" becomes a picklist or checkbox stamp plus a criteria rule reading that flag. The difference from the record-type case is that the stamp is not maintained by a business process, so a flow or trigger owns the sync. Either way, the shape is the same: value on the record, rule reads it, group gets access, recalc keeps it honest.[^4]
+
+![Stamp plus criteria rule flow: a flow or record type writes a value onto the record, a criteria-based sharing rule selects records where the stamped value matches and grants the group, and recalculation keeps the grant current](</diagrams/day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust/3-stamp-criteria-rule.png>)
+
+## Mechanism three: custom (Apex) logic
+
+Apex Managed Sharing is the escalation you reserve for access that a field cannot represent. When the decision that determines access is computed at runtime, drawn from an external system, or expressed in logic too complex for a rule, you cannot stamp a value because there is no value to stamp. You write code that computes access and creates explicit share rows through the sharing API, on the object's Share object, using a distinct RowCause.[^6]
+
+What makes this different from the other two is the reconciliation duty. A manual share and a rule share have a home in the sharing model and, in the rule case, a recalculation path. Apex-written shares are only as correct as the code that wrote them, and nothing in the platform recomputes them. If the code grants access and the trigger condition later stops holding, the share row persists unless the code deletes it. So Apex Managed Sharing must reconcile: re-evaluate the population and delete rows that no longer qualify. The code that grants is the same code that revokes. Without reconciliation you are accumulating programmatic shares in exactly the way manual shares accumulate, except worse, because the reason was computational and no human ever sees it.[^7]
+
+It also typically requires Modify All data access, because deleting share rows the org owns requires the permission to delete shares beyond the ones the executing user created. This is a licensing and security consideration the design weighs: you are trading declarative predictability for the power to express arbitrary logic, and the power carries a permission and an upkeep cost.[^6]
+
+![Apex Managed Sharing flow: access computed at runtime or from external data that no field can represent drives code that creates explicit share rows with a distinct RowCause, and the same code reconciles by deleting rows that no longer qualify, requiring Modify All and reconciliation](</diagrams/day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust/4-apex-managed-sharing.png>)
+
+### A worked example
+
+An org computes a "risk-tier" access label for each record from an external risk engine that no field on the record mirrors, because the value is refreshed nightly and does not map to any picklist. The requirement is that the team assigned to each tier can see the records at that tier. Because the access-determining data comes from an external system's runtime computation and cannot be stamped, the correct mechanism is Apex Managed Sharing. A scheduled Apex job reads the external tier, computes which team each record should reach, creates share rows with a distinct custom RowCause, and deletes rows it no longer justifies. The RowCause lets the same job identify and clean its own shares without disturbing manual or rule shares. This is the honest escalation: declarative stamping cannot express it, so code and reconciliation carry it.[^6]
+
+## Numbered configuration walkthrough
+
+Walk the decision and the build in order. The order matters because each step produces the input the next one consumes.
+
+**Step 1: Classify the need.** Write down the requirement and name its nature. One-off human decision for a single record means manual sharing. Repeatable by a field or process value means a stamp plus criteria rule. Access computed at runtime or from external data that a field cannot represent means Apex Managed Sharing. This step is the whole objective; if you get it right, everything else is plumbing.[^1]
+
+**Step 2: For manual sharing, grant and document the policy.** Ensure owners who may create manual shares have the appropriate permission on their profile or permission set, and that the object's sharing model permits manual sharing. Document that policy: who may share, at what levels, and that shared granted in this way are subject to the cleanup job. If manual sharing is not meant to be open, do not grant the capability; a share-capable owner is an access control in its own right.[^2][^3]
+
+**Step 3: For repeatable access, implement the stamp and the criteria rule.** Choose the field that encodes the requirement (an existing process-maintained field, or a dedicated access field), build the flow or trigger that writes and clears it, create the criteria-based sharing rule that reads it and grants the group, and keep a recalculation plan. Test that a record stamped to the group appears and a record not stamped stays hidden.[^4][^5]
+
+**Step 4: For computed access, implement managed sharing with reconciliation, using a distinct RowCause.** Write the Apex that computes access, creates share rows at the right level, and, in the same code path, deletes rows that no longer qualify. Set a distinct RowCause so cleanup can target only the code's own shares. Confirm the code has Modify All or the permission it needs to delete existing rows.[^6][^7]
+
+**Step 5: Add a periodic cleanup for stale manual and programmatic shares, and test each mechanism path.** Schedule a job that reviews and removes manual shares past their reason, and run the reconciliation for programmatic shares. Then test each path end to end: someone shares a record manually, a record changes its stamp and the rule reacts on recalc, and a programmatic share is deleted when its condition stops holding. The cleanup and the tests are part of the design, not an afterthought.[^8]
+
+## Exam traps to avoid
+
+**Trap: reaching for manual sharing for population or criteria access.** Manual sharing is per-record and owner-initiated. It does not scale and is not the answer for granting a class of records or for a rule. A requirement like "the VIP group sees all VIP records" answered with "share each one" is wrong, because it has no rule, no recalc, and no way to react to new records. Choose the stamp plus criteria rule for anything the platform can express as a condition.[^2][^4]
+
+**Trap: thinking a stamp, rule, or Apex needs no upkeep.** Stamps require sync and custom logic requires reconciliation. Both are active duties the exam tests. A stamp that is never cleared is a grant that never ends; Apex that grants without a matching revoke path leaks access. A correct design names who maintains the stamp and who reconciles the shares. If a scenario answer assumes the mechanism maintains itself, it is wrong.[^4][^7]
+
+**Trap: layering manual shares on top of a rule you are trying to restrict.** The sharing model is a union: access granted by any mechanism adds to what a user can see. If a rule restricts a record to one group but an owner manually shared it to a colleague, that manual share re-exposes the record outside the restriction. Auditing the union, not just the rule, is the only way to know who actually has access. The exam rewards recognizing that manual shares can quietly widen an intended restriction and that the cleanup job exists to catch exactly this.[^2][^8]
+
+**Trap: relaxing OWD instead of overriding.** The override mechanisms exist so you can grant precise access without changing the baseline for everyone. If a scenario is answered by making a whole object public or by giving a group a blanket higher level, it over-grants and destroys the default model the override was meant to protect. The correct answer is the smallest mechanism that meets the need, not a relaxation of OWD.[^1]
+
+## Try it yourself
+
+In a sandbox, build all three mechanisms on a custom object. First, log in as an owner and use the Share button to grant a second user Read access to a single record; confirm the second user sees only that record, then create another record and confirm it is not shared. Second, add a picklist field, write a before-save Flow that sets it to a group name when a condition holds and clears it otherwise, create a criteria-based sharing rule that grants that group access to records where the field equals the group name, and confirm a matching record appears and a non-matching one does not after Recalculate. Third, write a small Apex trigger (or use the sharing API in a class) that creates a share row with a distinct managed RowCause for a record whose computed condition holds, then a matching revoke path that deletes that row when the condition stops holding; confirm the grant appears and disappears as the condition toggles and that the cleanup job for manual shares removes a share you created manually and no longer need. You have now built and tested all three mechanisms and watched what each one requires to stay correct.
+
+## When to pick which, in one screen
+
+Keep the decision frame short and load-bearing. If the need is a one-off human decision for a single record, use manual sharing and plan a cleanup. If the need is repeatable and driven by an identifiable value on the record, use a stamp plus criteria rule and keep the stamp in sync. If the need depends on runtime or external computation that a field cannot represent, use Apex Managed Sharing with reconciliation and a distinct RowCause. Wherever you land, document the chosen override per object so the why is auditable and future admins do not layer competing mechanisms. This one frame is the whole objective r-9b, and lesson 29 takes you into a new requirement: Reports and Dashboards with their own sharing and exposure decisions.[^1]
+
+![Decision guide for override scenarios: classify the need as one-off human decision (manual sharing), repeatable by a field or process value (stamp plus criteria rule), or computed from runtime or external data (Apex Managed Sharing with reconciliation), and pair every choice with a stale-share cleanup and documented per-object policy](</diagrams/day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust/5-decision-guide.png>)
+
+## What's next
+
+Tomorrow is lesson 29, Reports and Dashboards: Folder Sharing, Run-in-Context, Aggregate-Data Exposure, which moves the sharing model off records and onto the artifacts that summarize them. Where today you classified overrides by the nature of the need, lesson 29 turns to how reports and dashboards expose data: folder-level sharing that controls who sees a report or dashboard at all, run-in-context which computes each viewer's access against the underlying records, and the aggregate-data exposure risk that reports create when they summarize records a user could not otherwise open. Bring the same instinct, name the access decision first, because report sharing has its own set of traps around who can see data they could never list record by record.[^1]
+
+[^1]: Salesforce, "Salesforce Certified Platform Sharing and Visibility Architect Exam Guide," Salesforce Help, https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1
+[^2]: Salesforce, "Sharing a Record," Salesforce Help, https://help.salesforce.com/s/articleView?id=sf.security_manual_sharing.htm&type=5
+[^3]: Salesforce, "Define Sharing Rules," Salesforce Help, https://help.salesforce.com/s/articleView?id=sf.security_sharing_rules.htm&type=5
+[^4]: Salesforce, "Create Criteria-Based Sharing Rules," Salesforce Help, https://help.salesforce.com/s/articleView?id=platform.security_sharing_rules_criteria.htm&type=5
+[^5]: Salesforce, "Considerations for Making Sharing Updates," Salesforce Help, https://help.salesforce.com/s/articleView?id=platform.security_sharing_update_considerations.htm&type=5
+[^6]: Salesforce, "Apex Managed Sharing," Salesforce Developer Documentation, https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_understanding.htm
+[^7]: Salesforce, "Apex Sharing Recalculation," Salesforce Developer Documentation, https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_bulk_sharing_recalc.htm
+[^8]: Salesforce, "Considerations for the Sharing Table," Salesforce Help, https://help.salesforce.com/s/articleView?id=platform.sharing_considerations.htm&type=5

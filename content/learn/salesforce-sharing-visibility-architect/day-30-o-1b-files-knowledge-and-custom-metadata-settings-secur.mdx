@@ -1,0 +1,159 @@
+---
+title: "Files, Knowledge, and Custom Metadata/Settings Security"
+slug: day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur
+series: salesforce-sharing-visibility-architect
+lesson: 30
+excerpt: "How to control access to the artifacts that are not standard or custom records: files whose visibility is decided by sharing and libraries rather than by the record they attach to, Knowledge articles whose visibility combines permissions with internal and customer visibility and data categories, and custom metadata types and custom settings whose access runs on object permissions and the Protected flag instead of OWD and sharing rules."
+date: 2026-10-12
+author: Jimmy Olsen
+readTime: "15 min read"
+tags: [salesforce, sharing, visibility, architect, files, libraries, knowledge, articles, data-categories, custom-metadata, custom-settings, protected, object-permissions]
+---
+
+Every lesson so far has been about records: org-wide defaults, role hierarchies, sharing rules, manual shares, and Apex grants all decide who can open which object record. Lesson 30 steps outside that model again, and this time the artifacts have no record underneath them at all. Files, Knowledge articles, and custom metadata types and custom settings are not governed by the sharing machinery you have spent twenty-nine lessons mastering. Each one has its own dedicated access control, and the exam objective o-1b is explicit about why they deserve their own room under Access to Other Data: given a scenario, you must pick the right control for data that lives outside standard and custom objects.[^1]
+
+The trap that frames this whole lesson is the assumption that these artifacts follow the same rules as records. A file attached to an Account is not automatically visible to everyone who can see the Account. A Knowledge article is not visible to everyone who can see the article type. A custom metadata record does not respect org-wide defaults or sharing rules at all. Each of these breaks the record model in a different way, and each has a different control in its place. Learn the dedicated mechanism for each artifact, keep the broad permissions narrow, and you have mastered the objective.[^1]
+
+## Define the terms
+
+**File.** A document, image, or other binary stored in Salesforce Files and represented by the ContentDocument and ContentVersion objects. A file is a thing in its own right, separate from any record it happens to be attached to. The same file can be attached to many records, and its visibility is decided by the file's own sharing, not by the records that reference it.[^2]
+
+**File sharing.** The model that decides who can see a file. A file is visible to users who are explicitly shared on it, to members of the library that holds it, or to users who can see a record the file is shared with when the file's visibility is set to shared with the record. The key fact for the exam is that record access alone does not grant file access. A user who can open an Account can still be unable to see a file attached to that Account, because the file's sharing is a separate decision.[^2][^3]
+
+**Library.** A container for files that grants members access to the files inside it. Libraries are the file equivalent of report folders: you decide who is a member and what permission each member holds. A file in a library is visible to the library's members according to their library permission, and it does not matter whether those members can see the records the file is attached to. Libraries are how you share a file with a defined audience without relying on record access.[^3]
+
+**File permission (user).** The org-wide rights a user holds over files, granted through profiles and permission sets. The set includes Create Files, Read Files, Edit Files, Delete Files, and the two broad ones the exam loves: View All Files and Edit All Files. View All Files lets a user see every file in the org regardless of sharing, and Edit All Files lets a user edit and delete any file. These two are the org-wide file controls, and restricting them to a small set of administrators is the standard governance move.[^2]
+
+**Knowledge article.** A piece of content in Salesforce Knowledge, stored as a Knowledge article (Knowledge__ka) with one or more versions (Knowledge__kav). An article is not a normal record: its access combines the user's Knowledge permissions with the article's visibility settings and its data category assignments. The article's owning user matters far less than these three layers.[^4][^5]
+
+**Article visibility.** The setting that decides whether an article is available internally, to customers through an Experience site, or publicly. An article marked visible internally is available to internal users who have the right permissions; an article marked visible to customers is available to external users through the Experience; an article marked public is available to anyone. External users see only articles marked visible to them, never the internal-only ones.[^4][^6]
+
+**Data category.** A classification you assign to articles to organize them and to control who can see them. Data categories are grouped into category groups, and you control visibility by role, permission set, or profile. A user must have visibility into at least one category in each category group that classifies an article to see that article. Data category security is the inverse of most Salesforce models: you start with open access and restrict it, rather than starting closed and opening it up.[^5][^7]
+
+**Custom metadata type.** A container for org configuration that you define in Setup and populate with records. Custom metadata is configuration metadata, not record data, so it does not follow org-wide defaults or sharing rules. Access is governed by object permissions on the type and by the type's visibility setting, which can be Public or Protected. In a managed package, a Protected type is visible only to Apex code in the same namespace, which makes it a safe place for secrets.[^8]
+
+**Custom setting.** The older configuration mechanism, similar to custom metadata but without the same packaging and migration support. A custom setting is also configuration, not record data, and it has its own visibility setting: Public or Protected. A Protected custom setting in a managed package is invisible to subscribing orgs and accessible only to Apex in the package. Salesforce recommends custom metadata over custom settings for new work, but the exam still tests the security model of both.[^9]
+
+**Protected flag.** The visibility setting on a custom metadata type or custom setting that restricts access. In a managed package, Protected means only Apex code in the same namespace can see the type or setting, and subscribing orgs cannot see it at all. In an unmanaged package, a Protected type behaves like a Public one, which is why secrets must live in a managed package to be protected.[^8][^9]
+
+## Why it matters for the exam and for real builds
+
+Requirement o-1b asks you to pick the right access control for files, Knowledge articles, and custom metadata and settings, and the exam returns to four scenarios again and again. A user can open a record but cannot see the file attached to it. A user can see some Knowledge articles but not others, even though both are published. A custom metadata record is visible to some users and not others, with no sharing rule in sight. And an administrator wants to stop a user from deleting any file in the org. Each scenario has a correct control, and each rewards the same instinct: these artifacts do not follow the record model, so you must reach for their dedicated mechanism.[^1]
+
+In production this matters because these are the access controls that quietly fail least-privilege designs. Record sharing can be locked down perfectly, and then a single user with View All Files re-exposes every file in the org. A Knowledge article marked visible to customers can hand external users content meant only for internal eyes. A custom metadata type left Public can expose configuration that should have been Protected. These failures do not show up in a record-level audit, because no record was shared; the leak happened at the file permission, the article visibility, or the metadata flag, which is why these are real access controls and not cosmetic settings.[^2][^8]
+
+The exam also rewards remembering that these artifacts are not records, so the record machinery does not reach them. You cannot write a sharing rule that grants a file to a group, because files do not use sharing rules. You cannot set an org-wide default on a custom metadata type, because custom metadata has no OWD. The correct answer in a scenario is almost never "set the OWD to private" or "add a sharing rule"; it is the dedicated control for the artifact in question. Hold that and the objective falls into line.[^1][^8]
+
+![Three artifacts, three dedicated controls: files, Knowledge articles, and custom metadata and settings each have their own access control, and none of them follow the record model of org-wide defaults and sharing rules](</diagrams/day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur/1-three-artifact-access-model.png>)
+
+## Files security is separate from record security
+
+Hold this one distinction and most of the file half of the objective falls into place. A file attached to a record is not automatically visible to everyone who can see the record. File access is governed by the file's own sharing, by the library that holds it, and by the user's file permissions, and record access alone grants none of these. This is why question one in the quiz asks why a user can open an Account but cannot see a file attached to it. The answer is that file access is governed separately from record access: the file is not shared with that user, and record access does not carry file access with it.[^2][^3]
+
+The independence works the other direction too. A user can be a member of a library and see every file in it, even files attached to records the user cannot open. The library grants file access on its own, without any record sharing underneath. So you control files with file sharing and libraries, and you control records with the sharing model, and you get correct least privilege only by setting both. A record opened wide over files that are locked down is safe on the file side; files opened wide under a narrow record are safe on the record side; but the common failure is opening both because one felt like a shortcut for the other.[^2][^3]
+
+![File access is separate from record access: a user who can open an Account can still be unable to see a file attached to it, because file access comes from the file's own sharing, library membership, or file permissions, not from record access](</diagrams/day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur/2-file-access-vs-record-access.png>)
+
+### The file permissions, spelled out
+
+The org-wide file controls are the user permissions granted through profiles and permission sets. Create Files lets a user upload new files. Read Files lets a user open files the user can otherwise see. Edit Files and Delete Files let a user change and remove files the user can otherwise access. And the two broad ones, View All Files and Edit All Files, override sharing entirely: View All Files lets a user see every file in the org, and Edit All Files lets a user edit and delete any file, regardless of who shared it.[^2]
+
+This is the control question four tests. An administrator wants to restrict which users can delete any file in the org. The appropriate control is to restrict the broad file permissions, Edit All Files and View All Files, to a small set of administrators. Setting Account OWD to private does nothing to files, because files do not follow OWD. A sharing rule on files does not exist, because files do not use sharing rules. And a queue is for routing work, not for file access. The broad file permissions are the only control that governs org-wide file access, so restricting them is the answer.[^2]
+
+### Libraries and shared-with-record behavior
+
+Libraries give you a defined audience for a file. You create a library, add members, and assign each member a library permission, and the files in that library are visible to the members according to their permission. A library is the file equivalent of a report folder: it is where access to a set of files is decided, and it sits outside the record sharing model entirely. A file in a library is visible to the library's members even if they cannot see the records the file is attached to.[^3]
+
+The shared-with-record behavior is the other way a file becomes visible. When a file is attached to a record and its visibility is set to shared with the record, users who can see the record can also see the file. This is the one case where record access does carry file access, and it is the exception that proves the rule. The default for a file uploaded to a record is that it is shared with the record's viewers, but the file owner can change the visibility, and the file's sharing remains a separate decision from the record's. The exam tests whether you know that record access alone is not enough, and the shared-with-record setting is the deliberate exception, not the default assumption.[^2][^3]
+
+## Knowledge article visibility is not record-based
+
+Knowledge articles break the record model in a different way. An article's visibility is not decided by its owner's org-wide default or by a role hierarchy; it is decided by the combination of the user's Knowledge permissions, the article's internal and customer visibility settings, and the article's data category assignments. This is why question two in the quiz asks which mechanism controls which articles a user can view. The answer is article visibility, internal and customer, plus data category security, plus the View Articles permission. It is not the article owner's OWD, not the article's record type, and not the role hierarchy alone.[^4][^5]
+
+![Knowledge visibility is the sum of three layers: the View Articles and Manage Articles permissions, the internal, customer, or public visibility setting, and data category security, and all three must allow an article before a user sees it](</diagrams/day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur/3-knowledge-visibility-three-layers.png>)
+
+### The permissions and the visibility settings
+
+The baseline is the Knowledge permissions granted through profiles and permission sets. View Articles lets a user read published articles. Manage Articles lets a user create, edit, publish, archive, and delete articles. Manage Salesforce Knowledge is the administrative permission for configuring Knowledge itself. A user with View Articles can read articles the visibility settings allow; a user without it cannot read any article, no matter how the article is marked.[^4][^6]
+
+On top of the permissions sit the visibility settings. An article is marked available internally, to customers, or publicly. Internal visibility makes the article available to internal users with the right permissions. Customer visibility makes it available to external users through an Experience site. Public visibility makes it available to anyone. External users see only articles marked visible to them, never the internal-only ones, so marking an article visible to customers is a real exposure decision and not a cosmetic one.[^4][^6]
+
+Article versions and translations have their own visibility too. Sharing works at the level of the article version, the Knowledge__kav object, not the primary article, so a user can have access to some versions and not others. A user can view only published articles unless the profile grants the permissions to view draft and archived articles. Translations follow the master article's data category assignment, so a translated article cannot be assigned to a different category than the master.[^4][^5]
+
+### Data categories tier the visibility
+
+Data categories are the third layer, and they are the one the exam tests hardest. You assign articles to categories within category groups, and you control who can see each category by role, permission set, or profile. A user must have visibility into at least one category in each category group that classifies an article to see that article. If an article is tagged to multiple category groups, the user needs visibility in all of them. A user with no access to an entire category group can see only the uncategorized articles in that group.[^5][^7]
+
+The data category model is the inverse of most Salesforce models. In most of Salesforce you start with the most restrictive access and open it up. For data categories you start with open access by default and then restrict visibility. This is a deliberate design, and the exam tests whether you know it. A user who is not assigned any category visibility can see only uncategorized articles, unless the user has View All Data or a category group has been made visible to all users by default. Child roles cannot have visibility into more categories than their parent role, so restricting a parent role automatically restricts its children.[^5][^7]
+
+The architect's rule for Knowledge is to use data categories to tier article visibility. Create category groups that match your content's natural divisions, such as region or product line, assign articles to the categories, and then restrict category visibility by role or permission set so that each audience sees only the articles meant for it. Keep Manage Articles and the broad Knowledge permissions narrow, and use data categories rather than the article owner to decide who sees what.[^5][^7]
+
+## Custom metadata and custom settings do not follow OWD or sharing
+
+Custom metadata types and custom settings are configuration, not record data, so the record sharing machinery does not reach them. There is no org-wide default for a custom metadata type, and there are no sharing rules for custom settings. Access is governed by object permissions on the type or setting and by the visibility setting, which is Public or Protected. This is why question three in the quiz asks which statement about custom metadata types is true. The answer is that they are typically configuration visible to users granted the relevant object permission, protected by the Protected flag in managed packages, and they do not follow OWD or sharing. They are not governed by record sharing rules, they are not always public to all users, and they do not require Apex Managed Sharing.[^8][^9]
+
+### The Protected flag and visibility
+
+The visibility setting on a custom metadata type or custom setting is the core control. Public means the type or setting is accessible to Apex, formulas, flows, and the API for users with the relevant permission. Protected means, in a managed package, that only Apex code in the same namespace can see the type or setting, and subscribing orgs cannot see it at all. This makes Protected custom metadata a good place to store secrets, because the subscribing org cannot read the values even through the API.[^8]
+
+The critical caveat is that Protected only protects inside a managed package. A Protected custom metadata type in an unmanaged package behaves like a Public one, so storing a secret in a Protected type that is not in a managed package protects nothing. The exam tests this distinction: the Protected flag is only meaningful when the type is installed as part of a managed package. If you need to protect configuration values, put them in a managed package and mark the type Protected.[^8]
+
+![The Protected flag only protects inside a managed package: a Protected custom metadata type or custom setting is protected in a managed package but behaves like a Public one in an unmanaged package](</diagrams/day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur/4-protected-flag-managed-vs-unmanaged.png>)
+
+### Object permissions and the Restrict access preference
+
+Beyond the visibility flag, access to custom metadata is governed by object permissions. A user needs Read access to the custom metadata type to read its records, and that access is granted through profiles and permission sets. There is also an org-wide preference, Restrict access to custom metadata types, which is enabled by default and limits API Read access to custom metadata types unless it is explicitly granted. Admins with Customize Application permission can grant access through profiles and permission sets.[^8]
+
+The practical rule for custom metadata is to review the Protected flag and who is granted the object-level read, and to limit modification permissions. Custom metadata is typically visible to all users who have the relevant object permission, so the way to restrict it is to not grant that permission broadly. Keep the type Protected when it holds sensitive configuration, grant Read only to the users who need it, and grant Edit to an even smaller set. The same logic applies to custom settings, with the added note that Salesforce recommends custom metadata over custom settings for new work.[^8][^9]
+
+## Configuring access, step by step
+
+Walk the configuration in order; each step produces the input the next one reads.
+
+**Step 1: Control files via libraries, file permissions, and shared-with-record behavior.** Create libraries for the files that need a defined audience, add members, and assign each a library permission. Grant the broad file permissions, View All Files and Edit All Files, only to a small set of administrators. For files attached to records, decide deliberately whether the file is shared with the record or kept private to the owner, and remember that record access alone does not grant file access.[^2][^3]
+
+**Step 2: Grant Knowledge permissions and set article visibility.** Grant View Articles to the users who must read published articles, and Manage Articles only to the users who must create, edit, publish, archive, and delete them. For each article, set the visibility to internal, customer, or public, and confirm that external users see only the articles marked visible to them. Keep Manage Articles and the broad Knowledge permissions narrow.[^4][^6]
+
+**Step 3: Set data category security to tier article visibility.** Create category groups that match your content's divisions, assign articles to categories, and restrict category visibility by role, permission set, or profile so each audience sees only the articles meant for it. Remember that data categories start open and you restrict them, and that a user needs visibility into at least one category in each group that classifies an article.[^5][^7]
+
+**Step 4: Review the Protected flag and object permissions for custom metadata and settings.** For each custom metadata type and custom setting, confirm the visibility is Public or Protected as intended, and remember that Protected only protects inside a managed package. Grant Read access to the type only to the users who need it, and grant Edit to an even smaller set. Confirm the Restrict access to custom metadata types preference is enabled.[^8][^9]
+
+**Step 5: Test a low-privilege user's access and audit the broad permissions.** Log in as a low-privilege user and confirm the user can open a record but cannot see a file attached to it unless the file is shared with the user or the record. Confirm the user sees only the Knowledge articles the visibility settings and data categories allow. Confirm the user cannot read a custom metadata record without the object permission. Then audit who holds the broad permissions, View All Files, Edit All Files, Manage Articles, and Edit on custom metadata, and restrict them to the smallest set that still works.[^2][^4][^8]
+
+## Exam traps to avoid
+
+**Trap: assuming a file attached to a record is visible to everyone with record access.** File access is governed separately from record access. A user who can open an Account can still be unable to see a file attached to it, because the file is not shared with that user. The shared-with-record setting is the deliberate exception, not the default assumption, and the file's sharing remains a separate decision from the record's.[^2][^3]
+
+**Trap: modeling Knowledge visibility on the article owner or OWD.** Knowledge article visibility is not record-based. It combines the user's View Articles permission with the article's internal and customer visibility settings and its data category assignments. The article owner's OWD, the article's record type, and the role hierarchy alone do not decide who sees an article. Reach for the visibility settings and data categories, not the record machinery.[^4][^5]
+
+**Trap: applying OWD or sharing rules to custom metadata and settings.** Custom metadata types and custom settings do not follow OWD or sharing. They are configuration, not record data, and their access runs on object permissions and the Protected flag. A scenario that asks you to restrict a custom metadata record is answered with object permissions and visibility, never with a sharing rule or an org-wide default.[^8][^9]
+
+**Trap: treating the Protected flag as protection outside a managed package.** A Protected custom metadata type or custom setting only protects inside a managed package. In an unmanaged package, a Protected type behaves like a Public one, so a secret stored in it is not protected. If you need to protect configuration values, put them in a managed package and mark the type Protected.[^8]
+
+**Trap: granting the broad file permissions to everyone.** View All Files and Edit All Files override file sharing entirely. A user with View All Files can see every file in the org, and a user with Edit All Files can edit and delete any file. These are the org-wide file controls, and restricting them to a small set of administrators is the standard governance move. A scenario that asks how to stop a user from deleting any file is answered by restricting these permissions, not by OWD or sharing rules.[^2]
+
+## Try it yourself
+
+In a sandbox, build the three-artifact model end to end. Create an object with org-wide defaults set to private, add records, and attach a file to one record while leaving the file's visibility private to its owner. Create a second file in a library and add a low-privilege user as a library member. Now log in as that low user: you should be able to open the record but not see the private file attached to it, and you should be able to see the file in the library even though you cannot open the record it is attached to. That single test demonstrates the file half of the objective in real time.
+
+Then enable Knowledge and create two article types. Publish one article marked visible internally and one marked visible to customers, and assign them to different data categories. Restrict category visibility so the low user can see only one category group. Log in as the low user and confirm you see only the article whose visibility and categories allow it, and confirm an external test user sees only the customer-visible article. Finally, create a custom metadata type, leave it Public, and grant Read to the low user, then change it to Protected in a managed package and confirm the low user can no longer read it. You have now watched file sharing, Knowledge visibility, and custom metadata protection behave in real time, which is the fastest way to trust the design rules.
+
+## The design frame, in one screen
+
+Keep three controls straight and the objective is half done. Files are governed by file sharing, libraries, and the user file permissions, and record access alone does not grant file access, so restrict View All Files and Edit All Files to a small set and use libraries for defined audiences. Knowledge articles are governed by the View Articles and Manage Articles permissions, the internal and customer visibility settings, and data category security, so use data categories to tier article visibility and keep Manage Articles narrow. Custom metadata types and custom settings are governed by object permissions and the Protected flag, not OWD or sharing, so review the Protected flag, grant Read only where needed, and remember that Protected only protects inside a managed package. Get these three right and the artifacts stay safe without a single record being shared.[^1][^2][^4][^8]
+
+![Which control for which scenario: the four recurring exam scenarios and the dedicated control each one needs, from file sharing and file permissions to Knowledge visibility and data categories to object permissions and the Protected flag](</diagrams/day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur/5-which-control-for-which-scenario.png>)
+
+## What's next
+
+Tomorrow is lesson 31, Big Objects, External Objects Security, Event Monitoring and Audit, and Run-As Exposure, which carries the same underlying idea into the last set of artifacts. Where today you learned that files, Knowledge articles, and custom metadata each have a dedicated access control, lesson 31 applies the principle to big objects and external objects, and then turns to the audit trail and the run-as exposure that can leak data through a single broad identity. Bring the same instinct: for each artifact type, name the control that decides who can reach it, then name the control that decides what data the reach reveals. Big objects, external objects, event monitoring, and run-as each answer those two questions differently, and lesson 31 walks every one.[^1]
+
+[^1]: Salesforce, "Salesforce Certified Platform Sharing and Visibility Architect Exam Guide," Salesforce Help, https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1
+[^2]: Salesforce, "Salesforce Files," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=experience.collaboration_admin_files.htm&type=5
+[^3]: Salesforce, "Manage Library Permissions," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=experience.content_workspace_perm.htm&type=5
+[^4]: Salesforce, "Sharing Considerations for Lightning Knowledge," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=service.knowledge_sharing_considerations.htm&type=5
+[^5]: Salesforce, "Salesforce Knowledge Article Visibility and Data Category Access Control Considerations," Salesforce Help Knowledge Article, https://help.salesforce.com/s/articleView?id=000382931&language=en_US&type=1
+[^6]: Salesforce, "Knowledge__kav," Object Reference for the Salesforce Platform, https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_knowledge__kav.htm
+[^7]: Salesforce, "Work with Data Categories," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=service.category_whatis.htm&type=5
+[^8]: Salesforce, "Protection and Privacy Options for Custom Metadata Types," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=platform.custommetadatatypes_protection.htm&type=5
+[^9]: Salesforce, "Define Custom Settings," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=platform.cs_define.htm&type=5

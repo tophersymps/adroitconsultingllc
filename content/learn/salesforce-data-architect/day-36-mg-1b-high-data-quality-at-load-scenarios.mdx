@@ -1,0 +1,148 @@
+---
+title: "Data Architect MG-1B: High Data Quality at Load: Scenario-Driven Techniques for Migrations"
+slug: day-36-mg-1b-high-data-quality-at-load-scenarios
+series: salesforce-data-architect
+lesson: 36
+excerpt: "Given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, applying profiling, cleansing, deduplication, transformation, mapping, and reconciliation to a specific migration situation. This lesson, the second of the Data Migration domain's three objectives, turns the load-time quality method you built in lesson mg-1a into scenario judgment. You will learn to start from post-migration business truths, the things that must be true after go-live such as no duplicate customers, every account with a valid owner, and historical cases intact, then derive the quality controls that guarantee them. You will work the multi-source consolidation scenario where each source must be harmonized to a canonical model, identity resolved across sources with a shared key or external ID, survivorship applied for conflicts, and one golden record loaded, because otherwise the migration itself creates duplicates. You will map picklist values that do not exist in the target and resolve lookups via external ID with parents loaded first, implement reject-to-error-file handling with every source row accounted for as loaded, merged, or rejected with a reason, and reconcile counts by object and by source-system id plus key business aggregates. You will route conflicts that survivorship cannot decide to a steward through a pre-load review queue, dry-run at volume, run user acceptance with real business scenarios, and validate downstream consumers of the migrated keys. You will run the five-step configuration walkthrough and close with the three exam traps, including the costliest one, loading cross-source data without identity resolution and recreating duplicates inside Salesforce.",
+date: "October 17, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Salesforce, Data Architecture, Data Migration, Data Quality, Profiling, Cleansing, Deduplication, Transformation, Mapping, Reconciliation, External ID, Survivorship, Stewardship, Certification]
+---
+
+Lesson 35 gave you the method: profile, cleanse, deduplicate, transform, load through validation gates, reconcile. [^1] This lesson, mg-1b of the Data Migration domain, turns that method into judgment. You no longer list techniques in order. You look at a customer situation and decide which techniques apply, in which combination, to keep the data clean at the moment of load. [^2] Where lesson 35 asked what high-quality load means, this lesson asks how you guarantee it for a specific scenario.
+
+The exam frames the requirement as a decision task: given a customer scenario, recommend the techniques that ensure high data quality at load time, applying profiling, cleansing, dedup, transformation, mapping, and reconciliation to that situation. [^2] Every scenario question rewards the same move: start from what must be true after the migration, then work backward to the controls that make it true. That is the whole lesson, and everything below is practice at it.
+
+## The scenario approach: start from the outcome that must be true
+
+A migration is not successful because records loaded. It is successful because the org, after go-live, behaves a certain way. [^1] The way to design quality controls is to write down those post-migration truths first, then derive the checks that guarantee each one. [^1]
+
+Start with the business truths. After the migration, there must be no duplicate customers, so that one account page shows one company instead of three near-identical ones. Every account must have a valid owner, so that ownership-based sharing and reporting work the day users log in. Historical cases must be intact, their records, statuses, and timestamps preserved so the audit trail survives the move. Every open pipeline value must reconcile to the same total the old system reported, so the sales forecast does not silently drop money. [^1] Write these as sentences a business owner would recognize, not as technical checks.
+
+Then derive the control for each truth. No duplicate customers requires cross-source identity resolution before load, because the simple case of a single clean source already being deduplicated is rare in the exam. Every account with a valid owner requires a completeness check on the owner field plus a fallback, a default owner or a stewardship queue, for rows that fail it. Histories intact requires a parent-before-child load order and lookup resolution by external ID, so the case records land on the right account. Pipeline totals reconciling requires a post-load aggregate check on open pipeline value by source system, compared against the source's own total. [^1]
+
+Each truth maps to one or more controls, and no control exists without a truth it serves. That reversed thinking is what separates a scenario answer from a checklist answer. A checklist answers with every technique it can recall. The scenario answer names the technique the specific situation needs and explains which truth it protects. [^2]
+
+![Each post-migration business truth derives a concrete quality control: no duplicate customers maps to cross-source identity resolution, every account with a valid owner to an owner completeness check with a fallback, intact history to parent-before-child load order with external ID lookup, and reconciling pipeline totals to a post-load aggregate check against each source's reported total.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/1-truth-to-control.png>)
+
+## Multi-source consolidation: resolve identity before you load
+
+The hardest scenario is multi-source consolidation, and the exam returns to it because it is where migrations create their own problems. When you merge customer data from three source systems into a single Salesforce Account object, the same customer will almost certainly appear in all three extracts, each carrying a slightly different view. [^1] If you load each source's rows as they arrive, you load the same company three times, and the migration itself becomes the cause of the duplicates. [^1][^3]
+
+The fix is identity resolution applied across sources before loading. You establish a canonical model, the single target schema every source maps into, and you decide how a record from system A and a record from system B represent the same real-world entity. [^3] You do that with a shared key: a natural key such as a tax identifier or email, or a system-assigned external ID that each source carries for the entity. [^9] Where a shared key exists, you match on it exactly. Where it does not, you match on normalized fields, a standardized name plus address in the same format, as you did in lesson 35, and you flag candidate matches for review. [^1][^3]
+
+Then you apply survivorship. Two records represent the same customer, and their fields conflict: one source has the current phone, the other an outdated one; one has the billing address, the other the HQ flag. [^3] Survivorship rules decide which source is authoritative for which field. The rule can be per-source, per-field, or per-confidence, and the mapping document records it. [^1] You load one golden record per entity, built from the surviving values, so the org holds one canonical customer with the best available data, not three partial views. [^1][^3]
+
+The stewardship connection is direct. When survivorship cannot decide, when two sources carry conflicting values that both look authoritative and there is no rule to break the tie, you do not guess. [^1] You route the record to a data steward who adjudicates the conflict before load. A pre-load review queue holds these rows out of production until a human with the domain knowledge decides the winner. [^12] This is what keeps bad data from entering the org, and it is a designed workflow, not an afterthought.
+
+![Three source extracts, each holding a slightly different view of the same customer, flow through a canonical model into cross-source matching by shared key or normalized fields, then survivorship picks the authoritative value per field, and one golden Account record is loaded per entity with undecidable conflicts routed to a steward before load.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/2-identity-resolution.png>)
+
+## Field mapping and transformation: map the picklists and resolve the lookups
+
+Every migration that touches two different systems has to reconcile two data shapes, and the two places transformation fails most are picklist values and lookups. The exam tests both. [^1]
+
+Picklists are the visible trap. Source picklist values frequently do not exist in the target, because the target's status field has a different list of allowed values than the source's. [^1] If you load a value the target does not define, the load fails, often mid-batch, and the failure wanders into an error file where it stalls until it is resolved. The correct approach is to map each source value to a valid target value before loading, or to a documented default, a value such as Unknown, when no sensible mapping exists. [^1] You do not load unmapped values, you do not delete the picklist field to sidestep the problem, and you do not convert the field to free text to dodge validation. Each of those degrades the model or produces invalid data. You map the values, record every mapping in the field mapping document, and make the steward sign off on the dispositions. [^1][^4]
+
+Lookups are the second trap, and they fail on ordering and on key choice. To load a Contact and point it at its Account, Data Loader needs to know which Account the Contact belongs to. [^9] If you try to match by account name, you depend on names being unique and exactly consistent, which is rarely true. You resolve the lookup by external ID instead: you put the source's account key in a Salesforce external ID field on Account, load the Accounts first, then upsert the Contacts using that external ID as the lookup key. [^3][^9] Parents must be loaded before children, because a child lookup cannot resolve to a parent that is not yet in the org. Load Accounts, then Contacts, then Cases, so every parent exists before any child points at it. [^9]
+
+The mapping document is where all of this is recorded, and the exam treats it as the contract of the migration. [^4] For every source field it names the target object and field, the transformation rule, and the disposition of unmapped values. The picklist mappings and the external ID resolution live in it, versioned and owned under change control. [^4] Without it, transformation logic is undocumented, and anyone who touches the load later is guessing. [^1]
+
+![Parent objects load before children: Accounts load first with the source key stored in an external ID field, Contacts upsert by that external ID as the lookup key, then Cases resolve their lookup to the already-loaded Account, so every parent exists before any child points at it.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/3-load-order.png>)
+
+## Reject handling: every row is loaded, merged, or rejected with a reason
+
+A migration that drops rows silently is a migration that has lost data it does not yet know is missing. [^1] The rule the exam rewards is simple and absolute: every source row must be accounted for as loaded, merged, or rejected with a documented reason. [^1]
+
+The wrapper for that rule is the rejects or error file. When a row fails validation, format, key resolution, or any other load-time check, it goes to the error file with the reason it failed, not to the void. [^1] The reason is what makes it actionable: it tells the source owner what to correct so the row can be fixed at the source and reloaded. [^1] You never silently drop, and you never ignore lookup resolution failures. A row whose parent cannot be found is a row the business is about to discover is missing, and it belongs in the error file with an explanation, not in a false success message. [^3]
+
+The accounting next to the error file is reconciliation. After the load you compare counts by object and by source-system id, and you confirm that the sum of loaded plus merged plus rejected equals the source extract's total. [^1] You also validate the business aggregates that carry real consequences, such as the total open pipeline value, by object and by source, and you compare the loaded total to the source's reported total. [^1] A discrepancy means a partial load, a transformation bug, or a silently rejected batch, and the reconciliation is what surfaces it while you can still fix the plan, not after go-live where users see the loss. [^1]
+
+The clean statement to hold for the exam: the migration is complete when loaded plus merged plus rejected equals the source count, every reject carries a reason, and the key business aggregates reconcile to the source's own totals. [^1][^3]
+
+![The migration reconciles when loaded rows plus merged rows plus rejected rows equals the total in the source extract, rejected rows carry a documented reason and go to the error file, and key business aggregates like total open pipeline are checked by object and by source system against each source's reported total.](</diagrams/day-36-mg-1b-high-data-quality-at-load-scenarios/4-reconciliation.png>)
+
+## Stewardship and the pre-load review queue
+
+Stewardship is where the quality decision stops being technical. When conflict resolution, picklist disposition, or field matching cannot be settled by a rule, a data steward decides it before the load. [^12] The steward is the named business owner of the data domain, the person who can say which source is authoritative for a phone number or whether an unmapped status becomes Unknown or maps to another value. [^12]
+
+The mechanism is the pre-load review queue. Rows that need human judgment sit in a queue as the migration runs, and a steward works them, adjudicating each conflict, before the row is released to load. [^12] This is different from post-load cleanup. A pre-load review queue keeps bad data out of production entirely; post-load remediation snatches it back out after users may have seen it. The queue is a designed gate in the pipeline, and its existence is part of the migration plan, agreed with the business before cutover. [^12]
+
+Governance knots the whole thing together. The exam wants you to see migration as a governance event, not just a technical one. [^12] Quality thresholds, the maximum acceptable duplicate rate, the minimum acceptable completeness, must be agreed with the business in advance and measured during the migration. [^1][^12] When the migration runs, you measure the duplicate rate and the completeness against those agreed thresholds, and the passed or failed verdict goes back to the stewards and the business. [^12] You are not deciding in a vacuum whether the data is good enough. The business agreed to the standard, and the migration is audited against it. [^12]
+
+## Testing: dry-run at volume, UAT with real scenarios, validate downstream consumers
+
+Every scenario answer closes with testing, and the exam tests your choices at three levels. [^1]
+
+First, unit-test the transformations on a sample. Take a representative extract, run your cleansing, mapping, and survivorship logic on it, and verify the output matches the source on a field-by-field sample. [^1] This is where you catch a wrong date normalizer or a mistyped picklist mapping cheaply, before it touches a volume load. [^3]
+
+Second, dry-run at volume in a full sandbox. Volume is itself a dimension of quality: a skinny table, an indexing problem, or a batch that times out under load only shows itself when the record count is representative. [^1][^5] Load the full prepared data into a full sandbox and let the volume expose what the sample could not.
+
+Third, run user acceptance testing with real business scenarios. Have users exercise the org the way they will in production: open a record, run a report, process an approval, run the sales forecast. [^1] The migration is only proven when the people who consume the data can do their jobs on it.
+
+And validate the integrations that will consume the migrated keys. The external IDs you migrated are the keys other systems use to reach the org. [^3] If a downstream integration carries the old account key and expects it on the new record, the migration must confirm that every migrated key maps correctly and that no consumer is left pointing at a vanished value. [^3] A reconciliation of keys against the consumers who use them is part of the test plan, not an afterthought. [^1]
+
+## Config walkthrough: deciding the controls for a specific situation
+
+When a customer hands you a migration scenario, this is the reasoning sequence the exam expects. [^1]
+
+1. Define the post-migration business truths and derive the quality controls. Write the outcomes that must hold after go-live, no duplicate customers, valid owners, intact history, reconciling pipeline totals, and turn each into a concrete check. [^1]
+
+2. Build cross-source identity resolution and survivorship, and route conflicts to stewards before load. Establish the canonical model, decide the shared key or external ID, match entities across sources, apply survivorship rules for conflicting fields, and send undecidable conflicts to a pre-load review queue for a steward. [^1][^3]
+
+3. Map all picklist values and resolve lookups via external ID; load parents before children. Translate every source picklist value to a valid target value or a default, resolve child lookups by external ID keyed to the parent, and order the load Accounts, then Contacts, then Cases so parents exist first. [^1][^9]
+
+4. Implement reject-to-error-file handling and count reconciliation. Send every invalid row to the error file with a reason, fix rejects at the source, and reconcile loaded plus merged plus rejected against the source extract, by object and by source-system id, plus the key business aggregates. [^1]
+
+5. Dry-run at volume, run UAT with business scenarios, and validate downstream consumers of the new keys. Unit test the transformations, dry-run at representative volume, run user acceptance, and confirm every migrated external key still resolves for the integrations that use it. [^1][^3]
+
+Each step is derived from the truths in step one, and steps four and five are what make the migration ready for production. [^1]
+
+## The three exam traps
+
+Trap one, silently dropping invalid rows. [^1] A scenario presents a migration that loaded cleanly and says nothing about the failed rows. The answer is not to accept the clean load. Every source row must be loaded, merged, or rejected with a documented reason, and rejected rows go to an error file, not into a void. [^1] The empty success message is not proof; the reconciliation is. [^3]
+
+Trap two, loading multi-source data without cross-source identity resolution. [^1] This is the trap that recreates duplicates inside Salesforce, and it is the exact situation the quiz asks about. When the same customer comes from three sources and you load without first resolving identity across them, you load the same entity three times. [^3] The fix is identity resolution by shared key or external ID before load, with survivorship for conflicts. Bigger batch sizes, more validation rules, and per-source page layouts do nothing to stop cross-source duplicates, because none of them resolve identity. [^1][^3]
+
+Trap three, loading children before parents or using record names instead of external IDs. [^1] A child lookup resolves to a parent by a key, and if you match by name or load the child before its parent is in the org, relationships fail. [^9] The fix is to resolve lookups via external ID and load parents before children. [^9]
+
+## Worked example: the three-system migration gone right
+
+A services company is consolidating three source systems, its CRM, its billing platform, and its marketing database, into a single Salesforce org, and the business has set the truths: no customer may appear twice, every account needs a valid owner, and the total open pipeline must match the sum the three sources report. [^1]
+
+You profile each extract and find the same customer records in all three, with conflicting phone numbers and two of them carrying the same email as their shared identity. You build identity resolution around the email as the shared key, match the overlapping customers, and apply survivorship: the billing platform is authoritative for the phone, the CRM for the account relationship, the marketing database for nothing that conflicts. [^1][^3] Customers that should merge but where the match confidence is low, and one record where two sources give irreconcilably different names, go to a pre-load review queue for the steward to adjudicate before load. [^12]
+
+You build the field mapping. The CRM's status values include two obsolete codes the target does not define, so you map one onto the valid Closed Won value and the other onto a documented Unknown default, and you record both in the mapping document. [^4] You add the source account key as an external ID on Account, load Accounts first, then upsert Contacts by that external ID, then load Cases onto their Accounts. [^9]
+
+You configure the rejects file and the reconciliation query. During the dry-run, a batch of Contacts fails because their Account keys point at source accounts that were not exported, and those rows land in the error file with the reason. [^1] You trace the missing Accounts back to a partial export the source team fixes, reload, and now loaded plus rejected equals the source total for every object. [^1] You validate the open pipeline total per source, and it matches the three systems' own figures. [^1]
+
+You dry-run at volume, the users accept it against their real scenarios, and you confirm the downstream billing integration still resolves every migrated account key. [^1][^3] The production load is uneventful. Every question about the data was answered in the sandbox, and the org opened with one customer per entity, valid owners, and a forecast nobody had to re-add. [^1]
+
+## Try it for yourself
+
+Write three tiny CSVs that each describe the same two customers with slightly different fields, one with a phone another lacks, one with the email both share, and a few picklist values that do not exist in a target you define. Run identity resolution by hand: match on the shared field, pick the survivor for each conflicting value, and write the rule that chose it. Then map every source picklist value to values in your target, assign an Unknown default where no mapping fits, and write the mapping document with the disposition of every unmapped value. Count the total rows in all three sources, and state, for each, whether it is loaded, merged, or rejected and why. When loaded plus merged plus rejected equals your source total, you have just run a scenario answer end to end. [^1]
+
+## What's next
+
+Lesson 37 of 42 is up next: LDV migration performance (mg-2a). Where this lesson finished the load-time quality scenarios, lesson 37 shifts to moving a large data volume efficiently: using Data Loader, Bulk API, parallel jobs, ETL tools, and batching to make the migration fast as well as clean. If this lesson kept the data right, lesson 37 makes the move scale.
+
+## Related lessons
+- Lesson 35 of 42 (mg-1a): Data quality at load: the method
+- Lesson 22 of 42 (sm-3b): Single customer view scenarios: merging and deduplicating
+- Lesson 12 of 42 (md-1b): Harmonizing and consolidating multi-source data
+
+## References
+
+[^1]: Salesforce Data Migration Best Practices, Salesforce Help. Lays out the migration workflow of identifying data, creating templates, preparing the destination org with legacy-ID and External ID fields, loading, and validating with custom reports, spot checks, and exception reports, and the principle that every record is accounted for and that quality is designed before load. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385417&language=en_US&type=1)
+
+[^2]: Salesforce Certified Platform Data Architect Exam Guide, Salesforce. Defines the Data Migration (15%) domain and the objective mg-1b: given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, applying profiling, cleansing, dedup, transformation, mapping, and reconciliation to a specific migration situation. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+
+[^3]: UNIFYING CUSTOMER DATA: A Best Practices Guide to Deduplication and Merging, Salesforce AppExchange. States that achieving the golden record requires deduplicating each existing database then reconciling them into a unified customer repository, and that consistent standardized fields are reliable identifiers for identifying duplicates, supporting cross-source identity resolution and survivorship into a single golden record. [appexchange.salesforce.com](https://appexchange.salesforce.com/image_host/2ea87ae6-81f0-4a49-a29b-c87b35f73442.pdf)
+
+[^4]: Salesforce Data Migration Checklist, GetClientell. Describes a real field mapping document with source and target fields, transformation rules, and disposition, owned under change control, and the practice of adding a unique, indexed External ID field to every object to hold the source primary key. [getclientell.com](https://www.getclientell.com/salesforce-blogs/salesforce-data-migration-checklist-2026)
+
+[^5]: V2 Data Migration Practitioners' Guide, Power of Us Hub. States that testing data quality should start in the source system before migration, that data should be cleansed in the source first, and that a custom validation checker should pre-validate mandatory fields, formats, and valid picklist values before import. [power-of-us-hub-doc.s3.us-west-2.amazonaws.com](https://power-of-us-hub-doc.s3.us-west-2.amazonaws.com/V2_Data_Migration_Practitioners_Guide.pdf)
+
+[^9]: Import Related Records with an External ID in Salesforce Data Loader, Salesforce Help. Explains matching related records by an external ID in an upsert, backing up data first, testing one record before the full operation, and using external ID as the upsert key for parent-child relationships. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000383207&language=en_US&type=1)
+
+[^12]: Data Quality: The Secret to Career Success, Salesforce AppExchange. States that establishing a clear data governance policy with designated roles and responsibilities for keeping data clean is critical, and that the person responsible for a data domain should control it and be accountable for its accuracy, supporting stewards adjudicating conflicts before load. [appexchange.salesforce.com](https://appexchange.salesforce.com/image_host/84336897-9e51-48de-9117-35b6bf9f52e4.pdf)

@@ -9,7 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import type { AdminAuditLogRow } from "@/shared/contracts-course-catalog";
 
 export async function GET(req: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const actor = (req.nextUrl.searchParams.get("actor") ?? "").trim();
 
   try {
-    const service = getSupabaseServiceClient();
+    const service = await getSupabaseServerClient();
     let query = service
       .from("admin_audit_log")
       .select("*")

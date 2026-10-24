@@ -11,8 +11,17 @@
  * derived from the request host — deriving from the request would let a
  * localhost dev server or a mismatched deploy origin produce a redirectTo
  * that Supabase's `uri_allow_list` rejects (silent email failure).
+ *
+ * M1 (t_7ecb98d7, CWE-601/CWE-640): the request `Origin` is only honoured when
+ * it is in the CONFIGURED allowlist (`getAllowedOrigins()`). It is never taken
+ * from a request header on trust: `checkOrigin()` accepts a "same-origin"
+ * request on the strength of `Host`, and a caller-supplied Host is
+ * attacker-controlled (a self-hosted deployment or a proxy that forwards it).
+ * Echoing that Origin into a reset/verification link would deliver the
+ * single-use token to a host the attacker controls.
  */
 import { siteConfig } from "@/lib/seo";
+import { getAllowedOrigins, normalizeOrigin } from "@/lib/api-security";
 
 /** Canonical origin for all auth-email redirects (ADR-PWR-1). */
 export const AUTH_ORIGIN = siteConfig.url;
@@ -29,4 +38,52 @@ export const AUTH_CALLBACK_PATH = "/auth/callback";
  */
 export function buildAuthRedirect(next: string = "/reset-password"): string {
   return `${AUTH_ORIGIN}${AUTH_CALLBACK_PATH}?next=${encodeURIComponent(next)}`;
+}
+
+/**
+ * Origin that Managed Better Auth will accept for `callbackURL` / `redirectTo`.
+ *
+ * Better Auth validates the redirect against the ORIGIN OF THE REQUEST, not
+ * just the project's trusted-domain list (verified 2026-10-23: sending
+ * `callbackURL: https://adroit.io/…` from an `Origin: http://localhost:3000`
+ * request returns `403 INVALID_CALLBACK_URL`, and vice-versa). The browser
+ * always sets `Origin` on our same-origin POSTs, and `checkOrigin()` has
+ * already rejected anything else — but `checkOrigin()`'s same-origin branch
+ * trusts the request `Host`, which a non-browser caller can forge. So the
+ * value fed into an EMAIL is resolved against the configured origin set only:
+ *
+ *   - an Origin in `getAllowedOrigins()` (canonical + www sibling, Vercel
+ *     deployment hosts, `AUTH_ALLOWED_ORIGINS`, dev loopback) is used as-is,
+ *     which keeps previews and non-production deployments working;
+ *   - anything else falls back to the canonical `AUTH_ORIGIN`.
+ *
+ * The fallback is also the behaviour for non-browser callers (no Origin),
+ * which is correct in production and fails closed elsewhere.
+ */
+export function authRedirectOrigin(reqOrigin: string | null | undefined): string {
+  const normalized = normalizeOrigin(reqOrigin);
+  if (normalized && getAllowedOrigins().has(normalized)) {
+    return normalized;
+  }
+  return AUTH_ORIGIN;
+}
+
+/**
+ * Build the `redirectTo` for Better Auth password-reset emails.
+ *
+ * Managed Better Auth appends the token itself (`<redirectTo>?token=…`, or
+ * `?error=INVALID_TOKEN` for a dead link), so this must NOT already carry a
+ * query string — otherwise the token lands inside an encoded parameter.
+ */
+export function buildPasswordResetRedirect(
+  reqOrigin?: string | null,
+): string {
+  return `${authRedirectOrigin(reqOrigin)}/reset-password`;
+}
+
+/** Same rule for signup/resend verification links (token appended upstream). */
+export function buildVerifyEmailRedirect(
+  reqOrigin?: string | null,
+): string {
+  return `${authRedirectOrigin(reqOrigin)}/field-notes`;
 }

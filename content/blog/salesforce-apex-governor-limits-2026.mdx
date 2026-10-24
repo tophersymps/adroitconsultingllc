@@ -1,0 +1,105 @@
+---
+title: "The Apex Budget: Governor Limits as a Design Discipline"
+slug: salesforce-apex-governor-limits-2026
+excerpt: "Apex runs inside a fixed per-transaction resource envelope. Design against the budget and the LimitException stops being a surprise."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 19, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Salesforce, Apex, Governor Limits, Performance, Architecture, SOQL]
+bannerImage: "/banners/salesforce-apex-governor-limits-2026.webp"
+ogImage: "/banners/salesforce-apex-governor-limits-2026-og.jpg"
+---
+
+Apex runs in a multitenant cloud, and that one fact decides how you write it. Because every org shares the same servers, the runtime enforces a hard resource budget on every transaction, and when your code crosses it, the platform throws an exception you cannot catch.[^1] Not a warning you can handle, not a soft limit you can tune around. A `System.LimitException` that terminates the transaction on the spot.[^4] The code that caused it never gets a chance to clean up, and every DML statement already issued in that transaction rolls back.[^2]
+
+Most teams meet this the hard way. A trigger that worked in a sandbox with 4,000 rows hits the 50,000-row SOQL ceiling in production. A batch job that processed a few hundred records fine now trips the 10,000-row DML limit. A loop that queries inside itself blows past 100 SOQL statements. The failure is always the same shape: it worked until it did not, and the error message names a number nobody designed against.[^1]
+
+The fix is not to memorize the table. It is to treat the limits as a budget you design against from the first line, the way you would design against a memory ceiling or a network timeout. This article maps that budget: the per-transaction envelope, the transaction boundary that makes it atomic, the bulkification discipline that keeps you inside it, the async reset that changes the numbers, and the platform-level limits that sit outside any single transaction. Every number here is read from the current Winter '27 (API version 68.0) Apex Developer Guide, so it reflects the limits your code actually runs under today.[^1]
+
+## The transaction is the unit of accounting
+
+Governor limits are per transaction, and the transaction is the thing you have to understand first. An Apex transaction is a set of operations executed as a single unit: all DML must complete or none of it commits.[^2] The boundary can be a trigger, a class method, an anonymous block, a Visualforce page, or a custom web service method.[^2] Everything that runs inside that boundary, including triggers that fire and classes they call, shares one resource budget and one fate. If any operation fails, the whole transaction rolls back and nothing is written to the database.[^2]
+
+That atomicity is the reason a governor-limit failure is so destructive. It is not that one record update fails. It is that the entire unit of work, including the updates that already succeeded, is undone. A batch job that inserts 9,000 records and then trips a limit on the 9,001st loses all 9,000, not just the last one.[^2] The transaction is all or nothing, and the governor is the thing that can force the nothing.
+
+The practical consequence is that you design for the whole transaction, not for the happy path. Every SOQL query, every DML statement, every callout, every byte of heap your code touches counts against one shared envelope that resets only when the transaction ends.[^1] The question is not "does this method stay under 100 queries." It is "does this entire transaction, including every trigger and every called class, stay under the budget."
+
+![One Apex transaction is a single unit: every DML operation must succeed or the whole thing rolls back, and every SOQL query, DML statement, callout, and byte of heap in the boundary counts against one shared per-transaction budget](</diagrams/salesforce-apex-governor-limits-2026/1-transaction-boundary.png>)
+
+## The per-transaction envelope
+
+The core limits are the ones that bite most builds, and they differ between synchronous and asynchronous execution. Here is the envelope as it stands in Winter '27.[^1]
+
+The SOQL budget is 100 queries in a synchronous transaction and 200 in an asynchronous one, with a hard ceiling of 50,000 records retrieved by SOQL queries in either context.[^1] That 50,000 is the number that kills production triggers: a query that returns more than 50,000 rows stops the transaction, and it does not matter that the code only needed the first few. The deeper question of why a query returns that many rows, and how the optimizer decides to execute it, is the subject of our [query performance walkthrough](/field-notes/salesforce-ldv-query-performance-2026); this article is about the budget the query runs inside. The `Database.getQueryLocator` path is separate, capped at 10,000 records, and SOSL gets its own 20-query and 2,000-record-per-query limits.[^1]
+
+DML is 150 statements and 10,000 records processed, in both contexts.[^1] The 150 is a statement count, not a record count, which is why bulkification matters so much: one `update` on a list of 10,000 records is a single DML statement, while 10,000 individual `update` calls are 10,000 statements and fail at the 151st.[^3] The 10,000 is the record ceiling, and it applies across all DML in the transaction, including `Approval.process` and `database.emptyRecycleBin`.[^1]
+
+Heap and CPU are the two that feel like performance but are actually hard limits. Synchronous heap is 10 MB, asynchronous is 25 MB, and exceeding it throws an uncatchable `System.LimitException`.[^1][^4] CPU time is 10,000 milliseconds (10 seconds) synchronous and 60,000 milliseconds (60 seconds) asynchronous, measured on the Salesforce application servers for the executing code and everything it calls, including package code and workflows.[^1][^5] Note what does not count toward CPU: the time spent in the database for DML, SOQL, and SOSL, and the waiting time for callouts.[^5] So a query-heavy transaction can feel slow without burning CPU, and a loop-heavy one can hit the CPU wall with no obvious query cost.
+
+Callouts are 100 per transaction with a 120-second cumulative timeout, and each callout defaults to a 10-second timeout on its own.[^1][^6] The request or response size is 6 MB for synchronous Apex and 12 MB for asynchronous.[^6] A transaction that makes many external calls can exhaust the 100-callout budget or the cumulative 120-second window even when no single call is slow.
+
+![The per-transaction Apex budget in Winter '27: 100 SOQL queries synchronous and 200 asynchronous, 50,000 SOQL rows, 150 DML statements and 10,000 DML rows, 10 MB synchronous and 25 MB asynchronous heap, 10 seconds synchronous and 60 seconds asynchronous CPU, and 100 callouts with a 120-second cumulative timeout](</diagrams/salesforce-apex-governor-limits-2026/2-per-transaction-envelope.png>)
+
+A few more numbers round out the envelope. The maximum execution time for any Apex transaction is 10 minutes in both contexts.[^1] A SOQL query that runs longer than 120 seconds is cancelled by the platform.[^6] The trigger batch size is 200 records, and the for-loop list batch size is 200 as well, which is the mechanism behind the SOQL-for-loop pattern below.[^6] Recursive Apex that fires triggers is capped at a stack depth of 16.[^1]
+
+## Bulkification is the discipline that keeps you inside the budget
+
+The single most effective way to stay under the envelope is to stop doing work one record at a time. Salesforce's own guidance is blunt about it: make DML calls on lists of sObjects instead of individual sObjects, and pull SOQL queries out of loops.[^3] The reason is arithmetic. A loop that calls `update` on each of 150 line items is 150 DML statements, and the 151st throws. The same work as one `update` on a list is a single statement that stays comfortably inside the 150-statement budget.[^3]
+
+The same logic applies to queries. A trigger that runs a SOQL query inside a `for` loop over `Trigger.new` executes that query once per record, and a batch of more than 100 records blows the 100-query limit.[^3] The fix is to query once, outside the loop, using a single query that retrieves all the child records for every parent in the batch, often with a nested subquery.[^3] One query instead of a hundred.
+
+The SOQL for loop is the third leg of the discipline. Instead of loading a large result set into a list and risking the heap limit, iterate over the query result directly, which the runtime processes in batches of 200 records.[^3] The list variable holds 200 items at a time instead of the entire result set, which keeps heap usage flat no matter how many rows the query returns.[^3] This is the pattern that lets a transaction touch a large result set without materializing all of it in memory.
+
+These three moves, bulk DML, query outside the loop, and SOQL for loops, are not optimizations. They are the difference between code that runs and code that throws. A build that bulkifies from the start rarely needs to think about the 150-statement or 100-query limits, because it never gets close to them. A build that does not bulkify hits them on the first real data volume, and the failure is a runtime exception, not a warning.[^3]
+
+![Bulkification keeps a transaction inside the budget: a loop that calls update on each record burns one DML statement per record and fails at the 151st, while one update on a list is a single statement; a query inside a for loop runs once per record and blows the 100-query limit, while one query outside the loop with a nested subquery stays at one](</diagrams/salesforce-apex-governor-limits-2026/3-bulkify.png>)
+
+## The async reset changes the numbers
+
+Moving work to asynchronous execution is not just about not blocking the user. It resets the budget and raises several ceilings, which is why the async path is the standard answer to a transaction that is about to exceed its envelope.[^1] The SOQL budget doubles from 100 to 200, heap goes from 10 MB to 25 MB, and CPU goes from 10 seconds to 60 seconds.[^1] For Batch Apex specifically, the per-transaction limits reset for each execution of a batch of records in the `execute` method, so each batch gets a fresh envelope rather than sharing one across the whole job.[^1]
+
+![Moving work to an async path resets the per-transaction budget and raises the ceilings: SOQL goes from 100 to 200, heap from 10 MB to 25 MB, CPU from 10,000 to 60,000 ms, and callout size from 6 MB to 12 MB, with batch Apex resetting the envelope for each execute call](</diagrams/salesforce-apex-governor-limits-2026/4-async-reset.png>)
+
+That reset is the reason batch Apex can process millions of records where a synchronous trigger cannot. Each `execute` call is its own transaction with its own 50,000-row SOQL ceiling, its own 10,000-row DML ceiling, and its own heap and CPU budget.[^1] The job as a whole is not bounded by the per-transaction limits; it is bounded by the platform-level limits that govern how many batches can run and how much async work the org can do in a day.
+
+The async path is not free, and the platform limits are where the tradeoff lives. The daily asynchronous Apex execution limit is 250,000 executions or 200 times the number of applicable user licenses, whichever is greater, shared across batch, future, queueable, and scheduled Apex.[^1] A batch job that needs 10,000 executions checks that capacity before it starts, and if the remaining limit is 9,500, it throws an `AsyncApexExecutions Limit exceeded` exception and does not run at all.[^1] Only 5 batch jobs can be queued or active concurrently, and only 1 `start` method can run at a time.[^1] The flex queue holds up to 100 batch jobs in `Holding` status, and up to 100 Apex classes can be scheduled concurrently.[^1]
+
+The concurrency ceiling that surprises most teams is the long-running transaction limit. Transactions that last longer than 5 seconds are capped at a ratio of 100 licenses to one concurrent long-running transaction, with a floor of 10 and a ceiling of 50.[^1] An org with 4,000 licenses gets 40 concurrent long-running transactions; an org with 1,000 or fewer gets the 10 minimum.[^1] If more long-running transactions start while the default number is still running, they are denied. This is a platform-level limit, not a per-transaction one, and it is the reason a burst of heavy async work can start failing even when each individual job is well under its own envelope.[^1]
+
+## The platform limits sit outside any single transaction
+
+Beyond the per-transaction envelope and the async reset, a set of platform-level limits governs the whole org, and these are the ones that bite at scale. The daily async execution limit is the big one, 250,000 or 200 times licenses, and it is shared across every async mechanism.[^1] A data-heavy org that runs many batch jobs, queueable chains, and scheduled jobs in a day can exhaust it, and the failure is a job that refuses to start, not a runtime exception mid-run.[^1]
+
+The cursor limits are newer and worth knowing because cursors are the modern answer to large result sets. A transaction can hold up to 50 million rows across all Apex cursors, with 100 `Cursor.fetch` calls per transaction.[^1] Per 24 hours, an org gets 10,000 cursor instances and 100 million cumulative new cursor rows.[^1] Cursors let you walk a result set in chunks without materializing it, which is the pattern Salesforce positions as an alternative to batch Apex for large reads.[^1]
+
+The size limits are the ones that bite at deploy time. A single class or trigger is capped at 1 million characters, and the total Apex code in an org is 6 MB (10 MB in scratch orgs).[^1] A method is capped at 65,535 bytecode instructions in compiled form, which is a limit you hit with a genuinely enormous method, not a normal one.[^1] A deployment is capped at 7,500 class and trigger code units.[^1] These rarely matter in day-to-day development, but they are the reason a very large org eventually has to split code across packages or refactor a monster method.
+
+The email limits are a separate budget that trips integrations. An org can send 5,000 single emails to external addresses per day, and 5,000 mass emails per day, with each `SingleEmailMessage` capped at 150 recipients.[^1] A bulk notification job that sends to 10,000 external contacts will hit the 5,000 daily ceiling, and the failure is silent: the emails that exceed the limit are not sent, and the org gets a notification and a debug-log entry.[^1]
+
+## The operational layer: see the budget before it breaks
+
+The limits are not a black box. The `Limits` class exposes the current usage and the ceiling for each resource at runtime, so you can check where a transaction stands before it crosses a line.[^1] `Limits.getDMLStatements()` and `Limits.getLimitDMLStatements()` tell you how many DML statements you have used and how many are available, and the same pattern exists for SOQL, heap, CPU, and the rest.[^1] A defensive build can check the budget at a decision point and branch, or log the usage for later analysis, instead of letting the transaction run into the wall.
+
+Salesforce also has a built-in early-warning system. You can configure specific users to receive an email notification when they invoke Apex code that surpasses 50 percent of the allocated governor limits.[^7] The check covers the per-request limits, SOQL queries, records retrieved, SOSL, DML statements, DML rows, heap, callouts, `sendEmail` calls, `future` methods, `enqueueJob` calls, `getQueryLocator` records, and mobile push calls.[^7] It does not cover per-org limits like concurrent long-running requests, which is exactly the platform-level limit that needs a different monitoring approach.[^7] Only users with the Author Apex permission can receive these warnings, and the option is a per-user setting on the user record.[^7]
+
+The 50-percent threshold is the useful part. It means a transaction that is trending toward a limit announces itself at half the budget, while there is still room to fix the code, rather than failing at 100 percent with a rollback. For a team that ships Apex regularly, turning on these warnings for the developers who write the code is a low-effort way to catch the envelope problem in a sandbox instead of in production.[^7]
+
+## Design against the budget from the first line
+
+The pattern that holds across every build is to treat the envelope as a design input, not a failure mode. Before you write a trigger, ask what the largest realistic batch is and whether the transaction stays under 100 SOQL queries, 150 DML statements, 10,000 DML rows, and 10 MB of heap at that volume. If it does not, the answer is usually bulkification first, then a SOQL for loop, then moving the work to an async path where the budget resets and the ceilings rise.[^1][^3]
+
+The numbers that deserve a place in every design review are the ones that fail at scale: the 50,000-row SOQL ceiling, the 10,000-row DML ceiling, the 100-query and 150-statement counts, the 10-second synchronous CPU wall, and the 5,000-external-email daily cap.[^1] A build that stays under those at its worst-case volume is a build that will not throw a `System.LimitException` in production. A build that does not know its worst-case volume is a build that will find out the hard way.
+
+The governor limits are not a constraint to fight. They are the contract that makes the multitenant platform work, and they are stable enough to design against. Learn the envelope, bulkify by default, use the async reset when a transaction outgrows its synchronous budget, and turn on the 50-percent warnings so the platform tells you before you break. Do that and the LimitException becomes a rare event you planned for, not a production incident you debug at 2am.
+
+[^1]: Salesforce, "Execution Governors and Limits," Apex Developer Guide, Winter '27 (API version 68.0). The per-transaction table (100/200 SOQL, 50,000 SOQL rows, 10,000 getQueryLocator, 20 SOSL, 2,000 SOSL rows, 150 DML, 10,000 DML rows, 16 stack depth, 100 callouts, 120-second callout timeout, 50 future, 50 enqueueJob, 10 sendEmail, 10/25 MB heap, 10,000/60,000 ms CPU, 10-minute execution, 50 million cursor rows, 100 cursor fetches), the platform table (250,000 or 200x daily async, 5 concurrent batch, 1 start, 100 flex queue, 100 scheduled, 100-licenses-to-1 long-running with 10/50 floor/ceiling, 10,000 cursor instances, 100 million cursor rows per 24h), the size table (1 million class/trigger chars, 6 MB org code, 65,535 bytecode, 7,500 code units), the email limits (5,000 single, 5,000 mass, 150 recipients), and the `Limits` class usage. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^2]: Salesforce, "Apex Transactions," Apex Developer Guide, Winter '27. The transaction as a single unit, all-or-nothing commit, the boundary types (trigger, class method, anonymous block, Visualforce page, custom web service), and the rollback on any error. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_transaction.htm)
+[^3]: Salesforce, "Running Apex within Governor Execution Limits," Apex Developer Guide, Winter '27. Bulkify DML calls on lists, query outside the for loop, and the SOQL for loop batching 200 records. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_limits_tips.htm)
+[^4]: Salesforce, "Execution Governors and Limits," Apex Developer Guide, Winter '27. The uncatchable `System.LimitException` on heap and other limit violations. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^5]: Salesforce, "Execution Governors and Limits," Apex Developer Guide, Winter '27. CPU time measured on the application servers for executing code and called processes, excluding database time for DML/SOQL/SOSL and callout waiting time. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^6]: Salesforce, "Execution Governors and Limits," Apex Developer Guide, Winter '27. The static limits table: 10-second default callout timeout, 6/12 MB callout size, 120-second SOQL run time, 200 trigger batch size, 200 for-loop list batch size, 50 million batch query locator records. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
+[^7]: Salesforce, "Set Up Governor Limit Email Warnings," Apex Developer Guide, Winter '27. The 50-percent threshold, the per-request limits checked, the exclusion of per-org limits, and the Author Apex permission requirement. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits_emails.htm)

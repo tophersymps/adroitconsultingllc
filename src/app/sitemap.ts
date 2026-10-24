@@ -4,6 +4,7 @@ import { learnLessons, learnSeries } from "@/data/learn";
 import { getCertExam, getKnowledgeChecks } from "@/lib/quiz";
 import { getAllTags } from "@/lib/tags";
 import { siteConfig } from "@/lib/seo";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 
 /**
  * Sitemap — public index. Per AC-5, learn URLs are included ONLY for courses
@@ -13,8 +14,13 @@ import { siteConfig } from "@/lib/seo";
  *
  * The live set is read via the SERVICE client (a system-level read of public
  * data — never used to resolve a per-user decision). If the DB is unreachable
- * at build time we fall back to the content-derived series so the build never
- * fails on a DB hiccup (arch §10 risk mitigation), logging the degradation.
+ * at build time the build must never fail on a DB hiccup (arch §10 risk
+ * mitigation) — but it also must never disclose a series it cannot prove is
+ * live. The fallback is therefore the STATIC launch mirror
+ * (`isPubliclyLaunchedSeries`), the same DB-free predicate the atlas routes use
+ * on their `unavailable` path (F-2, CWE-200). Failing open to "every content
+ * series" published unpublished/stealth course URLs to crawlers during a
+ * token outage (136 URLs measured, t_0194c233 option 1), so it is fail CLOSED.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const blogUrl = `${siteConfig.url}${siteConfig.blogPath}`;
@@ -23,10 +29,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Live series slugs from the DB (source of truth for status).
   let liveSlugs: Set<string> | null = null;
   try {
-    const { getSupabaseServiceClient } = await import(
-      "@/lib/supabase/service"
-    );
-    const supabase = getSupabaseServiceClient();
+    // Sitemap generation runs outside a request, so there is no session to
+    // forward: read the public catalog as the Data API `anonymous` role (the
+    // "courses_select_live_or_admin" policy still restricts it to live rows).
+    const { getSupabaseAnonymousClient } = await import("@/lib/db/server");
+    const supabase = await getSupabaseAnonymousClient();
     const { data, error } = await supabase
       .from("courses")
       .select("series_slug")
@@ -39,10 +46,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   } catch {
     liveSlugs = null;
   }
-  const liveSet = liveSlugs ?? new Set(learnSeries.map((s) => s.slug));
+  // F-2 / CWE-200 (t_0194c233): FAIL CLOSED. When the courses table cannot be
+  // read we cannot prove ANY series is live, so the learn section falls back to
+  // the static launch mirror — never to every content series, which would
+  // advertise unpublished ("stealth") courses to crawlers from a session-free
+  // surface. Static marketing/blog/tag URLs are unaffected.
+  const liveSet =
+    liveSlugs ??
+    new Set(
+      learnSeries
+        .filter((s) => isPubliclyLaunchedSeries(s.slug))
+        .map((s) => s.slug),
+    );
   if (!liveSlugs) {
     console.warn(
-      "[sitemap] courses table unreachable — falling back to all content series",
+      "[sitemap] courses table unreachable — restricting learn series to the static launched-series mirror",
     );
   }
   const isLive = (slug: string) => liveSet.has(slug);

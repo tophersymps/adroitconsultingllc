@@ -14,23 +14,24 @@ const { mocks } = vi.hoisted(() => {
   const getSupabaseServerClient = vi.fn();
   const getUser = vi.fn();
   const from = vi.fn();
+  const insertCompletionEvent = vi.fn();
   return {
-    mocks: { getSupabaseServerClient, getUser, from },
+    mocks: { getSupabaseServerClient, getUser, from, insertCompletionEvent },
   };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({
     auth: { getUser: mocks.getUser },
     from: mocks.from,
   }),
 }));
 
-// completion_events INSERT now routes via the service-role client (M2,
-// t_bd7ac2a0, migration 012) — point it at the same fake so the route's
+// completion_events INSERT routes via the privileged direct-SQL helper (M2,
+// t_bd7ac2a0, migration 012 / R2-2) — capture the rows so the route's
 // completion-event append assertions still observe the write.
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => ({ from: mocks.from }),
+vi.mock("@/lib/db/service", () => ({
+  insertCompletionEvent: mocks.insertCompletionEvent,
 }));
 
 // The lesson route now gates writes through the access seam (US-006). The
@@ -141,6 +142,10 @@ describe("POST /api/progress/lesson — completion_events append (plan §3f / AD
     vi.clearAllMocks();
     completionInserts.length = 0;
     mocks.from.mockImplementation((table: string) => chainableFrom(table));
+    mocks.insertCompletionEvent.mockImplementation(async (row: unknown) => {
+      completionInserts.push(row);
+      return { error: null };
+    });
     mocks.getUser.mockResolvedValue({ data: { user: { id: "user-1" } } });
   });
 

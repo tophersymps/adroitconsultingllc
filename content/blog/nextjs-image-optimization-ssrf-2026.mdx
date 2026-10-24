@@ -1,0 +1,93 @@
+---
+title: "Next.js SSRF: Your Image Allow-List Is a Security Boundary"
+slug: nextjs-image-optimization-ssrf-2026
+excerpt: "Two Next.js security releases in two weeks turned a config nicety into a production gate. Here is the image-optimization SSRF and the patch pipeline it demands."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "October 19, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "11 min read"
+tags: [Next.js, Security, SSRF, Patch Management, Web Development]
+bannerImage: /banners/nextjs-image-optimization-ssrf-2026.webp
+ogImage: /banners/nextjs-image-optimization-ssrf-2026-og.jpg
+---
+
+On September 30, 2026, the Next.js team patched a high-severity server-side request forgery (SSRF) in its Image Optimization. The advisory is short, and most of the commentary stopped at "upgrade and move on." That misses the point. Two weeks later, on October 14, the team shipped an out-of-band release fixing two critical unauthenticated remote code execution bugs and a denial of service, and the SSRF advisory is the key that explains all three of them.[^1] The same place your app is most likely to be configured wrong, the image optimizer, is where the framework turned a config file into the boundary between your public site and your internal network.[^2]
+
+Treating these as separate one-line dependency bumps is how a self-hosted Next.js app ends up sitting on a known-critical version. This article walks the mechanism behind the SSRF, why an allow-list is an authorization decision and not a formatting convenience, what the October release changed, and the patch pipeline that makes "a critical advisory lands" a routine, not an emergency.
+
+## The mechanics: an allow-listed URL is still a fetch
+
+The Image Optimization feature in `next/image` resizes and re-encodes images on the server. When you point it at a remote image, the server fetches that image itself, applies transformations, and serves the result. Because running a public image proxy is a classic SSRF vector, Next.js gates remote fetches behind `images.remotePatterns` in `next.config`: a list of hostnames and optional path patterns the app is willing to fetch from.[^3]
+
+The vulnerability, tracked as CVE-2026-94483 and published under GHSA-cjq9-62q9-8jv4, is that passing the allow-list check was not the same as authorizing the request you thought you were making.[^4] An attacker-controlled URL that matches a configured pattern can lead the optimizer to send a fetch that lands on a private IP range, including internal services that are never supposed to be reachable from the public internet. The advisory spells out the condition precisely: if no `images.remotePatterns` are configured at all, your application is not affected. The severity is high, scored at 8.3 on CVSS v4, with a network attack vector, no privileges required, and high confidentiality impact on the vulnerable system.[^5]
+
+The uncomfortable part is how ordinary the vulnerable setup looks. Almost every content site configures `remotePatterns` the day it starts pulling images from a CMS, a storage bucket, or a partner domain, and then never looks at it again. The pattern is doing real work: it is the only thing standing between the optimizer and a request to an address on your private network. Matching a hostname pattern tells the optimizer "this is a host we trust to fetch from." What it does not do is pin that hostname to a specific network address or guarantee that the request the optimizer makes goes only where you expect. Hostnames resolve, and resolution is not part of the allow-list contract.
+
+![SSRF flow: an attacker-controlled URL that matches images.remotePatterns passes the allow-list check, then the image optimizer makes an outbound fetch that can reach a private IP range instead of the intended public host](</diagrams/nextjs-image-optimization-ssrf-2026/1-ssrf-flow.png>)
+
+The fix landed in v16.3.8 on the Active LTS line and v15.5.27 on the Maintenance LTS line.[^6] For teams that cannot upgrade immediately, the official workaround is to audit the hosts in `images.remotePatterns` and remove any entry whose DNS you do not trust. That is a meaningful statement on its own: the mitigation is exactly the design discipline the article title points at. A host you allow-list becomes part of your trust boundary, so it has to be a host whose resolution and behavior you actually control the consequences of.
+
+## Why an allow-list is an authorization boundary, not a convenience
+
+The reason this bug keeps catching people is a mental-model mismatch. `remotePatterns` reads like a rendering preference, the same way a caching strategy or a layout option does. You configure it once to satisfy the image component, and it disappears from your thinking. To the runtime it is not a preference. It is an allow-list, and an allow-list is an authorization control: it decides who may cross a boundary, and it is only as strong as the weakest entry in it.
+
+This is the exact lesson the blog has made for the Salesforce side, that row-level security is the enforcement boundary in a multi-tenant realtime app, applied to the web tier.[^7] On Salesforce, the rule is that channel access means nothing if the policies behind the data do not enforce it. Here it is the inverse but the same shape: a remote-image pattern does nothing by itself; the server-side fetch it authorizes is what carries the risk. The config is a decision about what your server may reach, and you are responsible for the reach it grants.
+
+The October 14 release makes the point concrete, because the second critical bug lives in the same surface one layer deeper. Image Optimization hands image bytes to a native rendering library so it can process SVG and other formats. On glibc-based Linux, an attacker-supplied SVG fed into that library could be turned into remote code execution, tracked as CVE-2026-96889 under GHSA-2464-fhr4-w9xw.[^8] The workaround here is real and useful: ensure the version of `sharp` that Next.js uses is 0.35.5 or later, because the memory flaw is in an upstream dependency that sharp bundles. But the pattern is the same as the SSRF: an input you largely treat as static content, an image, becomes a code path that carries execution risk when it crosses the server boundary.
+
+![The allow-list boundary: a mental model where remotePatterns is a formatting preference, versus the reality where it authorizes a server-side fetch that must not reach private network addresses](</diagrams/nextjs-image-optimization-ssrf-2026/2-allow-list-boundary.png>)
+
+The two vulnerabilities are the same class of mistake wearing different labels. One is "I allowed a hostname, so the fetch it triggers is fine." The other is "I accepted an image, so parsing it is fine." Both assume that a benign-looking input stops being dangerous once it enters a trusted pipeline. Neither assumption holds when the processing happens server-side and the processing is a fetch or a native parse.
+
+## The October 14 out-of-band release
+
+The October 14 update is worth reading in full, because it is not a routine patch cycle and its shape tells you something about how the framework handles disclosure. The update is out-of-band, meaning it was not scheduled on a normal cadence; it exists to address vulnerabilities, and two of its fixes were postponed from the September release because fixing them depended on upstream libraries that were not ready in time.[^9]
+
+Three issues shipped in v16.4.1 (Active LTS) and v15.5.28 (Maintenance LTS):
+
+- **Unauthenticated remote code execution in `use cache` functions returning typed arrays**, tracked as GHSA-673q-mjm6-r5xr. Apps using App Router with Cache Components are vulnerable when a `use cache` function returns multiple typed arrays. The advisory is blunt: there is no known workaround, and you should upgrade immediately even if your application does not contain such functions, because the presence of the pattern in the framework is enough to matter.[^10]
+
+- **Unauthenticated remote code execution in the Image Optimization API when using SVG**, the `sharp`/`librsvg` bug noted above, tracked as CVE-2026-96889 under GHSA-2464-fhr4-w9xw. The workaround is the `sharp` 0.35.5 floor.[^8]
+
+- **Denial of service in App Router using Server Actions**, tracked as GHSA-p3m5-59mp-jv5r. Crafted requests to an app that defines at least one Server Action can push one process to full CPU use and stop it serving other requests. Apps on Pages Router, or apps that do not use Server Actions, are not vulnerable.[^11]
+
+![The two-week release timeline: the September 30 patch (16.3.8/15.5.27) fixing the SSRF, then the out-of-band October 14 patch (16.4.1/15.5.28) fixing two critical RCEs plus the Server Actions DoS](</diagrams/nextjs-image-optimization-ssrf-2026/3-release-timeline.png>)
+
+Three lessons fall out of the pair of releases. First, the surface area is broader than "the image optimizer." Server Actions, Cache Components, and image input all gained a security-advisory footprint in a single quarter, which means the "we only touch a few files, we are probably fine" heuristic is dead. Second, out-of-band releases do not wait for your sprint. The framework will publish a critical fix whenever the upstream dependency is ready, and your exposure window starts the moment the advisory is public, not the moment you schedule a dependency bump. Third, the phrase to take seriously is "no known workaround." When a release documents that, the only correct action is an immediate bare-minimum upgrade, and every day you wait is an unpatched unauthenticated RCE sitting in production.
+
+## Build the patch pipeline so a critical advisory is routine
+
+The pattern across both releases points to the practice that actually protects a client app, and it is not a config flag. It is a small, owned pipeline that treats a critical advisory as a scheduled event rather than a surprise. This is the discipline we build into the stacks we hand to clients, and it collapses to five steps a team can implement in an afternoon.
+
+**Know whether you run the exposed code.** The triage for these advisories is a short checklist, not a hunt. Are you on Next.js 16.x or 15.5? Do you configure `images.remotePatterns`? Do you use Cache Components or Server Actions? Do you run on glibc-based Linux and feed untrusted SVG into the image optimizer? Whether you self-host or deploy to a managed platform changes the answer to some of these, as does the platform, since Netlify handles image optimization through its own Image CDN rather than the Next.js optimizer code path, which is why that SSRF does not affect Netlify-hosted projects.[^12] Answer the checklist once, and you know which of each advisory's conditions can even reach you.
+
+**Run a scanner that surfaces advisories the day they land.** A dependency audit that runs on the schedule of your choice and fails the build on a critical advisory is the tripwire. It does not need to be clever. It needs to run continuously and be read by a person. In practice the failure mode is not "we have no scanner," it is "the alert sat in a channel nobody owns." A scanner plus a named owner is the difference between a patched app and a paper trail.
+
+**Treat a critical advisory as an incident, not a chore.** When a release says "no known workaround," the posture is defined: upgrade, test, and redeploy now, not next sprint. The production team needs authority to slot the dependency bump ahead of the feature work, and the release note from the framework is the justification. Write that policy down so the decision is already made before the alert fires.
+
+**Automate the bump path so the incident takes minutes.** The mechanical work, bump `next` to the patched version, regenerate the lockfile, run the build and the smoke tests, redeploy, is exactly what automation is for. A team that has this path scripted can apply a critical fix in minutes. A team that repairs it by hand each time will take hours, and hours is exposure.
+
+**Test the degraded path, not just the happy one.** The value of a dependency gate is only as real as your willingness to actually apply it. Half of this problem is cultural: teams that treat the weekly package bump as optional produce apps that are permanently a release behind. The discipline is to treat the bump as part of normal delivery, so that when the emergency release lands, applying it is a variation on something you already do.
+
+![The patch pipeline: a scanner catches a critical advisory, triage answers which code paths you expose, an incident decision bumps next to the patched version, automation rebuilds and redeploys, and a smoke test confirms the degraded path still works](</diagrams/nextjs-image-optimization-ssrf-2026/4-patch-pipeline.png>)
+
+The through line of this whole story is that the framework makes a lot of security decisions for you, and you own the results. The image optimizer fetches and parses on your behalf, and the allow-list you configure is the boundary that decides what that fetching and parsing may touch. Two security releases in two weeks, one high and two critical plus a DoS, is the reminder. The fix is not a single flag and it is not another framework blog post promising it is handled. It is the pipeline that brings a critical advisory to a named person and lets them act on it in minutes.
+
+If you are on Next.js 15 or 16 today, the concrete first action after reading this is to check your `next` version in `package.json`, confirm whether you configure `images.remotePatterns`, and decide whether you are on glibc Linux with untrusted SVG reachable from the optimizer. Those three answers tell you which of the September and October releases apply to your app, and none of them take more than a minute to find. The upgrade to 16.3.8 or 15.5.27 for the September fixes, and 16.4.1 or 15.5.28 for the October ones, is the price of staying ahead of the next out-of-band release, which will come, because that is how the framework now ships.[^13]
+
+[^1]: Next.js September 2026 Security Release, which discloses the server-side request forgery in Image Optimization and the version branches that fix it. See the [September 2026 Security Release](https://nextjs.org/blog/september-2026-security-release).
+[^2]: GitHub advisory GHSA-cjq9-62q9-8jv4 for CVE-2026-94483, which describes how a matching remote pattern can still lead to an SSRF to private IP ranges. See the [GitHub advisory](https://github.com/advisories/GHSA-cjq9-62q9-8jv4).
+[^3]: Next.js documentation on remote images, which defines `images.remotePatterns` as the allow-list for fetching remote images, and the guidance on restricting hostnames and paths. See the [remote-images guide](https://nextjs.org/docs/app/getting-started/images#remote-images).
+[^4]: NVD record for CVE-2026-94483, which states the affected range (16.0.0 up to 16.3.8) and the fix in 16.3.8. See the [NVD entry](https://nvd.nist.gov/vuln/detail/CVE-2026-94483).
+[^5]: GitHub advisory for the Image Optimization SSRF, which lists CVSS 8.3, CWE-918, network attack vector, no privileges required, and high confidentiality impact. See the [GitHub advisory](https://github.com/advisories/GHSA-cjq9-62q9-8jv4).
+[^6]: Next.js September 2026 Security Release, which names v16.3.8 and v15.5.27 as the patched versions. See the [September 2026 Security Release](https://nextjs.org/blog/september-2026-security-release).
+[^7]: Adroit's own post on row-level security as the enforcement boundary in realtime, the companion enforcement-boundary argument on the platform side. See [RLS Is the Enforcement Boundary in Multi-Tenant Realtime](/field-notes/realtime-rls-enforcement-boundary-2026).
+[^8]: Next.js Security Update for Upstream Vulnerabilities (October 14, 2026), which discloses the SVG Image Optimization RCE under CVE-2026-96889 / GHSA-2464-fhr4-w9xw and the `sharp` 0.35.5 workaround. See the [October 14 security update](https://nextjs.org/blog/nextjs-security-update-october-14-2026).
+[^9]: Next.js Security Update for Upstream Vulnerabilities (October 14, 2026), which describes the update as out-of-band and two of its fixes as postponed from the September release due to upstream dependency delays. See the [October 14 security update](https://nextjs.org/blog/nextjs-security-update-october-14-2026).
+[^10]: GitHub advisory GHSA-673q-mjm6-r5xr, the unauthenticated RCE in `use cache` functions returning typed arrays, with no known workaround and an upgrade-immediately recommendation. See the [GitHub advisory](https://github.com/vercel/next.js/security/advisories/GHSA-673q-mjm6-r5xr).
+[^11]: GitHub advisory GHSA-p3m5-59mp-jv5r, the Server Actions denial of service in App Router, with the Pages Router and no-Server-Actions exclusions. See the [GitHub advisory](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r).
+[^12]: Netlify's changelog entry on the Next.js security releases, which confirms the image-optimizer SSRF does not affect Netlify-hosted projects because image optimization runs on Netlify's Image CDN. See the [Netlify changelog](https://www.netlify.com/changelog/tag/security/).
+[^13]: Next.js security update pages for the September and October 2026 releases, which give the exact patched versions for each advisory. See the [security release](https://nextjs.org/blog/september-2026-security-release) and the [October 14 update](https://nextjs.org/blog/nextjs-security-update-october-14-2026).

@@ -15,7 +15,7 @@ const { mocks } = vi.hoisted(() => {
   return { mocks: { getUser, loadAchievementStats } };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({
     auth: { getUser: mocks.getUser },
   }),

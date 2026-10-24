@@ -66,6 +66,18 @@ function ghostFilter(id: string, tint: readonly [number, number, number], blur: 
 const BRONZE = [0.94, 0.76, 0.46] as const;
 const GOLD = [1, 0.85, 0.62] as const;
 
+/**
+ * Round a computed SVG coordinate before it reaches the DOM.
+ *
+ * Attribute values are serialised as strings, and `Math.sin`/`Math.cos` can
+ * disagree in the last ULP between the Node server build and the browser, so
+ * the same spoke shipped `y1="390.09618943233426"` on the client and
+ * `y1="390.0961894323342"` in the server HTML — a hydration attribute mismatch
+ * (React #441) on every series page (QA R2-4 F4 follow-up). Four decimals is
+ * far below one device pixel at these viewBox scales.
+ */
+const coord = (n: number): number => Math.round(n * 1e4) / 1e4;
+
 /** Faint atlas graticule — concentric rings and spokes, cartographic depth. */
 function Graticule() {
   const spokes = [];
@@ -75,10 +87,10 @@ function Graticule() {
       <line
         key={a}
         className={a % 45 === 0 ? "cxc-spoke is-major" : "cxc-spoke"}
-        x1={500 + Math.cos(rad) * 150}
-        y1={520 + Math.sin(rad) * 150}
-        x2={500 + Math.cos(rad) * 440}
-        y2={520 + Math.sin(rad) * 440}
+        x1={coord(500 + Math.cos(rad) * 150)}
+        y1={coord(520 + Math.sin(rad) * 150)}
+        x2={coord(500 + Math.cos(rad) * 440)}
+        y2={coord(520 + Math.sin(rad) * 440)}
       />,
     );
   }

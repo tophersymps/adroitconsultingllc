@@ -1,0 +1,229 @@
+---
+title: "Lesson 77: Capacity Planning and Performance at Scale: Headroom, Forecasting, and the Load You Cannot See"
+slug: capacity-planning-performance-at-scale-headroom-forecasting
+series: "salesforce-architect"
+lesson: 77
+excerpt: "Capacity is not a server size. It is the amount of work your org can absorb before one specific constraint breaks, and how many months of growth you have left before it does. This lesson covers headroom targets, growth forecasting from real telemetry, and how to tell whether you need more capacity or a better design."
+date: "October 23, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Salesforce, Architecture, Performance, Capacity, Scalability]
+---
+
+# Lesson 77: Capacity Planning and Performance at Scale: Headroom, Forecasting, and the Load You Cannot See
+
+Every architecture review contains a moment where someone asks "can it handle the volume?" and someone else says "yes, we tested it." Both statements are usually true and both are usually useless, because they miss the only question that matters: which resource runs out first, when, and what are we doing about it.
+
+Capacity planning is the discipline of answering that question with numbers instead of confidence. It is not the same as performance tuning. Tuning makes a single operation faster. Capacity planning makes a set of operations survive next year's data volume and next quarter's integration count. An org can be fast today and out of runway in eight months, and nothing in a normal QA cycle catches that, because nothing in normal QA runs against next year's record counts.
+
+This lesson covers the three constraints that actually bind a Salesforce design, how to define and measure headroom on each, how to forecast growth from telemetry rather than from optimism, and how to decide between adding capacity and changing the design. There is a worked example with real arithmetic, a set of load-testing limitations you should be honest about, and a decision rule you can put in a design document.
+
+## Define the terms
+
+Capacity planning has a small vocabulary. Get these right and the rest of the discipline follows.
+
+- **Capacity**: the maximum sustained work a system can absorb before a specific constraint is breached. Capacity is always per constraint, never a single number. An org has an API capacity, a storage capacity, a query performance capacity, and a concurrency capacity, and they run out at different times.
+- **Constraint**: the resource that will bind first. It might be daily API allocation, data storage, a full-table scan on a 12 million row object, Apex CPU time in a batch, or the concurrent long-running request limit.
+- **Headroom**: the gap between current peak consumption and the constraint, expressed either as an absolute amount or as a percentage of the limit. Headroom is only meaningful if measured at peak. Average usage divided by a limit is a comfort number, not a planning number.
+- **Peak factor**: peak consumption divided by average consumption over the same period. A month-end batch cycle or a seasonal event can push this well above 2x, and a design that is sized to average will fail at peak every time.
+- **Working set**: the subset of records that active processes touch. Most architectural performance problems come from working sets that quietly grow to equal the whole table.
+- **Selectivity**: how narrow a query filter is. A selective query returns a small fraction of the rows in an object and can use an index. A non-selective query causes a scan. Salesforce states the point plainly: the main approach to tuning performance in large deployments is reducing the number of records the system must process. [^1]
+- **Large data volume (LDV)**: Salesforce describes this as an elastic, imprecise term, and gives a working definition: tens of thousands of users, tens of millions of records, or hundreds of gigabytes of record storage. [^2]
+- **Growth rate**: the periodic change in the consuming quantity, ideally taken from telemetry over at least three full cycles. A quarterly rate is usually more useful than a monthly one for procurement, because it matches how contracts and hardware move.
+- **Runway**: how long until the constraint is hit at the current growth rate, assuming no design change. Runway is the number that turns capacity planning into a calendar item.
+
+## Three constraints, three curves
+
+Most capacity failures are not one problem. They are three curves crossing their limits at different times, and teams watching only the loudest one.
+
+![Three capacity constraints side by side: data volume, request volume, and concurrency and compute, each with what it is metered by, the first symptom an operator sees, and why standard usage dashboards miss it](</diagrams/capacity-planning-performance-at-scale-headroom-forecasting/1-three-constraints.png>)
+
+**Data volume.** Records accumulate. Storage is the obvious limit, but it is rarely the first one to bite. The first symptom is usually a query or report that used to take two seconds and now takes twenty, because the filter is no longer narrow enough to use an index. Salesforce's own guidance is direct about this: as data sets get larger the time required for certain operations grows, and the way an architect designs data structures and operations can change those times by several orders of magnitude. [^2]
+
+**Request volume.** API calls accumulate too, but in a lumpier way: they track business activity, not record counts. A new integration, a mobile app release, or a data warehouse pulling hourly snapshots eats allocation in steps. Daily allocation is fixed by edition and license mix, so request growth is a pure headroom problem. [^3]
+
+**Concurrency and compute.** Simultaneous long-running requests, batch jobs stacking on each other, Apex transactions competing for CPU. This curve is invisible in usage dashboards and shows up as intermittent timeouts that nobody can reproduce.
+
+The architect's job is to name which constraint binds first for this specific org, and then to instrument that one. Watching all three equally is how teams end up tuning storage while the API allocation is what actually kills them.
+
+## Headroom: how much is enough
+
+Headroom is a policy decision, not a platform setting, so treat the numbers below as a starting default that a design document should state explicitly and defend.
+
+- **API allocation: keep peak-day usage under 60 to 70 percent of allocation.** The remaining 30 to 40 percent absorbs a bad integration release, a retry storm, a migration, and a month-end spike happening in the same week. Below 30 percent headroom you are one incident away from a partial outage, and API exhaustion does not degrade gracefully: callers get errors.
+- **Storage: keep 12 months of forecasted growth in reserve at all times.** Storage is cheap to expand and slow to procure. Reserving a year means the conversation happens on your schedule rather than during a renewal.
+- **Query performance: keep the worst interactive page under half your latency budget.** If the service console tolerates four seconds of load time, the slowest list view should be two. Latency does not degrade linearly with data volume, so the margin absorbs the non-linearity.
+- **Concurrency: keep the async queue drained within one business cycle.** If a nightly batch finishes at 9am, you have no headroom, you have a schedule that depends on every night being average.
+
+Two rules make headroom honest. First, measure at peak, not at average. Second, measure the specific constraint, not a proxy. "The org feels slow" is not a measurement. "Peak-day API consumption reached 196,000 of a 280,000 allocation in September" is.
+
+## Forecasting from telemetry, not from optimism
+
+A forecast built from business projections is a wish with a spreadsheet around it. A forecast built from three periods of your own telemetry is a defensible estimate. The difference matters because forecasts drive spend.
+
+Four data sources do most of the work:
+
+1. **API usage over the last 24 hours**, in Setup, which gives you current consumption against allocation. Snapshot it weekly into a sheet, because the platform does not keep a long history for you. [^3]
+2. **Storage usage by category**, also in Setup, separating record storage from file storage. [^4]
+3. **Query cost**, via the Query Plan tool in the Developer Console, which shows whether a query uses an index and how expensive the chosen plan is. [^5]
+4. **Job and transaction telemetry**, via Event Monitoring or the async job queue, for batch durations and Apex execution times. Durations are the leading indicator for the compute constraint, because they move before anything errors.
+
+Then compute growth. Compound growth is the right model for most capacity curves, and the arithmetic is simple enough to do in a design review:
+
+```
+runway_in_periods = ln(limit / current) / ln(1 + growth_rate)
+```
+
+Linear extrapolation is what teams actually use, and it is optimistic whenever growth is compounding. A constraint that looks fourteen months away at 8 percent quarterly growth is about eleven months away at 10 percent, and procurement lead times do not shrink to match.
+
+Two adjustments turn a growth rate into a usable forecast. Apply the peak factor, so the forecast is of peak consumption rather than average. And set the forecast horizon to your procurement or release lead time plus one quarter, not to the contract year. A capacity gap discovered in the month it becomes a problem is a project failure that looks like an infrastructure event.
+
+![Forecasting pipeline in four steps: pull the four telemetry sources, snapshot them weekly because the platform keeps no long history, compute compound growth over at least three full cycles, then convert to a runway with the log formula adjusted for peak consumption and a horizon of lead time plus one quarter](</diagrams/capacity-planning-performance-at-scale-headroom-forecasting/2-forecast-pipeline.png>)
+
+## A worked example
+
+Here is a service org in its third year of a support transformation. The numbers are invented for the exercise, but the arithmetic and the reasoning are the ones you would use.
+
+**The org.** Twelve million Case records, growing by 250,000 per month with no archiving. One hundred Salesforce licenses, twenty Salesforce Platform licenses, three hundred Customer Community Plus licenses. No API add-ons. Peak-day API consumption last quarter: 196,000 calls.
+
+**Step 1: the API allocation.**
+
+Enterprise-style formula: a base amount plus a per-license contribution. Using 100,000 base, 1,000 per Salesforce and Platform license, and 200 per Community Plus license: [^3]
+
+```
+100,000 + (100 x 1,000) + (20 x 1,000) + (300 x 200)
+= 100,000 + 100,000 + 20,000 + 60,000
+= 280,000 calls per 24 hours
+```
+
+**Step 2: current headroom.**
+
+196,000 / 280,000 = 70 percent of allocation at peak. That leaves 84,000 calls, or 30 percent. On paper, fine.
+
+**Step 3: runway.**
+
+Integration call volume has grown 8 percent per quarter for four quarters, driven by two new systems and an hourly warehouse sync.
+
+```
+ln(280,000 / 196,000) / ln(1.08) = ln(1.4286) / 0.07696 = 0.3567 / 0.07696 = 4.6 quarters
+```
+
+Fourteen months of runway, and the growth has not stopped. The org is twelve months from a hard ceiling, and the ceiling does not negotiate: when allocation is exhausted, every external caller fails at once, including the ones the business considers critical.
+
+**Step 4: the query problem the dashboard does not show.**
+
+The service console's default list view filters on `Status != 'Closed'`. Status has low cardinality, the filter is a negation, and the object is twelve million rows. That is a scan, not an index lookup. Salesforce's own tuning guidance covers this class of problem directly: filters on null values in picklist or foreign key fields do not use the index, and in some cases multiple `WHERE` filters prevent index use even when the individual fields are indexed, in which case the query should be decomposed into narrower queries whose results are combined. [^6]
+
+The fix is not more CPU. It is a design change: filter on an indexed, selective field (owner, queue, `IsClosed` with a real value), add a custom index on the field the view actually filters on, and split the multi-filter query. [^6] That is the difference between a design that needs more capacity and a design that needs to stop wasting the capacity it has.
+
+**Step 5: storage is the slow constraint, not the fast one.**
+
+Data storage for an Unlimited-style org is 10 GB plus 120 MB per user license, and the per-user share applies to Salesforce and Salesforce Platform licenses, not to Experience Cloud licenses. [^4] The 120 user licenses in this org therefore carry 10 GB plus 14.4 GB, or about 24 GB. The org actually has 58 GB because extra storage was purchased along the way, which is why the number worth planning from is the Storage Usage page in Setup and not the license table. If the org holds 41 GB today and each Case with its related comments, tasks, and email messages averages about 3.4 KB, then 250,000 new cases per month consume about 0.85 GB per month, plus related rows, so call it 1.3 GB.
+
+```
+runway = (58 - 41) / 1.3 = 13 months
+```
+
+Thirteen months on storage, fourteen on API. Notice what that means for planning: they land in the same window, which is the worst possible outcome, because both conversations land on the same budget cycle and both look like surprises.
+
+![Worked example arithmetic: the license formula produces 280,000 daily API calls, peak consumption of 196,000 is 70 percent of that, 8 percent quarterly growth gives 4.6 quarters or 14 months of runway, and 41 of 58 GB of storage with 1.3 GB of monthly growth gives 13 months, so both limits land in the same quarter](</diagrams/capacity-planning-performance-at-scale-headroom-forecasting/3-worked-example-runways.png>)
+
+**Step 6: decisions.**
+
+Three moves, ranked by leverage rather than by visibility. First, cut calls per business event: the hourly warehouse sync should be incremental and event-driven rather than a full poll, which removes a large share of the growth. Second, archive closed cases older than two years into a Big Object, which provides consistent performance whether you hold a million records or a billion. [^2] Third, fix the list view and add the index, which buys back latency without touching capacity at all.
+
+Only after those three does the org buy more API allocation. Buying capacity first is how a design problem becomes a recurring line item.
+
+## Levers that buy runway without buying capacity
+
+Four levers show up in almost every capacity plan, and each one changes a different curve.
+
+**Reduce the records processed.** Selective filters, custom indexes where the platform allows them, and queries split so each one has a single usable filter. This is the lever that fixes latency, and it is the only one that changes how the platform's own tuning guidance applies to your org. [^1] [^6]
+
+**Defer sharing calculation during bulk changes.** Sharing recalculation is one of the hidden capacities. A large permission or role change can trigger long sharing rule evaluations or timeouts. Administrators with the defer sharing calculation permission can suspend group membership and sharing rule calculation, process a large batch of sharing-related configuration changes during working hours, and resume the recalculation during a maintenance window. That is capacity scheduling, not capacity buying. [^7]
+
+**Move work off the interactive path.** Batch Apex and queueable work split a large job into chunks, and each execution runs as its own transaction with its own governor limits, which is what makes a 500,000 record job possible at all. [^8] The capacity consequence is that asynchronous work is measured in wall-clock windows and queue depth rather than in user-facing latency, so it needs its own headroom target.
+
+**Shrink the working set.** Archive, purge, and externalize. Big Objects exist for exactly this, since they deliver consistent performance whether the store holds one million records or one billion. [^2] Every record you archive is a record no scan has to skip.
+
+## Load testing, and why your sandbox lies to you
+
+A full copy sandbox with production-like data volume is the only place you can test query plans at realistic scale, and you should use it. But be precise about what it proves.
+
+It proves data-volume behavior: whether a query uses an index at twelve million rows, whether a batch completes inside its window, whether a report times out. Those are the questions that matter most, and a full sandbox answers them well.
+
+It does not prove concurrency behavior. A sandbox serves one tenant's test traffic. Production serves your real user mix, your real integration schedule, and every other tenant sharing infrastructure you do not control. Your sandbox timing is a floor, not a prediction, and a test that passes comfortably in the sandbox should be re-read as "no data-volume problem found," not as "capacity is sufficient."
+
+It also does not prove the peak, unless you build the peak. Manufacture it: run the month-end batch, the warehouse extraction, and a synthetic user load in the same hour. Capacity is defined by the worst hour, so test the worst hour on purpose.
+
+## What to instrument, and what to alert on
+
+Capacity plans fail quietly. The instrumentation below is what makes them fail loudly instead, with enough lead time to act.
+
+- **API consumption as a percentage of allocation, weekly, with peak day called out.** Alert at 70 percent on a rolling four-week peak. [^3]
+- **Storage by category, monthly, with the month-over-month delta.** Alert when the delta grows faster than the trailing average, not only when the total approaches the limit. [^4]
+- **Slow query reports and Query Plan reviews for the top ten list views and reports, quarterly.** Latency is the earliest signal of an LDV problem, and it appears months before errors do. [^5]
+- **Batch durations, tracked as a trend.** A batch that has grown from 40 minutes to 70 minutes over two quarters is telling you the working set is growing even if nothing has failed.
+- **Async queue depth and retry counts.** Rising retries mean something downstream is degrading, and retries themselves consume allocation.
+- **Trust site maintenance windows**, so planned platform events do not get misread as capacity incidents.
+
+## The decision rule: more capacity or better design
+
+This is the part architects get wrong in both directions. Teams that always buy capacity hide design debt behind a budget line. Teams that always refactor spend six months shaving 15 percent off a constraint that is growing 30 percent a year.
+
+Use this test, in order:
+
+1. **Is the constraint being consumed by waste?** A non-selective query, a per-record REST call where bulk belongs, a full-table poll where an event belongs. If yes, fix the design first. Waste compounds, so removing it is the only move that changes the slope.
+2. **Is the growth itself optional?** Archiving, retention policy, and data externalization change the growth rate rather than the limit. Salesforce's guidance is blunt: a policy of archiving or discarding data at the same rate it arrives prevents degradation over time. [^1] That is a design decision with a permanent effect.
+3. **Does a design change buy more runway than the purchase, per dollar?** A polling integration replaced with Platform Events usually costs less than a year of API add-on capacity and keeps costing less every year after.
+4. **Only then buy.** Purchased capacity is the correct answer when the demand is real, the waste is gone, and the remaining growth is business growth you want. That is a good purchase, not a failure.
+
+![Decision rule in four ordered questions: is the constraint consumed by waste, is the growth itself optional, does a design change buy more runway than the purchase per dollar, and only then buy, followed by the design document line that records the constraint, peak, growth rate, runway, chosen lever and review date](</diagrams/capacity-planning-performance-at-scale-headroom-forecasting/4-more-capacity-or-better-design.png>)
+
+State the answer in the design document with the numbers attached: the constraint, the current peak, the growth rate, the runway, the chosen lever, and the review date. A capacity section with dates in it is a plan. A capacity section without dates is a paragraph.
+
+## Pitfalls
+
+**Planning to average instead of peak.** Every capacity conversation that starts with "we use 40 percent" should immediately ask "at peak or on average." The gap between the two is usually where the incident lives.
+
+**Treating a sandbox benchmark as production capacity.** It measures data volume, not concurrency. Say so in the design document, so the next reviewer does not inherit false confidence.
+
+**Watching one constraint.** API, storage, and query latency cross their limits at different times. Instrument all three, then rank them by runway, not by which one has the prettiest dashboard.
+
+**Forgetting that retries consume the same budget as the original call.** An integration that fails 20 percent of the time and retries three times has a 60 percent higher effective call cost than its functional volume suggests.
+
+**Buying capacity to solve a query problem.** Allocations are metered by call, storage by gigabyte, and neither one makes a full-table scan faster. Some constraints are bought out and some are designed out, and confusing the two wastes the budget twice.
+
+**No review date.** A forecast without a recheck is a claim that reality will not change. Put a quarterly review on the calendar with the same telemetry pull each time, so the trend line stays real.
+
+## Try it
+
+1. An org has a daily API allocation of 400,000 calls. Peak-day consumption is 260,000 and has grown 10 percent per quarter. What is the headroom in percentage terms, and what is the runway in quarters? *(Answer: 140,000 calls, or 35 percent headroom. Runway is ln(400,000 / 260,000) / ln(1.10) = 0.4318 / 0.0953 = 4.5 quarters, roughly fourteen months.)*
+
+2. A list view filters a 9 million row object on `Status != 'Closed'` plus two other conditions. It is slow. What are the two most likely causes, and what is the first fix? *(Answer: a negation filter on a low-cardinality field, and multiple WHERE filters preventing index use. First fix: replace the negation with a selective, indexed condition such as an `IsClosed` boolean with a real value, then add a custom index if the filter is still not selective. If index use is still blocked, decompose into narrower queries and combine results.)*
+
+3. A monthly load of 400,000 records runs as one REST call per record. Allocation is 280,000 calls per day. What happens on load night, and what should the design be? *(Answer: the load alone consumes 400,000 calls, exceeding the 280,000 daily allocation, so callers fail and retries make it worse. Move the load to Bulk API 2.0, where batches draw from a separate allocation pool, and make the load incremental instead of full.)*
+
+4. Storage is 48 GB of a 58 GB allocation. Growth is 1.5 GB per month and accelerating by 10 percent per quarter. What is the runway, and what should the design document say? *(Answer: 10 GB / 1.5 GB gives about 6.7 months at today's rate, and compounding shortens it further. The document should state the monthly delta, the acceleration, the archive trigger date, and whether archiving to a Big Object is the chosen lever.)*
+
+5. Your sandbox load test of the month-end batch completes in 40 minutes against a full copy. The same batch in production takes 95 minutes. What does that tell you, and what do you do next? *(Answer: the sandbox measured data volume, not production concurrency or the real job overlap schedule. Next step is to instrument the production batch duration trend, check what else runs in the same window, and re-test the worst hour by running the overlapping jobs together rather than testing the batch in isolation.)*
+
+## What's next
+
+You can now name the constraint that binds an org, measure headroom at peak, forecast a runway from telemetry, and defend a decision to buy capacity or change a design. The next lesson moves from the platform to the people who change it: org governance, including change management, release calendars, and the DevOps culture that keeps a busy org from becoming an unmaintainable one.
+
+[^1]: Salesforce Developers. "Best Practices for Deployments with Large Data Volumes: Best Practices." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-best-practices.html)
+
+[^2]: Salesforce Developers. "Best Practices for Deployments with Large Data Volumes: Introduction." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-introduction.html)
+
+[^3]: Salesforce Developers. "API Request Limits and Allocations." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-api.html)
+
+[^4]: Salesforce Help. "Data and Storage Resources." [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.admin_monitorresources.htm&type=5)
+
+[^5]: Salesforce Help. "Query Plan Tool." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.query_plan_overview.htm&type=5)
+
+[^6]: Salesforce Developers. "Best Practices for Deployments with Large Data Volumes: Using SOQL and SOSL." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-techniques-using-soql-and-sosl.html)
+
+[^7]: Salesforce Developers. "Best Practices for Deployments with Large Data Volumes: Defer Sharing Calculation." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-techniques-deferred-sharing-calculation.html)
+
+[^8]: Salesforce Developers. "Asynchronous Processing" in the Apex Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_async_overview.htm)

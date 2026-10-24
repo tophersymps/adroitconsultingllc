@@ -1,0 +1,98 @@
+---
+title: "Lesson 66: Multimodal Agents: Vision, Audio, Documents, and Structured Data"
+slug: multimodal-agents-vision-audio-documents-structured-data
+series: "agentic-ai"
+lesson: 66
+excerpt: "An agent that only reads text is blind to most of the real world. This lesson shows how multimodal models give agents eyes and ears: how a model turns images, audio, and documents into tokens it can reason over, how vision maps to token cost, how documents get their structure back instead of being flattened into text, and how to decide when a general multimodal model beats a specialized extraction pipeline."
+date: "October 11, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Multimodal, Vision, OCR, Document Understanding, Structured Data]
+---
+
+Every agent in this course so far has done the same trick: it turned language into tokens, reasoned over tokens, and acted. That works because language happens to be the medium a text model already understands. But the inputs a real business hands an agent are rarely just clean text. Reimbursement requests arrive as photos of receipts. Contracts are PDFs with tables and annotations. Support calls are audio, or worse, screen recordings of a broken checkout. Leave those inputs to a text-only chain and the agent is effectively working blind, because the information it needs is locked inside the image, the sound, or the layout, not in any words it was told.
+
+This lesson is about giving an agent those missing senses. We will look at what a multimodal model actually is under the hood, why images and audio become tokens and what that costs, how documents get their structure back instead of being flattened, and the decision framework for when a general multimodal model is the right tool versus when a specialized extraction pipeline beats it.
+
+## What a multimodal model is doing under the hood
+
+A multimodal large language model is a language model that can reason across more than one input type at a time. The IBM explainer defines it as a model that processes and reasons across data such as text, images, and audio, and can do things like describe images, interpret charts, run OCR, or hold a real-time conversation that involves both vision and speech. [^1] The point is not that it attaches a separate image tool to a text model. It is that the reasoning engine itself can consume all these inputs in one pass, which is what lets it connect a picture to a question about it rather than handing the picture off to some other system.
+
+The internal flow is worth knowing because it predicts where costs and failures come from. IBM breaks it into four mechanical stages. [^1] First is data encoding: each modality has its own structure, so each gets a dedicated encoder. Text is tokenized and embedded. Images pass through a vision transformer or a convolutional network that extracts shapes, colors, and spatial patterns. Audio goes through speech encoders like wav2vec or HuBERT that turn a raw waveform into representations of speech or sound. [^1] These encoder outputs land as feature vectors in different shapes and sizes.
+
+Then comes feature projection. The model maps every encoder's output into one shared embedding space, using learned projection heads or small neural layers, so that text, image, and audio features are vector-compatible and can be compared and combined. [^1] Next is fusion: the model combines the projected features into a unified representation, either by concatenating them or by using cross-attention, where one modality learns to selectively focus on relevant parts of another. [^1] Cross-attention is the mechanism that lets a word like "the red car" reach into the image and bind to the actual red pixels. Finally the fused representation flows through the transformer layers, and a decoder produces output. [^1]
+
+The practical takeaway: a multimodal model is a text reasoning engine with encoders bolted on the front and a projection layer that translates every other modality into the language the engine already speaks. That design is why the newest models can be trained end to end across text, vision, and audio, with a single network processing all of them, rather than the older three-model pipeline that transcribed audio to text, ran a text model, then synthesized the reply. [^2]
+
+![A diagram shows the multimodal pipeline: an image, a text sentence, and an audio waveform each enter a dedicated encoder (vision transformer, tokenizer, speech encoder), then move through a projection step into one shared embedding space, are fused by cross-attention, and finally flow into the language model's transformer layers. The caption explains that projection is what translates every modality into the token language the reasoning engine already speaks.](</diagrams/multimodal-agents-vision-audio-documents-structured-data/1-multimodal-pipeline.png>)
+
+## Vision is tokens, and tokens cost money
+
+The fastest way to go wrong with a vision agent is to forget that an image is not free to the model. Images count as tokens and get billed accordingly. [^3] The OpenAI vision guide explains the mechanics. For cost, you set a detail level. With detail set to low, an image costs only the model's base tokens no matter its dimensions. With high or auto detail, the API scales the image down to fit a 2048 by 2048 square, then if the shortest side exceeds 768 pixels it scales it down to 768, then counts the 512-pixel squares needed to cover the image, and each square consumes the model's tile tokens, plus the base tokens. [^3] For the main gpt-4o class models, the base is 85 image tokens and each tile is 170. [^3] A large image is not one token; it is a base plus a stack of tiles, and every tile is a chunk of your context window and your bill.
+
+Because a model actually sees a downscaled, tiled version, its limits are predictable. The vision guide lists them bluntly: small text in an image is hard to read, rotated or upside-down text gets misinterpreted, graphs that rely on color or line-style differences are unreliable, and tasks needing precise spatial localization, like reading a chess position, are weak. [^3] The model also does not process original file names or metadata, and images may be resized before analysis even at original detail. [^3] The practical rules follow directly. If your agent needs to read small print from a photo, enlarge the text in the image before sending it, or consider running OCR as a separate step rather than trusting the model's eyes on a downscaled tile. And when an image is just decoration, set detail to low to avoid paying tile tokens for pixels the agent does not need.
+
+Vision in an agent therefore needs a conscious budget, same as prompt length in lesson 2. You decide what the agent actually has to see, crop or resize to that need, and only buy the resolution that the task demands. A model that reads a receipt for a total can do it on a low-detail pass; a model that must transcribe a dense contract page cannot.
+
+## Docs and structured data: the structure is the meaning
+
+The second sense an agent often needs is one for documents, and the trap here is thinking a document is just text with extra steps. Real documents carry meaning in layout: a table header only applies to the columns beneath it, a caption only makes sense next to the figure it describes, and an invoice's "total due" only means something relative to the number physically beside it. [^4] Traditional OCR flattens all of that away. It extracts raw character strings and discards the visual structure, spatial relationships, and embedded imagery that often carry the actual meaning. [^4] Multimodal document understanding, MDU, is the discipline that treats layout as a first-class signal rather than noise: it reads text, interprets embedded charts and figures with computer vision, parses the spatial position of headings and table cells, and fuses all of it into structured output like key-value pairs, classifications, or summaries. [^4]
+
+This is exactly where a multimodal model earns its keep in an agent. A text-only pipeline given a scanned contract loses the table. An MDU-capable model reads the table as a table because it sees the geometry of rows and columns, not a string of words. Models built specifically for this, like the LayoutLM family, encode text tokens together with 2D layout coordinates so the model reasons about where things sit on the page, not just what they say. [^4]
+
+There is also a decision to make between a general multimodal model and a specialized extraction pipeline, and the NVIDIA PDF extraction experiments are a good concrete example of the tradeoff. The team compared a specialized multistage pipeline (detect each page element, then run a model tuned per element: a chart model for charts, a table-structure model with OCR for tables, OCR alone for infographics) against a single general vision-language model asked to describe each element. [^5] On the DigitalCorpora 10K benchmark, the specialized pipeline beat the 11B vision model by 7.2 percent recall@5 across all visual modalities, and it processed pages about 32 times faster. [^5] The error analysis is what makes it worth quoting: the general model misinterpreted chart elements, missed embedded text, and hallucinated details. [^5]
+
+The lesson is not that general multimodal models are useless. It is that they are the wrong tool for high-throughput, high-fidelity extraction of messy tables and charts. General models shine when you need flexible reasoning over an image in context, following the instruction "what does this page tell me about the customer's renewal risk?" A specialized pipeline shines when you need every table cell exact, at scale, cheaply. Your agent design should treat that as a routing decision: general model for understanding, specialized extractor for exactness, and the two can even cooperate, with extraction producing clean structured rows that the reasoning model then interprets.
+
+## Worked example: a reimbursement email with a receipt attachment
+
+Put it together as one agent so the pieces stop being abstract. A company runs an agent that approves low-value employee expense reimbursements. The request arrives as an email that carries a photo or PDF of a receipt and one line of text: "Reimbursing my taxi from the airport, covered by the client visit." The agent needs to pull the amount and the date out of the receipt image, confirm the category matches the policy, and either auto-approve or route for human review.
+
+Here is how it threads the senses. First, the agent decides what it actually needs from the image. The receipt is a clean, large-print number row on a simple layout, so a general vision model on low detail is enough to read the total and date; no expensive per-tile pass is worth it. [^3] The model sees the receipt, the agent's instruction tells it exactly which fields to return, and the reply comes back as structured JSON: amount, date, vendor, and a confidence note. That is the general model doing flexible reading. If the receipt were a dense restaurant bill with an itemized table, the agent would flip to a table-structure extractor to get exact line items instead of trusting the vision model's eyes on squeezed rows. [^5]
+
+Then the agent runs the policy against the extracted values. The amount is under the auto-approve threshold, the date is within policy, the vendor category matches a taxi. The structured extraction is what made any of this possible, because the policy check and the audit trail both want fields, not prose. On the way out, the agent stores the original image and the extracted JSON together, so that if the audit later questions the amount, a human can see the receipt and the model's reading side by side. The whole flow is the perceive-reason-act loop from lesson 3, re-equipped: the agent perceives an image and a sentence, reasons over both as tokens, acts by writing an approval record, and leaves enough for a reviewer to re-perceive it.
+
+![A flow shows the four steps of a reimbursement agent: an email with a receipt image enters; a vision model extracts amount, date, and vendor into structured JSON; a policy step compares those fields against rules and approves or routes to review; a final step stores the original image next to the extracted JSON for the audit trail. The lesson is that structure is what makes the downstream checks possible.](</diagrams/multimodal-agents-vision-audio-documents-structured-data/2-reimbursement-agent.png>)
+
+## Choosing your senses: a decision framework
+
+When you add a modality to an agent, the question is never "can the model see an image?" It is "what does the model have to do with what it sees, and at what cost?" Three decisions cover most cases.
+
+Decide on perception budget first. If the task is reading a number from a clean image, go low detail and save the tile tokens. [^3] If the task is dense text or tabular data, plan on either high-detail vision, which buys tiles, or a dedicated OCR-table extraction step, which buys exactness. The two are not the same and are not interchangeable.
+
+Decide on understanding versus exactness. For a task that reasons about content, "does this chart suggest the vendor's revenue fell," a general multimodal model in context is the natural fit. [^4] For a task that must reproduce every cell of a table exactly for downstream processing, a specialized pipeline wins on accuracy and speed, per the NVIDIA results, and using a general model there just invites hallucinations and missed cells. [^5]
+
+Decide on structure before you build. Multimodal agents rarely end their work with a sentence. They end with a field, a JSON record, or an approval decision, and that structured output is what downstream systems consume. So design the output schema up front, tell the model exactly which fields to return, and keep the original artifact linked to the extraction for audit. The model's job is to fill the schema, not to describe.
+
+![A decision grid maps two questions: on one axis, clean and simple input versus dense and tabular input; on the other, flexible understanding versus exact reproduction. Simple input plus understanding points to a general multimodal model on low detail; simple input needing exactness points to low-detail vision plus a small validation step; dense input needing understanding points to high-detail vision or chunk-focused extraction; dense input needing exactness points to a specialized table-structure pipeline.](</diagrams/multimodal-agents-vision-audio-documents-structured-data/3-sense-decision-grid.png>)
+
+## The pattern to take away
+
+Multimodal agents fail for predictable reasons, and a numbered pattern avoids most of them.
+
+1. Pick what the agent must actually perceive, and trim everything else out of the image or audio before it reaches the model.
+2. Set the perception budget deliberately. Use low-detail vision for simple reads so you are not paying tile tokens for pixels the task ignores. [^3]
+3. Choose understanding versus exactness per task. General multimodal model for reasoning in context, specialized extraction pipeline for exact table and chart reproduction. [^4][^5]
+4. Define the output schema before you prompt. Structured fields, not prose, are what downstream policy checks and systems consume.
+5. Keep the original artifact next to every extraction so reviewers and audits can re-perceive the source. [^4]
+6. Route per input, not per request type. An agent that reads receipts with a vision model should still flip to a table extractor the moment a receipt turns dense. [^5]
+
+Get the senses right and the reasoning engine you already built in the earlier lessons does the same job, just no longer half-blind. Get them wrong, and the agent will be confidently wrong about things it never actually saw.
+
+## Try it
+
+Take the reimbursement example and make it your own. Write down a three-field JSON schema you would want an agent to return from a real receipt you have on hand: amount, date, vendor. Now decide the perception budget: would you run this on low-detail vision, and if so, what could break in the reading? Next, pick a document you deal with at work, a contract, an invoice, a form, and name one piece of meaning that lives in its layout rather than its words, something like "this clause only applies if the checkbox at the top is checked." Finally, decide, for that document, whether a general multimodal model or a specialized extractor is the right tool and why. Write two or three sentences each, then compare your perception-budget and understanding-versus-exactness calls against the decision grid in this lesson. The goal is not to build the agent. It is to practice deciding which senses it needs and at what price.
+
+## What's next
+
+This lesson gave your agents eyes for images, a way to recover structure from documents, and a budget for buying that sight with tokens. The next lesson points the agent's ears at the real-time problems. Lesson 67 covers voice agents: speech-to-text and text-to-speech, the latency budgets that separate a usable voice loop from a frozen-feeling one, how agents handle interruptions and when they should barge in over the user's speech. If this lesson was about letting an agent see and read, the next one is about letting it hold a live conversation.
+
+## Summary
+
+A multimodal model is a text reasoning engine with per-modality encoders and a projection layer that translates images, audio, and documents into the shared token space it already reasons in, fused through cross-attention. [^1] Images cost real tokens: detail level controls whether you pay base tokens or base plus a stack of tile tokens, so perception budget matters as much as prompt length. [^3] The model's vision limits (small, rotated, or low-contrast text; weak spatial localization) mean high-stakes reads should be routed to OCR or table extraction instead of the general model's eyes. [^3] Documents carry meaning in layout, and multimodal document understanding recovers that structure into key-value pairs and classifications rather than flattening it away. [^4] For exact, high-volume table and chart extraction, a specialized pipeline beats a general vision model on both accuracy and speed; for flexible in-context reasoning, the general model wins. [^5] The reliable pattern is to choose perceptions deliberately, budget the tokens, separate understanding from exactness, and design the output as structured fields that downstream systems can consume.
+
+[^1]: "What is a multimodal LLM (MLLM)?," IBM Think. https://www.ibm.com/think/topics/multimodal-llm
+[^2]: "Hello GPT-4o," OpenAI. https://openai.com/index/hello-gpt-4o/
+[^3]: "Images and vision," OpenAI API documentation. https://developers.openai.com/api/docs/guides/images-vision
+[^4]: "What is Multimodal Document Understanding?," LlamaIndex. https://www.llamaindex.ai/glossary/multimodal-document-understanding
+[^5]: "Approaches to PDF Data Extraction for Information Retrieval," NVIDIA Technical Blog. https://developer.nvidia.com/blog/approaches-to-pdf-data-extraction-for-information-retrieval/

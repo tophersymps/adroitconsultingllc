@@ -1,0 +1,198 @@
+---
+title: "Testing the Security Model: Validation, Sharing Graphs, Test Matrix, Audit"
+slug: day-36-i-3-testing-the-security-model-validation-sharing-grap
+series: salesforce-sharing-visibility-architect
+lesson: 36
+excerpt: "How an architect proves a sharing model works before rollout: the reliable signal is a per-user-class test matrix that logs in as every access class and asserts exactly which records each one can view and edit, not the admin's summary or an admin-only session. The architect inspects each record's Sharing detail and share graph to confirm the composition of grants and their RowCause sources, exercises recalculations so criteria changes, ownership transfers, and rule edits do not leave stale or missing shares, then audits the org with sharing reports, Health Check, and Event Monitoring to confirm only intended broad permissions exist and that field-level and programmatic enforcement strip hidden fields in every run-as context."
+date: 2026-10-18
+author: Jimmy Olsen
+readTime: "16 min read"
+tags: [salesforce, sharing, visibility, architect, security-testing, system-runas, test-matrix, sharing-graph, sharing-detail, sharing-recalculation, sharing-summary, health-check, event-monitoring, field-level-security, fls, stripinaccessible, with-security-enforced, rowcause, implicit-sharing]
+---
+
+Lesson 35 taught you to design within license constraints. Today's requirement, i-3, is the last one in the course and the one the whole model is proven by: given a set of conditions, determine how to test the sharing model. The point of the objective is not to configure sharing, it is to prove that every access decision your configuration implies actually holds under real users with real licenses, and to catch the bugs that no config screen will ever show you.[^1]
+
+Start from a hard truth about how sharing fails. Sharing bugs rarely announce themselves. A criteria-based sharing rule that silently drops a group, an ownership transfer that leaves a stale share the old owner should no longer see, a field that says hidden in the layout but spills through a report or a list view, and an Apex class that leaks records because it is not marked with `with sharing` will all pass a casual check by an admin. Every one of them shows up the moment you run a test matrix and log in as the users the model is supposed to protect. That gap, between what the config says and what a user actually sees, is exactly what requirement i-3 is built to close.
+
+The architect's job under i-3 is to move trust from description to demonstration. You do not trust the admin's summary, and you do not test only as the system admin, because the system admin is precisely the persona that sees everything and therefore proves nothing about a sharing model. You build a test matrix that crosses every user access class with every record class, assert an expected access value for each cell, and drive those assertions as the representative user of each class through `System.runAs(user)` in Apex tests or through a login-as flow in the UI. Then you inspect the sharing graph, exercise recalculation, and run the audit. This lesson walks that whole proving loop.
+
+## Define the terms
+
+**Test matrix.** The two-dimensional table that is the backbone of sharing validation. The rows are user access classes (every distinct type of user your model defines: owner, reporting manager, group member, external guest, a user with a broad permission). The columns are record classes (every distinct kind of record your model treats differently: an owned record, a record shared by rule, a record in a team, a record with OWD locked down). Each cell holds the expected access (none, read, or write) for that user and record pair. You write the matrix before you run a single test, because the matrix is your spec for what correct means, and a test only proves something against an expected value.[^2]
+
+**System.runAs(user).** The Apex method that runs a block of test code in the context of a different user, applying that user's profile, permission set licenses, object and field permissions, role, and sharing access. It is the programmatic equivalent of logging in as that user, and it is the primary tool for testing both granted and denied access in Apex. Critically, `runAs` does not work like a typical user switch in a setup screen: inside `runAs`, the running user's sharing rules and record access are enforced exactly as they would be for that user, so a `SELECT` that the target user cannot see returns no rows and a DML the user cannot do throws an exception. That behavior is what makes assertion possible. In a test context the running user's own profile permissions still apply, which is how you test both the allow and the deny side of every matrix cell.[^3][^4]
+
+**Login-as.** The administrative flow that opens the interface as a chosen user, letting you confirm what that user sees in list views, record pages, reports, and the sharing detail, not just what a query returns. Login-as complements `runAs` because some behavior, notably Lightning Experience UI composition and reports, is best verified by actually being the user rather than by a headless query. The reliable method combines both: Apex `runAs` for fast, repeatable, code-verifiable assertions and login-as for the human view that the UI surfaces correctly.[^5]
+
+**Access class.** A distinct identity that the sharing model must treat consistently, defined by the combination of role, profile, permission set, group membership, and license that produces a single access pattern. You enumerate access classes when you build the matrix: the record owner, the role-hierarchy superior, a sharing-rule qualifying user, a public-group member, a team member, an external guest, a user holding View All or Modify All, and so on. Two users who belong to the exact same classes are the same access class and get one matrix row; the matrix rows are the distinct classes, not every individual user.
+
+**Share graph (Sharing detail).** The complete set of share rows on a record, each with its source, that together produce the record's effective access. The Sharing detail on a record page lists every share row and its RowCause, which reveals exactly which mechanism granted the access: the owner implicit share, the OWD-implied read, a role-hierarchy share, a sharing-rule share, a team share, a manual share, or an Apex-managed share. Reading the share graph tells you not just who can see a record but why, and any grant source you did not expect is a bug to investigate. It is the single most important screen for validating the composition of access.[^2][^6]
+
+**RowCause.** The field that names the source of a share row. It is how the platform tracks which mechanism created each grant, so you can distinguish an intentional Apex share from a leftover manual share or a forgotten rule. The share graph is built from these causes, and auditing composition is auditing the set of RowCauses present on a record.
+
+**Sharing recalculation.** The process by which the platform re-evaluates and rewrites share rows when the conditions those rows depend on change. Changes to sharing-rule criteria or filter values, transfers of record ownership, and edits to roles or role hierarchy membership can each invalidate existing shares. Recalculation should remove stale shares the new conditions no longer grant and add shares the new conditions newly require. It is not guaranteed to be automatic and always correct in the sense an architect can ignore it, so recalculation paths must be exercised and validated, not assumed. Testing recalculation surfaces both stale grants that survive a change and missing grants that never appear after it.
+
+**Access audit.** The read-only confirmation, run near rollout, that the org's effective access matches what the design intends. It uses the Sharing Summary and sharing reports to see which records and objects carry broad access, Health Check to review configured permissions against Salesforce baseline best practices, and Event Monitoring to review the actual permission-related events the org records. The audit confirms that only the intended broad permissions (View All, Modify All, Edit All Files) are held and documents the security model so a reviewer can reason about it without digging through every config screen.[^7][^8]
+
+## Why it matters for the exam and for real builds
+
+Requirement i-3 sits in the Implications of Security Model Choice domain, and the exam guide's stated topic is testing the sharing model by enumerating the test matrix, validating the share graph per record, exercising recalculation, and running an audit. That phrasing matters: the exam does not ask you to configure a sharing rule, it asks you to determine how to test the model and prove the intended behavior holds.[^1] The scoring centers on the reliability of your test method, and the two wrong ideas the questions are built around are trusting the admin's summary and testing only as the system admin. Both are tempting because both are easy. Both are useless for proving a model that differentiates users, because both only ever see an org where everything looks accessible.
+
+The realistic version is sharper than the exam. I have watched a team discover, two weeks after a rollout, that an account owned by a rep who left the org was still visible to that rep through a stale manual share, because the removal path had never been exercised and no one had looked at the record's sharing detail after the ownership transfer. The config was correct when it was written. The share rows on disk were wrong, because recalculation had left a stale grant behind. No admin's one-line report and no admin session would have caught it, because the admin sees everything regardless. Only a test that logged in as the departed rep's successor and asserted the record was no longer visible would have surfaced the stale share, and only reading the share graph would have named its source.
+
+So the exam wants a proving discipline, not a config listing. Faced with a set of conditions, the architect enumerates the access classes and record classes, writes the expected-access matrix, runs `runAs` and login-as checks for every cell, reads each record's sharing detail to validate the composition and source of its grants, exercises the recalculation paths, and audits broad permissions and programmatic enforcement before rollout. Mapped to the quiz objectives in the lesson, that loop answers the three questions the material centers on: the test matrix is the reliable way to verify, the sharing detail is how you validate composition, and recalculation must be tested because it is neither cosmetic nor always correct.[^1][^2]
+
+## Enumerate user classes and record classes, then write the matrix
+
+The proving loop starts before any code. You cannot assert that a grant is wrong until you have written down what correct means, so the first step is to enumerate every access class and every record class and lay them out as a matrix.
+
+**Enumerate the access classes.** Walk your role hierarchy, profiles, permission sets, public groups, teams, and external-user population and list every distinct identity that behaves differently. A useful minimum for most orgs: the record owner, a manager one or more levels up in the hierarchy, a peer in the same role with no sharing mechanism, a user who qualifies for a criteria-based sharing rule, a member of a public group that receives an ownership-based rule, a member of an account or sales team, an external guest or community user if one exists, and a user holding a broad permission like View All or Modify All. If your org has gone license-correct per lesson 35, the external access classes exist only where Experience licenses do, and you list the external tiers you actually hold.
+
+**Enumerate the record classes.** List every kind of record your model treats differently. The typical set: a record owned by a user who is also a target of other grants, a record that qualifies for a criteria-based sharing rule, a record that qualifies for an ownership-based rule via a group, a record added to a team or shared manually, a record under OWD-locked-down at an object whose other records are public, and, if external users exist, a record that should and a record that should not be visible to a guest. The list is driven by your design decisions, so a model that uses only OWD and role hierarchy has a shorter record list than one that layers rules, teams, and Apex sharing.
+
+![Test matrix for a locked-down account model: user access classes across, record classes down, and each cell holding the expected access value a runAs or login-as assertion proves](</diagrams/day-36-i-3-testing-the-security-model-validation-sharing-grap/1-test-matrix.png>)
+
+**Fill every cell with an expected access value.** For each user class and record class pair, write none, read, or write in the cell, plus whether you must verify the record is visible and whether you must verify it is editable. This expected value is your spec. When you later assert a query result or a DML outcome, you compare it against the cell. A matrix you cannot fill because you are unsure what a user should access is itself a finding, because it means the design is not yet defined enough to test.
+
+**Test both the allow and the deny side of every cell.** This is where the matrix earns its name. A cell that expects none still gets checked, as a negative assertion that the record is absent from a query and that DML is denied. Half the sharing bugs live on the deny side, and a model tested only for what users can see is a model half-tested.
+
+## Write runAs-based Apex tests, or login-as checks, and assert per cell
+
+With the matrix filled, drive each cell with an assertion. The workhorse is a batch of Apex test methods that wrap each user class in `System.runAs(user)` and assert the exact query results and DML outcomes the matrix predicts.
+
+A minimal pattern for a write cell looks like this:
+
+```apex
+@IsTest
+static void ownerCanEditOwnedRecord() {
+    Account acct = [SELECT Id FROM Account LIMIT 1];
+    User rep = [SELECT Id FROM User WHERE Id = :acct.OwnerId];
+    System.runAs(rep) {
+        System.assert(acct.OwnerId == rep.Id, 'owner mismatch');
+        acct.Description = 'owner edit';
+        update acct; // no exception means the owner can edit
+    }
+}
+```
+
+And for a deny cell, the assertion inverts: you assert the record is gone from a query or that the DML throws.
+
+```apex
+@IsTest
+static void peerCannotSeeRecordLockedByOwd() {
+    Account acct = [SELECT Id FROM Account WHERE IsDeleted = false LIMIT 1];
+    Profile p = [SELECT Id FROM Profile WHERE Name = 'Standard User' LIMIT 1];
+    User peer = new User(Alias='peer', Email='peer@example.com',
+        EmailEncodingKey='UTF-8', LastName='Peer', LanguageLocaleKey='en_US',
+        LocaleSidKey='en_US', ProfileId=p.Id,
+        TimeZoneSidKey='America/New_York', UserName='peer@test.com');
+    insert peer;
+
+    System.runAs(peer) {
+        List<Account> visible = [SELECT Id FROM Account WHERE Id = :acct.Id];
+        System.assertEquals(0, visible.size(), 'peer must not see OWD-private account');
+    }
+}
+```
+
+The reason this catches what an admin session cannot: inside `runAs`, the platform enforces the target user's sharing, role, profile, and field permissions, so a query that the target user cannot see returns nothing and a DML they cannot perform throws. Notice the second example does not even set OWD in the test; it demonstrates the assert shape, and your real test would use `@testSetup` to build orgs at each OWD level per that cell. The pattern is one test method per matrix cell, or a data-driven loop that iterates the matrix, so a regression any cell turns red and the suite, not a human, guards the model.[^3][^4]
+
+For the UI-facing behaviors the code cannot show, complement `runAs` with login-as. Log in as the representative user of each class and confirm the list view, record page, and report show exactly the records the matrix predicts. Login-as proves the composition users actually see; the code proves the data layer. A strict rule for the whole loop: any cell that asserts none still gets a login-as pass, because a field that hides in layout but surfaces through a report or a `SELECT` is a real leak that only the user's full context finds.
+
+![The two complementary ways to drive a matrix cell: System.runAs in Apex proves the data layer with code-verifiable assertions, and login-as verifies what the user actually sees in the UI](</diagrams/day-36-i-3-testing-the-security-model-validation-sharing-grap/2-runas-vs-loginas.png>)
+
+## Inspect the Sharing detail to validate the share-graph composition
+
+Asserting which records a user can see proves access but not why. Requirement i-3 also asks you to prove that the access is composed of the grants you intended, with no unexpected source. That is the share graph, and you read it on a record's Sharing detail.[^2][^6]
+
+On any record, the Sharing button opens the sharing detail, which lists every share row and its RowCause. Reading it answers the composition question directly: the owner implicit share from the ownership cause, an OWD-induced share, a role-hierarchy share where a superior gained access, a sharing-rule share with the rule that produced it, a team share, a manual share, an Apex-managed share. Each row names its source, so the graph tells you not only who can see the record but the complete mechanism inventory that produced that access.
+
+The discipline is to know the expected composition before you open the screen. For a record you believe is visible to a user through a specific criteria-based rule, the sharing detail should show exactly that rule's share row, and no manual share, no Apex share, and no other rule. When the graph shows a row you did not intend, you have found a bug the matrix might not: it is entirely possible for a record to be visible for the wrong reason, a share row a user can still see because a stale manual grant survived. The sharing detail is the only place that tells you the access is there for the reason you designed, and it is the check that catches an unexpected grant from a forgotten rule, a leftover team, or an orphaned Apex share.
+
+![Reading a record's sharing detail names which mechanism granted each grant: the share rows and their RowCause sources, where an unexpected manual or Apex share is a bug to investigate](</diagrams/day-36-i-3-testing-the-security-model-validation-sharing-grap/3-share-graph.png>)
+
+Pair the per-record detail with a programmatic view of the share tables for anything that exists at scale. Querying `AccountShare`, `OpportunityShare`, or the custom-object share table with `RowCause` in the filter lets you assert, in code, that no record has a share row whose cause you did not intend. That is the scalable version of reading one record's detail, and it is what makes share-graph validation repeatable across a whole population rather than one representative at a time.
+
+## Exercise recalculation paths and confirm stale grants are removed
+
+A sharing model is not a static file; it is a process that changes as records change. Requirement i-3 demands that you test the recalculation paths so a criteria change, an ownership transfer, or a rule edit does not leave the share table behind.[^2]
+
+Walk the three classic recalculation triggers, and for each, run a before and after assertion in the matrix:
+
+**Change a sharing-rule criteria value.** Take a criteria-based rule, alter the filter so a record that previously qualified no longer does, then confirm the record's shares are recalculated so the affected user loses access. The false assumption to test against is that the rule edit instantly repairs every affected record; in reality you must re-run the recalculation and confirm the stale share rows are gone, which is exactly what a `runAs` deny assertion plus a share-table `SELECT` verifies.
+
+**Transfer record ownership.** Move an owned record from rep A to rep B, then confirm A no longer sees it unless another mechanism grants access, and B now sees it as owner. Ownership transfer is the highest-traffic recalculation in most orgs and the one where stale grants most often survive, so the matrix should test it explicitly for both the losing and the gaining side. A leftover implicit or manual share for the old owner is a data-leak bug that only this assertion finds.
+
+**Edit roles or role-hierarchy membership.** Move a user out of a role whose hierarchy granted them access, remove a user from a role, or change the hierarchy so a manager loses a subordinate, then confirm the affected shares are released and no stale hierarchy grant remains.
+
+For each path, assert in both directions: the access that should appear does appear, and the access that should disappear is gone. The share graph check matters here too, because recalculating should remove the stale row entirely, not leave a ghost share the matrix's deny assertion would catch only by running the exact right query.
+
+The reason recalculation must be a first-class test (not a side note) is that it is neither cosmetic nor guaranteed automatic in the sense you can ignore it. Criteria changes, ownership transfers, and rule edits can all leave stale or missing grants, and only this test path surfaces them. If you skip it, the org sails past rollout with a share table that no longer matches the config, and the user who should have lost access keeps it quietly.
+
+![The three recalculation paths to exercise: a criteria-value change, an ownership transfer, and a role or hierarchy edit, each asserted before and after so no stale or missing grant survives](</diagrams/day-36-i-3-testing-the-security-model-validation-sharing-grap/4-recalculation-paths.png>)
+
+## Run the access audit: sharing reports, Health Check, Event Monitoring, and programmatic paths
+
+The last leg of the proving loop is the audit: confirm, org-wide, that only the intended broad permissions exist, and that field-level and programmatic enforcement hold in every run-as context.
+
+**Confirm broad permissions with the Sharing Summary and sharing reports.** The data sharing summary and related sharing reports show which objects and records carry public or broad access. Run them to confirm that only the objects you deliberately set to Public Read or Public Read/Write are broad, and that View All, Modify All, and Edit All Files are held only by the users and permission sets the design requires. Broad permissions are the fail-open escape hatch of any sharing model, so the audit names every object and user that holds one and verifies each is intentional.
+
+**Run Health Check.** Salesforce Health Check reviews the org's configured permissions and security settings against Salesforce baseline best practices and reports the org's security score. Run it to surface broad-permission settings and create baseline recommended settings to compare against. It is a configuration-level sweep, so it complements rather than replaces the data-level matrix, but it is a fast way to catch a `View All` that drifted onto an over-broad profile or a global permission you never meant to grant.[^7]
+
+**Use Event Monitoring for permission-related events.** Event Monitoring records events about how data was used and accessed, including permission and sharing-related activity. It lets you review which permission fields and access events actually fired, giving you evidence about the access that occurred rather than only the access that was configured. This is the evidence layer that turns an audit from a config review into a record of behavior.[^8]
+
+**Confirm field-level and programmatic enforcement for restricted users.** A security model is only as strong as its hidden fields and code paths. As a restricted user, assert that fields hidden by Field-Level Security do not leak through any surface: they are absent from reports and list views, stripped from API and Apex results, and the programmatic paths respect sharing. In Apex, use `WITH SECURITY_ENFORCED` on SOQL to have the query enforce field- and object-level permissions, and use `System.stripInaccessible` to strip hidden fields and inaccessible records from query and DML results before returning them. The audit should demonstrate, as a restricted user, that a hidden field is gone from an API response and that a code path does not leak records a `runAs` context should not see. Run-as contexts must not broaden access; that is the invariant the programmatic checks enforce.[^4][^9]
+
+**Document the security model for reviewers.** Finally, write down the model so a reviewer can reason about it: the OWD for every object, the role hierarchy, every sharing rule and why it exists, every team and group, every manual and Apex share pattern, and the matrix you built to test it. Documentation is the deliverable that lets a reviewer or a successor audit the model without re-deriving it, and it forces you to state the intent that the matrix then verifies.
+
+## Worked scenario: proving a locked-down account model with a rule and a team
+
+This scenario is the union of quiz questions one and two, and it is the shape the exam favors. Consider an account model locked down at Private OWD, with a criteria-based sharing rule that grants a regional sales team read access to accounts whose territory matches the rule, and an account team that grants a support rep edit access to a handful of accounts.
+
+Test matrix: the access classes are the account owner (write), a regional sales team member whose territory matches a rule-qualified account (read via rule), a support rep added to the account team (write via team), a peer in the sales role whose territory does not match (none), and a manager one level up in the role hierarchy (read via hierarchy). The record classes are a rule-qualified account, a team-shared account, a non-qualifying account, and an own account with no additional grants.
+
+Run the matrix: for the rule-qualified account, `runAs` the regional team member, assert a SOQL query for that account returns it, and assert a DML update throws, matching the read cell. For the team-shared account, `runAs` the support rep, assert the update succeeds, matching the write cell. For the non-qualifying account, `runAs` the peer, assert the query returns zero rows, matching the none cell. For the manager, `runAs` the superior and assert the query returns the record, matching the hierarchy cell.
+
+Validate composition: open the rule-qualified account's Sharing detail and confirm the access rows are the owner implicit share plus exactly the regional-rule share, with no manual and no Apex share. If the detail shows a manual share on a record you never manually shared, you have found an unexpected grant source, and the discipline is to trace it and remove it, not to assume it is harmless.
+
+Now exercise recalculation, because this scenario is also quiz question three. Transfer the owner of the rule-qualified account, then confirm the losing owner no longer appears in the share table unless another grant exists, and the new owner does. Then change the rule's territory criteria so the account stops qualifying, re-run recalculation, and confirm the regional team member's read share is removed and their `runAs` query now returns zero rows. If the old share survives any of these, the recalculation is broken and you have found the bug an admin-only review would hide.
+
+Finally audit: run the data sharing summary and confirm no other object is broad, run Health Check and review the security baseline, review Event Monitoring for permission events, and as the support rep, confirm a hidden field on the account is stripped from an API read and that the programmatic path does not leak records from the `runAs` context. Document the OWD, hierarchy, rule, team, and the matrix in the record.
+
+The reasoning that answers the three quiz questions falls out of this loop. The most reliable way to verify the model before rollout is to log in as representative users of each access class and assert their view and edit per record through a test matrix, because the matrix verifies both granted and denied access, where admin-only testing and trusted summaries miss per-class bugs. The architect validates composition by opening the record's Sharing detail and reading the share-graph rows and their sources, because that is where the RowCause reveals which mechanism grants access and catches an unexpected grant. Recalculation must be part of security testing because criteria changes, ownership transfers, and rule edits can leave stale or missing grants that only recalculation testing surfaces, because recalculation is neither cosmetic nor always correct.
+
+## Exam traps to avoid
+
+**Trap: testing only the happy path as owner and admin.** The owner can see and edit the record, and the admin can see everything, so neither persona ever exercises a deny path. Sharing bugs almost always live in the classes whose access is granted or withheld by a specific mechanism, so the matrix must cover every user class, and the denial cells must be asserted as hard as the allow cells. A model trusted because the owner and admin tests pass is a model that has never been tested.[^2]
+
+**Trap: skipping the Sharing detail and its share graph.** The matrix tells you a user can or cannot see a record, but it does not tell you why. A record can be visible for the wrong reason, through a manual share you forgot, a rule you did not expect, or a team membership you thought you removed. The Sharing detail reveals the grant sources and their RowCauses, and skipping it lets an unexpected grant from a forgotten rule or team pass unnoticed. Composition is a first-class check, not a bonus.[^6]
+
+**Trap: failing to test recalculation.** The static config can be perfect while the live share table is wrong, because criteria changes, ownership transfers, and role edits alter the conditions shares depend on. Without testing recalculation, stale grants (or missing grants) go unnoticed after a data or role change, and the org ships a model whose share table no longer matches the config. Recalculation must be exercised and validated on every path that changes the conditions rules depend on.[^2]
+
+## The proving loop, in one screen
+
+Keep requirement i-3 in one frame. Given a set of conditions, test the sharing model. Enumerate the user access classes and record classes and write the expected-access matrix, with a none, read, or write value and both an allow and a deny assertion per cell. Drive each cell with `System.runAs(user)` Apex tests and login-as checks that assert the exact query results and DML outcomes per cell, in all contexts, and confirm programmatic paths do not leak broader data. For every record at scale, inspect the Sharing detail and the share tables to validate the share graph's composition and RowCause sources, so no unexpected grant from a forgotten rule, team, or Apex share survives. Exercise the recalculation paths, a criteria-value change, an ownership transfer, a rule edit, so stale grants are removed and missing grants appear with ownership, hierarchy, and rule changes. Run the access audit with the data sharing summary, Health Check, and Event Monitoring to confirm only intended broad permissions are held, verify field- and object-level security is enforced in API and Apex paths with `WITH SECURITY_ENFORCED` and `stripInaccessible`, and document the model for reviewers. Test every user class times record class in a matrix, read every record's sharing graph, and exercise recalculation before rollout. That is the whole of proving a security model, and it is the last requirement in the course.[^1][^2][^4][^6][^7][^8]
+
+![The proving loop, in one screen: enumerate user and record classes, write the expected-access matrix, assert each cell with runAs and login-as, inspect the share graph, exercise recalculation, then audit org-wide and programmatic enforcement](</diagrams/day-36-i-3-testing-the-security-model-validation-sharing-grap/5-proving-loop.png>)
+
+## Try it yourself
+
+In a scratch or Developer org, prove the loop on a small model. Create three objects with OWD locked down, a role hierarchy with two levels, one criteria-based sharing rule, one public group, and a handful of users across classes: an owner, a manager, a rule-qualifying user, a group member, and a user with no grant. Write the expected-access matrix by hand before touching the config, so your spec exists before your proof.
+
+Then, in the Developer Console, write the `runAs` test methods for a write cell and a none cell, as shown in this lesson, and run them. Confirm the write cell's DML succeeds under the owner and the none cell's query returns zero rows under a user with no grant. Then open the owner's record Sharing detail and read the share graph, confirming the rows and their RowCauses match the design. Transfer ownership to another user, re-run the none-cell assertion for the old owner, and confirm the stale share is gone. Change the rule's criteria so a record stops qualifying, recalculate, and confirm the share table releases the affected rows.
+
+Finally, find a field hidden by FLS and, as a restricted user, confirm it is stripped from an API read and from a `WITH SECURITY_ENFORCED` Apex query, and confirm `stripInaccessible` removes the field from DML results. Run the data sharing summary and Health Check and record the broad permissions and score. Then re-read the i-3 objective and ask whether your proof covers every access class, every record class, the composition of each share graph, the recalculation paths, and the programmatic enforcement. Each run moves the model from described to demonstrated.
+
+## What's next
+
+This is lesson 36 of 36, the last lesson in this first pass of the Platform Sharing and Visibility Architect course. You have now built a complete sharing and visibility model across all four domains, from object, field, and UI-level security, through OWD, role hierarchy, rules, groups, teams, relationships, programmatic sharing, and external users, into the scalability, license, and testing decisions that make a model run in a real org. Because the requirement that closes the course is the one that proves the whole design, testing, the next pass restarts the course at lesson 1 to deepen every decision you have seen once. The scheduled next lesson is lesson 1, Object Permissions: CRUD, System vs Object, Profiles vs Permission Sets, where the course returns to the foundation: what object-level permission actually grants and how the system permission model shapes every sharing choice above it. Bring the proving discipline from this lesson, and you will test the foundation as rigorously as you have tested the whole.
+
+[^1]: Salesforce, "Salesforce Certified Platform Sharing and Visibility Architect Exam Guide," Trailhead. <https://trailhead.salesforce.com/help/salesforce-certification-exam-guides/platform-sharing-and-visibility/>
+[^2]: Salesforce, "Sharing," Salesforce Help. <https://help.salesforce.com/s/articleView?id=sf.security_sharing_intro.htm&language=en_US&type=5>
+[^3]: Salesforce, "Using the runAs Method," Apex Developer Guide. <https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_testing_tools_runas.htm>
+[^4]: Salesforce, "Enforcing Object and Field Security," Apex Developer Guide. <https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_classes_with_sharing.htm>
+[^5]: Salesforce, "Log in As Another User," Salesforce Help. <https://help.salesforce.com/s/articleView?id=sf.login_as_the_running_user.htm&language=en_US&type=5>
+[^6]: Salesforce, "How Sharing Fields Are Determined," Salesforce Help. <https://help.salesforce.com/s/articleView?id=sf.security_implicit_sharing.htm&language=en_US&type=5>
+[^7]: Salesforce, "Health Check," Salesforce Help. <https://help.salesforce.com/s/articleView?id=sf.health_check_overview.htm&language=en_US&type=5>
+[^8]: Salesforce, "Event Monitoring," Salesforce Help. <https://help.salesforce.com/s/articleView?id=sf.event_monitoring.htm&language=en_US&type=5>
+[^9]: Salesforce, "Secure SOQL: WITH SECURITY_ENFORCED," Salesforce Documentation. <https://developer.salesforce.com/tv/secure-coding-soql-with-security-enforced-implementation-strategies>

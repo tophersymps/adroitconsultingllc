@@ -36,7 +36,7 @@ const serverClient = {
   },
 };
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => serverClient,
 }));
 

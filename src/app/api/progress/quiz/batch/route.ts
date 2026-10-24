@@ -20,8 +20,9 @@
  * over-count on a rare double-fire — documented in the impl plan risks).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { insertQuizRun, upsertQuizAttempts } from "@/lib/db/service";
 import { getKnowledgeChecks, parseQuizName, resolveQuizByName } from "@/lib/quiz";
 import { areAllChecksPassed } from "@/lib/certificate";
 import { denyQuizNotAccessible } from "@/lib/access-gate";
@@ -239,9 +240,7 @@ export async function POST(req: NextRequest) {
      * clients (migration 006), so this graded write uses the privileged
      * service-role client. */
     if (attemptRows.length > 0) {
-      const { error } = await getSupabaseServiceClient()
-        .from("quiz_attempt")
-        .upsert(attemptRows, { onConflict: "user_id,quiz_name,question_index" });
+      const { error } = await upsertQuizAttempts(attemptRows);
       if (error) {
         return NextResponse.json({ status: "error", error: sanitiseDbError(error) }, { status: 500 });
       }
@@ -250,16 +249,14 @@ export async function POST(req: NextRequest) {
     /* --- Insert one quiz_run row (best-score MAX semantics) ---
      * quiz_run is also server-write-only; the service-role client writes it. */
     const score = Math.round((correctCount / questionCount) * 100);
-    const { error: runErr } = await getSupabaseServiceClient()
-      .from("quiz_run")
-      .insert({
-        user_id: user.id,
-        quiz_name: body.quizName,
-        correct: correctCount,
-        total: questionCount,
-        score,
-        completed_at: now,
-      });
+    const { error: runErr } = await insertQuizRun({
+      user_id: user.id,
+      quiz_name: body.quizName,
+      correct: correctCount,
+      total: questionCount,
+      score,
+      completed_at: now,
+    });
     if (runErr) {
       return NextResponse.json({ status: "error", error: sanitiseDbError(runErr) }, { status: 500 });
     }
@@ -292,7 +289,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(result);
-  } catch {
+  } catch (err) {
+    // R2-5: this route is answer-key bearing, so it keeps its strictest guest
+    // shape (401) — but a token-route failure must never be a 5xx.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" }, { status: 401 });
+    }
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }

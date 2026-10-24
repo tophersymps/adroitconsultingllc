@@ -1,0 +1,168 @@
+---
+title: "Data Architect MG-1A: Data Quality at Load: Validation, Dedup, Transformation, Stewardship, Testing"
+slug: day-35-mg-1a-data-quality-at-load-validation-dedup-transformati
+series: salesforce-data-architect
+lesson: 35
+excerpt: "Given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, including validation, deduplication, transformation, stewardship, and testing before and during migration. This lesson is the first of the Data Migration domain's three objectives, and it treats load-time data quality as a designed outcome, not a result you discover after go-live. You will learn the six-step core sequence that quality migrations follow: profile the source, cleanse and normalize, deduplicate before load, transform to the target model, load through validation gates, and reconcile. You will see profiling establish the source's true state, cleansing fix formats and encoding, deduplication stop the same entity from landing twice, and a versioned source-to-target mapping document act as the migration contract. You will learn the validation gates that reject bad rows before they touch the org, the rejects/error file and count reconciliation that surface mismatch before users see it, and the stewardship that makes line managers decide survivorship and sign off on quality. You will run a numbered configuration walkthrough, work a customer scenario that mirrors the three in-lesson quiz questions, and close with a manual dry-run exercise. Covers the three exam traps the cert rewards knowing: loading before deduplicating, migrating without a versioned mapping document, and skipping validation gates and reconciliation.",
+date: "October 16, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Salesforce, Data Architecture, Data Migration, Data Quality, Validation, Deduplication, Transformation, Stewardship, Testing, External ID, Data Loader, Certification]
+---
+
+Every migration carries a promise: the data that lands in Salesforce will be better than the data that left the old system. That promise is broken by accident far more often than by malice. It is broken when someone loads the extract, sees green checkmarks, and assumes the job is done, when in fact the org now holds orphaned records, duplicate customers, and dates in three formats nobody can query. The platform accepted every row. It accepted rows that should never have been allowed in.
+
+This lesson, requirement mg-1a of the Data Migration domain, is about the difference between a load and a migration. A load moves records. A migration moves records and improves them. [^1] The exam phrases the requirement as a decision task: given a customer scenario, recommend the techniques and methods that ensure high data quality at load time, covering validation, deduplication, transformation, stewardship, and testing before and during the migration. [^2] Every one of those words earns a place in the answer, and the cert expects you to know what each one means in practice.
+
+Here is the core belief that underpins the whole objective, and I want you to hold it through every scenario question: migration quality is designed, not discovered. [^1] You do not find out after the load whether the data is good. You build the checks that decide it in advance, and you run them at every stage so that a bad row is stopped where it costs the least. The sequence the exam rewards is fixed and it is worth memorizing as a method: profile the source data, cleanse and normalize it, deduplicate it, transform it to the target model, load it, and reconcile it, with a validation gate at each step. [^1] Load is only the middle move, not the whole game. Everything the architect controls happens before and after it.
+
+## The core sequence: quality is designed, not discovered
+
+A quality migration runs the same six moves in the same order, and the order is load-bearing. [^1] First you profile the source to learn its true state. Then you cleanse and normalize what you found, and deduplicate so the same entity appears once. Then you transform the clean rows into the shape the target expects, load them through validation gates, and reconcile counts and values against the source at the end. Do not let the list read as a menu you can pick from. It is a pipeline with hard dependencies: you cannot transform data you have not cleansed, and you should not load data you have not profiled, because the profiling tells you what cleansing and transformation rules to write in the first place.
+
+Why does this sequence produce high quality while a straight load does not? Because every bad record has a cheapest point of removal, and the sequence keeps removing records at that point. A malformed date is cheapest to fix in the extract, before it becomes a blocking error or a silent garbage value. A duplicate customer is cheapest to suppress in a staging table, before duplicate rules and manual merges have to untangle two live records. [^1] A missing required value is cheapest to catch in a pre-load check, before Data Loader rejects it in a batch and the failure wanders into an error file. When you skip a stage, you do not skip the cost of bad data. You move it later, where it is higher. That is the entire economic argument for this sequence, and you can lean on it in a scenario question.
+
+![The six-step quality sequence runs in a fixed order: profile the source, cleanse and normalize, deduplicate, transform, load through validation gates, and reconcile, with a validation gate at every step and hard dependencies between stages](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/1-six-step-sequence.png>)
+
+## Profiling: learn the source's true state before you trust it
+
+The migration starts with a hard look at the source, and the honest name for it is profiling. [^1] You run diagnostics against the extract to answer the questions nobody can answer from the data dictionary alone: how many rows are actually complete, how many values are in the wrong format, how many times does the same customer appear, and how many records point at parents that are not there. Profiling is the reconnaissance that tells you what the cleansing and transformation rules need to handle and how much effort the whole migration is going to cost. [^1]
+
+The specific findings you collect are the ones the exam expects you to name. Null rates, the share of rows missing a given field, tell you which required fields are not going to pass and which values you will need defaults for. Invalid values, such as a picklist field holding a free-text string or an email column full of typos, tell you where normalization has to map free text into controlled values. Format inconsistencies, the dates stored as 2024-13-01 in one system and 01-13-2024 in another, tell you which transforms you must run before anything can be compared. Duplicates tell you the scale of your deduplication problem. Orphaned references, child records whose parent key is missing from the parent extract, tell you about relationship and ordering risk before you create broken lookups in the org. [^1][^5]
+
+Profiling is not a formality. It drives concrete downstream decisions. A high null rate on a field the target marks required means you either populate defaults, map a value from another column, or exclude the rows, and you decide which before you transform. [^3] A high invalid-format rate on dates means your transformation rules need a date normalizer, and your effort estimate goes up. The profiling output becomes the input to the transformation rules and to the effort estimate, which is why the exam treats it as the first and non-negotiable step rather than an optional audit. [^1]
+
+![Profiling findings drive the plan: null rates, invalid values, format inconsistencies, duplicates, orphaned references, and row completeness each set a concrete downstream decision such as defaults, normalization rules, a date normalizer, or the scale of the dedup problem](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/2-profiling-findings.png>)
+
+## Cleansing and normalization: make the data comparable
+
+Once you know what is wrong, you fix the parts that make data incomparable, and that fix is cleansing and normalization. [^1] Cleansing removes or corrects errors: fix the encoding so accented characters survive, drop whitespace, correct a reversed name, repair a telephone number that lost its area code. Normalization standardizes values so that the same thing always looks the same: dates in one format, phone numbers in one shape, addresses in a canonical form, names in consistent case, and free-text values mapped onto controlled picklist values. [^1]
+
+The point of normalization is that inconsistent data is harder to query, harder to report on, and harder to match than data that is merely wrong. A report that has to SUM three spellings of the same region code is a report nobody trusts. [^5] More importantly for the migration, normalization is the prerequisite for deduplication. You cannot confidently decide whether two customers are the same if one is "Acme Corp" and the other is "ACME Incorporated". Standardize the name and the address first, and the match gets much easier. [^1]
+
+Harmonization across sources belongs here too, and it connects to the master data management domain you studied earlier in this course. When the migration pulls customer data from more than one source system, each source brings its own formats, its own value conventions, and its own partial view of the customer. You harmonize those before loading, so that all sources agree on the format of a date and the meaning of a status value, and the reconciliation produces one coherent set of rows rather than several competing ones. This is why the exam links load-time quality to MDM: the harmonization must happen before the load, or you are storing the disagreement and calling it data. [^1][^17]
+
+## Deduplication before load: stop duplicates before they exist
+
+Deduplication is where the sequence earns its keep, and the single most important lesson in this section is the timing. You deduplicate the extract before you load, by matching records within and across sources and merging or suppressing them before a duplicate ever exists in Salesforce. [^1] Loading first and deduplicating later is the expensive path the exam traps you into, and knowing why matters. [^1]
+
+Here is what loading first costs you. Salesforce gives you tools to manage duplicates after the fact, duplicate rules, matching rules, duplicate jobs, and record merges, but they all act on records that already live in the org, and they all require someone to review and resolve matches. [^8] A merge in Salesforce combines a small number of records by hand or by review, and at volume it becomes a large, risky, slow cleanup that runs on live data your users can see. [^8] Bad merges at volume can attach the wrong activity history to a customer or fold two distinct accounts together. [^1] Every duplicate you suppress before load is a merge you never had to run and a risk you never took.
+
+So the migration does deduplication as a pre-load step. You define match keys, the fields that identify a customer, such as an external ID, a normalized name and address, an email, or a phone number. [^8][^9] You run exact and fuzzy matching against those keys to group records that likely represent the same entity. [^5] And you decide the survivor, which record keeps its identity, and where the conflicting values in the losing records go. [^1] When the same customer arrives from two sources, the migration produces one row for the target, not two that Salesforce will later try to merge. That is the whole job, and doing it in staging is dramatically cheaper and safer than doing it after insertion. [^1]
+
+![Deduplicate before load, not after: loading first and deduplicating later runs duplicate rules and merges on live records that need review and risk bad merges at volume, while deduplicating in staging on match keys produces one clean row before a duplicate ever exists in Salesforce](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/3-dedup-timing.png>)
+
+## Transformation and the mapping document: the migration contract
+
+After cleansing and deduplication, you shape the clean rows into the form the target expects, and that shaping is transformation. [^1] Every source field maps to a target field, and the mapping comes with rules: a lookup resolved by external ID rather than by name, a value translated from the source's code to the target's picklist, a first and last name concatenated, an address field split into its component parts, a missing value filled with a default. [^1] Transformation is where the source's reality becomes the target's model, and it is why the architect documents the mapping rather than remembering it.
+
+The mapping document is the contract of the migration, and the exam is explicit that it must be versioned and owned under change control. [^1][^4] It records, field by field, the source object and field, the target object and API name, the transformation rule applied, and the disposition of values that do not migrate. [^4] When a business owner asks why a date shifted, or a developer inherits the project a year later, the mapping document is where the answer lives. Without it, transformation logic is undocumented and unmaintainable, and anyone who touches the load afterwards is guessing at intent. [^1] Something as subtle as a date format change or a region-code translation lives in that document and nowhere else.
+
+The mapping document is also where stewardship starts to bite, because it encodes value judgments. Which region code maps to which picklist value is a business decision, not a technical one. Which source is authoritative for a conflicting field is a survivorship decision. Getting this signed off by the right people is what turns a contract into an approved one.
+
+## Validation gates, rejects files, and reconciliation
+
+Loading is not an act of faith. It runs through validation gates that reject what should not land, and those gates are the load-time quality control the requirement literally names. [^1][^2] There are two families of gates, and the exam expects both.
+
+The target-side gates are the ones Salesforce enforces during load. [^3] Field-level required flags reject inserts that skip a mandatory value. [^10] Target validation rules reject rows that fail the same business rules the org already enforces on users, such as a phone format or a status that must be in a set. [^10][^14] External ID uniqueness protections reject a second insert with an already-used external key, and they are indexed so they stay fast. [^3] You configure these before the load so that a bad row is blocked at save time, exactly as it would be for a user. [^10]
+
+The pre-load gates are the ones you run before data ever reaches the insert. You write checks that reject rows failing format, key, and completeness rules, and you send the rejects to a separate file rather than letting them fail inside the org's error stream. [^1] You plan a rejects/error file that captures every row the migration cannot load and why, so that rejected records are visible, classified, and fixable rather than silently dropped. [^1] And you reconcile, comparing the count of records in the source against the count loaded, and resolving every difference against the rejects file. [^1] A migration is not done when the loader reports success. It is done when the source count plus the rejects count equals the loaded count, and a sample of loaded values matches the source. [^1][^3]
+
+This is the gate pair the quiz tests, and holding it in one sentence is enough for the exam: a reliable quality gate is a versioned mapping document paired with count reconciliation and a rejects/error file. [^1][^3] The mapping guarantees the transformation is documented and reviewable. The reconciliation guarantees every row is accounted for and every discrepancy is explained. [^1]
+
+![Validation gates, rejects file, and reconciliation: target-side gates block bad rows at save time, pre-load gates reject them before the org, and a migration is done when source count plus rejects count equals loaded count](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/4-validation-gates.png>)
+
+## Stewardship: who owns the quality outcome
+
+Data quality at load time is not finally an engineering problem. It is a business ownership problem, and the requirement names it explicitly as stewardship. [^1][^2] Business stewards are the people who own the quality outcome for a given data domain. They decide survivorship when two sources disagree on a field value, which value wins and how conflicts resolve. They approve merges when deduplication proposes folding two records together. They sign off on the quality thresholds the migration has to meet, the acceptable null rate, the acceptable duplicate rate, the formats that count as valid. [^1]
+
+The exam's framing is that migration is a business-owned activity with technical execution. [^1] The architect builds the pipeline, and the stewards set the standards and own the outcome. A customer domain steward, for example, decides that the CRM is authoritative for the customer's phone number and the billing system is authoritative for the address, and approves the survivorship rules that the mapping document encodes. [^12] This is the difference between a migration that satisfies the business and a migration that satisfies a load script. Stewardship is what makes the quality threshold something a line manager commits to, not something an engineer invents. [^12]
+
+The governance lessons from earlier in the course apply directly here. Without a named owner for customer data, nobody is accountable when duplicates recur, and the quality gains of the migration quietly decay. The migration does not end the stewardship conversation. It is the moment the stewardship decisions get made for the records being brought in. [^12]
+
+## Testing: the dry run that makes production boring
+
+Every quality migration is tested before it reaches production, and the test the exam wants you to name is a dry-run load at representative volume into a full sandbox, validated with mock business scenarios. [^1] A full sandbox is the environment that matches production data volume and configuration closely enough to surface real problems. [^5] You load at a representative volume, not a token sample, because scale itself is a dimension of quality. Volume-representative dry runs expose large data volume (LDV) performance issues and data-quality issues that a few hundred rows will never show. [^1] A skinny-table, an indexing problem, or a batch that times out under load only reveals itself when the volume is real. [^18]
+
+The dry run exercises the whole plan. You load the prepared, transformed data into the full sandbox at target volume and validate with mock business scenarios that a user will actually run, such as opening a record, running a report, and processing an approval. [^1] You reconcile the counts and spot-check records, comparing loaded values against the source for a sample on every critical field. [^1][^3] You review the rejects file and make sure the rejection rate and reasons match what the profiling forecast. [^1] And when the results match expectations, you get business and steward sign-off before production cutover. [^1] The dry run is not a rehearsal you can skip. It is the evidence that the migration is ready, and it is the gate the business signs. [^1][^5]
+
+Why spend the effort before go-live? Because a problem discovered in a dry run is cheap, discoverable by the team, and fixable in the plan. The same problem discovered after cutover is expensive, visible to users, and has to be fixed on live data. [^1][^5] That asymmetry is the entire justification for representative-volume testing, and the exam rewards the architect who states it plainly.
+
+## Config walkthrough: running the six moves on a real migration
+
+Here is the numbered walkthrough the exam expects you to reason through when a customer hands you a source extract and a target model. [^1]
+
+1. Profile the source extract. Run diagnostics for null rates, invalid formats, duplicates, and orphaned references on every object you will migrate. [^1][^5] Record the counts. These numbers set the effort estimate and tell you which transformation and cleansing rules to write.
+2. Cleanse and normalize, then deduplicate within and across sources. Fix formats, encoding, and case. Map free-text values onto controlled picklists. Standardize dates, phone numbers, and addresses. Then match records against your keys and merge or suppress duplicates so each entity appears once before load. [^1]
+3. Produce the field-level source-to-target mapping document with transformation rules. Record source field, target API name, the transformation rule, and the disposition of unmapped values. Own it under change control and get it versioned. Resolve lookups by external ID, not by name. [^1][^4]
+4. Configure the target gates and pre-load checks. Make sure required fields are marked required, configure target validation rules, and add an indexed External ID to each target object to hold the source's legacy key. Build the pre-load format and key checks, plan the rejects/error file, and define the reconciliation counts. [^3][^10]
+5. Dry-run at volume in a full sandbox, validate with mock business scenarios, and reconcile and spot-check. When the counts match and the stewards approve the sample, get business or steward sign-off before production cutover. [^1][^5]
+
+Each step feeds the next, and the verification steps (4 and 5) are what turn a load into a migration. [^1]
+
+## The three exam traps
+
+Trap one, loading first and deduplicating later. [^1] The scenario shows an extract that clearly contains duplicates, and the tempting answer is to load everything and let duplicate rules clean it up. That answer is wrong, because duplicates are cheaper to suppress before load than to merge after. [^1] Post-load cleanup runs on live records, requires review, and risks bad merges at volume. Deduplicate in staging before insertion. [^1][^8]
+
+Trap two, migrating without a versioned mapping document. [^1] A scenario claims the team has been loading data for months straight from the source with no mapping. That is undocumented transformation logic, impossible to maintain and impossible to audit. The answer is a versioned source-to-target mapping document owned under change control. [^1][^4]
+
+Trap three, skipping validation gates and reconciliation. [^1] A scenario declares the migration successful because the loader reported no errors, but nobody reconciled counts or reviewed a rejects file. That is not success. Row-count and value mismatches surface only after go-live, where they become user-visible. The answer is the rejects file, count reconciliation, and spot-checking before cutover. [^1][^3]
+
+![The three exam traps: loading first and deduplicating later, migrating without a versioned mapping document, and skipping validation gates and reconciliation, each with the fix the cert rewards](</diagrams/day-35-mg-1a-data-quality-at-load-validation-dedup-transformati/5-exam-traps.png>)
+
+## Worked example: the two-system customer migration
+
+Put the whole method together on a scenario that mirrors the quiz. A retail company is migrating customers from two source systems into Salesforce. The billing system stores dates in one format and the mailing list stores them in another, and the same customers appear in both extracts, sometimes with slightly different addresses. [^1]
+
+Follow the sequence. First profile: the run shows a moderate null rate on phone, a date-format split across the two sources, one region field holding free text instead of a picklist, and a customer overlap between the two extracts. Those findings drive the plan. Next cleanse and normalize: you standardize the date formats, map the region free text onto the target picklist values, and normalize names and addresses so comparison is possible. Then deduplicate: you match on the normalized name plus address, group the overlapping customers, choose the survivor, and decide which source is authoritative for which field, with a steward sign-off. [^1]
+
+Now transform: you produce the mapping document that pairs each source field with its target API name and records the date and region transformations, and you resolve the account lookup by external ID rather than by name. [^4] You then configure the target gates, required fields, validation rules, and an indexed External ID field on each object. You set up the rejects file and the reconciliation query. [^3][^10]
+
+Finally you dry-run at representative volume in a full sandbox. [^1] The data loads, the reconciliation shows source count plus rejects equals loaded count, and a spot-check of a sample of customers matches source values on the critical fields. The stewards approve the sample, sign off on the threshold, and you cut over. [^1] The production load is uneventful because every question about the data was already answered in the sandbox. [^5]
+
+The exam wants you to see what was not done here. Nothing was loaded to fix later. No duplicates entered the org to be merged. No transformation logic went undocumented. No validation gate was skipped. Every stage absorbed its share of bad data at the cheapest point, and production only ever saw clean rows. [^1]
+
+## Try it for yourself
+
+Take any two CSV extracts you can create by hand, even toy data, and run the first three moves yourself. Make one file of customers with dates in one format and one with the same customers in another format, plus a few extra rows and a couple of free-text region values. Profile them, count the nulls and the format problems. Cleanse and normalize the dates and the region values by hand. Deduplicate by matching normalized names, and decide the survivor for one overlapping pair. This is the whole pre-load story, and it is exactly what an architect does before the load tool ever opens. [^1]
+
+Then, if you have a Developer Edition org, set up one target object with required fields, a validation rule, and an indexed External ID, and run a small load of a few rows that pass and a few that deliberately fail. Watch the loader's error file capture the rejects, and reconcile the count by hand. The empty success message is not the proof. The reconciliation is. [^3]
+
+## What's next
+
+You can now design quality into a load before a single record moves. You can profile the source for null rates, invalid formats, duplicates, and orphans, and let the findings drive your rules and your estimate. [^1][^5] You can cleanse and normalize formats and value maps, and deduplicate within and across sources before loading so the same entity never lands twice. [^1] You can produce a versioned source-to-target mapping document, resolve lookups by external ID, and configure target validation rules and required fields. [^1][^3][^4] You know the validation gates that reject bad rows, the rejects/error file that explains every rejection, and the reconciliation that proves the counts match. [^1][^3] You know stewardship assigns the quality outcome to business owners who decide survivorship and sign off on thresholds. [^1][^12] And you know the representative-volume dry run in a full sandbox is the test that makes production cutover boring. [^1][^5]
+
+Lesson 36 of 42 is up next: high-data-quality-at-load scenarios (mg-1b). Where this lesson built the method, lesson 36 turns it into scenario judgment. You will read concrete customer situations and pick the right combination of validation, deduplication, transformation, stewardship, and testing for each one, the way the cert actually asks the question. If lesson 35 taught you the sequence, lesson 36 makes you apply it under exam pressure.
+
+## Related Requirements
+
+- Lesson 36 of 42 (mg-1b): High-data-quality-at-load scenarios
+- Lesson 37 of 42 (lv-3c): LDV migration performance (mg-2a)
+- Lesson 22 of 42 (sm-3b): Single customer view scenarios: merging and deduplicating
+- Lesson 12 of 42 (md-1b): Harmonizing and consolidating multi-source data
+
+## References
+
+[^1]: Salesforce Data Migration Best Practices, Salesforce Help. Lays out the migration workflow: identify the data, create templates, populate them, prepare the destination org with legacy-ID and External ID fields, load, and validate with custom reports, spot checks, and exception reports. Supports the sequence of profiling, cleaning, deduplicating, transforming, loading, and reconciling, and the principle that quality is designed before load. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385417&language=en_US&type=1)
+
+[^2]: Salesforce Certified Platform Data Architect Exam Guide, Salesforce. Defines the Data Migration (15%) domain and the objective mg-1a: given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, including validation, deduplication, transformation, stewardship, and testing before and during migration. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+
+[^3]: Best Practices with Any Data Loader, Salesforce Developers. Instructs to identify data, create a template per object, clean data before populating templates, create custom External ID fields for legacy IDs, load one record and check before the full load, and validate with custom reports, spot checks, and exception reports. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api/guide/best-practices-with-any-data-loader.html)
+
+[^4]: Salesforce Data Migration Checklist, GetClientell. Describes a real field mapping document with source and target fields, transformation rules, and disposition, and the practice of adding a unique, indexed External ID field to every object to hold the source primary key. [getclientell.com](https://www.getclientell.com/salesforce-blogs/salesforce-data-migration-checklist-2026)
+
+[^5]: V2 Data Migration Practitioners' Guide, Power of Us Hub. States that testing data quality should start in the source system well before migration, that data should be cleansed in the source first, and that a custom validation checker should pre-validate mandatory fields, formats, and valid picklist values before import. [power-of-us-hub-doc.s3.us-west-2.amazonaws.com](https://power-of-us-hub-doc.s3.us-west-2.amazonaws.com/V2_Data_Migration_Practitioners_Guide.pdf)
+
+[^8]: Manage Duplicate Records, Salesforce Help. Documents duplicate rules and matching rules, duplicate jobs that find duplicates across the org, duplicate record sets used to merge duplicates, and tracking progress in reducing duplicate records. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sales.managing_duplicates_overview.htm&language=en_US&type=5)
+
+[^9]: Import Related Records with an External ID in Salesforce Data Loader, Salesforce Help. Explains matching related records by an external ID in an upsert, backing up data first, testing one record before the full operation, and using external ID as the upsert key. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000383207&language=en_US&type=1)
+
+[^10]: Importing Data into Salesforce, Salesforce Developers. Explains upsert operations, using a Salesforce ID or external ID as the upsert key, the unique identifier from another system, and Bulk API as the best option for large data sets processed asynchronously. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/dataloader/guide/import-data.html)
+
+[^12]: Data Quality: The Secret to Career Success, Salesforce AppExchange. States that establishing a clear data governance policy with designated roles and responsibilities for keeping data clean is critical, and that the person responsible for a data domain should have control over it and be responsible for its accuracy. [appexchange.salesforce.com](https://appexchange.salesforce.com/image_host/84336897-9e51-48de-9117-35b6bf9f52e4.pdf)
+
+[^14]: Validation Rules, Salesforce Help. Explains that validation rules verify that the data a user enters meets specified standards before the record can be saved, returning an error message when a rule is violated. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.fields_about_field_validation.htm&language=en_US&type=5)
+
+[^17]: UNIFYING CUSTOMER DATA: A Best Practices Guide to Deduplication and Merging, Salesforce AppExchange. States that achieving the golden record requires deduplicating each existing database then reconciling them into a unified customer repository, and that consistent standardized fields are reliable identifiers for identifying duplicates. [appexchange.salesforce.com](https://appexchange.salesforce.com/image_host/2ea87ae6-81f0-4a49-a29b-c87b35f73442.pdf)
+
+[^18]: Salesforce Data Migration Best Practices, Coffee AI. States to profile, deduplicate, and cleanse source data before migration because fixing issues afterward costs roughly five times more and can break new workflows, and to run multiple sandbox dry runs before cutover. [coffee.ai](https://www.coffee.ai/articles/salesforce-migration-best-practices-2026)

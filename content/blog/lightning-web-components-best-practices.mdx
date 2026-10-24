@@ -1,0 +1,111 @@
+---
+title: "Lightning Web Components Best Practices"
+slug: lightning-web-components-best-practices
+excerpt: "Lightning Web Components are Salesforce's modern component model, but the practices that keep a complex org healthy go far beyond the syntax."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+bannerImage: "/banners/lightning-web-components-best-practices.webp"
+ogImage: "/banners/lightning-web-components-best-practices-og.jpg"
+date: "October 13, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [Salesforce, LWC, Lightning Web Components, Apex, JavaScript, Best Practices]
+---
+
+## Why LWC Best Practices Matter More Than the Framework
+
+Lightning Web Components give you a modern, standards-based component model on the Salesforce platform, but the framework itself does not keep your org healthy. The components that rot are almost never broken by the LWC runtime; they rot from decisions made in the first few weeks: one giant "god component" carrying every responsibility, data fetched in five different ways, and event names that mean nothing to the next developer.
+
+This playbook captures the practices that separate a maintainable Lightning experience from a legacy codebase in the making. It assumes you know the basics of LWC: composition, the reactive `@track`/`@api` model, and the shadow DOM, and focuses on the harder decisions: how to structure components, how to move data, and how to keep rendering fast at scale [^1].
+
+## Structure: Build Small, Compose Often
+
+The single biggest predictor of an LWC codebase that stays healthy is component size. A component that renders a whole page, queries its own data, handles its own modals, and formats its own numbers will be unreadable within months.
+
+**One component, one job.** Split by responsibility, not by screen area. A `ContactHeader` that shows the record name is a different concern from a `ContactRecentActivity` that loads a list, even if both live on the same record page. When a component grows past a couple of hundred lines or starts mixing data-loading with heavy presentation, that is the signal to decompose it [^2].
+
+Prefer composition over inheritance everywhere. If you feel the need to subclass a base component to share logic, extract that logic into a shared ES module instead. LWC is built around importing plain JavaScript modules, and a utility module is far easier to test and reason about than a fragile base class hierarchy. For the broader question of how component libraries fit into a headless architecture, see our field note on [headless UI component libraries](/field-notes/headless-ui-component-libraries-2026).
+
+### A Folder Layout That Ages Well
+
+```
+lwc/
+  contactHeader/          # presentation: renders a record
+  contactHeaderData/      # data service: owns the getRecord / Apex wire
+  contactRecentActivity/  # presentation: list rendering
+  contactRecentActivityData/
+  utils/                  # shared pure functions
+```
+
+Pairing a presentation component with a `*Data` sibling is a proven pattern. The data component exposes `@api recordId` in, calls the Apex method or wire adapter, and emits the result up; the presentation component renders whatever it receives. This keeps data logic isolated, makes the presentation component trivially testable in isolation, and lets you swap data sources without touching markup.
+
+## The Event Model: Namespaced and Purposeful
+
+Events in LWC cross the shadow DOM boundary, and the way you name and thread them is where a lot of future pain hides.
+
+**Namespace your custom events.** Fire events named after the domain, not the action: `contactselected` and `filterchanged` communicate intent; `onselect` and `onchange` collide with native events and mean nothing at a distance. Prefix to avoid collisions when libraries are in play.
+
+**Lift state up deliberately.** Decide early where each piece of state lives. A child that needs to tell a grandparent something should fire an event up through named handlers, not reach across via `querySelector` or by sharing a global. The event chain `child → parent → grandparent` through explicit `on<event>` handlers is explicit, traceable, and exactly what the framework is designed for [^3].
+
+**The worst anti-pattern:** using `lightning/navigation` or composing weird `window` lookups to bypass the event chain. If state has to travel five levels, that is a sign your component decomposition is wrong, not that events are broken.
+
+## Data Access: Pick One Pattern per Component
+
+LWC gives you several ways to get data: wire adapters like `getRecord`, `getListUi`, imperative Apex, and `refreshApex`. Mixing them within a component creates inconsistent loading states and duplicated logic.
+
+Here is the decision framework our teams use on every component:
+
+![Pick one data-access pattern per component: a getRecord wire for a single known record or handful of fields, getListUi or refreshApex for a filtered list, an imperative Apex call for a custom or multi-object query, and one shared data component when the same data appears in several components. Deviate only when you need fine-grained refresh control, server-side pagination, or full transaction control.](</diagrams/lwc-decision-framework/1-data-pattern-routing.png>)
+
+**Fetch only the fields you need.** The single most common performance mistake is `getRecord` with `fields={ALL_FIELDS}` or a long list of fields in Apex that outgrows the page. Every field is a round trip and a payload cost. Explicitly list the fields the component renders; add a new one only when the UI grows to need it [^4].
+
+**Handle the loading and error state explicitly.** A wire or Apex call is never instantaneous. `data`, `error`, and `undefined` data are three distinct states, and a component that renders the same thing for all three is a component that silently shows stale or blank content when the platform hiccups. Provide a loading placeholder, a real error state with a retry, and only then the data state.
+
+## Performance: Rendering Less, More Often
+
+LWC is fast, but it cannot outrun a component that re-renders a thousand rows on every keystroke.
+
+**Memorize derived values.** If a getter recomputes an expensive transform on every render (filtering, sorting, formatting a large array), move that computation so it only runs when its inputs change. For genuinely heavy work, compute once and cache, or push the computation into the data layer rather than the render path [^5].
+
+**Beware the reactive array.** With LWC's shallow reactivity, pushing to an array does not always trigger a re-render the way developers expect. When you mutate an array and the view does not update, the fix is often to assign a new array reference (`this.rows = [...this.rows, item]`), rather than `this.rows.push(item)`. Know this early so it is a design decision, not a debugging session at 5 p.m.
+
+**Render on demand, not all at once.** For long lists, virtualize or paginate instead of rendering entire collections into the DOM. A table with 5,000 rows is a UX problem before it is a performance problem, and infinite scroll or server-side pagination keeps the DOM small and the interaction snappy.
+
+### The LWC Development Mode Trap
+
+**Never ship with `lightning__secondScreenOnly` or debug-only markup inlined.** LWC has a development mode that surfaces a set of warnings in the browser console. Treat those warnings as a build gate, not noise. A clean dev-mode console is a component that is easy to reason about. Gating a fix behind "well, it works in production" is how silent regressions creep in.
+
+## Testing: Treat Components Like the Code They Are
+
+A Lightning web component is JavaScript with a rendering layer, and it deserves the same testing discipline as any modern frontend. Jest is the standard tooling for LWC component tests and is supported natively by Salesforce's CLI [^6].
+
+**Test the logic, then test the render.** Unit-test the data service as a plain module with mocked Apex responses. For the component, assert the reactive behaviors that matter: that a fires event carries the right payload, that an error state renders the error, that a filter updates the list. You do not need to snapshot every pixel; you need to prove the behavior that keeps the business running.
+
+**Mock `@salesforce/*` modules consistently.** Every LWC test suite ends up mocking `@salesforce/label`, `@salesforce/apex`, and `@salesforce/userPermission`. Standardize those mocks in a shared setup so the mocks do not drift from the real behavior across tests.
+
+## Real-World Example: A Record Page Built the Right Way
+
+A client's sales team lived on a record page that had grown into a single 2,000-line LWC doing everything: loading the record, showing a custom summary, running a lookup, and rendering a recent-activity feed. The page worked, but every change risked breaking the whole thing, and onboarding a new developer took weeks.
+
+We decomposed it along responsibility lines. A `LeadSummary` component rendered the header fields from a `LeadSummaryData` service that did exactly one `getRecord` call with a fifteen-field list. A `LeadLookup` component handled search input and fired a `leadselected` event. A `LeadRecentActivity` component consumed a server-side-paginated Apex result and rendered a bounded list. State that both needed (the currently selected lead) was lifted to a small page-level container.
+
+The result: each component was under 150 lines, the data calls were auditable at a glance, error and loading states were explicit everywhere, and a change to the summary no longer threatened the lookup. The page got faster because each piece rendered only what it owned, and the team started shipping changes in days instead of weeks.
+
+## Key Takeaways
+
+- Decompose by responsibility: one component, one job; pair presentation with a `*Data` sibling
+- Name custom events with intent and thread them through explicit `on<event>` handlers, never query across the tree
+- Pick one data-access pattern per component, fetch only the fields you render, and handle loading/error/data as distinct states
+- Respect LWC's shallow reactivity: assign new array references, cache expensive derived values, and virtualize long lists
+- Treat components as testable code: Jest-test the logic and the reactive behaviors, and standardize your `@salesforce/*` mocks
+
+The teams that keep a Lightning experience healthy do not rely on the framework to save them. They make a handful of structural decisions: small components, one data pattern, intentional events, bounded rendering, and then let LWC do what it is good at.
+
+[^1]: Lightning Web Components Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/component-library/documentation/en/lwc)
+[^2]: LWC Best Practices: Component Design. [developer.salesforce.com](https://developer.salesforce.com/docs/component-library/documentation/en/lwc/use_best_practices)
+[^3]: LWC Events, Component Communication. [developer.salesforce.com](https://developer.salesforce.com/docs/component-library/documentation/en/lwc/lwc.events)
+[^4]: LWC Reusing Wire Adapters and Loading Data. [developer.salesforce.com](https://developer.salesforce.com/docs/component-library/documentation/en/lwc/lwc.data_wire_service_about)
+[^5]: LWC Performance and Reactive Properties. [developer.salesforce.com](https://developer.salesforce.com/docs/component-library/documentation/en/lwc/lwc.reference_reactive_props)
+[^6]: LWC Testing with Jest and @salesforce/lwc-jest. [github.com](https://github.com/salesforce/lwc-jest)

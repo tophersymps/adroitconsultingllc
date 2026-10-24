@@ -1,0 +1,136 @@
+---
+title: "Lesson 71: Event Streaming at Scale: Kafka, Change Data Capture, and Real-Time Pipelines"
+slug: event-streaming-at-scale-kafka-cdc-real-time-pipelines
+series: "salesforce-architect"
+lesson: 71
+excerpt: "This is the infrastructure lesson. Lesson 28 taught you to move a trickle of events inside Salesforce's own bus; this one is about the distributed stream that sits behind a modern real-time integration: an append-only log like Kafka where order is guaranteed per partition, change data capture that turns every row change into an event, and the pipeline that lets a fast consumer and a slow consumer read the same committed log without slowing each other down. The Salesforce system architect needs this because real-time replication, streaming analytics, and event-driven integrations are built on it, and scaling them correctly means reasoning about partitions, keys, replay, and delivery guarantees."
+date: "October 17, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Salesforce, Architecture, Kafka, Event Streaming, Change Data Capture]
+---
+
+# Lesson 71: Event Streaming at Scale: Kafka, Change Data Capture, and Real-Time Pipelines
+
+An architect moving a business from nightly batch to real time is really changing the source of truth from a snapshot to a story. A warehouse that refreshes at midnight answers "what is the state of the data now." A streaming pipeline answers "what happened, and in what order" the moment it happened, and lets many consumers read that same story without forking it. This lesson is the machinery behind that change: the append-only log that makes ordering and replay possible, change data capture (CDC) that turns database writes into events, and the real-time pipeline that carries events from one system to another at scale.
+
+This lesson builds directly on lesson 28, which covered streaming with the Pub/Sub API and the event-bus allocations inside a Salesforce org. That lesson handled the low end of volume correctly: one, or a few, tightly-controlled streams. The Salesforce System Architect exam scenario that reaches for Kafka-style infrastructure is the one where volume, ordering, and replay become the deciding constraints, or where Salesforce must feed an external streaming platform that other teams already run. You will be asked to reason about which design keeps order where it matters, which delivery guarantee the architecture actually offers, and how a consumer recovers without losing or double-counting events. That is the reasoning this lesson hands you.
+
+![Kafka is an append-only committed log grouped into partitions; records inside a partition carry monotonic offsets and a key, related events that share a key land in the same partition and stay ordered, and each partition is read by exactly one consumer in a group](</diagrams/event-streaming-at-scale-kafka-cdc-real-time-pipelines/1-kafka-partitions.png>)
+
+## Define the terms
+
+- **Event streaming**: the practice of treating data as an ordered, durable sequence of events that consumers read as a continuous flow, rather than as a static snapshot they poll for. Events are published once and read by any number of subscribers, each holding its own position. [^1]
+- **Change data capture (CDC)**: a technique that records individual row-level changes as they are made to a database or platform, turning each insert, update, and delete into an event that other systems can consume. It is a way to make a transactional source publish its changes without the source writing bespoke integration code. [^2]
+- **Real-time pipeline**: the end-to-end chain that takes a source's events, carries them over a streaming transport, and delivers them to consumers with low latency, usually composed of a capture stage, a buffering stage, and one or more consuming stages. [^1]
+- **Append-only log**: a data structure where producers only ever append records in order, and consumers read forward from a position (an offset) they control. Because nothing is edited in place, any consumer can replay from any earlier position. [^4]
+
+## The log: why streaming platforms are built on an append-only structure
+
+Every serious streaming platform, Kafka foremost among them, is built on a model that looks nothing like a relational table. It is a log: each topic is a named, ordered sequence of records (events), and producers only append to it. Nothing is updated or deleted in place; a record, once written, is immutable until a retention policy drops it. [^4] That immutability is what makes the whole model work, because it means a consumer never fights another consumer over the data, and it can always read the record stream again from an earlier position.
+
+A topic is not one giant sequence, though. It is split into partitions, and each partition is its own ordered log. This split is the entire key to scale. The records in a topic are distributed across its partitions, and the ordering guarantee is scoped per partition: the platform guarantees order within a partition, and only within that partition. Across partitions, order is not promised. [^4]
+
+The consequence is concrete and it decides designs. If two records must be observed in a specific order by a downstream consumer, they must land in the same partition. The mechanism that forces this is the key. Every record can carry a key, and the platform routes all records with the same key to the same partition. So an architect who needs every event for a single order to stay in order gives all those events the same key, the order ID, and they settle into one partition and one ordered sequence. Events for different orders, with different keys, can scatter across partitions and may well be observed in a different order. [^4]
+
+This is the trade that the exam loves. Global order across all records would require a single partition for the whole topic, and a single partition caps throughput at what one partition can append and one consumer group can read. Real streaming designs reject global order and instead pick the key that represents "the thing that must never be observed out of sequence." For an integration, that is usually the business entity: the order, the case, the account, the device. Partition on the entity, keep that entity's events ordered, and let independent entities proceed in parallel. [^4]
+
+Each record in a partition receives a monotonically increasing offset, its position in that partition's log. A consumer tracks the offset it has read up to, and that stored position is what makes replay and recovery possible. When a consumer dies, it flushes the offsets it has committed, and on restart it resumes from the highest committed offset rather than from the start. [^1] The retention window limits how far back a consumer may go; records older than the window are deleted, so a consumer that stays down past retention cannot replay the full history. Sizing retention is an architect decision, not a default you inherit.
+
+## Consumer groups: scale and fan-out on the same log
+
+The second half of the Kafka model is how readers consume the log. Consumers are organized into consumer groups. Within a group, each partition is assigned to exactly one consumer at a time. [^4] This does two things at once, and they pull in opposite directions.
+
+It provides load balancing. Because each partition has one reader in the group, a group of N consumers can read a topic with N partitions with every consumer working without overlap. To make a consumer group faster, you add partitions and consumers together; the partitions are the parallelism, the consumers the workers. The platform handles reassignment when a consumer joins or leaves, which is how the group stays balanced and how a failed consumer's partitions are handed to the survivors. [^4]
+
+It also scopes ordering to the partition, again. Since only one consumer in the group reads a given partition, processing within that partition is serialized: one consumer sees the records in partition order, one at a time. That is exactly how the business entity's events remain ordered end to end. The cost is that any consumer is only a slice of the entity's stream, unless you partition the topic to match the entity, which is precisely what the key does. [^4]
+
+The log model has one more property that matters more as you scale. Because consumers hold independent offsets, the same log serves very different consumers without conflict. A real-time consumer reads near the newest offsets and drives a live dashboard. A batch consumer, in the same consumer group or a different one, reads from an older offset and rebuilds a downstream database or runs a nightly ETL. Neither slows the other, because they are not competing for the data, they are reading different positions in the same immutable log. [^4] This is the property that makes the streaming platform a superior replacement for a shared message queue: a queue is drained by its consumers, so once an event is read it is gone, but a log is read by anyone, at any time, within retention, without removing the event for anyone else.
+
+![Consumer groups read the same log at different positions: within a group each partition is read by exactly one consumer for load balancing, while a real-time consumer follows the live tip and a batch consumer replays from an older offset, and neither slows the other because each holds an independent offset](</diagrams/event-streaming-at-scale-kafka-cdc-real-time-pipelines/3-consumer-groups.png>)
+
+## Change data capture: turning row changes into events
+
+There are two ways a system ends up on a stream. The first is to publish events explicitly, with code that calls a publish API when something happens. The second is change data capture, which removes the dependency on that code.
+
+In a relational database, every write is first recorded in a transaction log, the write-ahead log or binlog, before it can change the actual data pages. CDC reads that log and translates each committed change into an event. [^2] An insert becomes an event carrying the inserted row, an update becomes an event with the before and after values, and a delete becomes an event with the removed row's identity. Because CDC sits at the storage layer, it captures every change regardless of which application made it. A change made by a trigger, a bulk loader, a human in an admin screen, or a scheduled job all flow through the same transaction log, so all of it becomes an event, and the source system needs no integration code of its own. [^2]
+
+That is what makes CDC attractive as a pattern: it is complete, and it is non-invasive. The producer does not have to be taught to announce its own changes. But the completeness comes with a contract the architect must honor. CDC events are a record of state changes in the order they were committed. They are not business intent. An event that says "the case status changed from New to Working" tells you the row now looks a certain way; it does not tell you why, or which user action caused it, or what the user was trying to do. When you need the reason behind a change, you need an explicit business event (a platform event authored at the point of the action), not CDC. This is the standing distinction between "what happened to the data" and "what the business was trying to do." [^2][^3]
+
+![Change data capture records what happened to the data, complete and non-invasive but without the reason or intent, while a business event authored at the point of action records what the business was trying to do; when a downstream consumer needs the reason behind a change, feed it a business event, not CDC](</diagrams/event-streaming-at-scale-kafka-cdc-real-time-pipelines/4-cdc-vs-business-intent.png>)
+
+Salesforce's own version of this is Change Data Capture, an object that publishes a change event for a record when it is created, updated, deleted, or undeleted. [^2][^3] You enable it on an object, and a subscriber using the Pub/Sub API, CometD, or event relay receives a change event carrying the record's changed fields, the change type, and a replay ID that lets a subscriber resume after a disconnect. [^3]
+
+The shape of the change event is worth holding onto. It is delivered with the before and after state of the change, a header naming the event and the entity, and a change-type indicator for create, update, delete, or undelete. [^3] The replay ID is the Salesforce equivalent of the Kafka offset: it is the durable position in the event stream, and it is what makes at-least-once recovery safe, because a subscriber that stores its replay ID and reconnects can resume from exactly where it stopped. [^3]
+
+## The Salesforce connection: getting changes onto an external stream
+
+The pieces above describe a generic streaming platform. The Salesforce System Architect puzzle is how the two worlds connect: how does an external Kafka cluster or similar platform receive Salesforce's change events?
+
+The capture side is Change Data Capture, as just described, or an explicit platform event when the business intent matters. [^3] The transport side has a few options, and they differ by how tightly you want Salesforce involved.
+
+For low to moderate volume, the Pub/Sub API carries the connection directly. It is a gRPC and HTTP/2 interface that delivers binary Avro messages to a subscriber on an open connection. [^5] A custom client can consume the change events and, if it wants, translate and forward them to Kafka. This is the pattern lesson 28 covered, and it works well when you want the forwarding logic in your own hands and the volume is manageable.
+
+For higher volume and tighter coupling to a cloud event bus, Salesforce provides an event relay. An event relay streams platform events and change data capture events from Salesforce to Amazon EventBridge, natively, without writing or operating an integration app. [^6] Salesforce manages the connection, authentication, and delivery to the external event bus; the relay subscribes to an event channel on the Salesforce side and forwards the published events to the EventBridge event bus, so most of the bridging work is lifted off your team. [^6]
+
+You pick between the two the same way you pick between any integration option: by how much control and operation you want. A relay moves the bridge into the platform and off your plate, at the cost of tying you to the destinations the relay supports and giving you less control over the exact outgoing payload. A custom Pub/Sub client gives you full control over the consumer, the transform, and the destination, at the cost of running and monitoring a process that must stay connected, query for the right events, and honor replay. For either, the connectors you should remember are that the stream source on the Salesforce side is CDC (or platform events) and that the durable position on the Salesforce side is the replay ID, while the destination system has its own offset and its own delivery guarantees.
+
+## Real-time pipelines: delivering the stream to consumers
+
+With the pieces defined, the real-time pipeline is the assembly. It has four stages, and an architect reasons about each.
+
+**Capture.** Events leave the source. On Salesforce this is CDC or platform events, captured with no application code. [^2][^3]
+
+**Buffer.** Events move to the streaming platform, where they are appended to a topic and become durable and replayable. This is the stage that absorbs bursts: if the downstream slows, events accumulate in the log rather than being lost or blocking the producer. [^1][^4]
+
+**Deliver.** Consumers in a group read from their own offsets. A real-time consumer follows the live tip; a batch consumer or a second group replays from an older offset for catch-up or analytics. [^4]
+
+**Guarantee.** The pipeline exposes a delivery guarantee. Streaming platforms commonly default to at-least-once: an event is never lost, but it can be delivered more than once, because a consumer that crashes before committing its offset will re-read the events after restart. Making downstream safe for that duplicate is the architect's job, either by making the consumer idempotent (processing the same event twice yields the same result) or by deduplicating on a stable event ID. [^1][^4]
+
+The ordering contract carries through the whole pipeline. In CDC terms, events for the same record (same key) land in the same partition and are delivered in the order they were captured. Events for different records may be delivered in any order, and no consumer should assume otherwise. [^4]
+
+The pipeline also inherits the availability reality of every distributed system. A source can be down, the transport can lag, a consumer can crash, and the retention window can expire. The design is resilient when each failure has a defined recovery: replay from the stored offset for a disconnected consumer, buffering in the log for a slow downstream, and idempotency or dedup for duplicate delivery. [^1]
+
+![A real-time pipeline from Salesforce into a streaming platform: change data capture turns row changes into events, the Pub/Sub API or an event relay carries them over an open connection to a Kafka topic, and both a live real-time consumer and a replay-from-offset batch consumer read the same committed log without slowing each other down](</diagrams/event-streaming-at-scale-kafka-cdc-real-time-pipelines/2-real-time-pipeline.png>)
+
+## Worked example: real-time order replication to a data platform
+
+A retailer keeps orders in Salesforce and wants every order change visible in its data platform within seconds, so its pricing, inventory, and analytics teams can react live. The architect builds a streaming pipeline.
+
+1. **Choose the capture.** The team needs the state of each order, not the reason behind each change, so they enable Change Data Capture on the order object. Every create, update, and delete of an order becomes a change event without writing any capture code. [^2][^3]
+2. **Choose the transport.** Volume is high and the data platform is built on Kafka, so the architect runs a custom subscriber over the Pub/Sub API that consumes the change events and publishes them into the order topic. If the team's platform instead reached Salesforce's native integration target, an event relay would handle the bridge from Salesforce to Amazon EventBridge without writing a forwarder. [^5][^6]
+3. **Choose the topic key.** Each change event is keyed by the order ID. Events for one order all land in the same partition and stay in the order they were captured, so the downstream store never sees a status change arrive before the record that preceded it. Different orders can flow in parallel. [^4]
+4. **Shape the consumers.** One consumer group reads the live tip to update the pricing engine in real time. A second consumer group replays from an older offset to power a nightly ETL that rebuilds the analytics warehouse. Both read the same topic without interfering, because each holds its own offset. [^4]
+5. **Plan for duplicates.** The Pub/Sub subscriber and the stream platform deliver events at-least-once. A consumer that crashes and restarts re-reads some events, so the architecture keys the downstream writes by the order event ID and makes the sink idempotent, meaning reapplying the same event changes nothing. [^1][^5]
+6. **Plan for downtime.** If the pricing consumer is down for an hour, the events it missed stay in the topic within the retention window. On restart it resumes from its committed offset and catches up, and the live tip is never lost, just delayed. The batch consumer's offset is separate, so the analytics rebuild is unaffected by the pricing consumer's outage. [^1][^4]
+
+That is the pipeline's value in one scene: one durable stream, multiple independent consumers, each with its own position, serving uses from seconds-latency to nightly batch, with a documented recovery for every failure a consumer can hit.
+
+## The pitfalls to avoid
+
+**Assuming global order.** The exam scenario that says "all order events must be processed in the order they happened" and expects a single ordered topic is usually a trap. Global order means one partition, which caps throughput. The correct design partitions on the business entity and guarantees order only within that entity's key. [^4]
+
+**Confusing CDC events with business intent.** A change event says what happened to the data. It does not carry the reason, the user, or the intent. If a downstream consumer needs to act on why a case changed, feed it an explicit business event, not a CDC record of the row change. [^2][^3]
+
+**Ignoring the delivery guarantee until it bites.** At-least-once is the default, and it means duplicates are normal. A consumer that cannot tolerate a duplicate but does not deduplicate or make its sink idempotent will count the same event twice. Design for the guarantee up front, not when production shows double-counted orders. [^1][^4]
+
+**Setting a retention window the slowest consumer cannot meet.** If the slowest batch consumer can be down longer than the retention window, replay becomes impossible and events are permanently lost. Size retention to the lag your slowest legitimate consumer must be able to bridge, and alert when a consumer's lag threatens to exceed it.
+
+## Try it
+
+1. A team says "we need all order events in strict order, so we use one topic partition." What is the design cost, and what is the better partition choice? *(Answer: a single partition forces all orders through one ordered stream and caps throughput. Partition on the order ID as the key, guaranteeing order within each order while letting independent orders proceed in parallel.)* [^4]
+2. A downstream system has been double-counting orders since a consumer restarted. What is the likely cause, and what are the two fixes? *(Answer: at-least-once delivery re-delivered events after the restart because the consumer re-read from its last committed offset. Fix by making the consumer idempotent or by deduplicating on a stable event ID.)* [^1][^4]
+3. A business asks for "the reason the case status changed." Does Change Data Capture answer this, and if not, what does? *(Answer: no. CDC records the state change, not the intent behind it. Feed an explicit business intent captured at the point of the action, which on Salesforce is a platform event.)* [^2][^3]
+4. A fast consumer and a slow batch consumer read the same topic. Why does the fast consumer not have to wait for the slow one? *(Answer: consumers hold independent offsets and read different positions in the immutable log. The fast consumer follows the live tip while the batch consumer replays from an older offset, and neither blocks the other.)* [^4]
+5. You are enabling CDC on an object to feed a Kafka cluster. What two delivery positions does the design need to track, and why do they differ? *(Answer: the Salesforce replay ID on the capture side, so a subscriber resumes after a disconnect, and the consumer offset on the streaming side, so each Kafka consumer resumes from where it stopped. They differ because they are the durable positions of two different transports.)* [^3][^4]
+
+## What's next
+
+You can now design an append-only log with order per partition, turn row changes into events with CDC, and wire Salesforce changes onto a real-time pipeline with a defined recovery for every consumer. The next lesson moves to the layer that hands those events to the rest of the world: API management. It covers the gateway that fronts your services, the throttling that protects them from overload, versioning that lets them evolve without breaking callers, and the observability that tells you whether the API you published is actually performing. It is where the streaming you just built meets the request-driven integrations your clients and partners depend on.
+
+[^1]: Confluent. Apache Kafka documentation. [What is Apache Kafka?](https://docs.confluent.io/platform/current/platform.html)
+[^2]: Debezium. [What is change data capture?](https://debezium.io/documentation/faq/)
+[^3]: developer.salesforce.com. [Change Data Capture Development Guide](https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_intro.htm)
+[^4]: Confluent. Apache Kafka documentation. [Kafka Architecture](https://docs.confluent.io/platform/current/kafka/index.html)
+[^5]: developer.salesforce.com. [Pub/Sub API Overview](https://developer.salesforce.com/docs/platform/pub-sub-api/overview)
+[^6]: developer.salesforce.com. [Event Relay](https://developer.salesforce.com/docs/platform/event-relay/overview)

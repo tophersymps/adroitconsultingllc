@@ -1,0 +1,127 @@
+---
+title: "Lesson 75: Agent Architecture Patterns: Orchestration, Planning, and Tool Use"
+slug: agent-architecture-patterns-orchestration-planning-tool-use
+series: "salesforce-architect"
+lesson: 75
+excerpt: "How to give an AI agent structure: the three capabilities that turn a language model into something that acts. It defines the difference between a workflow and an agent, then walks through the three building blocks of agent architecture, orchestration, planning, and tool use, and shows how they combine in a worked example. It is the general-system entry point to the course's agent thread."
+date: "October 21, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Architecture, AI, Agents, Orchestration]
+---
+
+# Lesson 75: Agent Architecture Patterns: Orchestration, Planning, and Tool Use
+
+Lesson 74 gave you the shapes of whole-system integration: monolith, microservices, and the platform that mediates them. Its closing question was pointed, because it is the question this course has been steering toward. Which new kind of component sits beside those systems, not just connecting them but deciding what they should do? The answer is the agent, and if you are going to architect systems in 2026 and beyond, you need a working model of what an agent actually is.
+
+Here is the thesis in one line. **An agent is a language model with three things added: the ability to call tools, a loop that lets it act and observe, and some orchestration that decides how the model, its tools, and possibly other agents combine.** This lesson is the general-system anchor for that idea. Lesson 40 gave you state: where an agent's memory lives and how it carries context forward. Lesson 5 gave you the coordination patterns. This lesson names the three capabilities that put those together, orchestration, planning, and tool use, and shows you how an architect decides between them.
+
+## First, separate workflows from agents
+
+Before any pattern makes sense, you need the distinction that every serious source draws, and it comes from Anthropic's own field work with dozens of teams. Anthropic separates **agentic systems** into two kinds. A **workflow** is a system where LLMs and tools are orchestrated through predefined code paths: the steps are known in advance and the code chooses the order. An **agent** is a system where the LLM dynamically directs its own process and tool usage, maintaining control over how it accomplishes the task. [^1]
+
+Read that closely, because the word "agent" gets used for both, and the architecture difference is real and load-bearing. In a workflow, the control flow lives in your code. You decide that step two only runs after step one passes a check, and that decision is fixed. In an agent, the control flow lives partly in the model. The model decides, at runtime, which tool to call next and whether to keep going or stop. [^1]
+
+Anthropic's advice on when to use each one is the pragmatic counterweight to the hype. Start with the simplest solution, and only add complexity when needed. Agentic systems trade latency and cost for task performance, so you should consider when that trade makes sense. Where you do want them, workflows give you predictability and consistency for well-defined tasks, while agents are the right call when you need flexibility and model-driven decision making at scale. [^1] That maps cleanly onto the pattern language from lesson 5: a workflow is a fixed assembly of processing units, and an agent is a processing unit that selects its own pipeline.
+
+![Workflow vs. Agent: the control flow lives in your code for a workflow, with predefined paths and predictable results, while an agent keeps control flow partly in the model, which decides at runtime which tool to call next and whether to keep going or stop](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/1-workflow-vs-agent.png>)
+
+## The building block: the augmented LLM
+
+Underneath every agent sits the same primitive, which Anthropic calls the **augmented LLM**: a language model enhanced with retrieval, tools, and memory. The model can generate its own search queries, select appropriate tools, and decide what information to retain. [^1]
+
+Stop on that last sentence, because it is the whole difference between a chatbot and an agent. A plain model answers from its weights only. The augmented model does not just answer; it can decide to look something up, call a system, or remember a result, and those augmentation capabilities are exactly what lesson 40's state layer and the retrieval layer live on. [^1]
+
+Two implementation details matter here, because the augmented LLM is the foundation everything else builds on. First, tailor the augmentations to the use case; there is no universal set. Second, give them an easy, well-documented interface for the model. This is why the Model Context Protocol (MCP) exists, a standard way to let models integrate with a growing ecosystem of third-party tools through a simple client implementation. [^1] A clean, standard tool interface is not a nice-to-have. It is what makes the next two capabilities, tool use and orchestration, even mechanically possible.
+
+## Tool use: the model's hands
+
+Tools are how the model reaches outside its weights. Anthropic emphasizes that no matter which agentic system you build, tools are likely an important part of it. A tool lets the model interact with external services and APIs by specifying their exact structure and definition, and when the model plans to use one, it returns a tool-use block in its response for the runtime to execute. [^1]
+
+The architectural weight here is not in the mechanics of calling a tool. It is in how you design the tool surface, because that is what decides whether the model uses it well. Anthropic gives a striking rule of thumb: invest as much effort in the **agent-computer interface (ACI)** as you would in a human-computer interface (HCI). [^1] People think about what a human finds obvious and usable; Anthropic's argument is that the agent deserves the same care.
+
+Turn that into concrete guidance, and three principles fall out.
+
+First, make the tool obviously usable to the model. A good tool definition includes example usage, edge cases, input-format requirements, and clear boundaries from other tools. Anthropic frames it as writing a great docstring for a junior developer. [^1] If a human engineer would stumble over the description, the model will too. The parameter names and descriptions are part of the interface, and you should change them to make the model's intended choice obvious.
+
+Second, choose the format the model is good at. Different ways to express the same action are not equal from the model's point of view. Some formats, like writing a diff or escaping code inside JSON, are much harder for a model to produce than others. Anthropic's guidance is to keep the format close to what the model has seen naturally occurring in text, and to avoid formatting overhead that forces the model to keep an accurate count of thousands of lines or escape code it writes. [^1] This is a surprisingly practical lever: an easier format can change a feature from unreliable to reliable.
+
+Third, design against the mistakes the model will make. Anthropic's own example is specific and good. While building its agent for the SWE-bench coding benchmark, it spent more time optimizing the tools than the overall prompt, because the model made mistakes with tools that used relative filepaths after it had moved out of the root directory. The fix was to change the tool to always require absolute filepaths, and after that the model used it flawlessly. [^1] That is poka-yoke thinking applied to a language model: change the arguments so mistakes are harder to make, instead of relying on the model to remember a subtle rule.
+
+So the first architectural capability, tool use, is less about the tool-calling mechanism and more about the tool catalog you expose. It sets the boundary of what the system can act on, and how confidently it can act on it.
+
+## Orchestration: single agent or many?
+
+The second capability is orchestration, and OpenAI's practical guide gives the clean framing. Orchestration patterns fall into two categories: **single-agent systems**, where one model equipped with tools and instructions executes workflows in a loop, and **multi-agent systems**, where execution is distributed across several coordinated agents. [^3]
+
+Start with the single-agent case, because it is where you should always begin. A single agent can handle many tasks by incrementally adding tools, which keeps complexity manageable and simplifies evaluation and maintenance. [^3] Each new tool expands what the agent can do without forcing you to coordinate multiple agents. And every orchestration approach, even the single agent, needs a concept of a run: a loop that lets the agent operate until an exit condition is reached, such as a tool call, a structured output, an error, or a maximum number of turns. [^3]
+
+The interesting decision is when to leave the single-agent shape. OpenAI's guidance is that as the number of required tools increases, consider splitting tasks across multiple agents. [^3] There is a clear cost just below the surface: splitting into more agents multiplies the tokens (a point this course will revisit in the cost lesson next), and it multiplies the coordination surface where things can silently go wrong. That is why the disciplined default is to start single, confirm the single agent is actually the bottleneck, and only then split.
+
+When you do split, the dominant shape is the **orchestrator-worker** pattern, and Anthropic describes how its own research product is built on exactly that architecture. The lead agent coordinates the process while delegating to specialized subagents that operate in parallel. [^2] The delegation is not just parallel work; it is a deliberate distribution of context. Each subagent gets its own context window and its own tools, so it can investigate one slice of the problem in depth without blowing up a single shared window. [^2]
+
+This is where the architectural leverage of multi-agent systems actually lives. Anthropic's research finding is that multi-agent systems work mainly because they spend enough tokens to solve the problem: in its analysis of a browsing benchmark, token usage by itself explained 80 percent of performance variance. The architecture distributes work across agents with separate context windows to add capacity for parallel reasoning. [^2]
+
+![Orchestrator-Worker: a lead agent coordinates the process and delegates to specialized subagents that operate in parallel, each with its own context window and tools so it can investigate one slice of the problem in depth](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/4-orchestrator-worker.png>)
+
+But there is a real, and for this course, important, cost to that leverage. Anthropic's own data shows the token economics are harsh: agents typically use about 4x more tokens than plain chat interactions, and multi-agent systems use about 15x more tokens than chats. [^2] That single number is the reason orchestration choices and cost architecture (the very next lesson) are inseparable. More orchestration means more tokens, so the architecture has to earn the extra spend. Anthropic's own conclusion is blunt: multi-agent systems require tasks where the value is high enough to pay for the increased performance. [^2]
+
+## Planning: the model's strategy
+
+The third capability is planning, and it answers the coordination question that orchestration leaves open: if an agent is going to act in a loop, how does it decide what to do next? The plan-and-execute pattern gives the cleanest answer, and LangChain's implementation is the standard reference.
+
+Plan-and-execute splits the work into two components. A **planner** prompts an LLM to generate a multi-step plan to complete a large task. Then one or more **executors** take the user's query and one step of the plan, and invoke one or more tools to complete that step. [^4] The way these two coordinate is the architectural point. Because the planner is usually the largest, most expensive model, you do not want to call it on every tool invocation. You call it once to build the plan, hand the steps to a cheaper executor loop, and only go back to the planner when the plan needs re-planning. [^4]
+
+That last piece, the loop, is what makes this a genuine plan rather than a static list. Once execution completes, the agent is called again with a re-planning prompt, letting it decide whether to finish with a response or generate a follow-up plan when the first one did not have the desired effect. [^4] This is plan-and-act as a cycle, not a one-shot: plan, execute, observe, re-plan, and only stop when the result satisfies the goal.
+
+![Plan-and-Execute Loop: the planner, the largest and most expensive model, is called once to build a multi-step plan, then hands steps to a cheaper executor loop that invokes tools, and a re-planning loop calls the agent again to finish or generate a follow-up plan](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/2-plan-execute-loop.png>)
+
+LangChain's implementation takes this one step further into a form called **LLMCompiler**, and its shape is worth seeing because it previews how planning, orchestration, and tool use combine. The compiler has a planner that streams a directed acyclic graph of tasks, each task carrying a tool, its arguments, and a list of dependencies. A task-fetching unit schedules and executes tasks once their dependencies are met, and a joiner decides whether to respond with the final answer or pass progress back to the planner to continue. [^4] The paper behind it claims the extra parallelism grants a significant speedup, roughly 3.6x. [^4]
+
+Read what has actually been built here and the three capabilities collapse into one system. The planner is the model's strategy and it owns the orchestration decision of what runs when. The executors are the tool use. The task graph and the re-planning loop are the orchestration runtime. The pattern is not three separate features bolted together. It is one architecture where planning decides, orchestration schedules, and tools execute.
+
+## How the three combine: a worked example
+
+Put all three capabilities together against the client from earlier lessons, the field-services company whose technicians, services, and sites you have modeled before. The company wants an agent that can research a service problem, produce a fix recommendation, and update the relevant records, all from a single natural-language request.
+
+Start with tool use, because it defines the reach. The agent needs a small, well-chosen catalog: a search tool over the service knowledge base, a case-lookup tool, a technician-availability tool, and an update tool bound by the retraction and audit rules the course's security lessons demanded. Each tool gets a precise description with example usage and clear boundaries, so the model does not confuse the search tool with the update tool, the exact interface Anthropic argues for. [^1]
+
+Then decide orchestration. The disciplined answer is to start single. One agent decides the request is a research task, calls the search tool, calls the case-lookup tool, and produces a recommendation. No multi-agent complexity yet, and evaluation is straightforward because there is one actor to trace. [^3] That is the honest starting point, and it is what the course's reliability lessons would want you to ship before anything fancier.
+
+Only when the request regularly needs several independent research threads does the shape earn a split. Say the case involves a hardware failure that could have multiple root causes across electrical, mechanical, and field-history dimensions. An orchestrator-agent decomposes the problem and spawns parallel subagents, each with its own tools and context window: one investigates the electrical service history, one the mechanical maintenance log, one the technician notes. [^2] Each runs its research in parallel and returns findings, and the lead synthesizes a recommendation.
+
+Now add planning, and the loop becomes genuinely agentic. Instead of the orchestrator deciding every step in advance, a planner builds a multi-step plan and hands steps to executor loops that call tools, then re-plans when the result suggests a new direction. [^4] If the electrical subagent finds a service bulletin the mechanical side never accounted for, the plan re-plans and routes the follow-up investigation accordingly, exactly Anthropic's dynamic, path-dependent behavior. [^2] The agent is no longer executing a script; it is pursuing a strategy and adjusting it on the evidence.
+
+And then hold the lesson's most important accounting in view. The multi-agent, plan-and-execute version is dramatically more capable, and it spends dramatically more tokens, somewhere in the range of the 15x multi-agent multiplier Anthropic measured. [^2] The architect's job in this worked example is to be explicit about what that spend buys, and the answer has to be "recommendation quality on genuinely hard service cases," not "we used the impressive architecture." If the value does not clear the cost, the correct design is the single agent.
+
+## The pattern: a decision sequence
+
+You have the pieces, so here is the sequence an architect actually runs, and it is where every capability decision gets made.
+
+1. Classify the task. Is the control flow known in advance, or does it need model-driven decisions at runtime? Known flow means a workflow; unknown, flexible, path-dependent flow means an agent. [^1]
+2. Define the tool surface before anything else, because it sets the boundary of what the system can do. Invest ACI-grade effort in tool descriptions, examples, and boundaries. [^1]
+3. Start single-agent. Add tools to one loop, keep evaluation simple, and only consider a split when one agent is demonstrably the bottleneck. [^3]
+4. If you split, prefer orchestrator-worker, and be explicit about what the extra context windows and parallel subagents buy. [^2]
+5. If the task needs real strategy, add a planner that builds a plan, hands steps to executors, and re-plans on new evidence. [^4]
+6. Account for the token cost of every step you added, because orchestration and planning are not free, and the next lesson is where that accounting lives.
+
+![The Architect's Decision Sequence: classify the task, define the tool surface first, start single-agent, prefer orchestrator-worker if you split, add a planner for real strategy, and account for the token cost of every step](</diagrams/agent-architecture-patterns-orchestration-planning-tool-use/3-decision-sequence.png>)
+
+## Try it
+
+Work a system you know through the sequence.
+
+1. Classify a task you have automated or want to automate. Is it better as a workflow or an agent, and what is the one sentence of reasoning? [^1]
+2. Write the tool catalog for an agent you would build. Give each tool a name, a description, and one example of correct use, the ACI treatment. [^1]
+3. For the same agent, state whether you would start single or multi, and name the cost of the more complex choice using the token multiplier from this lesson. [^2] [^3]
+4. Describe one scenario where a planner would re-plan after an executor returns an unexpected result, and what the re-plan would do. [^4]
+5. A client asks for the "most advanced" multi-agent architecture. Using this lesson, give the honest first response.
+
+## What's next
+
+You can now separate workflows from agents, name the three capabilities of an agent architecture, and reason about when each is worth using. The next lesson takes the accounting this one kept pointing at and makes it concrete. Lesson 76 covers **cost architecture: licensing, API consumption, storage, and optimization**, the economics of building and running these systems over time. It moves from the architecture of a single agent to the architecture of its invoice, and it is the natural partner to this lesson, because every orchestration and planning decision you make is, at bottom, a cost decision. Continue to Lesson 76 to see how an architect plans for spend instead of being surprised by it.
+
+[^1]: anthropic.com. [Building effective agents](https://www.anthropic.com/research/building-effective-agents), which defines workflows versus agents, describes the augmented LLM and the Model Context Protocol, and gives detailed guidance on designing the agent-computer interface, including the SWE-bench filepath example and the advice to treat tool interface design like HCI.
+[^2]: anthropic.com. [How we built our multi-agent research system](https://www.anthropic.com/engineering/built-multi-agent-research-system), which documents the orchestrator-worker architecture, the finding that token usage explains 80 percent of performance variance, and the measured cost that agents use about 4x more tokens than chat while multi-agent systems use about 15x more.
+[^3]: openai.com. [A practical guide to building agents](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf), which separates single-agent from multi-agent orchestration, defines the run loop and exit conditions, and recommends starting with a single agent and only splitting when needed.
+[^4]: langchain.com. [Plan-and-Execute agents](https://www.langchain.com/blog/planning-agents), which describes the planner and executor components, the re-planning loop, and the LLMCompiler variant with its task DAG and claimed 3.6x speedup from parallelism.

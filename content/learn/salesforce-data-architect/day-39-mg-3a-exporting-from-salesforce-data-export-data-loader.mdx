@@ -1,0 +1,239 @@
+---
+title: "Data Architect MG-3A: Exporting from Salesforce: Data Export, Data Loader export, API, reports"
+slug: day-39-mg-3a-exporting-from-salesforce-data-export-data-loader
+series: salesforce-data-architect
+lesson: 39
+excerpt: "Compare and contrast the techniques and considerations for exporting data out of Salesforce, and match each one to the volume and purpose it actually serves. This is the Exporting lesson (mg-3a) in the Data Migration domain, the one that turns the migration story around: lesson 37 showed you how to get data in at large volume, and this lesson shows you how to get it back out. You will learn why the Data Export service is a scheduled backup rather than a tactical tool, why Data Loader is the go-to for a defined SOQL-scoped pull, why Bulk API query jobs are the pattern for recurring feeds to a warehouse, and why reports and list views are analysis tools with row limits, not LDV extractors. You will learn the export consideration that trips most people on the exam: every export is filtered by the running user's access, both field-level security and row-level sharing, so the same export run by two users returns different data. You will learn why large-dataset exports must be selective on indexed fields or they time out, why scheduled Data Export is a coarse backup rather than a full point-in-time restore, and how incremental extraction by SystemModstamp keeps a warehouse feed pulling only what changed. You will work the recurring nightly feed case that is the objective's signature question, and you will map controls for encryption, access, and retention onto the exported copies before any personal data leaves the org.\"
+date: "October 20, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Data Architecture, Data Migration, Export, Data Export Service, Data Loader, Bulk API, Reports, SOQL, SystemModstamp, Field-Level Security, GDPR, Certification]
+---
+
+Lesson 37 brought data into Salesforce at scale, with Data Loader, Bulk API, parallel jobs, and batching. [^1] This lesson, mg-3a of the Data Migration domain, works the other direction. It asks how you get data back out, and the exam frames the whole objective as a comparison: compare and contrast the various techniques and considerations for exporting data from Salesforce, including the Data Export service, Data Loader export, API-based extraction, and reporting exports, and their suitability for different volumes and purposes. [^2]
+
+Read that objective closely, because the word that carries the exam is "suitability." You are not being asked to memorize four buttons. You are being asked to look at a stated job, a volume, and a purpose, and pick the tool that fits. Exporting is a choose-your-own-tool problem, and every tool has a sharp edge you have to know about.
+
+The exam tip for this objective is a single matching rule. Data Export for scheduled backup. Bulk API for LDV feeds. Reports for analysis. [^2] Hold that line for the whole lesson, and the three quiz questions fall into place, because each one is a scenario asking you to make exactly that match.
+
+## The four export tools, and what each one is really for
+
+There are four families of export in Salesforce, and they differ in three ways that matter: whether they are scheduled or on demand, whether they are designed to move large data volumes, and what they lose along the way.
+
+The first is the Data Export service, the org's native scheduled backup. It runs on a weekly or monthly cadence and writes the org's data to comma-separated value (CSV) files. [^3] It is complete in the sense that it aims to cover the whole org, but it is coarse: it is built for backup, not for pulling a defined slice of data on command. [^3]
+
+The second is Data Loader, the tactical extraction tool. It can run interactively in its desktop application or from the command line, it selects records with SOQL, and it writes the result to a CSV file. [^4] It is the tool you reach for when you need a defined data set now, and through its Bulk API mode it can handle large volumes. [^4]
+
+The third is API-based extraction through the REST, SOAP, and Bulk APIs. This is the programmatic option, the one you build into an integration or an ETL pipeline. [^5] Bulk API query jobs are the pattern for moving large volumes efficiently, and because they are API calls you can schedule and automate them. [^5] This is the family that runs a recurring data feed to a data warehouse. [^5]
+
+The fourth is reports and list views. These export a report or a list to CSV or Excel for a user who wants the answer to a question. [^6] They have row limits, and they exist for analysis, not for bulk data extraction. [^6]
+
+The temptation is to read those four and assume that all exports are interchangeable and you just pick whichever sounds fastest. They are not interchangeable, and the differences are exactly what the quiz tests.
+
+![The four export tools matched to the job: Data Export service for scheduled backup, Data Loader for tactical SOQL pulls, the REST SOAP and Bulk APIs for recurring warehouse feeds, and reports and list views for analysis within row limits](</diagrams/day-39-mg-3a-exporting-from-salesforce-data-export-data-loader/1-four-export-tools.png>)
+
+## Data Export service: a scheduled backup, not a tactical tool
+
+Start with the Data Export service, because it is the one that most people misunderstand.
+
+Your org can generate backup files of its data on a weekly or monthly basis, depending on your edition. [^3] Weekly export is available in Enterprise, Performance, and Unlimited editions; monthly export is available in all editions except Database.com. [^3] You can generate a backup manually no more than once every 7 days if your org is on a weekly schedule, or once every 29 days if it is on a monthly schedule. [^3] In Professional and Developer editions, you can only generate backups every 29 days, and their scheduled exports are monthly only. [^3]
+
+![Data Export cadence by edition: weekly in Enterprise Performance and Unlimited with a manual backup at most every 7 days, monthly in all editions except Database.com with a manual backup at most every 29 days, and monthly only in Professional and Developer editions](</diagrams/day-39-mg-3a-exporting-from-salesforce-data-export-data-loader/2-data-export-cadence.png>)
+
+You export by going to Setup, finding Data Export, and either scheduling a recurring export or requesting one now, subject to the frequency limit for your edition. [^3] Salesforce then builds a set of CSV files, packages them into archives, and emails you a download link when they are ready. [^3] Large exports are split across multiple files: each archive can be up to approximately 512 MB, so an org whose data is larger than that gets several archives. [^7]
+
+That last detail is a reminder of what this tool is for. A 512 MB file cap, files split across many archives, a download link that arrives by email, and a cadence measured in days: this is backup infrastructure. It is not an on-demand data pull. [^3]
+
+And it has real gaps as a backup, which you will see in the backup-versus-extraction section. The service does not capture metadata the way a dedicated backup product does, it does not provide point-in-time restore, and the download window matters: Salesforce keeps the export files available for a limited download period, so you have to retrieve them promptly and store them securely. [^8] Treat it as a scheduled snapshot you are responsible for moving to controlled storage, not as a complete restore mechanism on its own. [^8]
+
+The quiz can test this indirectly through the "which is a true statement" question. Scheduled Data Export is a coarse backup, not a full point-in-time restore. [^8] That is the true statement. The distracting statements are the ones that claim exports include everything regardless of the user's access, or that large exports can run non-selective without a performance penalty. Both of those are false, and both earn their own sections later in this lesson. [^2]
+
+## Data Loader export: the tactical, SOQL-scoped pull
+
+Where Data Export is the scheduled batch, Data Loader is the tactical tool you run when you need a defined set of data now.
+
+Data Loader works by SOQL. You build a query against the object you want, choose the fields, optionally set conditions to filter the result, and Data Loader writes the matching records to a CSV file. [^4] It can run in its desktop interface, or from the command line in a scripted, automated form. [^4] If you do not set any conditions, the export returns all the data to which you have read access. That last clause is doing real work, and it comes back in the considerations section. [^4]
+
+Because Data Loader builds its export on SOQL and can drive the Bulk API under the hood, it is the right tool for pulling a defined, large data set that you have scoped yourself. [^4][^1] It is your answer for "I need these 500,000 Contacts that match this filter, as a CSV, tonight." It is not your answer for "send our whole org every night," because a scheduled full-org export at scale is a Bulk API ETL feed, not a desktop tool someone runs by hand. [^5]
+
+The thing to remember about Data Loader on the exam is the permission model. Using Data Loader requires the API Enabled permission, and exporting records requires read access on those records. [^9] That connects directly to the export consideration the exam loves: the export returns what the running user can see, nothing more. [^4]
+
+## API-based extraction: Bulk API query jobs for LDV and recurring feeds
+
+The third family, API-based extraction, is the one that scales. This is where large-volume export lives.
+
+The REST and SOAP APIs both support querying records programmatically, which makes them suitable for integration and ETL scenarios where your code needs to pull data and send it somewhere. [^5] But when the volume is large, the tool to reach for is the Bulk API. Bulk API query jobs are designed to move large data volumes efficiently by processing records in batches, and they are fully automatable because they are API calls. [^1][^5]
+
+The pattern the exam wants you to recognize is the recurring warehouse feed. You need a nightly feed of changed records into a warehouse that keeps an external copy of your Salesforce data current. That is not a weekly backup file, and it is not a report. [^2] It is a Bulk API query job, or an ETL tool driving the Bulk API, extracting incrementally. [^1][^5]
+
+Why the Bulk API for this job and not the other three? Because the other three are each wrong for a different reason. A weekly Data Export file is scheduled backup, not a data feed, and it runs far too infrequently for a nightly load. [^3] A report export has row limits and is an analysis tool, not an extractor. [^6] A list view export has the same limits and the same analysis orientation. [^6] Only the Bulk API query job is built to run on a schedule, at large volume, and pull exactly the records you ask for, which is why it is the objective's answer for a recurring feed. [^1][^5]
+
+There is a second reason the Bulk API matters here, and it ties back to lesson 37's selectivity rules. When you export at large volume, you cannot afford non-selective queries. The Bulk API has its own query limits, and a poorly scoped query at LDV is exactly the kind that drags. [^1] You scope your Bulk query the same way you would scope any LDV query, with indexed filters, which leads to the selectivity section below. [^2]
+
+## Reports and list views: analysis, with row limits that rule them out for LDV
+
+The fourth family is the one the exam wants you to rule out for the wrong job.
+
+Reports and list views let users export a report or list to CSV or Excel for analysis. They are the user-friendly face of export, and they are the right tool for a business user who wants the filtered answer to a question. [^6] But they are bounded by report limits, and those limits are what disqualify them from large-volume extraction.
+
+A report displays a maximum of 2,000 rows in the interface. [^6] To get more rows than that you have to export. And the export itself has limits: when you export a matrix report in Lightning Experience using the formatted report option, you can get up to 2,000 rows and 100 columns, and when you export a tabular or summary report using the formatted option or as an XLSX file using the Details Only option, you can get up to 100,000 rows and 100 columns. [^10] These are firm ceilings, and they are nowhere near the scale of a large data volume.
+
+There is also a practical ceiling on the export operation itself. A report export that takes too long can time out and fail, and there are limits on how many reports one user can export at once. [^6] The whole tool is shaped like an analytics surface: display a bounded number of rows, export a bounded set, move on. [^6]
+
+So the quiz rule for reports and list views is a flat one. Report exports are limited by row limits and are not suited to large data volumes. [^6][^2] That is one of the two true statements in the true/false question, and it is true for the structural reason above, not as a guess.
+
+These tools are not a failure. They are purpose-built for analysis, and analysis is a legitimate export purpose. [^6] The mistake is using them for extraction, which is the first exam trap for this objective. [^2]
+
+## Export considerations: every export is filtered by the running user
+
+Now the consideration that silently changes your export results, and the one the exam treats as the trap.
+
+Every export out of Salesforce is subject to the access of the user running it. Field-level security controls which fields a user can see, and row-level access controls which records a user can see. [^11][^9] Both apply to exports, which means an export is not a snapshot of the org; it is a snapshot of what that particular user is allowed to see.
+
+Data Loader makes this explicit. If you run an export with no filter conditions, you get all the data to which you have read access, and read access is governed by sharing. [^4] The Replication API has the same behavior, and it is documented the same way: getUpdated() retrieves the IDs of data to which the logged-in user has access, and data outside the user's sharing model is not returned. [^12]
+
+The practical consequence is that two users can run the same export and get different files. [^4][^12] An administrator exporting with broad sharing sees the full population. A sales manager whose sharing only reaches their own records sees only their team's. [^9] If you build a backup or a warehouse feed on exports run by a restricted user, your downstream copy is missing records you never knew were missing. [^4]
+
+![Every export is filtered by the running user: field-level security controls which fields and row-level sharing controls which records, so an administrator with broad sharing gets the full file while a sales manager with restricted sharing gets a shorter file silently](</diagrams/day-39-mg-3a-exporting-from-salesforce-data-export-data-loader/3-running-user-filter.png>)
+
+This is the heart of the third exam trap. Exports are limited by the running user's access, so an export can silently omit data the user cannot see. [^2] The word that makes it a trap is "silently." Nothing tells you the export is short. The record count is just smaller than you expected, and unless you know the user's sharing model, you have no idea why. [^2]
+
+So the control is deliberate: run extraction with a service identity whose sharing you understand, verify the row count against a known baseline, and never assume an export is org-complete just because it ran successfully. [^2][^12]
+
+## Selectivity at LDV: filter on indexed fields or time out
+
+The second consideration is performance, and it is the one that makes large exports hard.
+
+A large-volume export has to be selective. That means the query must filter on indexed fields, reducing the number of rows Salesforce has to scan. [^13] SOQL queries, including those that drive exports, must be selective for best performance, and Salesforce can terminate non-selective queries that run against large objects to avoid long execution times. [^13]
+
+![Selectivity at large data volume: a selective query filters on an indexed field and runs, while a non-selective query does a full scan and times out at LDV](</diagrams/day-39-mg-3a-exporting-from-salesforce-data-export-data-loader/4-selectivity-ldv.png>)
+
+Why does this matter for an export specifically? Because an export is a query over your whole object, and at LDV an unselective query over a large object is exactly the kind that drags or times out. [^1][^13] The guidance for large data volumes is to reduce query scope and use selective filters, and to consider Bulk API 2.0 query for the heaviest exports. [^1]
+
+The quiz builds one of its three questions directly on this. Why must large exports filter on indexed fields? Because non-selective queries time out at large data volumes, and indexed filters keep extraction performant. [^2][^13] The distracting answers are the ones that claim exports cannot use SOQL at all (they can, Data Loader and the Bulk API both run SOQL), or that reports require it, or that encryption requires it. None of those is the reason. [^2][^13]
+
+So the export discipline at scale looks like lesson 37's load discipline, just in reverse: scope the query to indexed filters, window the extraction, and schedule it sensibly. [^1][^13] A Bulk API query job that pulls everything from a 50-million-row object every night is a design that will not last. A job that pulls by an indexed filter and an incremental timestamp is a feed you can run forever. [^1][^13]
+
+## Backup versus extraction: Data Export is coarse, not a restore
+
+There is a distinction the exam wants you to hold clearly in your head, between exporting data as a backup and extracting data for a purpose.
+
+The Data Export service is a backup-oriented, complete export of the org's record data into CSV files. [^3] But it is a coarse backup, and Salesforce's own guidance is blunt about what that means. A backup of your data is not the same as a backup of your metadata, and both matter if you ever need to restore. [^8] Data refers to records like Accounts, Contacts, and custom object rows. [^8] Metadata is your configuration, your custom fields, page layouts, reports, dashboards, and code. [^8] The Data Export service delivers record data as CSV; it does not capture your metadata as a restore mechanism, and it provides no point-in-time restore on its own. [^8]
+
+A true backup-and-restore strategy for an org that needs it typically involves more, and Salesforce points to third-party options for comprehensive backup. [^8] Tools that automate backups of both data and metadata, and that provide a mechanism to restore that data easily, are the ones that close the gap the native export leaves open. [^8][^14]
+
+This distinction is the second exam trap. Assuming scheduled Data Export is a full backup-and-restore solution is wrong, because it is coarse, does not capture all metadata and files, and offers no point-in-time restore. [^2][^8] It is a scheduled snapshot for a defined set of records, and you should treat it that way, not as your disaster recovery plan. [^8]
+
+So when a stakeholder says "we're covered, we run the weekly data export," the architect's response is a question: covered for what? If the requirement is a weekly record snapshot you can audit, the Data Export service gives you that. [^3] If the requirement is restoring an org, its metadata, its files, and its records to a past point in time, you have engineering to do well beyond a CSV export. [^8][^14]
+
+## Incremental exports: pull only what changed
+
+The export that keeps a warehouse fresh is the incremental one, and it is worth its own section because it is the modern answer to the recurring feed question.
+
+For a warehouse feed, you want to extract by SystemModstamp or last-modified to pull only the records that changed since the last run, rather than re-extracting everything each cycle. [^15] Salesforce documents this directly for outbound integration: for queries, consider using SystemModstamp to control which records get exported, and the getUpdated() API call uses SystemModstamp as well. [^15]
+
+This is the difference between a full extract and a delta extract. A full extract reads your whole object every run, which is expensive and at LDV becomes impossible on a reasonable schedule. [^1][^15] A delta extract reads only the records whose SystemModstamp falls in the window since the last successful run, which is a fraction of the data. [^15] Running a full LDV export on a schedule when an incremental will do is the kind of design a data architect is expected to reject. [^15]
+
+![Incremental extraction by SystemModstamp: a full extract reads the whole object every run and is rejected for a recurring feed, while a delta extract pulls only records changed since the last run and keeps the feed current at LDV](</diagrams/day-39-mg-3a-exporting-from-salesforce-data-export-data-loader/5-incremental-systemmodstamp.png>)
+
+The exam frames this as the signature scenario of the objective. A team needs a recurring nightly feed of changed records to a warehouse. The right answer is a Bulk API query job that extracts incrementally by SystemModstamp. [^2][^15] The weekly Data Export files, the report export, and the list view export are all the wrong tool for the same reasons already covered: the Data Export file is scheduled backup on the wrong cadence, and reports and list views are limited analysis tools. [^2][^3][^6]
+
+You will see the delete gap in lesson 40, because incremental extracts have a well-known blind spot: they catch records that changed, but a deleted record does not appear in a last-modified query unless you detect it explicitly. [^2] For this lesson, the point is the positive direction: incremental extraction by SystemModstamp keeps a recurring feed pulling only what changed, which is critical at LDV. [^15]
+
+## Compliance: exporting personal data means respecting classification
+
+The final consideration is regulatory, and it applies whenever an export moves personal data out of the org.
+
+When you export data that is subject to classification, GDPR, or other data protection controls, the export itself becomes a data movement you have to govern. [^2] The architect's job is to map the controls onto the exported copies, not to assume they follow the data on their own.
+
+Three controls are the ones this objective names. First, encryption: the data must be protected while it is in transit to the destination. [^2] Second, access control: the destination where the exported data lands must be restricted to the people who should see it. [^2] Third, retention: the exported copies are subject to retention rules, which means you define how long they live and how they are disposed of, just as you would for the data in the org. [^2]
+
+Treat this as part of the export design, not an afterthought. The same export that is a simple CSV to one engineer is a compliance event to the person who owns the data. [^2] The export configuration should record what is being exported, where it goes, who can reach it, and how long it is kept. That is the governance layer that keeps an extraction from becoming a liability.
+
+## Configuration walkthrough: choosing the export tool
+
+Work these steps in order, and they map one-to-one onto the four tool families. [^2]
+
+1. For scheduled backups, enable the Data Export service on a weekly or monthly cadence and store the resulting files securely. [^3] Go to Setup, find Data Export, choose whether to schedule or run now (subject to the frequency limit for your edition), and move the files to controlled storage within the download window. [^3]
+
+2. For tactical extraction, use Data Loader, in its GUI or command line form, with a SOQL query scoped by indexed filters. [^4][^13] Log in with the identity whose access matches what you want to export, build the query, choose the fields, set selective conditions, and export to CSV. [^4][^13]
+
+3. For recurring warehouse feeds, use Bulk API query jobs or an ETL tool driving the Bulk API, extracting incrementally by SystemModstamp. [^1][^15] Scope the query to indexed filters, window the extraction, schedule the job, and write down the last successful timestamp so the next run pulls only what changed. [^1][^15]
+
+4. For user analysis, use reports and list views within their row limits. [^6][^10] Build the report or list view, let the user export to CSV or Excel, and accept the limits that come with the tool. [^6][^10]
+
+5. Apply security and compliance controls to the exported files, per data classification: encryption in transit, access control on the destination, and retention rules on the exported copies. [^2] Record what was exported, where it went, who can reach it, and how long it is kept. [^2]
+
+That is the whole objective in five steps. Scheduled backup, tactical pull, recurring feed, analysis export, and governance on top. [^2]
+
+## Worked example: the recurring nightly feed
+
+Put the pieces together on the case the quiz uses, because it is the objective's signature scenario. [^2]
+
+A team needs a recurring nightly feed of changed records to a data warehouse. Management wants the warehouse to stay current with Salesforce, and the org is not small: the Account object alone holds millions of rows. [^2]
+
+Rule out the tools first. Weekly Data Export files are the wrong cadence, because a weekly backup cannot feed a nightly load, and Data Export is scheduled backup rather than a feed. [^3] Report exports are also wrong, because they have row limits and are analysis tools, not extractors. [^6] List view exports are wrong for the same reason. [^6]
+
+That leaves the Bulk API query job, extracting incrementally by SystemModstamp. [^1][^15] You build a query job that returns records whose SystemModstamp is after the last successful run. [^15] You scope the query to indexed filters so it stays selective and does not time out at large volume. [^13] You run it nightly, write down the watermark timestamp each time, and the feed stays current without re-reading the whole object every night. [^1][^15]
+
+Every tool you ruled out was not wrong because it is useless; it was wrong because it does not fit the volume and purpose. That is the entire exam skill for this objective, and it is the same skill in the true/false question: you sort the true statements from the false ones by holding each tool's limits in your head. [^2]
+
+## Exam traps
+
+Three traps cover this objective, and each one is a real wrong choice people make. [^2]
+
+The first is using report or list view exports for large-volume extraction. They have row limits, the report interface caps rows, the exports cap rows and columns, and they are not LDV tools. [^6][^10] If you need to extract a large data set, you use Data Loader or the Bulk API, not a report. [^2]
+
+The second is assuming scheduled Data Export is a full backup and restore solution. It is coarse, it does not capture all metadata and files, and it offers no point-in-time restore. [^8] It is a scheduled snapshot, and a real restore strategy may need a third-party backup product. [^8]
+
+The third is forgetting that exports are limited by the running user's access, so an export can silently omit data the user cannot see. [^2] Field-level security and row-level sharing both apply to exports, so two users can export different files from the same org, and a restricted export looks complete when it is not. [^2][^4]
+
+## The export decision, in one line
+
+Match the export tool to the job: Data Export for scheduled backup, Bulk API for LDV feeds, reports for analysis, and every export governed by the running user's access and the data's classification. [^2]
+
+## Try it for yourself
+
+Take the recurring nightly feed case and write the plan in five bullets: the tool you choose for the feed and why the other three families are wrong for it; the field you key the incremental extraction on and why that keeps the feed from re-reading everything; the export consideration that means the same export run by two users returns two different files, and how you prevent a silent undercount; why scheduled Data Export is a coarse backup rather than a full point-in-time restore, and what a true restore strategy needs beyond it; and the three controls you apply to an exported file that contains personal data. Then reverse the exercise: state the scenario where a report export is the right choice despite its row limits, and name the two export families you would never use for a 50-million-row warehouse feed. Finally, write the two-line answer to the trap: why must large exports filter on indexed fields, and why does an export run by a restricted user look complete when it is not? [^2][^13][^4]
+
+## What's next
+
+Lesson 40 of 42 is up next: Export scenarios (mg-3b). Where this lesson taught you the four export tools and how to match them to volume and purpose, lesson 40 moves from tools to scenarios. It covers full versus incremental exports, when to extract for archival before purging data, and how to plan a large-volume export so it stays on schedule and within limits. You will work the delete handling gap that incremental extracts leave open, and you will face that signature verification decision: the export is only done when you have proven its completeness, especially when the source data is about to be deleted.
+
+## Related lessons
+
+- Lesson 40 of 42 (mg-3b): Export scenarios: full vs incremental, archive, and large-volume export planning
+- Lesson 37 of 42 (mg-2a): LDV migration performance: Data Loader, Bulk API, parallel jobs, and batching
+- Lesson 25 of 42 (gv-1a): GDPR-compliant data model: identify, classify, and protect personal data
+
+## References
+
+[^1]: General Guidelines for Data Loads, Bulk API and Bulk API 2.0 Developer Guide, Salesforce Developers. Defines parallel and serial concurrency modes, batch sizing, parent-first organization, and deferring sharing, and covers Bulk API query jobs for efficient large-volume extraction, the load lever this lesson applies in reverse to exports. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-planning-guidelines.html)
+
+[^2]: Salesforce Certified Platform Data Architect Exam Guide, Salesforce. Defines the Data Migration (15%) domain and the objective mg-3a: compare and contrast various techniques and considerations for exporting data from Salesforce, including Data Export service, Data Loader export, API-based extraction, and reporting exports, and their suitability for different volumes and purposes. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&type=1)
+
+[^3]: Export Backup Data from Salesforce, Salesforce Help. Documents the native Data Export service: weekly or monthly backups depending on edition, CSV files, a manual-export frequency limit of once every 7 days (weekly) or 29 days (monthly), and that scheduled backups are available. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.admin_exportdata.htm&language=en_US&type=5)
+
+[^4]: Export Data from Salesforce, Salesforce Help. Documents Data Loader's export flow: choose an object, build a SOQL query, select fields and optional conditions, and export to a CSV, with the note that if you set no conditions, Data Loader returns all the data to which you have read access. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.exporting_data.htm&language=en_US)
+
+[^5]: Work with Large Datasets, Salesforce DX Developer Guide. Documents the data export bulk command, which uses Bulk API 2.0 and a SOQL query to export a large data set, supporting programmatic, automatable extraction (the recurring warehouse feed pattern). [developer.salesforce.com](https://developer.salesforce.com/docs/platform/sfdx-dev/guide/sfdx-dev-data-bulk.html)
+
+[^6]: Reports and Dashboards Limits and Allocations, Salesforce Help. Documents that reports display a maximum of 2,000 rows, that a report export can time out after about 10 minutes, and that a user can export a limited number of reports at once, the limits that disqualify reports-for-extraction at LDV. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=analytics.rd_reports_dashboards_limits.htm&language=en_US&type=5)
+
+[^7]: Salesforce Data Export FAQ, Salesforce Help. Documents that a large org's export is split across multiple archives, each containing one or more CSV files and up to approximately 512 MB, and that only one file can be downloaded at a time with a wait between downloads. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000383962&language=en_US&type=1)
+
+[^8]: Best Practices to Back Up Salesforce Data, Salesforce Help. Distinguishes data from metadata, notes that native export is not a metadata backup and provides no restore on its own, recommends a manual point-in-time backup before major data projects, and points to third-party partners for comprehensive backup of data and metadata with easy restore. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000334121&language=en_US&type=1)
+
+[^9]: Data Loader Guide, Salesforce. Documents the permissions required to use Data Loader, including API Enabled and read access on the records being exported, and explains that an export returns the data to which the user has read access. [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/salesforce_data_loader.pdf)
+
+[^10]: Export a Report, Salesforce Help. Documents report export limits: a matrix report exported using the formatted option returns up to 2,000 rows and 100 columns, and a tabular or summary report exported using the formatted or Details Only XLSX option returns up to 100,000 rows and 100 columns. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=analytics.reports_export.htm&language=en_US)
+
+[^11]: Set Field-Level Security for a Field on All Permission Sets, Salesforce Help. Explains that field-level security controls the specific fields a user can see and edit on records, the control that applies to exports and makes them user-dependent. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_fields_fls_permsets.htm&type=5)
+
+[^12]: Data Replication Steps, SOAP API Developer Guide, Salesforce Developers. Documents that getUpdated() and getDeleted() retrieve the IDs of data to which the logged-in user has access, and that data outside the user's sharing model is not returned, the access-scoping behavior that filters exports. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api/guide/data-replication-steps.html)
+
+[^13]: Make Salesforce Platform SOQL Query Selective, Salesforce Help. Explains that a query is selective when a filter is on an indexed field and reduces the result below the selectivity threshold, and that non-selective queries require a full scan, the rule that governs large export performance. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385218&language=en_US&type=1)
+
+[^14]: Backup and Recover for Salesforce, Salesforce Help. Describes a backup product that creates daily backups of data, attached files, metadata, managed packages, and sandboxes, and provides a restore application, the level of protection third-party backup fills beyond native export. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.backup_recover.htm&language=en_US&type=5)
+
+[^15]: Incremental Processing for Heavy Bulk API and DML Use Cases, Salesforce Help. Documents using SystemModstamp or a record-level flag to control which records get exported from Salesforce, and notes that the getUpdated() API call also uses SystemModstamp, the basis of incremental extraction for recurring feeds. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000382007&language=en_US&type=1)

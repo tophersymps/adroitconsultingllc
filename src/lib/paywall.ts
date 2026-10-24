@@ -85,3 +85,24 @@ export function buildPaywallView(input: {
     ),
   };
 }
+
+/**
+ * R2-5: the paywall for a surface whose course row could NOT be read (the
+ * Data API token route was rate-limited / unreachable).
+ *
+ * A token-route failure is not a publication-state change: the page must still
+ * render the guest/paywall view of a live course at 200 rather than 404 or
+ * 500. With no course row there is no access model to read, so the most
+ * restrictive option set is used — degradation must never grant access.
+ */
+export function buildDegradedPaywallView(
+  series: LearningSeries,
+  peekLessonSlug: string | null,
+): PaywallView {
+  return {
+    courseName: series.name,
+    gradient: series.gradient,
+    peekLessonSlug,
+    options: accessOptionsForModel("one-time", null),
+  };
+}

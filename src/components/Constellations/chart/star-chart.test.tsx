@@ -331,3 +331,23 @@ describe("StarChart — degraded data", () => {
     expect(screen.getByTestId("cxc-star-chart")).toBeInTheDocument();
   });
 });
+
+describe("StarChart — hydration-stable graticule (QA R2-4 F4)", () => {
+  it("serialises every graticule coordinate at <= 4 decimals", () => {
+    render(<StarChart figures={SKY} focusSlug={null} onFocusChange={() => {}} />);
+    const lines = Array.from(
+      document.querySelectorAll<SVGLineElement>(".cxc-graticule line"),
+    );
+    expect(lines.length).toBe(24);
+    // Math.sin/cos disagree in the last ULP between the Node server build and
+    // the browser, so a raw float attribute (e.g. y1="390.0961894323342" vs
+    // "390.09618943233426") hydrates as an attribute mismatch (React #441) on
+    // every series page. Rounding makes both sides emit identical text.
+    for (const line of lines) {
+      for (const attr of ["x1", "y1", "x2", "y2"]) {
+        const value = line.getAttribute(attr) ?? "";
+        expect(value).toMatch(/^-?\d+(\.\d{1,4})?$/);
+      }
+    }
+  });
+});

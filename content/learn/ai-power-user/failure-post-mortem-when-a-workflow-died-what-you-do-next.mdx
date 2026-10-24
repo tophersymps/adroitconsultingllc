@@ -1,0 +1,128 @@
+---
+title: "Lesson 24: Failure Post-Mortem: When a Workflow Died, What You Do Next"
+slug: failure-post-mortem-when-a-workflow-died-what-you-do-next
+series: "ai-power-user"
+lesson: 24
+excerpt: "A workflow that dies is not a dead end. It is a source of information. This lesson shows how to run a blameless post-mortem: separate the symptom from the root cause, trace the chain with five whys, and turn the failure into fixes that keep the same mistake from taking down the next workflow."
+date: "October 17, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [LLMs, AI Power User, Workflow, Reliability, Post-Mortem]
+---
+
+Every workflow in this course will eventually die. Not because you built it badly. Because anything that runs long enough breaks, and the tools and models underneath your workflows change, drift, and get retired. Lesson 23 was about keeping a workflow alive as the ground under it moves. This lesson is about the day the ground moves and the workflow does not survive it: it stops, it breaks, or it quietly produces nothing, and you have to figure out why.
+
+The instinct when a workflow dies is to fix it fast and move on. That instinct is wrong, or at least incomplete. A dead workflow is not just a problem to solve. It is a source of information. It tells you where your assumptions were wrong, where your checks were missing, and where the next workflow you build will fail the same way. The skill this lesson teaches is how to read that information: how to run a post-mortem on a dead workflow, how to separate the symptom you noticed from the root cause that killed it, and how to turn the failure into fixes that keep the same mistake from taking down the next one.
+
+## Define the terms
+
+A post-mortem is a structured review of a failure, written after the fact. The name comes from medicine, where it means an examination after death to find out what killed the patient. In your workflow it means the same thing: a careful look at a dead workflow to find out what killed it. Google's Site Reliability Engineering team, which runs some of the largest systems on the internet, defines a post-mortem as a written record of an incident, its impact, the actions taken to mitigate or resolve it, the root cause or causes, and the follow-up actions to prevent it from recurring. [^1] The point is not to describe the failure. It is to understand it well enough to stop it from happening again.
+
+An incident is the failure event itself: the workflow stopped, or broke, or produced bad output. A symptom is what you noticed, the observable sign that something was wrong. The report did not arrive. The numbers were wrong. The workflow errored out. A root cause is the underlying condition that, if you fix it, prevents the failure from recurring. A proximate cause is the immediate trigger, the thing that happened right before the failure. The distinction between the two is the heart of this lesson, because most people stop at the proximate cause and never reach the root cause.
+
+Here is the distinction made concrete. A workflow dies because a data source changed its format and the tool could not read it. The proximate cause is the format change. The root cause is that the workflow had no check that its output was non-empty, so the failure went unnoticed until a human happened to look. Fixing the proximate cause, re-teaching the tool the new format, gets the workflow running again. Fixing the root cause, adding a check that the output is non-empty, keeps the same failure from happening again the next time the format changes. The post-mortem exists to find the root cause, not just the proximate one.
+
+![Proximate cause versus root cause: the proximate cause is the immediate trigger you cannot control, while the root cause is the underlying condition you can fix. For Marcus's dead report, the data source format change was proximate and the missing non-empty check was the root cause.](</diagrams/failure-post-mortem-when-a-workflow-died-what-you-do-next/1-proximate-vs-root-cause.png>)
+
+A blameless post-mortem is one that focuses on the system and the sequence of events, not on who is at fault. Google's SRE team treats blamelessness as a core tenet: the goal is to identify the contributing causes without indicting any individual or team, because when people fear blame they stop reporting problems honestly, and the whole point of the exercise collapses. [^1] [^2] This matters for a solo workflow too, even though there is no team to blame. If you run a post-mortem on your own workflow and the conclusion is "I was careless," you have learned nothing you can act on. If the conclusion is "the workflow had no check for empty output," you have found something you can fix. Blameless is not about being nice. It is about finding causes you can actually change.
+
+The five whys is the technique you use to reach the root cause. It comes from the Toyota Production System, where it was described by Taiichi Ohno as the basis of Toyota's scientific approach: ask why five times, and the nature of the problem as well as its solution becomes clear. [^3] [^4] You start with the symptom, ask why it happened, then ask why of that answer, and keep going until you reach a cause you can fix. Five is a guideline, not a law. You stop when the answer is something you can act on, and you keep going when it is not. [^4]
+
+An action item is a specific fix that comes out of the post-mortem, with an owner and a deadline. A post-mortem that ends with a list of action items but no one assigned to do them is a report, not a fix. Google's SRE team is explicit that the follow-up actions are the point: the post-mortem is only as good as the preventive actions it produces. [^1] [^2]
+
+## The worked example: Marcus's weekly client report dies
+
+Marcus runs a weekly client status report for his consulting team. Every Friday at 5pm, a workflow pulls the week's project updates from a shared tracker, summarizes them, and emails a one-page report to the client. It has run for six months without a problem, and Marcus has stopped thinking about it. It is the kind of workflow that runs so reliably that it becomes invisible, which is exactly the kind that hurts most when it dies.
+
+On a Friday in week twenty-six, the report does not arrive. Marcus notices on Monday morning, when the client emails asking where it is. He checks the workflow. It shows as having run on Friday at 5pm, and it shows no error. But there is no report in the client's inbox, and there is no report in his own sent folder. The workflow ran, and it produced nothing. This is the quietest way a workflow dies, and it is the one this lesson is built around: not a crash with an error message, but a run that completes and delivers nothing.
+
+![The quiet way a workflow dies: the workflow ran at 5pm with no error, but the data source format change made the track reading step return empty and, with no non-empty check, the workflow produced nothing. No report reached the client's inbox.](</diagrams/failure-post-mortem-when-a-workflow-died-what-you-do-next/2-quiet-death-timeline.png>)
+
+Marcus's first instinct is to re-run it and see if it works now. That instinct is worth resisting, because re-running a dead workflow without understanding why it died tells you almost nothing. If it works on the re-run, you have a working workflow and no idea what broke it, which means it will break again. If it fails again, you have the same failure and no more understanding. The post-mortem starts before the re-run, with the question of what actually happened.
+
+Marcus runs the post-mortem in four steps, and they are the four steps this lesson teaches.
+
+![The four-step blameless post-mortem: build the timeline, assess the impact, find the root cause with five whys, and write action items with owners and deadlines. Each step produces the input the next step needs.](</diagrams/failure-post-mortem-when-a-workflow-died-what-you-do-next/3-four-step-post-mortem.png>)
+
+### Step one: build the timeline
+
+The first thing Marcus does is reconstruct what happened, in order, with times. The workflow ran at 5pm on Friday. It pulled the project updates. It generated a summary. It attempted to send the email. Somewhere in that chain, it stopped producing output. Marcus checks the workflow's run log and finds the moment it went wrong: the step that reads the shared tracker returned an empty result, and the workflow, which had no check for an empty result, treated that as a normal run and continued to the end. The timeline tells him the failure was not in the email step. It was in the data step, and it happened before the summary was ever generated.
+
+The timeline matters because it separates the symptom from the cause. The symptom was "no report arrived." The timeline shows the report was never generated, because the data step came back empty. That is a different problem with a different fix. Without the timeline, Marcus would have spent his time on the email step, which was never the problem.
+
+### Step two: assess the impact
+
+The second step is to be honest about what the failure cost. Marcus's report was a day late, and the client had to ask where it was. That is a small impact, but it is not zero. It cost the client a follow-up email, it cost Marcus a Monday-morning scramble, and it cost the team a little trust in a report they had come to rely on. Impact assessment is not about catastrophizing. It is about deciding how much effort the fix deserves. A workflow that dies and costs nothing might get a light fix. A workflow that dies and costs a client relationship gets a thorough one. Marcus's report sits in the middle, and the honest assessment tells him it deserves a real fix, not a patch.
+
+### Step three: find the root cause with five whys
+
+Now Marcus asks why, five times, and this is where the post-mortem earns its keep.
+
+Why did the report not arrive? Because the workflow produced no output.
+
+Why did it produce no output? Because the step that reads the shared tracker returned an empty result.
+
+Why did it return an empty result? Because the tracker's data source changed its format, and the workflow could not read the new format, so it read nothing.
+
+Why did the workflow not notice? Because it had no check that the data step returned a non-empty result, so an empty read looked like a normal run.
+
+Why was there no such check? Because when Marcus built the workflow, he tested it on a day when the data was present, and he never added a check for the case where the data was absent. [^5]
+
+The fifth why lands on something Marcus can fix: the workflow has no guard against empty input, and it never did. That is the root cause. The proximate cause was the format change, which Marcus could not have predicted and cannot fully control. The root cause is the missing check, which he can fix today. [^5] The five whys turned a vague "the workflow broke" into a specific, actionable "the workflow has no check for empty input, and I need to add one."
+
+![Five whys on Marcus's dead report: ask why five times from the missing report down to the root cause, that the workflow had no guard against empty input because it was tested only when data was present.](</diagrams/failure-post-mortem-when-a-workflow-died-what-you-do-next/4-five-whys-chain.png>)
+
+### Step four: write action items, not just conclusions
+
+The last step is to turn the root cause into fixes with owners and deadlines. Marcus writes two action items. The first is immediate: add a check to the workflow that fails loudly if the data step returns an empty result, so the next time the data source changes, the workflow stops and tells him, instead of silently producing nothing. [^5] The second is preventive: add the data source's format to his runbook, so that when it changes again, he has a record of what it used to look like and what to check. [^6] Both have a deadline, and both have an owner, which is Marcus. A post-mortem with no action items is a story. A post-mortem with action items is a fix.
+
+## Why the post-mortem is blameless, even when it is just you
+
+The blameless principle matters most when there is no one else in the room, because the person you are tempted to blame is yourself. When Marcus's workflow died, the easy conclusion was "I should have built it better." That conclusion is true and useless. It does not tell him what to do next. The blameless conclusion, "the workflow had no check for empty input," tells him exactly what to do next. [^1] [^2]
+
+This is the deeper reason the course has spent so long on versioning, testing, and documentation. Those habits are not about being perfect. They are about making failures diagnosable. A workflow with a saved baseline, a changelog, and a runbook is a workflow whose post-mortem is fast, because you can see what changed and what the workflow was supposed to do. [^6] [^7] A workflow with none of those is a workflow whose post-mortem is guesswork, because you have no record of what it did when it worked. The post-mortem is the last layer of the reliability habit, and it depends on all the layers before it.
+
+## How to run a post-mortem on your own dead workflow
+
+You do not need a team or a formal process to run a post-mortem. You need the four steps and a willingness to be honest. Here is the pattern, sized for one person and one workflow.
+
+First, write the timeline. Reconstruct what happened in order, with times, from the workflow's run log and your own memory. Do not skip this because it feels like paperwork. The timeline is what separates the symptom from the cause, and it is the step most people skip when they are in a hurry to fix things.
+
+Second, assess the impact honestly. What did the failure cost, in time, in trust, in missed deadlines? This decides how much effort the fix deserves. Be honest about it. A failure that cost nothing does not need a week of work. A failure that cost a client relationship needs more than a quick patch.
+
+Third, run the five whys. Start with the symptom and ask why until you reach a cause you can fix. [^3] [^4] The discipline is to keep going past the proximate cause. The format change is not the root cause. The missing check is. If your five whys end with "the tool broke" or "the vendor changed something," you have not gone deep enough, because neither of those is something you can fix. Keep asking until the answer is something you can act on.
+
+Fourth, write action items with owners and deadlines. For a solo workflow, the owner is you, and the deadline is a date, not "someday." A post-mortem that produces no action items has produced nothing. [^1] [^2]
+
+There is one more step that separates a good post-mortem from a great one, and it is the step that makes the failure worth something: ask what the next workflow you build should learn from this one. Marcus's missing check is not just a fix for his report. It is a lesson for every workflow he builds from now on: every workflow needs a guard against empty or bad input, and every workflow needs to fail loudly when it cannot do its job. [^5] The post-mortem is not just about the workflow that died. It is about the workflows that have not been built yet.
+
+## Try it
+
+Give yourself forty-five minutes and run a post-mortem on a workflow that has failed you, or on the workflow you smoke-tested in Lesson 23 if it has ever misbehaved. [^8] You need the workflow's run log if it has one, and your own memory of what happened.
+
+Step one, write the timeline. Reconstruct what happened in order, with times. Step two, assess the impact honestly. Step three, run the five whys until you reach a cause you can fix. [^3] [^4] Step four, write at least one action item with a deadline. Then ask the last question: what should the next workflow you build learn from this one?
+
+Below is a try-it prompt that runs the post-mortem with you rather than doing it for you. The trap in a post-mortem is stopping at the proximate cause, so the tool should push you past it.
+
+> You are helping me run a blameless post-mortem on a workflow that failed. I will paste the workflow's purpose, what it was supposed to do, what I observed when it failed, and any run log or error I have. Be critical. First, help me build a timeline of what happened in order. Second, help me assess the impact honestly, including what it cost in time and trust. Third, run a five-whys analysis starting from the symptom, and do not let me stop at a proximate cause like "the tool broke" or "the vendor changed something": keep asking why until we reach a cause I can actually fix. Fourth, turn the root cause into at least one specific action item with an owner and a deadline. Finally, ask me what the next workflow I build should learn from this failure, and push me to name one concrete change I will make.
+
+Run that once and you will have done what this lesson is really teaching: you will have turned a dead workflow from a problem into a lesson. The workflow that died is gone. The lesson it leaves behind is the part that lasts, and it is the part that makes the next workflow you build more likely to survive.
+
+## What's next
+
+This lesson took the reliability habit the course has been building, versioning, testing, review gates, documentation, keeping current, and added the last layer: what to do when a workflow dies anyway. You now know how to run a blameless post-mortem, how to separate the symptom from the root cause with five whys, and how to turn a failure into action items that keep the same mistake from taking down the next workflow.
+
+The next lesson turns from the failure itself to the judgment that prevents it. Lesson 25 is titled The power user's mental model: judging a tool's reliability. Where this lesson was about what to do after a workflow dies, Lesson 25 is about the judgment you bring to every tool you build on: how to look at a tool, a model, or a platform and form an honest estimate of how reliable it is before you trust it with a workflow. It covers the signals that separate a dependable tool from a fragile one, how to weigh a vendor's track record against its promises, and how to build your own mental model of what you can count on.
+
+Come to Lesson 25 with the post-mortem you just ran, because the two lessons are two halves of the same skill. The post-mortem tells you what to do when a tool fails. The mental model tells you which tools are worth trusting in the first place. Together they are the difference between a power user who reacts to failures and one who sees them coming.
+
+[^1]: John Lunney and Sue Lueder, "Postmortem Culture: Learning from Failure," in Site Reliability Engineering (Google, 2016), (defines a post-mortem as a written record of an incident, its impact, the actions taken to mitigate or resolve it, the root cause(s), and the follow-up actions to prevent recurrence; states that the primary goals are to document the incident, understand all contributing root causes, and put effective preventive actions in place; and treats blameless post-mortems as a core tenet of SRE culture, focused on identifying contributing causes without indicting any individual or team). [sre.google](https://sre.google/sre-book/postmortem-culture/)
+[^2]: Daniel Rogers, Murali Suriar, Sue Lueder, Pranjal Deo, and Divya Sudhakar, "Postmortem Culture: Learning from Failure," in The Site Reliability Workbook (Google, 2018), (describes how a blameless post-mortem culture results in more reliable systems, focuses on what went wrong rather than who caused it, and aims action items at improving the system instead of improving people). [sre.google](https://sre.google/workbook/postmortem-culture/)
+[^3]: "Five whys," Wikipedia, (traces the technique to the Toyota Production System, where Taiichi Ohno described it as the basis of Toyota's scientific approach: ask why five times and the nature of the problem as well as its solution becomes clear). [en.wikipedia.org](https://en.wikipedia.org/wiki/Five_whys)
+[^4]: Atlassian, "The power of 5 Whys: analysis and defense," (explains the five-whys technique, notes that five is shorthand for digging until you hit the broken process behind the incident, and states a foundational rule: never identify a person as the root cause, but instead ask what caused the human error and what process or cultural factor is at play). [atlassian.com](https://www.atlassian.com/incident-management/postmortem/5-whys)
+[^5]: The testing lesson in this series covers dry runs, edge cases, and catching bad output before it ships, the discipline that would have caught Marcus's empty-input case: a workflow tested only on a day when data is present has a blind spot for the day when it is absent. (Series internal, Lesson 10.)
+[^6]: The documenting lesson in this series defines a personal runbook that records which workflows exist, what each one does, and what good output looks like, which is where Marcus records the data source's format so a future change is diagnosable. (Series internal, Lesson 21.)
+[^7]: The versioning lesson in this series defines a baseline as the known-good version you save and never overwrite, and a changelog as the running record of what changed and why, the records that make a post-mortem fast because you can see what changed. (Series internal, Lesson 9.)
+[^8]: The keeping-current lesson in this series introduced the smoke test, a quick check that a workflow still produces its expected output after something changes, which is the workflow Marcus would have caught his failure with if it had been in place. (Series internal, Lesson 23.)
+
+*Note: a post-mortem is a habit, not a feature of any one tool. The exact format differs across teams and vendors, but the transferable pattern is the same: build a timeline, assess impact honestly, trace the root cause with five whys, and write action items with owners and deadlines. Your company's software, data, and acceptable-use policies are the binding rules for how you handle failures in every case.*

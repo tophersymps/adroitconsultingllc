@@ -15,8 +15,9 @@ import ProfileForm from "@/components/Profile/ProfileForm";
 import CertificateSection from "@/components/Profile/CertificateSection";
 import LockedSkyTeaser from "@/components/Constellations/LockedSkyTeaser";
 import FullSkySection from "@/components/Constellations/FullSkySection";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { loadProfileSky } from "@/lib/sky-server";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { loadAchievementStats, loadProfileSky } from "@/lib/sky-server";
 import { avatarHueClass, initialsFromEmail } from "@/lib/avatar";
 import { buildMetadata } from "@/lib/seo";
 import type { UserProfile } from "@/shared/contracts-account";
@@ -74,7 +75,18 @@ export default async function ProfilePage() {
 
   // Constellation + Chronicle (B-18): full-sky hero — the hero IS the starfield.
   // Loads completion events → rank/streak/stats + every course constellation.
-  const sky = await loadProfileSky(user.id);
+  // R2-5: under a token-route failure the sky cannot be read; render the page
+  // with the guest/empty sky rather than 500 (identity itself is known — it
+  // comes from /get-session, which is not rate limited).
+  const sky = await loadProfileSky(user.id).catch(async (err) => {
+    if (!isDbTokenUnavailable(err)) throw err;
+    return {
+      stats: await loadAchievementStats(null),
+      constellations: [],
+      chronicle: [],
+      isGuest: false,
+    };
+  });
 
   return (
     <div className="min-h-screen flex flex-col">

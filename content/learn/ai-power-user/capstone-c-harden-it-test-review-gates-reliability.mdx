@@ -1,0 +1,145 @@
+---
+title: "Lesson 29: Capstone C: Harden It (Test, Review Gates, Reliability)"
+slug: capstone-c-harden-it-test-review-gates-reliability
+series: "ai-power-user"
+lesson: 29
+excerpt: "Capstone B left you with a workflow that passed one dry run. This lesson makes it durable. It covers three layers of hardening: a regression set of past inputs you can re-run after every change, review gates that stop a bad output instead of merely noticing it, and failure handling that makes a broken run loud, early, and cheap. A worked example follows Priya hardening her vendor risk digest and finding three real breaks before the first real month. It ends with a try-it prompt and a hardening checklist you can run against your own capstone."
+date: "October 22, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [LLMs, AI Power User, Workflow, Capstone]
+---
+
+Your capstone now runs. Capstone B got it from trigger to output on a past or fake input, and it passed the checks you wrote in Capstone A. [^11] That is a genuine milestone and it is also the least representative run the workflow will ever have. You chose the input, you were watching, and you were ready to fix whatever broke. Real runs do not offer any of that.
+
+Hardening is the work of making a working workflow survive the runs you did not rehearse: the morning a source file is missing, the month nobody got flagged, the week a vendor changes its name in one system and not the other. None of those are exotic. They are ordinary Tuesdays.
+
+This is Capstone C, and it has one job: make your pipeline fail in ways you can see, at a cost you can absorb, before it ever fails in front of someone who matters.
+
+## Define the terms
+
+**Hardening** is the set of changes that make an existing workflow durable rather than merely functional. It does not add new capability. It changes how the workflow behaves when reality does not match the happy path you built against, and how quickly you find out.
+
+**A regression set** is a fixed collection of past inputs, paired with the outputs you approved for them, that you re-run after every change to the workflow. The name comes from software testing: a regression is when something that used to work stops working. [^5] For a non-technical workflow, the regression set is usually three to six folders of real historical input plus the digest, post, or report you actually sent for each. Small, boring, and the single highest-value artifact in this lesson.
+
+**A review gate** is a stop in the pipeline where a human checks something specific, with a defined pass condition and a record of the decision. Lesson 13 drew the distinction that matters here: a gate is built into the workflow, not bolted on after. [^3] A habit is when you usually remember to look at the draft. A gate is when the deliver step cannot proceed without a decision being written down.
+
+**A silent failure** is a run that reports success while the output is wrong. Lesson 11 named this class, and it is the one that hurts most, because nothing asks for your attention. [^4] The opposite is a loud failure: a step errors, the run stops, a message arrives. You want your quiet failures converted into loud ones, not eliminated (you cannot eliminate them).
+
+**Blast radius** is how much a bad run can touch before anyone notices. One digest going out with a wrong count has a small blast radius. The same wrong count going into a shared dashboard that three teams quote has a large one. Hardening is partly the discipline of keeping the radius small while the workflow is still new.
+
+**Idempotency** is the property that running the same job twice produces the same result as running it once. It sounds abstract until the first time a retry sends your manager the same monthly digest twice, or leaves two dated files on the shared drive, one of which is stale.
+
+## The dry run passed. That is one sample.
+
+A single passing dry run tells you the pipeline can work. It says nothing about how it behaves when an input is shaped differently, and it says nothing about the runs where you are not watching. Richard Cook's essay on complex systems makes the point in a way that transfers cleanly to workflows: catastrophe requires multiple failures, and small, apparently innocuous failures join to create the opportunity for a systemic accident. [^1] Your workflow will rarely break for one dramatic reason. It breaks when a renamed vendor meets a column that shifted and a check that was never really checking anything.
+
+That is why hardening is not "test it once more and call it done." It is building a small amount of machinery that keeps answering the same three questions every month: does the pipeline still produce the right output for inputs it has seen before, does a human stop it when the output is questionable, and do I find out quickly when it breaks.
+
+![Hardening has three layers: a regression set that catches changes you made, a review gate that catches output that is wrong in a way tests cannot see, and failure handling that makes a broken run loud and cheap instead of silent and expensive](</diagrams/capstone-c-harden-it-test-review-gates-reliability/1-three-layers-of-hardening.png>)
+
+## Layer one: a regression set you can actually run
+
+Assemble your regression set from history, not from imagination. Pick three to six past inputs you already processed by hand or with an earlier version of the workflow, and pair each with the output you actually delivered. For Priya, that means three months of vendor files and the three digests her manager received. For a content workflow, it means four briefs and the four posts that shipped.
+
+The pass condition is comparison, not judgment. When you re-run the workflow on last month's input, either the flagged vendor count matches the digest you sent or it does not. Either the headline is present or it is not. Make the comparison mechanical wherever you can: counts, field presence, required sections, exact strings for anything that carries a number or a name. Save the taste judgments for the review gate, because a regression set that depends on your mood is not a test.
+
+Then extend the set with edge cases. This is where most of the hardening value lives, and it is where a non-technical builder has an advantage over a hasty engineer, because you know which weird months actually happen. Enumerate them from your own experience rather than from a generic checklist: the month a file was late, the time a source added a column without telling anyone, the vendor whose name is spelled two ways across two systems, the quiet month with nothing to report. [^2]
+
+![Six edge cases worth one folder each: missing file, extra column, unmatched vendor name, zero exceptions, duplicate rows, and last month's file still sitting in the folder](</diagrams/capstone-c-harden-it-test-review-gates-reliability/2-edge-case-set.png>)
+
+Write down, for each edge case, two things: what the workflow should do, and how you would know it did it. "Should do" is a decision you have to make now, deliberately, and it is the part people skip. When the file is missing, does the workflow stop and tell you, or does it run with two files and note the gap? Both can be right. Only one of them is right for a digest your manager reads, and if you have not decided, the workflow will decide for you by accident.
+
+## Layer two: turn the habit into a gate
+
+Your capstone has a review step. In Capstone B it was designed as a pause between draft and deliver. Now check whether it is actually a gate, using four tests.
+
+First, does it name the check? "Priya reads the draft" is not a check. "Priya confirms every flagged vendor appears once, with a severity, and that the two priority vendors have a note" is three checks she can pass or fail.
+
+Second, is there a stop condition? If a check fails, the deliver step must not run. This is the difference between a gate and advisory text in a document. In most workflow tools this is a branch: the review step returns a decision, and deliver only runs on approval. If your tool cannot branch, then the gate is a message you must answer before you run the deliver step manually, and the workflow is two runs instead of one. That is fine. A gate that is honored beats an automation that ignores its own gate.
+
+Third, is the decision recorded? A line in the run log with the date, the checks, and your verdict. Without the record, you cannot tell later whether a bad output slipped past you or past the workflow.
+
+Fourth, is there an owner and a deadline? Review gates rot when nobody knows when a pending review is too old. A digest due on the second business day needs the review to have a due time, and a stale-review alert if it passes.
+
+![A habit and a gate look similar in a diagram and behave nothing alike in a bad month: the gate names the checks, blocks delivery on failure, and records the decision](</diagrams/capstone-c-harden-it-test-review-gates-reliability/3-habit-vs-gate.png>)
+
+## Layer three: make failure loud, early, and cheap
+
+Every failure has three properties you can design: how it surfaces, how soon, and what it costs. Defaults are usually the worst of all three: it surfaces as a wrong document, weeks later, at the cost of your credibility.
+
+**Surface it at the step, not the symptom.** The useful message names the step and the input: "validate failed: flag file for October has a new column `issue_type`, expected 6 columns, found 7." A message that says "workflow failed" costs you a re-run to learn anything.
+
+**Distinguish loud from quiet.** Loud failures are easy: a step errors, you get a message. Quiet failures need a check that runs after the fact. The three checks that catch most of them in a workflow like Priya's are count reconciliation (does the flagged count in the output equal the count in the source), field presence (does every required field have a value), and expected-content checks (does the output contain the sections it always contains). When one of those trips, you have a quiet failure being reported as a failure, which is the whole point.
+
+**Alert on absence, not only on error.** A scheduled workflow that never ran produces no error at all, so silence has to be an alarm. Borrow the shape of the four golden signals from Google's SRE book, which names latency, traffic, errors, and saturation as the minimum set worth monitoring for a user-facing system. [^6] A personal workflow needs the equivalent: did it run, did it finish, was the output correct, and is anything getting close to a limit (file size, token budget, retry count). For a monthly digest, a staleness alarm is the highest-value one: if no approved digest exists by 10am on the second business day, one message. [^7]
+
+**Keep the radius small while it is new.** Run the first two real cycles in parallel with your manual process, or deliver to yourself before you deliver to the audience. This is the canary pattern from software delivery, where a new version goes to a small subset before everyone gets it, precisely so that a problem surfaces at a small scale with an easy rollback. [^12] In your terms: the first month, the digest goes to your own folder and you compare it to the one you built by hand. The second month, it goes to your manager with the comparison already done. By the third month, you have two months of evidence and the manual version retires.
+
+**Cap the retries and cap the spend.** A workflow that retries a failing step forever burns tokens and buries the error. Two retries, then stop and tell you. Lesson 19's cost discipline applies here as much as anywhere: an unattended loop is the most expensive kind of bug. [^8]
+
+**Make reruns safe.** The most common hardening miss is not detection, it is recovery. Test what happens when you re-run a step that already half-succeeded. The deliver step should check whether today's dated file already exists and whether the link was already sent, so a retry repairs the run instead of duplicating its output. [^2]
+
+## Worked example: Priya hardens the digest
+
+Priya's workflow has five steps: validate the three files, normalize both sources into the vendor contract shape, draft the digest with her template and house style, review the draft, and deliver the one-pager with the dated filename. [^11] It passed one dry run against last month's files. Here is what she does next, in the order the layers arrive.
+
+**The regression set.** She pulls the last three months of input folders and the three digests she actually sent. She writes the comparison as four mechanical checks: flagged vendor count in the digest equals the count in the flag file, every flagged vendor appears once, every row has a severity and a status, and the digest contains the two required sections (summary and priority notes). She runs it against September and gets a pass, which tells her the set works. Then she runs August and gets a fail on the count: the digest says eleven, the flag file has twelve. She opens both and finds a vendor listed twice, once as "Vendor Inc" and once as "VendorInc." Her normalize step passed both through because neither name matched the accepted list exactly, so it never merged them. That is the first real break found, and it was found in a folder, not in her manager's inbox.
+
+**The edge cases.** She builds six test folders, each containing one deliberate problem: a missing delivery export, a flag file with an extra column, a vendor name that is not on the accepted list at all, a month with zero flagged vendors, a duplicate vendor across both sources, and a folder that still contains the prior month's file. Running all six takes twenty minutes and produces three more findings. The missing-file test passes when it should fail, because validate counts files in the folder and the leftover prior-month file makes the count three. She changes the check to match filenames against the expected month pattern instead of counting whatever is present. The zero-flagged month produces a digest whose summary line reads "review the exceptions below" over an empty table, and the count check passes because blank equals blank; she adds an explicit empty-state line and a check that the count is a number. The duplicate-vendor folder shows her that fixing the name mapping is not enough, because the accepted-list mismatch still splits one vendor into two rows; she adds a dedupe on the normalized vendor key in normalize.
+
+**The gate.** Her old review step was a note to herself. She rewrites it as three named checks with a stop condition. The digest does not leave the draft step unless all flagged vendors appear once with a severity, the count matches the source, and the two priority vendors have a written note. She adds a run-log line she fills in with the date, the count, and her verdict, and a due time of 4pm on the first business day so the second-day delivery is not a scramble. [^3]
+
+**The alarms.** She adds two messages to her own channel. One fires when a step fails, naming the step and the file. The other fires when the post-run checks disagree, which is how a quiet failure becomes loud. She adds a staleness alarm for 10am on the second business day if no approved digest exists. She caps retries at two. And she makes deliver idempotent: before writing, it checks for a file with the current month in the name, and it records the send in the run log so a rerun after a partial failure repairs the run instead of posting the digest twice. [^8]
+
+**The canary.** For the October cycle she runs the workflow and her manual version side by side, compares the two outputs, and sends only the manual one. November she sends the workflow's output, with the comparison already done. December she retires the manual version and adds one line to her runbook recording what the hardening covered and what it still does not: a vendor that is new to both systems in the same month will still land unmatched, and that will surface as a failed check rather than a silent drop. [^10]
+
+![Priya's hardening pass turns six edge cases and one regression fail into four concrete changes: month-pattern validation, an empty-state guard, a dedupe key, and an idempotent deliver step](</diagrams/capstone-c-harden-it-test-review-gates-reliability/4-priya-hardening-findings.png>)
+
+None of those four changes are clever. Each one came from running a folder she already had. That is the whole method: the hardening is not insight, it is coverage.
+
+## What hardening is not
+
+It is not adding steps. A workflow that has grown two extra approval stages and a manual review of the review has not been hardened, it has been inflated, and every added step is another place to fail. If a new step does not catch a failure you have actually seen or can name, leave it out.
+
+It is not eliminating failure. Cook's point about degraded operation is the honest frame: complex systems run with flaws present, and the goal is defenses that divert most trajectories away from the accident, not a system without flaws. [^1] Your workflow will break. Hardening decides whether you find out from a message at 9am or from your manager at noon.
+
+It is not a one-time pass, either. The regression set is worth keeping precisely because it is re-runnable: every time you change a prompt, a template, or a connector, you run it, and you learn in ten minutes whether the change broke August. [^5] That habit is what keeps the workflow from quietly rotting as the tools underneath it update. [^13]
+
+## Try it
+
+Block out two hours and do the three layers in order, because each one makes the next cheaper.
+
+**First, build the regression set.** Pick three to six past inputs and pair each with the output you actually delivered. Write four to six mechanical checks, ideally ones a machine can compare. Run the set. If everything passes, add the edge cases until something fails, because a test suite that has never failed has never tested anything. Store the folders and the checks in your automation library, next to the templates and connectors, so the next workflow can borrow the method. [^9]
+
+**Second, rewrite the gate as a gate.** Name the checks. Define the stop condition. Add the run-log line and the due time. If your tool cannot branch, split the workflow so deliver is a separate, manually triggered run that you only fire after approving.
+
+**Third, wire the alarms and the recovery.** One message for a failed step that names the step and input. One post-run check that catches the quiet failure class you are most exposed to: usually a count mismatch or a missing field. One staleness alarm. A retry cap. And a rerun test: deliberately re-run the deliver step and confirm it does not duplicate anything.
+
+Here is a prompt that runs the audit with you and refuses to be encouraging about it.
+
+> You are auditing a workflow I have already built and run once successfully. I will paste my workflow description step by step, my definition of done, and the list of past inputs I have available. Be adversarial and specific, and do not praise the design. First, propose a regression set of three to six past inputs and, for each, the mechanical checks that would prove the output still matches what I approved. Second, generate an edge-case matrix of at least eight realistic failures for this specific workflow, including the boring ones (missing input, extra column, a name spelled two ways, an empty result set, a duplicate, a stale file in the folder). For each, state what the workflow should do and how I would detect that it did it, and mark any case where I have not actually decided the correct behavior. Third, audit my review step against four tests: does it name the checks, does it block delivery on failure, is the decision recorded, does it have a due time. Fourth, list the failures in my workflow that would currently be silent, meaning the run reports success and the output is wrong, and give me the specific post-run check that would catch each one. Do not tell me the workflow is ready. Tell me what is still unverified.
+
+Run that, then do the work it names. When the regression set passes on every folder including the ugly ones, when the gate blocks a bad output in a test, and when you have seen a deliberate failure produce a message within a minute, you are done with Capstone C.
+
+## What's next
+
+You now have a workflow that has been tested against history and against the failures you can name, gated so a bad draft cannot ship, and instrumented so a broken run tells you instead of hiding. That is a materially different object from the pipeline you had at the end of Capstone B, and it is the thing worth showing someone.
+
+The next lesson is Capstone D: ship, document, and reflect on the full stack. Lesson 30 closes the capstone and the course. You will write the runbook entry that lets you or a colleague operate the workflow without you, [^10] document the stack you built across all four capstone lessons so the decisions are recoverable, run the retro that turns your own build into lessons for the next workflow, [^15] and look back at the full arc from auditing your week to running an automation you own. [^14] Come to Capstone D with your hardened workflow and its run log, because the retro is built from what actually happened, not from what you meant to build.
+
+[^1]: Richard I. Cook, "How Complex Systems Fail," (point 3: catastrophe requires multiple failures, since small, apparently innocuous failures join to create the opportunity for a systemic accident; point 5: complex systems run in degraded mode). [how.complexsystems.fail](https://how.complexsystems.fail/)
+[^2]: The testing lesson in this series covers dry runs, edge cases, and catching bad output, the discipline this lesson extends from one passing run to a repeatable set. (Series internal, Lesson 10.)
+[^3]: The review-gates lesson in this series defines human checkpoints built into a workflow rather than bolted on after, and distinguishes a named check from a glance. (Series internal, Lesson 13.)
+[^4]: The handling-failure lesson in this series defines a silent error as a failure where the system reports success while the output is wrong, the class this lesson converts into loud failures. (Series internal, Lesson 11.)
+[^5]: The quality-bar lesson in this series defines measuring accuracy and catching regressions, the standard the regression set enforces. (Series internal, Lesson 18.)
+[^6]: Google, "Monitoring Distributed Systems," Site Reliability Engineering, (the four golden signals of monitoring are latency, traffic, errors, and saturation). [sre.google/sre-book/monitoring-distributed-systems](https://sre.google/sre-book/monitoring-distributed-systems/)
+[^7]: The scheduling lesson in this series covers cadence, batching, queues, and event hooks, the triggers whose failure modes a staleness alarm watches for. (Series internal, Lesson 12.)
+[^8]: The cost-and-limits lesson in this series covers token budgets and rate limits, the reason an unattended retry loop is capped. (Series internal, Lesson 19.)
+[^9]: The library lesson in this series defines the automation library of reusable building blocks, where a hardened workflow's test folders and checks belong. (Series internal, Lesson 26.)
+[^10]: The documenting lesson in this series builds the personal runbook that records every workflow you own, including what its hardening covers and what it does not. (Series internal, Lesson 21.)
+[^11]: The Capstone B lesson in this series assembles the workflow and proves it with one dry run against the definition of done, the state this lesson hardens. (Series internal, Lesson 28.)
+[^12]: Danilo Sato, "Canary Release," martinfowler.com, 25 June 2014, (a technique to reduce the risk of introducing a new version by slowly rolling the change out to a small subset before making it available to everybody). [martinfowler.com/bliki/CanaryRelease.html](https://martinfowler.com/bliki/CanaryRelease.html)
+[^13]: The keeping-current lesson in this series covers adapting to tool and model updates, the ongoing reason to keep a regression set runnable. (Series internal, Lesson 23.)
+[^14]: The Capstone A lesson in this series defines the scope, the definition of done, and the selection tests the whole capstone is measured against. (Series internal, Lesson 27.)
+[^15]: The post-mortem lesson in this series covers what to do the day a workflow dies, the reflective habits Capstone D's retro draws on. (Series internal, Lesson 24.)

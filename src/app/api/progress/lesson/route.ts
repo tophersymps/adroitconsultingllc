@@ -11,7 +11,8 @@
  * localStorage as the fallback).
  */
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { getAllCanonicalLessonSlugs, findSeriesForLessonSlug } from "@/lib/learn";
 import { accessSeam } from "@/lib/access";
 import { completeLessonServer } from "@/lib/progress-complete";
@@ -107,7 +108,11 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ status: "ok" });
-  } catch {
+  } catch (err) {
+    // R2-5: token unavailable → the guest identity answer, never a 5xx.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" });
+    }
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }
@@ -151,7 +156,11 @@ export async function DELETE(req: NextRequest) {
     }
 
     return NextResponse.json({ status: "ok" });
-  } catch {
+  } catch (err) {
+    // R2-5: token unavailable → the guest identity answer, never a 5xx.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" });
+    }
     return NextResponse.json({ status: "error" }, { status: 500 });
   }
 }
@@ -176,7 +185,11 @@ async function denyIfNotAccessible(
       { error: "This course is not available to you" },
       { status: 403 },
     );
-  } catch {
+  } catch (err) {
+    // R2-5: a token-route failure is the guest identity answer, not a denial.
+    if (isDbTokenUnavailable(err)) {
+      return NextResponse.json({ status: "unauthenticated" });
+    }
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

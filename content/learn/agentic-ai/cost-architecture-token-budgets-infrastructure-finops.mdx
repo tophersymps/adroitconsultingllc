@@ -1,0 +1,179 @@
+---
+title: "Lesson 73: Cost Architecture for Enterprise AI: Token Budgets, Infrastructure, and FinOps"
+slug: cost-architecture-token-budgets-infrastructure-finops
+series: "agentic-ai"
+lesson: 73
+excerpt: "Lesson 72 showed you how to build the platform that enforces policy. This lesson is about what that platform costs to run, because an agent bills the moment it thinks and never stops until a budget stops it. A single agent task can fan out into dozens of model calls, tool invocations, and retries, and the token bill compounds in ways a normal API call never does. You will learn the three-lever cost identity that frames every optimization, why cost per completed task beats cost per token as your operating metric, how token budgets and throughput planning keep a runaway loop from emptying the account, the crossover where self-hosted infrastructure beats a managed API, and how FinOps turns the whole thing into a number a finance team can argue with."
+date: "October 18, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Cost Architecture, Token Budgets, FinOps, Prompt Caching, Model Routing, Unit Economics, Enterprise AI]
+---
+
+Lesson 72 ended with a system you can operate: a gateway that enforces policy, a policy engine that decides, and planes that carry the work. Operating it has a price, and that is the subject of this lesson. An agent bills the moment it thinks, and it keeps billing across every tool call, every retry, and every reflection pass until a human or a budget stops it. That reality changes how you plan money for AI.
+
+This lesson covers the three parts of cost architecture that matter in an enterprise. First, why agentic cost is structurally different from the per-API-call cost you already understand. Second, the concrete architecture that controls it: the three-lever cost identity, metering, token budgets, throughput planning, and the crossover where self-hosted infrastructure beats a managed API. Third, FinOps, the discipline that ties all that spend to an owner and a business outcome. By the end you should be able to reason about what a finished task costs, not what a single prompt costs.
+
+## Why agentic cost is a different animal
+
+A normal API call has a predictable cost profile. One request produces one response, and the price scales linearly with volume. An agentic workflow does not behave like that, and the difference is the root of every cost problem in this lesson. A single user request can trigger a planning step, multiple tool calls, several retrieval operations, and a final synthesis, and the token count for that one task can vary by an order of magnitude depending on the agent's reasoning path. [^1]
+
+Three characteristics make agents structurally expensive. Compounding consumption: one customer-service interaction that retrieves policy documents, reasons over them, drafts a response, and self-corrects can consume on the order of 50,000 tokens. A batch of 10,000 such interactions a day is real money. Path variability: two identical requests can follow different reasoning paths, one resolving in a single model call and the other needing multiple rounds of tool use and self-correction, which makes forecasting hard. Hidden multipliers: a supervisor agent may delegate to specialist agents, and the total cost of the top-level request fans out across those delegations, invisible unless you trace it. [^1]
+
+The vendor-side economics reinforce this. A simple chatbot query triggers one inference call, but an agentic workflow, one where a model reasons iteratively, calls tools, verifies outputs, and self-corrects, can trigger 10 to 20 model calls for a single user-initiated task. Gartner's March 2026 analysis put the number at 5 to 30 times more tokens per task for agentic models than for a standard chatbot. [^2] The per-token cost of intelligence has dropped, but enterprise AI bills are still rising, because the multiplier on the amount of work per task is growing faster than the price per unit came down. [^2]
+
+The metric you manage against has to change with it. Cost per token is a vanity metric. Every per-token price keeps falling, yet total bills keep climbing, and a price-per-token view hides expensive output tokens, run-and-gun retries, and the compounding of a multi-step loop. [^4] The unit that actually governs money is cost per completed task: the total spend traced across every input, output, retry, and sub-agent step that a task required. [^4] Cost per token measures what the vendor charges. Cost per completed task measures what your business gets for its money.
+
+## The three-lever cost identity
+
+Once you accept that a task, not a token, is the unit of value, you need a frame for where the cost actually comes from. The industry has one, and it is compact. Total cost equals the sum, across all calls in a task, of context size multiplied by effective per-token price, plus output cost. [^1]
+
+That identity gives you three levers, and every optimization you will ever read about is a pull on one of them.
+
+The first lever is per-call context size: the total tokens in a single request, including the prompt, tool schemas, conversation history, and observations. The second lever is the number of calls required to complete the unit of work, because each additional call multiplies the first: the growing context retransmits on every turn. The third lever is the effective per-token price after cache discounts and model routing. [^1]
+
+The trap is that naive optimizations shift cost between levers rather than removing it. Infosys works a concrete example: a 40% reduction in per-call context that triggers 67% more calls reaches break-even under a linear cost model, because 0.60 multiplied by 1.67 is approximately 1.00. [^1] Saving on one lever by spending on another gets you nowhere. Evaluate every idea against all three levers at once, or you will celebrate a win that quietly canceled itself.
+
+![The three-lever cost identity: total cost equals the sum across all calls of context size times effective per-token price, plus output cost, and every optimization is a pull on one of the three levers of context size, call count, and effective per-token price](</diagrams/cost-architecture-token-budgets-infrastructure-finops/1-three-lever-cost-identity.png>)
+
+Which lever matters most depends on the workload, and you should profile your own before you optimize. Tool-heavy coding agents are heavily input-dominated, around a 100:1 input-to-output ratio in one analysis, with roughly 99% of tokens as input. [^1] For those, output-side tricks like telling the model to be concise move about 1% of the bill. The levers that matter are prompt caching, tool-definition compression, observation management, and call-count reduction. [^1] Reasoning models and content generators sit at a different ratio, more like 3:1 to 10:1 input-to-output, and there the output side, thinking-token caps and generation budgets, is first-order. [^1] Profile each agent class by its input-output ratio and aim your effort at the side that dominates.
+
+## Metering comes before any optimization
+
+You cannot pull a lever you cannot see. Metering is the foundation, and it captures consumption at two levels that answer two different questions.
+
+The first level is the individual API call. Each call to a foundation model records the model identifier, input token count, output token count, latency, and timestamp, accurate enough to compute cost from provider pricing tables. [^1] That is the infrastructure view, the data your gateway already has in the per-request log record from lesson 72.
+
+The second level is the business transaction. A single customer inquiry may generate dozens of API calls across multiple agents and tools, and you need a correlation identifier that propagates across every call in that transaction. [^1] That identifier is what makes delegated, hidden-multiplier cost visible across the full agent chain, and it elevates the metering layer from a billing utility into an architectural capability: cost lineage, the ability to trace any transaction backward through every agent hop, subagent delegation, tool call, and cache hit. [^1] This is the difference between knowing your total token burn and knowing what a resolved customer issue cost.
+
+Go deeper than the call level and you find which components of a request dominate. A single call sends several context components: the system prompt, tool and function schemas, conversation history, tool-call arguments, tool-result observations, and the model output. A small number of these usually account for most of the tokens. [^1] Tool schemas act as a large, fixed overhead on every call, and observations from tool results are the largest variable component, growing with the length of the agent trajectory. [^1] Per-component attribution is what points you at the exact component to shrink, and it maps directly to the first lever.
+
+Instrumentation builds on the OpenTelemetry generative AI semantic conventions, which define standard span attributes for model calls including the system, request model, input and output token counts, cached-read and cache-write counts, and reasoning tokens. [^1] Your agent run should emit one correlated trace with a span per LLM call and per tool call, and your metering should extend the standard conventions in two ways: decompose per-call input tokens by component, and carry a business-transaction identifier on each span so infrastructure events map to the two-level metering model. [^1]
+
+One more metering truth: real-time telemetry and provider billing run on different clocks. Your circuit breakers and dashboards compute from token estimates multiplied by pricing tables. The actual invoice lands 24 to 48 hours later and can diverge through cache-hit accounting differences, mid-period price changes, and rounding at aggregation boundaries. [^1] Run a reconciliation loop that flags divergence above a threshold and backfills the record, or your chargeback reports slowly drift from reality. [^1]
+
+## Token budgets and throughput planning
+
+Metering shows you the spend. Budgets stop it. Lesson 72 introduced the gateway's token budget check as one control; this lesson treats it as a first-class discipline, because for an autonomous agent it is the only thing between a runaway loop and an unexpected bill.
+
+Capacity planning for agentic workloads needs explicit throughput budgets in tokens per minute (TPM) and requests per minute (RPM). Provider rate limits impose hard ceilings that spending alone cannot lift on short notice. [^1] A capacity plan allocates TPM and RPM across tenants, agent classes, and priority tiers, with reserved quotas for critical workloads and burst allowances for spikes. [^1]
+
+The arithmetic matters, and it is concrete. Infosys works a deployment of 50 concurrent agents, each consuming an average of 30,000 input tokens and 2,000 output tokens per turn, averaging four turns per task. At an end-to-end turn latency of about 60 seconds, peak concurrent turns reach roughly 50 per minute. The TPM requirement is about 50 multiplied by 32,000, or 1.6 million TPM. Against a 2 million TPM ceiling that leaves 20% headroom for bursts, which fits comfortably. Below 15% headroom, a single long-context spike can starve other tenants and trigger queuing delays. [^1] Size against the 99th-percentile turn latency, not the mean, because long-tail trajectories drive the peak throughput requirement. [^1]
+
+The same percentile thinking applies to cost distribution. The 50th-percentile cost is the modal cost most tasks incur. The 99th-percentile cost is the budget ceiling your capacity plan accommodates. A P99-to-P50 ratio above about 8 means a small fraction of trajectories carry most of the spend, and that rewards targeted trajectory-shaping rather than average-case optimization. [^1] Cost reports that quote only averages systematically understate the risk from those long-tail trajectories. [^1]
+
+Once you have a throughput budget, enforce it where the traffic flows, which is the gateway from lesson 72. Control operates at multiple levels: per agent, per task category, and per organizational unit, with circuit breakers, rate limits, and graceful-degradation policies. [^1] When a caller hits its limit, the gateway returns a 429 before the request reaches the provider, and that is what stops a runaway agent loop from generating an unexpected bill.
+
+## Caching and context discipline, the highest-return levers
+
+Within the three-lever identity, two optimizations repeatedly come back as the highest-return moves, and both are worth understanding precisely because they are easy to get wrong.
+
+Prompt caching reduces the effective per-token price of calls that do go through. Providers cache repeated context prefixes and charge a reduced rate for cached input tokens, up to around 90% on the cached portion depending on the provider. [^1][^2] Anthropic lists cache reads on Claude Sonnet 4.6 at $0.30 per million tokens against a standard $3.00 rate, a 90% reduction on every token that hits the cache. [^2] The catch is that realized hit rates often fall well below projections. A single changed character inside the cached prefix, a timestamp, a reordered key, a per-user variable, invalidates everything after it. [^1] The technique is to order static content first and push volatile content to the tail, which can move effective cache hit rates from single digits toward 70% or higher. [^1]
+
+Semantic caching is a different layer with a different job. Prompt caching sits below the model call and reduces the cost of calls that proceed. Semantic caching sits above the model call and, when different users ask semantically equivalent questions, can serve the same answer without invoking the model at all. [^1] The two compose as a two-stage funnel: semantic cache first to skip the call, prompt cache second to reduce the cost of calls that proceed. [^1] Semantic caching needs correctness guardrails, because semantically similar questions can have context-dependent answers that vary by tenant, entitlement, time sensitivity, or personalization. [^1] Scope cache keys to those dimensions and pair an invalidation strategy with a monitoring loop that samples hits against fresh generations. [^1]
+
+![The two-stage caching funnel: a semantic cache above the model serves equivalent answers without invoking the model at all, and a prompt cache below the model reduces the cost of the calls that proceed](</diagrams/cost-architecture-token-budgets-infrastructure-finops/2-two-stage-caching-funnel.png>)
+
+Context discipline extends beyond caching. Different agent workloads need different treatment, and this is where classification errors cause expensive waste. Read-heavy agents, those doing research, debugging, or retrieval, consume large volumes of content they did not author, and that content can be safely masked or compacted once it is no longer needed verbatim. [^1] Write-heavy agents, those generating code or documents, produce content they may need to reread, and compacting it triggers expensive rewrites because the agent reads truncation as corruption of its own work. [^1] Classify each agent by that read-write profile before you apply a compaction strategy.
+
+## Model routing and tiering
+
+Routing is the lever that moves effective per-token price, and it is the most important architecture decision in this lesson because it compounds across every call. Not every task needs a frontier model. A simple classification step may perform equally well on a smaller, cheaper model, while a multi-step reasoning task may justify the frontier price. [^1] Model routing evaluates each task against task complexity, latency requirements, accuracy thresholds, and cost constraints, then picks the most cost-effective model that meets all of them. Data residency and sovereignty rules are hard constraints: a workload subject to jurisdictional rules may be ineligible for a cheaper region regardless of the per-token saving. [^1]
+
+The common shape is three tiers: small specialized models for high-volume, low-complexity tasks like classification and extraction, midrange models for moderate reasoning, and frontier models reserved for complex reasoning, multistep planning, and accuracy-critical work. [^1] The hard part is deciding which tier a task needs. Static rules work for well-understood task types. Dynamic routing uses a lightweight classifier at runtime, and a practical start assigns tiers by task category then promotes individual requests on failure or low-confidence output. [^1]
+
+![Model routing across three tiers: a routing classifier evaluates complexity, latency, accuracy, and cost, then sends high-volume low-complexity tasks to small specialized models, moderate reasoning to midrange models, and complex reasoning to frontier models](</diagrams/cost-architecture-token-budgets-infrastructure-finops/3-model-routing-three-tiers.png>)
+
+The router is itself a cost. Infosys prices a concrete example: a routing classifier that costs 300 tokens per decision and saves 800 tokens on average by selecting a smaller model breaks even at roughly 40% small-model routes. [^1] Semantic routing is net-positive for workloads with a clear bimodal complexity distribution, and it quietly loses money when your workload is uniformly complex, because the router's cost has nothing to pay for. [^1] This is why you meter before you route: routing decision criteria should be grounded in observed workload distributions, not guesses.
+
+There is a subtle tension between routing and caching that catches teams off guard. Prompt caches are provider-specific, model-specific, and usually session-scoped or short-window-scoped. Routing the same logical workload across many providers fragments the cache pools and collapses your realized hit rate. [^1] Two resolutions exist: route at the workload-class boundary rather than the request boundary so cache pools stay coherent within a workload, or accept lower cache hit rates as the price of provider diversification and factor that into the routing economics. [^1] Either is a conscious choice; the failure mode is doing neither and getting a lower hit rate without the diversification benefit.
+
+## Infrastructure: the crossover where self-hosted beats managed
+
+Token budgets, caching, and routing manage the API bill. Infrastructure is the other half of the ledger, and it all comes down to one question: at what volume does fixed-cost self-hosting beat variable-cost pay-per-token? The crossover is real and it is not exotic.
+
+A managed LLM API prices per token, and it has zero idle cost at low volume, which makes it the efficient choice for a pilot or a small workload. At high volume the per-token price scales linearly, and the math flips. [^4] Self-hosting an open-weight model on your own GPUs shifts spend to fixed hourly compute, which is inefficient at low volume, because idle GPU capacity is still billed, but highly efficient at high volume, once the fixed cost is saturated across millions of queries. [^4] The break-even is a utilization story. On dedicated GPU inference, below roughly 30% realized utilization, self-hosting is frequently more expensive than the API alternative, and above 60% to 70% utilization the economics tilt sharply toward self-hosting. [^1]
+
+![The infrastructure crossover: managed API cost rises linearly with volume while self-hosted cost is fixed hourly, so self-hosting wins only above roughly 60 to 70 percent utilization and loses below roughly 30 percent](</diagrams/cost-architecture-token-budgets-infrastructure-finops/4-infrastructure-crossover.png>)
+
+The same threshold logic applies to committed capacity, which is the intermediate option between pure pay-per-token and owning hardware. Azure OpenAI provisioned throughput units and AWS Bedrock provisioned throughput convert the cost model from marginal per-token to average per-unit-of-committed-capacity. [^1] That inversion changes your routing objective: under consumption pricing you minimize per-call price, but under committed capacity you maximize utilization of the committed pool and spill to on-demand only when it saturates. [^1] The break-even sits around 60% sustained utilization; below that, committed capacity often costs more than on-demand, and above it the economics tilt the other way. [^1] Model both regimes against your metering data before you commit to either.
+
+The strategic move in self-hosting is the same discipline as routing: use telemetry to identify the highest-volume, narrowest tasks, and move only those to open-weight or fine-tuned models on your own infrastructure. Embedding generation for retrieval pipelines, internal classification and routing, and sovereign AI use cases are typical candidates. [^1] Straightforwardly, self-hosting converts unpredictable variable API costs into fixed, controllable infrastructure expenses, and at scale it can cut costs by 50% or more on the eligible workloads, but only if you have the volume and the utilization to justify the fixed spend. [^1] Start self-hosting only after metering confirms a workload has enough volume, and the operational burden of serving, scaling, and maintaining the model is one you are ready to carry.
+
+## FinOps: tying every token to an owner
+
+None of the architecture matters for corporate budgeting if the spend cannot be attributed. That is where FinOps comes in, and it is worth defining precisely because the term gets stretched.
+
+FinOps for AI is the practice of applying financial operations principles, visibility, attribution, optimization, and governance, to AI workloads: LLM API calls, autonomous agents, GPU infrastructure, vector databases, and the cloud data platforms they query. Its goal is to tie every token, model request, and agent action to an owner, a budget, and a business outcome. [^4] It applies the traditional FinOps lifecycle, inform, optimize, operate, to workloads whose costs scale with tokens, requests, and agent steps rather than provisioned capacity. The unit economics goal is a defensible cost for every AI transaction, tied to the team, product, and outcome that generated it. [^4]
+
+The adoption is real and fast. The FinOps Foundation's State of FinOps 2026 survey found 98% of FinOps practitioners now manage AI spend, up from 31% in 2024. [^4] What has not kept pace is attribution maturity: many organizations still cannot answer which product feature or agent drove last month's token bill. [^4] That gap is the whole reason FinOps for AI exists as a distinct discipline.
+
+The structural problem is that traditional FinOps breaks on AI. It was built on three assumptions AI violates: that compute resources are tagged at provisioning, that cost is deterministic given known inputs, and that workload spend maps to environments and accounts that align with the org structure. [^5] An AI provider bill arrives as consolidated line items with no per-team or per-product breakdown, and there is no taggable resource at the point of use, so the tagging hygiene that makes cloud FinOps work has nothing to attach to. [^5]
+
+The answer replaces source-level tagging with rule-based allocation inside the FinOps system itself. The four-step framework is: centralize every AI provider invoice in a single FinOps system as first-class billing data alongside cloud spend; replace source-level tagging with rule-based allocation expressed in the team's own taxonomy, like this API key belongs to this team; tie agent activity to identity, typically API key or SSO email matched against the HR system; and treat embedded-agent spend as product COGS, flowing into the same allocation bucket as the product's other infrastructure. [^5]
+
+![The FinOps four-step allocation framework: centralize every AI provider invoice in one FinOps system, apply rule-based allocation in the team taxonomy, tie agent activity to identity, and treat embedded-agent spend as product COGS](</diagrams/cost-architecture-token-budgets-infrastructure-finops/5-finops-four-step-framework.png>)
+
+Two principles make or break this. First, the allocation logic must live in the FinOps system, not the upstream billing source, and it must be editable by the FinOps team without engineering involvement, because AI is one of the most volatile line items in the stack and the rate of change makes engineering-gated updates a bottleneck. [^5] Second, unit economics has to account for more than the raw token line. The cost of a resolved task is the model input plus output, the tool and data calls, retries, orchestration infrastructure, and the human time spent reviewing uncertain results. [^4] Experience bears this out in the aggregate: in real deployments the all-in operating cost routinely lands at two to five times the raw token cost, and for regulated or mission-critical environments the multiplier can be higher. [^3] A cost model that stops at the token bill misses most of the real recurring cost of running an agent.
+
+## Worked example: a support-automation team with a cost architecture
+
+Put the whole lesson together on one concrete system: a customer-support agent suite of eight agents, an intake classifier, a knowledge-retrieval agent, a response drafter, an escalation agent, a quality reviewer, a CRM updater, a sentiment detector, and an analytics agent.
+
+Start with the metering foundation, because nothing else works until it lands. Every call across all eight agents emits a span carrying model, input and output tokens, cached-read and cached-write counts, latency, and a business-transaction identifier that ties the whole thread back to one resolved ticket. [^1] The gateway writes the per-request log record from lesson 72, and a reconciliation loop keeps estimates honest against provider invoices. Finance can now answer the question that matters: what does a resolved support issue cost.
+
+Then apply the three levers to the dominant workload. The suite is input-heavy, because it retrieves policy documents and carries ticket history into every call. So the first lever, context size, gets the attention. The static system prompt and the policy corpus go first in the prefix so prompt caching reclaims them at the cached rate, and volatile content, the current ticket text, rides at the tail. [^1][^2] The retrieval agent gets semantic caching for the frequent, near-identical questions, skipping the model call entirely. [^1]
+
+The second lever, call count, gets attacked at the loop level. The CRM updater and the sentiment detector are simple, bounded tasks, so they route to a small, cheap model. Only the response drafter and the escalation analysis reach a frontier model. [^1] A routing classifier decides, and metering data confirmed the workload is bimodal before the router went in, so the router pays for itself. [^1]
+
+The third lever, effective per-token price, is where the infrastructure decision lands. The intake classifier and the sentiment detector run at sustained high volume on a fixed, narrow task, so after metering confirmed utilization, they move to a self-hosted open-weight model on dedicated GPU capacity. [^1] The reasoning-heavy drafter stays on the managed API, where its lower volume does not justify fixed hardware.
+
+Finally, FinOps ties it together. The provider invoices land in one FinOps system, rule-based allocation maps each API key to a team, and the embedded spend for the CRM updater and the others flows into the product's COGS bucket rather than a shared services line. [^5] The metric reviewed each month is cost per resolved ticket, tracked across every call, retry, and sub-agent step, and that number, not cost per token, is what gets compared to what the suite saves in handled tickets. [^4] Showback tells each owner what their agent cost, and the budget caps in the gateway stop any single agent from blowing the month in a runaway loop.
+
+## How to build it, step by step
+
+The order matters, because each stage feeds the next with evidence rather than guesswork.
+
+1. Meter first, at two levels. Emit per-call spans with tokens and latency, and carry a business-transaction identifier across every call in a task. This is the evidence base for every decision after it. [^1]
+
+2. Pick your metric. Make cost per completed task, not cost per token, the number the platform optimizes and finance reviews. [^4] Everything downstream should reduce the cost of a finished unit of work.
+
+3. Pull the three levers in order, starting with the one your workload profile says dominates. Profile each agent class by input-output ratio, then apply prompt caching, semantic caching, tool-definition compression, and call-count reduction to the side that matters. [^1][^2]
+
+4. Set throughput budgets and enforce them at the gateway. Allocate TPM and RPM across tenants and tiers, size against P99, and return a 429 at the limit before the provider is reached. [^1] This is the runaway-loop insurance.
+
+5. Route by tier. Send simple tasks to small models and reserve frontier models for what needs them, but meter first so the router's own cost is justified by the distribution it saves on. [^1]
+
+6. Evaluate the infrastructure crossover with your own numbers. Model consumption pricing, committed capacity, and self-hosting against your metering data, and move a workload to fixed-cost self-hosting only when utilization clears the threshold. [^1][^4]
+
+7. Stand up FinOps attribution. Centralize AI invoices, allocate by rule against the team taxonomy, tie consumption to identity, treat embedded spend as COGS, and let the FinOps team edit the rules without engineering. [^5]
+
+## The pattern to take away
+
+1. Manage cost per completed task, not cost per token. The token price keeps falling while the task bill keeps climbing, because the work-per-task multiplier grows faster. [^2][^4]
+2. Frame every optimization with the three-lever identity: context size, call count, effective per-token price. An optimization that saves on one lever only to spend on another is a canceling win. [^1]
+3. Meter at two levels, call and business transaction, with cost lineage. Per-call data optimizes the model; per-transaction data justifies the business. [^1]
+4. Enforce budgets at the gateway. TPM and RPM quotas with a 429 before the provider are the only reliable guard against a runaway agent. [^1]
+5. Cache and route before you switch models. Prompt caching, semantic caching, and tiered routing reduce token volume and effective price without sacrificing quality, and they come before any model or hardware change. [^1][^2]
+6. Buy infrastructure on the crossover, not on enthusiasm. Self-hosting and committed capacity win only above sustained utilization thresholds, and metering tells you whether you are there. [^1][^4]
+7. Attribution is a FinOps discipline, not a tagging plan. Rule-based allocation against the team taxonomy replaces source-level tagging that AI spend structurally cannot support. [^5]
+
+If you walk away with one skill from this lesson, it is the ability to reason about what a finished task costs: traced across every call, retry, and sub-agent step, reduced through the three levers, bounded by a gateway budget, and owned by a team through FinOps. That single number is what separates an AI feature with a business case from an AI line item with a blowout.
+
+## Try it
+
+Take a real agent you run or a workload you are evaluating, and build its cost architecture on paper before you touch the model. First, define the unit of work: what is a completed task for this agent, a resolved ticket, a merged PR, a generated document. Second, trace the per-task token profile: how many model calls, how many input and output tokens per call, and what the retry rate looks like. Use metering or a representative sample if you lack telemetry. Third, apply the three-lever identity and list one concrete action per lever: what you would do to cut context size (prompt caching, compaction, tool-definition compression), what you would do to cut call count (semantic caching, loop limits, tool-fusion), and what you would do to cut effective per-token price (tiered routing, committed capacity, or a self-hosting evaluation). Fourth, write down the throughput budget: your TPM and RPM, the P99 you plan for, and the level, team, and agent where the gateway denies at the limit. Last, assign an owner and a rule-based allocation so that next month's invoice maps to a team and a business outcome. You should end with a one-page cost architecture: the metric you manage against, the three lever-pulls you would make first, the budget that stops a runaway, and the owner who answers for it.
+
+## What's next
+
+This lesson gave you the money side of running an agent system: what a task costs, the levers that reduce it, the budgets that bound it, and the FinOps discipline that attributes it. The next lesson turns the lens from cost to risk. Lesson 74 covers a security review, a full threat model for an agent system, walking through the attacks an autonomous agent invites, prompt injection, tool misuse, excessive agency, and data exfiltration paths, and how to audit a system against them. Where this lesson asked what a task costs to run, the next one asks what an agent can be made to do, and the vulnerabilities that makes real.
+
+## Summary
+
+An agent bills the moment it thinks and keeps billing across every tool call and retry, so cost architecture is a discipline, not a line item. Agentic workflows are structurally expensive because of compounding consumption, path variability, and hidden multipliers, and a single task routinely consumes far more tokens than a chatbot query. [^1][^2] The operating frame is the three-lever cost identity: context size, call count, and effective per-token price, and every optimization is a pull on one of them, watching that a save on one lever does not spend on another. [^1] Metering comes first, at both the API-call level and the business-transaction level, with cost lineage that traces any task back through every hop; cost per completed task, not cost per token, is the metric that governs money. [^1][^4] Token budgets in TPM and RPM, enforced at the gateway with a 429 before the provider, stop runaway loops. [^1] Prompt caching, semantic caching, and context discipline reduce token volume with the biggest returns, and tiered model routing reduces effective price once metering shows a bimodal workload. [^1][^2] Infrastructure follows the crossover: self-hosting and committed capacity win only above sustained utilization thresholds. [^1][^4] FinOps for AI ties every token to an owner through rule-based allocation against the team taxonomy, and its goal is a defensible unit cost per completed outcome, the only number that lets finance argue with the platform the same way it argues with any other cost. [^4][^5]
+
+[^1]: Infosys, "Enterprise AI cost and capacity architecture: Metering and planning" (Frontier Tech Perspectives, September 2026). https://www.infosys.com/iki/technology-review/deep-tech-perspectives/enterprise-ai-cost-capacity-architecture.html
+[^2]: Cockroach Labs, "The Bill Arrives: How to Manage Agentic AI Costs at Scale" (June 2026). https://www.cockroachlabs.com/blog/agentic-ai-costs-at-scale/
+[^3]: InfoWorld (David Linthicum), "The real cost of agentic AI" (June 2026). https://www.infoworld.com/article/4181397/the-real-cost-of-agentic-ai.html
+[^4]: Revefi (Girish Bhat), "FinOps for AI: Managing Financial Operations for AI Agents, LLMs, and Multi-Modal Workflows" (September 2026). https://www.revefi.com/blog/finops-for-ai
+[^5]: Finout, "FinOps for AI Agents: A Four-Step Allocation Framework" (April 2026). https://www.finout.io/blog/finops-for-ai-agents-a-four-step-allocation-framework

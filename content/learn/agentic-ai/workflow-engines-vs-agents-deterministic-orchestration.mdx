@@ -1,0 +1,167 @@
+---
+title: "Lesson 78: Workflow Engines vs Agents: When to Use Deterministic Orchestration"
+slug: workflow-engines-vs-agents-deterministic-orchestration
+series: "agentic-ai"
+lesson: 78
+excerpt: "Lesson 77 gave you two agents that can find each other and finish a task. This lesson asks whether the task needed an agent. You learn what a workflow engine actually guarantees (durable state, replay, retries, exactly-once execution), what an agent buys in exchange for variance, a five-question test that separates the two, and how to put an agentic step inside a deterministic skeleton without poisoning either one."
+date: "October 23, 2026"
+author: "Adroit Consulting"
+readTime: "17 min read"
+tags: [Workflow Engines, Durable Execution, Deterministic Orchestration, Temporal, Step Functions, Agents]
+---
+
+# Lesson 78: Workflow Engines vs Agents: When to Use Deterministic Orchestration
+
+Lesson 77 gave you two agents that can find each other, agree on a task, and finish it. Before you build the third one, answer a question that will save you more money than any model swap: does this work need an agent at all?
+
+The distinction is older than the current tooling, and the two major vendor guides draw it the same way. Anthropic separates workflows, "systems where LLMs and tools are orchestrated through predefined code paths," from agents, "systems where LLMs dynamically direct their own processes and tool usage, maintaining control over how they accomplish tasks." [^1] OpenAI's guide puts the same cut in operational terms: a workflow is a sequence of steps that must be executed to meet the user's goal, and an agent is a system that independently accomplishes tasks on the user's behalf. [^2]
+
+Reduce both to one question and the rest follows. Who decides what happens next: the code, or the model?
+
+When code decides, you have a workflow. A model may still do real work inside it (classify this, extract that, draft a reply), but it never chooses the next step. When the model decides, you have an agent, and the shape of the run is discovered at execution time instead of written down.
+
+Neither shape is the more advanced one. Anthropic's advice is to find the simplest solution possible and add complexity only when needed. [^1] OpenAI's is the same from the cost side: validate that your use case meets the criteria for an agent, "otherwise, a deterministic solution may suffice." [^2]
+
+## What a workflow engine actually guarantees
+
+The phrase "workflow engine" gets used for everything from a cron job to a drag-and-drop canvas. The mature ones guarantee a specific list of things, and the list is the reason to use one.
+
+Temporal's model is the clearest to learn from. A Workflow is your business process written in ordinary code with loops, conditionals, and function calls. An Activity is the unit of work that touches the outside world: an API call, a database write, an email, a charge. The Temporal Service persists an Event History of every command and result, so a process that crashes mid-run is recovered by another worker that replays the history and resumes with local variables intact. [^3]
+
+That persistence has a price: Workflow code must be deterministic, because the platform reruns it to rebuild state after a failure. Anything that talks to the outside world belongs in an Activity, where each call gets a retry policy, timeouts, and optional heartbeats from configuration rather than from code you wrote. [^3]
+
+The cloud-managed version of the same idea is AWS Step Functions, which models work as a state machine and calls each step a state. Its Standard workflow type runs for up to one year with exactly-once execution, while the Express type trades that for higher throughput at at-least-once semantics and a five-minute ceiling. [^4] Read those two sentences again if you plan to move money or file regulatory paperwork on top of either.
+
+Strip the vendor names and the guarantee set is consistent. The engine knows every step in advance, records what happened, retries the parts that fail, survives a restart, and can tell you which state a given case is sitting in months later.
+
+![Three panels showing workflow code calling activities while an event history records every result, then a crashed worker replaced by another that replays the history and resumes with local variables intact](</diagrams/workflow-engines-vs-agents-deterministic-orchestration/1-durable-execution.png>)
+
+Everything a workflow engine gives you rests on one assumption: somebody could name the steps before the work started.
+
+## What an agent buys, and what it charges
+
+An agent questions that assumption. You hand it a goal and a toolset, and the model picks the tools, the order, and the stopping point.
+
+That flexibility is worth real money when the path genuinely cannot be predicted. Anthropic's examples are coding and open-ended research, where the number of files to change or the number of searches to run depends on what you find. They also note the trade plainly: agentic systems often trade latency and cost for better task performance. [^1]
+
+The charge shows up in four places.
+
+Path count. A workflow with eight branches has eight paths. An agent on the same job has as many paths as the model can compose, including ones you never imagined and cannot reproduce on demand.
+
+Cost variance. Two identical inputs can produce two very different token bills, because the second run decided to look at four more documents.
+
+Debugging. When a workflow step fails, you read a stack trace. When an agent fails, you read a transcript and reconstruct intent.
+
+Auditability. A regulator asking why this claim was approved gets a graph from a workflow and a narrative from an agent.
+
+None of that makes agents wrong. It makes them a purchase with a price, and the price is only worth paying when the flexibility converts into output quality you could not get otherwise.
+
+## The five-question test
+
+Run this before writing orchestration code. It takes ten minutes and settles most arguments.
+
+1. **Can you enumerate the steps for most inputs?** Not every input, most. If yes, you are describing a workflow.
+2. **Is the step count bounded?** Workflow graders pass; "keep searching until you are confident" does not.
+3. **Does the same input have to take the same path every time?** Compliance, billing, and audit all demand this. Determinism is a feature there, not a limitation.
+4. **Can a validator decide whether the step succeeded?** A JSON schema, a test suite, a balance check. If yes, code can gate the step, and the model does not need control of the loop.
+5. **Would a wrong branch cost money, data, or trust?** Irreversible actions push toward code-controlled paths with a human gate.
+
+Mostly yes on one through three, plus five: build the workflow. A firm no on one and two: you have an agent-shaped problem.
+
+OpenAI's three agent-suitability criteria map onto the same test from the other direction. They reserve agents for complex judgment with exceptions, rulesets that have become too intricate to maintain, and heavy reliance on unstructured data, with refund approvals, vendor security reviews, and insurance claims as the examples. [^2] Notice that all three describe a ruleset that has already failed, not a ruleset that has not been written yet.
+
+The failure mode in both directions is symmetric. A team that builds an agent for an enumerable process gets a system that costs more than the script it replaced and surprises people monthly. A team that builds a rigid workflow for a judgment-heavy process gets a ruleset that grows a new exception every sprint until nobody can safely change it.
+
+## The ladder, with the middle rungs included
+
+The choice is not binary, and Anthropic's pattern catalog is really a ladder of how much control you hand over. [^1]
+
+![A four rung ladder running from code decides at the top to model decides at the bottom: deterministic workflow with a model step, routing, orchestrator-workers where most agent systems actually live, and autonomous agent](</diagrams/workflow-engines-vs-agents-deterministic-orchestration/2-control-ladder.png>)
+
+**Deterministic workflow with a model step.** Code decides the path; the model fills a slot. Fetch the record, call the model to classify or extract, validate the output against a schema, write the result. Cheapest, most testable, fully auditable.
+
+**Routing.** A classifier sends the input to one of several known downstream paths. The classification can be a model or a plain classifier. The set of destinations is fixed in code.
+
+**Orchestrator-workers.** A central model breaks the task into subtasks it did not know in advance, delegates them, and synthesizes the results. Anthropic still classifies this as a workflow, because the code defines the orchestration pattern and the model only decides what the subtasks are. [^1] This rung is where most "agent" systems actually live.
+
+**Autonomous agent.** The model runs the loop, chooses tools, and decides when it is done, with a stopping condition such as a maximum iteration count to keep it bounded. [^1]
+
+Knowing which rung you are on matters more than the label. The orchestrator-workers shape gives you dynamic decomposition while keeping the outer structure testable, and teams routinely jump to rung four when rung three would have shipped.
+
+## Worked example: contract renewal review
+
+Take a job with an unstructured input, a fixed policy, and an expensive mistake: a client sends forty supplier contracts for renewal review.
+
+Here is the deterministic design.
+
+1. **Load the roster.** Query the CRM for contracts expiring in the next 90 days. Plain code, idempotent, one Activity.
+2. **Fetch each document.** Download from the repository with a retry policy and a per-document timeout, keyed by document id so a retry cannot double-fetch.
+3. **Extract the clause fields.** One model call per contract, constrained to a JSON schema: renewal term, notice period, auto-renew flag, liability cap, governing law, and a quote span for each field.
+4. **Validate.** A schema check plus a rule check. Missing field, unparseable date, or a quote span that does not appear in the source text sends the contract to exception handling instead of forward. The quote-span check is what catches extraction that reads plausible and invents numbers.
+5. **Apply policy.** Deterministic branch. Within tolerance and no liability change: approve. Notice period shorter than company standard: human review. Auto-renew with a cost increase above threshold: escalate to procurement.
+6. **Write back and notify.** One activity, idempotent on contract id, plus a summary row per contract.
+
+![Six step pipeline for forty contracts: load roster, fetch each document, model extraction constrained to a schema, a validation gate that diverts ungrounded extractions, a deterministic policy branch with three named outcomes, then an idempotent write back, with the agent placed only on the exception queue](</diagrams/workflow-engines-vs-agents-deterministic-orchestration/3-contract-renewal.png>)
+
+Forty contracts, forty extraction calls, six branches, one report. Cost per run is predictable within a few percent because the number of model calls is a function of the contract count. When something goes wrong, the engine points at the contract and the state. Notice the model does exactly one job here, and code owns everything else.
+
+Now the agent-shaped version of the same request: "review these contracts and tell me which ones need attention," with tools for the CRM, the document store, and a search index, and no fixed sequence.
+
+It works well on the first run and on most runs after that. The problems are structural rather than dramatic.
+
+The run may read thirty-eight of forty documents and stop when it feels finished, and nothing in the system will flag the two it skipped. The extraction quality is the same as the workflow's, but there is no schema gate between extraction and the report, so a misread liability cap flows into a recommendation. And the bill varies by a factor of three across runs of the same batch, because the model sometimes searches the index for context it does not need.
+
+Every one of those is a control you removed, not a model that got worse. The agent was doing what agents do: deciding. The design never said which decisions were its to make.
+
+The repair is not to abandon the agent. It is to move it to the rung where its judgment actually adds value. Give it the exception queue: the twenty percent of contracts where the rule engine hit a deviation and a human would otherwise spend fifteen minutes reading clauses. There the path genuinely varies per contract, the input is unstructured, and the output goes to a person who can check it. That is an agent-shaped job.
+
+## Hybrid: deterministic skeleton, agentic joints
+
+Production systems end up mixed, and the tooling now says so directly. LangGraph describes mixing deterministic, hand-coded steps with LLM-driven agentic steps in the same graph as a core capability, on the grounds that parts of the logic can be fully predictable and auditable while other parts stay flexible and model-driven. [^5]
+
+There are two seams to get right.
+
+**An agent as a step inside a workflow.** The engine treats the agent as an Activity: it has a typed input, a typed output, a timeout, a retry policy, and a budget cap. The agent can take any path it likes inside that envelope, and the workflow does not care, because it only sees the validated result or a failure it knows how to route.
+
+**A workflow as a tool inside an agent.** The agent calls one tool that runs a durable sub-process and returns its result. The deterministic parts stay deterministic; the agent gets a reliable primitive instead of improvising the same sequence every run.
+
+Both seams need the same contract: a schema for the input, a schema for the output, validation at the boundary, an idempotency key so a retry is safe, a timeout, a token or cost ceiling, and a defined escalation when the agent returns something that fails validation. Write those seven items down before the first run. Every one you leave undefined becomes an incident later.
+
+One trap deserves its own warning. Do not call a model, and do not touch the network, from inside deterministic workflow code. Temporal is explicit that Workflow code must be deterministic because it is replayed to rebuild state, and that anything touching the outside world belongs in an Activity. [^3] A model call inside the workflow body returns a different answer on replay, and the history no longer matches the code. The failure looks like a mysterious nondeterminism error in production and never reproduces locally.
+
+## Failure modes
+
+**Agent where a workflow belonged.** Cost per task drifts, path count explodes, and nobody can answer "how many steps should this take" because the answer changes weekly. The five-question test would have caught it.
+
+**Workflow where an agent belonged.** The ruleset grows a branch per exception. The team hires someone to work the exception queue, and that queue becomes the real product.
+
+**Model call inside durable code.** Replay breaks. Keep the model in an Activity or a step function, never in the deterministic body.
+
+**Unbounded loops with no stopping condition.** Anthropic notes that agents commonly include stopping conditions such as a maximum number of iterations specifically to maintain control. [^1] If your loop has no ceiling, the ceiling is your bill.
+
+**Treating at-least-once as exactly-once.** Express workflows and any queue-based retry can run a step twice. Idempotency keys are not optional when the step charges a card or sends an email.
+
+**Validating the shape but not the content.** A schema check proves the JSON parsed. The quote-span check proves the extraction is grounded. You want both.
+
+## Try it
+
+1. **Draw the last multi-step process your team automated.** Every box is a step, every diamond is a decision. Count the diamonds. If the count is stable across inputs, you have a workflow on paper.
+2. **Run the five questions in writing.** One sentence per question, with the answer and the evidence. Do this before touching a framework.
+3. **Build the deterministic version first, with a stubbed model.** Return a fixed extraction for every input and get the plumbing working end to end: retries, idempotency, schema validation, the write-back. Ten inputs, ten clean runs.
+4. **Swap in the real model call behind the same interface.** Nothing else changes. If your diff touches more than one function, your boundary was not a boundary.
+5. **Add one bounded decision.** Pick the single branch where judgment genuinely helps (the exception queue, not the main path), hand it to an agent, and cap it: max iterations, max tool calls, max tokens, and a hard timeout.
+6. **Measure before and after.** Cost per case, wall-clock time, exception rate, and the share of cases a human had to touch. If the agent step does not move at least one of those in the right direction, remove it. That is a successful experiment too.
+
+## Summary
+
+A workflow engine gives you replay, retries, durable state, and a named step for every action, and it needs you to name the steps first. An agent gives you a path the model composes at runtime, and charges you in variance, latency, and debuggability. The question that separates them is who decides what happens next, and it gets answered by whether you can enumerate the work, not by which framework is trending. Most production systems are one deterministic skeleton with a bounded agentic step at the seam where judgment actually pays.
+
+## What's next
+
+Lesson 79 is about the controls that make any of this survivable in a real organization: human oversight through dashboards, approval gates, kill switches, and escalation design. The shapes you chose in this lesson decide where those controls attach. A deterministic workflow has obvious places to put an approval gate. An agent needs one designed in, because there is no obvious moment to stop it.
+
+[^1]: anthropic.com. [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^2]: openai.com. [A Practical Guide to Building Agents](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf)
+[^3]: docs.temporal.io. [Understanding Temporal: Durable Execution](https://docs.temporal.io/evaluate/understanding-temporal)
+[^4]: docs.aws.amazon.com. [What is AWS Step Functions?](https://docs.aws.amazon.com/step-functions/latest/dg/welcome.html)
+[^5]: docs.langchain.com. [LangGraph overview](https://docs.langchain.com/oss/python/langgraph/overview)

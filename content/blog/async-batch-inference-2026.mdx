@@ -1,0 +1,174 @@
+---
+title: "Half Price If It Can Wait: The Batch Inference Lane"
+slug: async-batch-inference-2026
+excerpt: "Your nightly model calls are paying interactive prices. The batch lane is half price, 24 hours, and a state machine you have to own."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 22, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [AI Infrastructure, Batch Inference, LLM Cost, Inference, Model Serving, Queueing]
+bannerImage: /banners/async-batch-inference-2026.webp
+ogImage: /banners/async-batch-inference-2026-og.jpg
+---
+
+If your pipeline processes records on a schedule, you already own a queue. Most teams simply pay interactive prices to run it.
+
+That is the gap worth closing. The same tokens that cost a full price through the chat endpoint cost half through a batch endpoint, and the reason is structural: you accept an unpredictable completion time inside a 24-hour window, and the provider fills idle capacity with work it can preempt, reorder, and pack. OpenAI, Anthropic, and Google all price it at 50% of the synchronous rate.[^1][^2][^3] All three also run batch traffic on a rate-limit pool of its own, separate from live calls.[^1][^2][^4]
+
+The parts that bite sit behind the discount: the lifecycle, the join key, the expiry rules, and the fact that recovery is your job, not the provider's. Teams that treat batch as "the same call, slower" get a bill that looks better and a pipeline that quietly drops whatever expired. Teams that treat it as a queue get the discount and a system that is easier to reason about than the retry storm it replaced.
+
+## The physics behind the price
+
+A synchronous inference request has to be served now, on capacity that has to exist at that moment whether or not anyone is using it. The provider keeps a margin of headroom for spikes, and you pay for that headroom in the per-token price. A batch request has no such obligation. It can sit in a queue until capacity is cheap, it can be scheduled around a peak, and it can be packed into a large batch where each token of compute is better amortized.
+
+That is why the number lands at 50% rather than 5%. The provider keeps its margin and sells you a different product: throughput instead of latency, with the queue as the buffer between them.
+
+There is a second benefit that gets buried in the pricing pages, and for a lot of teams it matters more than the bill. Batch limits are separate from interactive limits. OpenAI states that batch usage does not consume tokens from your standard per-model rate limits, and Anthropic states that batch usage does not affect Messages API rate limits.[^1][^2] If your problem is that a nightly backfill collides with daytime customer traffic, batch is not just cheaper, it is capacity you cannot get any other way at the same price.
+
+## Three lanes, one decision
+
+There are three ways to spend tokens, and they differ on a single axis: how long the answer can wait.
+
+**Interactive** is the default endpoint. Seconds, sometimes a minute for long reasoning output, full price, streaming available, and the only lane where a human is plausibly watching the tokens arrive.
+
+**Flex** is the middle lane that most teams do not know exists. It runs through the normal request shape, but with `service_tier` set to `flex`, and it is priced at batch rates. What you give up is availability: flex requests can come back as a 429 Resource Unavailable when capacity is tight, you are not charged for those, and the documented fix is exponential backoff, or a retry on the default tier if the result is worth full price.[^5] Flex is the right lane for work that is asynchronous but not bulk, where you want one call per item and you can retry a few percent of them without thinking about file formats.
+
+**Batch** is the bulk lane. One file in, one file out, up to 24 hours, half price, and a completely different operational contract.
+
+The decision test I use is three questions, answered honestly:
+
+1. Does a human or another system block on this result within the next few seconds?
+2. Does every call in the job depend on the output of the previous call?
+3. Would anyone notice within the hour if this result never arrived?
+
+If the answers are no, no, and no, the work belongs in batch. That covers a surprising amount of what production pipelines actually do: classification and labeling backfills, enrichment of records that landed overnight, evaluation suites, embeddings for a repository you are indexing, summarization of a document set, moderation sweeps of historical content, and regeneration of derived fields after a prompt change.
+
+If any answer is yes, stay interactive, or use flex for the middle cases. An agent loop is the clearest disqualifier: twenty steps where each depends on the last cannot be batched, because the wall clock multiplies. A support reply a customer is waiting on cannot be batched. Neither can a tool call that writes to a system of record and might be retried.
+
+![Three inference lanes compared: interactive responses in seconds at full price, flex tier at batch pricing with occasional retryable unavailability, and batch jobs inside a 24 hour window at half price](</diagrams/async-batch-inference-2026/1-three-lanes.png>)
+
+## The contract you are signing
+
+Batch is a state machine, and the states are the API. A job is created, validated, then processed. It ends in one of four ways, and each one means something different for your data.[^1][^2]
+
+![Batch job lifecycle: submitted, validating, in progress, then completed with results, or expired with a partial output file plus an error file, or failed or cancelled](</diagrams/async-batch-inference-2026/2-job-lifecycle.png>)
+
+The important state is `expired`, and it is the one nobody designs for. OpenAI's batch endpoint only accepts a 24-hour completion window, and a job that does not finish inside it has its unfinished requests cancelled. The completed work is still returned in the output file, the abandoned requests are written to an error file with a `batch_expired` code, and you are billed only for the tokens that were actually consumed.[^1] Anthropic's version of the same rule: a batch that has not completed after 24 hours expires, and results stay downloadable for 29 days from creation, after which they are gone.[^2]
+
+Three consequences follow, and they should shape your schema before you write your first submitter.
+
+**Partial is normal.** Your collector has to merge a results file with an error file and produce a per-item disposition, not a job-level success flag. A job that returns 48,900 of 50,000 results is a successful job that owes you 1,100 retries.
+
+**Your system of record is yours.** If results live only in the provider's bucket and expire in 29 days, then the provider's bucket is not your archive. Copy results into your own store at collection time, keyed by the same identifier you submitted.
+
+**A day is the unit of planning.** The batch lane turns a latency problem into a scheduling problem. If the downstream report has to be ready at 06:00, the batch has to be submitted with enough runway that one retry still lands before the deadline. Two submission windows per day, twelve hours apart, is a common compromise: it gives every job a retry path inside the same business day.
+
+## What the providers actually promise
+
+The headline discount is the same everywhere. The limits are not, and the limits are what your submitter has to be written against.
+
+![Batch limits by provider: request caps, file size caps, completion windows, and result retention compared across the three major APIs and self-hosted vLLM](</diagrams/async-batch-inference-2026/3-limits-compared.png>)
+
+OpenAI caps a single batch at 50,000 requests and a 200 MB JSONL input file, allows 2,000 batch creations per hour, and applies an additional 50,000-input cap on embedding batches. Each input file can only carry requests for a single model.[^1]
+
+Anthropic caps a Message Batch at 100,000 requests or 256 MB, whichever is hit first, and notes that most batches finish in under an hour.[^2]
+
+Google's Batch API accepts either inline requests under 20 MB or a JSONL input file up to 2 GB, and prices at half the interactive rate with a 24-hour target turnaround.[^3]
+
+Two details in those numbers change architecture more than they look like they should. First, the binding constraint is usually bytes, not requests, when the payloads are documents: 50,000 requests of a 4,000-token document will blow past 200 MB long before you hit the request cap. Your chunker has to size on both axes and cut on whichever comes first. Second, Google's docs are explicit that creating a batch job is not idempotent, so a double submit creates two jobs and two bills.[^3] That is true in effect everywhere, even where it is not stated, because retried HTTP requests are a fact of life. Assume it and defend against it.
+
+One more limit worth knowing because it invalidates a common optimization: Anthropic does not support `max_tokens: 0` inside a batch, which is the cache pre-warming trick, on the reasoning that an ephemeral cache entry written during batch processing would likely expire before the follow-up request runs. Prompt caching does work in batches, but the docs describe cache hits as best-effort because requests are processed concurrently and in any order.[^2] If your cost model depends on a warm cache, batch is the wrong lane.
+
+## Reconciliation is the whole job
+
+Everything above collapses into one operational discipline: you must be able to answer "which inputs came back, and which did not" without reading a log.
+
+The join key is the per-request identifier. OpenAI requires a `custom_id` on every line. Anthropic requires a `custom_id` matching `^[a-zA-Z0-9_-]{1,64}$`.[^1][^2] That string is the only thing connecting a row in your database to a line in a results file, so it has to be generated by you, stored before you submit, and stable across retries.
+
+![Reconciliation loop: build a manifest keyed by custom id, submit once, poll the job, merge results and errors, then re-drive only the missing items](</diagrams/async-batch-inference-2026/4-reconciliation-loop.png>)
+
+The loop that works looks like this.
+
+**Build a manifest first.** One row per item, with the request key, the input hash, and a status column that starts at `pending`. The JSONL file is an export of the manifest, never the source of truth.
+
+**Submit once.** A unique constraint on the job's idempotency key stops the double submit that Google warns about. If the request times out and you are not sure whether it landed, list your recent jobs and match on a marker you control rather than resubmitting blindly.
+
+**Poll, then collect.** Polling every few minutes is fine, and webhooks exist where you want them. On completion, download the results file and the error file in the same step, and write both into your own storage.
+
+**Re-drive the set difference.** The retry is not "run the job again." It is "select the items whose status is still `pending` and build a new batch from those." That gives you a bounded second pass, and a third, without ever re-paying for work that already succeeded.
+
+**Classify the failures.** An expired request is a capacity miss: retry it in a smaller batch or on the next window. An error is usually a bad request: a schema violation, an unsupported parameter, a model mismatch. Retrying a malformed request forever is how a queue turns into a slow leak.
+
+**Record the disposition.** Every item ends `succeeded`, `failed_after_retries`, or `skipped`, with the reason. A pipeline that can report "248,013 of 250,000 records succeeded, 1,900 expired and retried once, 87 rejected for schema errors" is operable. One that reports "job complete" is not.
+
+## The arithmetic, without the hype
+
+Take a workload of 250,000 records a month, each with a 1,400-token prompt and a 300-token answer. That is 350 million input tokens and 75 million output tokens. At the interactive rate, call that cost C. The batch rate is the same tokens at half price, so the same work costs C/2, and a full year of it costs what six months cost interactively. Nothing about the model, the prompts, or the quality changed.
+
+Now the honest part. If 3% of that volume expires on the first pass, you do not pay twice: you paid nothing for the expired requests. What the expiry costs you is a day. So the real price of the discount is latency risk, and the mitigation is not a smarter retry, it is earlier submission plus a second window.
+
+The saving also compounds differently than a discount usually does. It does not free up budget for a one-off experiment. It buys permanent headroom in the same line item, which is what lets a team run an evaluation suite over the whole corpus instead of a sample, or re-embed a repository after a chunking change instead of waiting a quarter. Those are quality decisions that the interactive price quietly forbade.
+
+## When you own the batch
+
+The same trade exists on hardware you control, and the tooling is mature enough that it is a configuration choice rather than a research project. vLLM's offline path is a Python call: build an `LLM`, hand it a list of prompts, get results back, with the engine handling KV cache allocation and continuous batching. There are queue-shaped primitives too, `enqueue` and `wait_for_completion`, for submitting work without blocking on it, and the Ray Data integration adds streaming execution for datasets larger than cluster memory, sharding and autoscaling across a cluster, and fault tolerance through checkpointing.[^6]
+
+If owning that queue is still an open question, start with the [self-hosting crossover decision](/field-notes/self-hosted-inference-decision-2026) before you price a GPU.
+
+The throughput argument for offline mode is the one PagedAttention made in the first place: memory fragmentation and duplication in the KV cache were capping batch size, and fixing that management produced 2x to 4x higher throughput at the same latency compared with then-current serving systems, with the gain growing for longer sequences and larger models.[^7]
+
+![What changes when you serve the batch yourself: queue reordering, larger batch sizes, prefix caching, quantization, and spot instances with checkpointed recovery](</diagrams/async-batch-inference-2026/5-self-hosted-batch.png>)
+
+When you own the queue, four levers open that a hosted API does not give you. You can reorder the queue, sorting by length and grouping prompts that share a prefix so the prefix cache actually hits. You can push batch size until the GPU is genuinely full, because no single request has a latency obligation. You can quantize to fit a larger effective batch in the same VRAM. And you can run the job on interruptible capacity, provided your job checkpoints, since a preempted spot instance with no checkpoint means starting over.
+
+That is also the honest limit of the self-hosted lane: you have just taken on scheduling, checkpointing, and a GPU you have to keep busy. If the job runs four hours a night and sits idle for the other twenty, the math from the hosted side usually wins. The self-hosted batch case gets strong when the volume is large enough to fill most of a day, or when the data cannot leave your network at all.
+
+## Where batch is the wrong answer
+
+Batch is a specific tool with a specific shape, and forcing the wrong work into it produces a pipeline that is slower and harder to debug than the one you replaced.
+
+**Anything with a dependency chain.** Agent loops, tool-calling sequences, and multi-step reasoning where step five reads the output of step four. Each step is a separate batch, so a twenty-step run takes twenty windows.
+
+**Anything a person is waiting on.** Even at flex pricing, a 429 you have to retry is a visible delay.
+
+**Anything that writes.** A batch request that creates a record, sends a message, or charges a card turns a retry into a duplicate side effect. Keep writes interactive and batch the reading, scoring, and drafting around them.
+
+**Anything with a hard sub-day deadline.** The 24-hour window is a bound, not a promise, and it is the only window OpenAI currently supports.[^1] If the report must be out by 09:00 and you submit at 08:00, you have built a coin flip. Chunk the work so each piece has runway, or submit the night before.
+
+**Streaming.** Batch results arrive as a file, not a stream. Requests that set streaming are rejected, which is exactly what you would want.
+
+## What this looks like on the ground
+
+Our own content fleet is a batch system that happens to be built out of scheduled jobs: article drafts, lesson generation, diagram capture, audio synthesis, audits, and the verification passes that gate all of it. None of it needs to happen in the next two seconds. All of it has a deadline measured in hours. The contention problem we hit with a single serving slot is documented in our [local concurrency notes](/field-notes/local-llm-concurrency-slots-2026), and it is the reason the queue came first.
+
+The failure we hit was a shape problem, not a pricing one. Work was being dispatched as if it were interactive, one live slot at a time, and a job that had already finished could leave a stale claim on that slot, so the next job queued behind a ghost. The fix was to stop treating in-flight state as the truth. Each job got a durable record with an identifier and a status, a single dispatcher owned the slot, and recovery became a reconciliation step over records rather than a cleanup of orphaned processes.
+
+That is the same discipline this article keeps landing on, and it is the part clients actually buy. When work is deferrable, the queue is the system. The endpoint is an implementation detail. Get the manifest, the identifier, and the reconciliation right, and the 50% discount is the least interesting thing about the change.
+
+## Start here
+
+1. List every scheduled or triggered model call in your system, with its prompt size, output size, and monthly count.
+2. Mark each one against the three questions. Anything that passes goes on the batch lane list.
+3. Write the manifest schema before writing the submitter: request key, input hash, job id, status, attempt count, disposition.
+4. Measure your real payload bytes, then set your chunk size on bytes and requests, whichever binds first.
+5. Build the collector as a merge of results and errors, with a re-drive query for the leftovers.
+6. Schedule two submission windows a day so every job has one retry inside its deadline, then watch the expiry rate for a week before you move the last of your volume.
+
+The discount is real and it is sitting there unclaimed in most pipelines. The reason it stays unclaimed is that half price comes bundled with a state machine, and a state machine needs an owner. Assign one, and the queue stops being a cost center you babysit and becomes the most predictable part of the platform.
+
+[^1]: OpenAI, "Batch API" guide, covering the 50% discount, 50,000-request and 200 MB per-batch limits, 2,000 batch creations per hour, the 24-hour completion window, separate rate-limit pools, the single-model-per-file rule, and expired-request handling: [developers.openai.com](https://developers.openai.com/api/docs/guides/batch)
+
+[^2]: Anthropic, "Batch processing" documentation, covering the Message Batches limits of 100,000 requests or 256 MB, the 50% discount, 24-hour expiry, 29-day result retention, the custom_id format, and the batch constraints on streaming, max_tokens: 0, and best-effort prompt caching: [docs.anthropic.com](https://docs.anthropic.com/en/docs/build-with-claude/batch-processing)
+
+[^3]: Google, "Batch API" documentation for the Gemini API, covering the 50% cost, 24-hour target turnaround, 20 MB inline and 2 GB input-file limits, and the warning that batch job creation is not idempotent: [ai.google.dev](https://ai.google.dev/gemini-api/docs/batch-api)
+
+[^4]: Google, "Rate limits" documentation for the Gemini API, stating that Batch API requests are subject to their own rate limits, separate from non-batch API calls: [ai.google.dev](https://ai.google.dev/gemini-api/docs/rate-limits)
+
+[^5]: OpenAI, "Flex processing" guide, covering service_tier flex, tokens priced at Batch API rates, 429 Resource Unavailable responses that are not billed, and the longer request timeout guidance: [developers.openai.com](https://developers.openai.com/api/docs/guides/flex-processing)
+
+[^6]: vLLM, "Offline Inference" documentation, covering LLM.generate, the enqueue and wait_for_completion queue APIs, and the Ray Data LLM integration's streaming execution, sharding, and checkpoint-based fault tolerance: [docs.vllm.ai](https://docs.vllm.ai/en/latest/serving/offline_inference.html)
+
+[^7]: Woosuk Kwon et al., "Efficient Memory Management for Large Language Model Serving with PagedAttention," SOSP 2023, reporting 2x to 4x throughput improvement at the same latency versus FasterTransformer and Orca: [arxiv.org](https://arxiv.org/abs/2309.06180)

@@ -1,0 +1,210 @@
+---
+title: "Data Architect DM-5C: Data Skew: Extreme Cases and Advanced Mitigation Patterns"
+slug: day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa
+series: salesforce-data-architect
+lesson: 41
+excerpt: "Lesson 9 explained how skew breaks a data model and lesson 10 gave you the design-shape fixes. This lesson takes the same problem to the extreme, which is where the dm-5c objective lives. You will learn what separates ordinary skew from extreme skew and why Salesforce's own guidance puts a warning line at 10,000 records per owner and 10,000 children per parent, while real orgs run at ten million. You will work the extreme ownership case, one integration user holding tens of millions of records, and see why the fix is distributing owners rather than adding sharing rules. You will work the extreme lookup case, millions of children rolling up to one parent, and see why a live roll-up on a skewed master-detail relationship is a per-write parent lock, and how to replace it with a scheduled aggregation onto a denormalized field. You will learn three sharding shapes, intermediate parents, a split hot parent, and moving the detail to a Big Object, plus polymorphic and junction patterns for fanning references laterally. You will finish with the operational levers that buy you room while the model gets fixed: Bulk API serial mode, parent-grouped batches, deferred sharing calculation, fewer sharing rules, a flatter role hierarchy, and a hard rule against mass reparenting at volume."
+date: "October 22, 2026"
+author: "Adroit Consulting"
+readTime: "24 min read"
+tags: [Salesforce, Data Architecture, Data Skew, LDV, Sharing, Record Locking, Bulk API, Certification]
+---
+
+Lesson 9 gave you the mechanics of skew: why a parent record with millions of children serializes writes, why one overloaded owner turns a sharing rule change into an hours-long recalculation, and why reparenting a heavily referenced record fans cascades across everything under it. Lesson 10 gave you the design shapes that prevent it: polymorphic lookups, junction objects, intermediate parents, and denormalization. If you have both of those in hand, a lot of this lesson will feel familiar, and that is fine. Requirement dm-5c is written as avoiding data skew through record locking, sharing calculation issues, and excessive child to parent relationships. [^1] The extreme-volume scope and the advanced mitigation patterns that follow are this series' reading of that requirement, not the guide's own wording. What dm-5c does not ask for is new mechanisms. It asks you to take the same mechanisms to a scale where the ordinary answer stops working and the answer has to become an architectural decision.
+
+Here is the distinction that matters. Ordinary skew is a distribution problem you can tune around: split a batch, defer a calculation, move a load to Saturday night. Extreme skew is a distribution problem where tuning no longer buys you anything, because the concentration is structural and every normal operation routes through the hot record or the hot owner. At that point the choices narrow to three: change who owns the data, change the shape of the relationship, or stop doing the expensive thing on every write.
+
+That third option is the one architects underuse, and it is the one this objective tests most often. A live roll-up summary on a master-detail relationship with ten million children is not a performance setting. It is a design decision with a cost you pay on every single child write, forever, and it can be replaced with a scheduled number that nobody can tell apart from the live one except the row lock log. [^2]
+
+## Deep Dive
+
+### The difference between skew and extreme skew
+
+Salesforce publishes two numbers that function as warning lines rather than hard limits. Do not let a single user or queue own more than 10,000 records of an object, and do not associate more than 10,000 child records with a single parent account. Both conditions are named in the product guidance, the first as ownership data skew and the second as parent-child data skew. [^3]
+
+![Skew read as a ratio: 10,000 records per owner across 500 owners is healthy, while 20 million records split across four owners reaches 5 million each and 300,000 children under one parent forces a scan of the other 299,999](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/1-skew-as-a-ratio.png>)
+
+Read those numbers as a ratio, not a rule. An org with 10,000 records per owner across 500 owners is healthy. An org with 20 million records and four owners is not, even though each owner's share is well "under the limit" by any single-object count you might eyeball. What makes skew extreme is the ratio of records to destinations, measured against the work the platform has to do when that destination changes. When one integration user owns thirty million records and someone edits that user's role, the platform has to evaluate what happens to thirty million shares and the hierarchy above it. That is the extreme case, and it is the exact scenario in the first quiz question of this lesson.
+
+The same logic runs for relationships. One parent with 300,000 children is not just a slow related list. Salesforce's own example is a marketing-generated contact population parked under a single dummy account. When a user loses access to one contact, the platform has to scan the other 299,999 to decide whether the user still deserves an implicit share on the account. [^4] Multiply that by the number of visibility changes in a day and you have an account that quietly costs more than the rest of the object combined.
+
+### Extreme ownership skew: one login holding tens of millions of records
+
+The mechanism behind ownership skew is sharing calculation, and it is worth being precise about it because the exam answers turn on it. Record access in Salesforce is materialized. Owner-based sharing rules, role hierarchy grants, and group memberships all produce share rows that the platform has to keep consistent. The cost of keeping them consistent is proportional to how many records sit under the thing you just changed. [^3][^5]
+
+A single integration user owning thirty million records concentrates three separate costs on one identity:
+
+- Any change to the owned object that triggers sharing evaluation has to consider that owner's full record set.
+- If that user has a role, every record they own materializes a share for every user above them in the hierarchy.
+- If that user is in a public group targeted by a sharing rule, a membership change recalcs access across everything they own.
+
+The fix is to distribute ownership so no single identity holds a disproportionate share, and the distribution has to be deliberate rather than incidental. In practice that means a pool of integration users, each mapped to a slice of the data (region, source system, business unit, or a hash of the external id), with the load split across them. Queues work the same way for work-item objects, because a queue is an owner too, and one queue holding every open case in a service org is the same skew wearing a different hat. [^3]
+
+Salesforce's guidance adds two details that separate a good answer from a memorized one. Do not assign a role to a user who owns more than 10,000 records, because the role is what forces share materialization for everyone above them. If a role is unavoidable, put that user in a separate role at the top of the hierarchy, keep them there, and keep them out of public groups that sharing rules reference. [^3] Both moves attack the same cost: stop the platform from deriving shares from an enormous owned set.
+
+![One integration user owning 30 million records concentrates three costs on a single identity: sharing evaluation span, role share materialization, and group membership recalculation, and only distributing owners reduces the concentration](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/2-ownership-skew-three-costs.png>)
+
+### Why more sharing rules make ownership skew worse
+
+Quiz question one offers "add more sharing rules" as a distractor, and the reason it is wrong is the reason a lot of remediation projects fail. Sharing rules are not free access. Each rule is a calculation that runs over records whose owner, criteria, or group membership changed. Adding rules to an org with an ownership skew problem adds calculation paths over the largest data set in the org. The slowness does not come from too few rules. It comes from too many records under one owner being evaluated by every rule you have. [^3][^5]
+
+The same logic kills "remove the role hierarchy" as an answer. Removing hierarchy grants changes who can see what, which is a security decision nobody asked for, and it does not reduce the record-to-owner concentration at all. The skew survives the change, and now the org's access model is broken as well. Platform Encryption is even further off the map: encryption has nothing to do with how sharing is computed. If a distractor does not touch owner count or parent fan-out, it is not a skew fix.
+
+### Extreme lookup skew with a master-detail roll-up
+
+Now the parent side. On an object with a master-detail relationship, updating a child record locks both the parent and the child for the duration of the transaction, because the platform is protecting referential integrity while it works. [^6] That lock is normally invisible. It becomes the dominant cost when one parent has millions of children, because every child write in flight has to queue behind the same parent lock.
+
+Add a roll-up summary and you make it worse in a specific, predictable way. A roll-up summary field lives on the master record and derives its value from detail records, which means the master's stored value has to be maintained as details change. [^2] So on a skewed master-detail relationship, each child write does two things: it takes the parent lock (mandatory, for integrity), and it makes the parent's aggregate stale, which pulls the parent record into the write path again. Serialize that across ten million children and the object effectively processes writes one at a time.
+
+![One child write on a skewed master-detail takes the mandatory parent lock and then makes the parent roll-up aggregate stale, so every write in flight queues behind the same parent record](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/3-master-detail-write-path.png>)
+
+That gives you the mitigation the second quiz question is testing, and it comes in two parts.
+
+The first is to stop recomputing on every write. If the business can tolerate a number that is minutes or hours old, replace the live roll-up with a scheduled aggregation that writes to a plain field on the parent. Batch Apex that selects children grouped by parent and writes one update per parent does the job, and Bulk API query jobs can pull the child side at volume when the aggregate has to be computed outside the platform. [^7][^8] The parent then holds a denormalized value that no child write has to touch. You trade freshness for throughput, and you should say that trade out loud, because it is the actual answer to "how do we keep the total and stop the locking."
+
+The second is to shard the relationship so children stop converging on one record. Both moves appear together in the correct answer set, and neither one alone is the whole fix: dropping the live roll-up removes the per-write recompute, and sharding removes the per-write parent lock contention. Keep both in your head as a pair.
+
+### Sharding pattern one: intermediate parents
+
+Insert a level between the hot parent and its children. If every order in a region hangs off one account, create segment or division records under the account and hang the orders off those. The children now distribute across many parents, each with a small fan-out, and none of them exceeds the 10,000-child warning line. [^3]
+
+Two consequences to state as an architect. First, reporting changes: totals that used to be a single parent roll-up now need to aggregate across the intermediate layer, either through a second roll-up on the top parent or a scheduled aggregate. Second, the relationship type matters. If the intermediate records are master-detail, deleting one cascades to everything under it, so a cleanup mistake at the segment level removes a large chunk of history. Lookup based intermediates keep the cascade contained at the cost of losing automatic owner and sharing inheritance. [^9]
+
+### Sharding pattern two: split the hot parent
+
+Sometimes the children genuinely belong to "one" business entity, but they do not have to belong to one record. Split the hot parent into several records, one per region, per fiscal period, or per source system, and distribute the children across those pseudo-parents. This is the pattern behind Salesforce's own round-robin advice: create a pool of accounts and assign children round robin. [^3]
+
+The honest cost here is identity. You now have four account records for one customer, and every downstream consumer (reporting, integrations, duplicate rules, service console search) has to know which slice it is looking at. That is a real governance burden, and an architect who recommends splitting should also recommend the reconciliation layer: a canonical id field on every slice, a mapping table or external id convention, and a rollup view that presents the customer as one. Do not sell this pattern as free.
+
+The cheaper variant, worth knowing for the exam, applies when the sharing model itself is the bottleneck rather than sharing rules. Where security allows, a Public Read/Write model on the parent keeps the parent lock but removes the sharing calculation around it. [^3] That does not fix the shape. It removes one of the two costs, and it is only defensible when the data is genuinely non-confidential.
+
+### Sharding pattern three: move the detail out
+
+If the relationship has to stay pointed at one entity and the volume keeps growing, stop storing the detail on the child object at all. Put the high-volume rows in a Big Object with the parent key on each row, and keep only the aggregate on the parent record. Nothing rolls up automatically from a Big Object, so the aggregate is written by the scheduled job, which is exactly what you wanted in the previous section. [^8] External Objects do the same trick when the detail already lives in another system and does not need to be copied.
+
+The trade is query behavior. Big Objects are for high-volume inserts and asynchronous reads, not for interactive related lists. The moment a user needs to see the ten most recent rows on a page, you need the query to be selective on an indexed field and you need the UI to tolerate that. If the details are genuinely cold (archive, audit, event history), this pattern is close to free. If they are hot, it is the wrong tool and sharding is the better answer.
+
+![Three sharding shapes side by side, intermediate parents, splitting the hot parent into pseudo-parents, and moving the detail into a Big Object, each with its mechanism and its reporting, identity, or query cost](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/4-three-sharding-shapes.png>)
+
+### Polymorphic and junction patterns at extreme volume
+
+Lesson 10 covered both of these, so treat this as the extreme-volume reading. A polymorphic lookup lets one field reference more than one parent object type, which spreads references across object types rather than concentrating them on one record. A junction object models many-to-many, so no single parent accumulates every child. [^1]
+
+The extreme case to watch is a junction where one side is still a single enormous parent. If every relationship row joins to the same hot record, you have moved the concentration into the junction, and the junction writes now contend on that record. Check both ends before you call the pattern a fix. A junction only spreads load when both sides are reasonable fan-out points.
+
+### Record-locking mitigation at volume
+
+The operational levers do not change the model, and that is the point. They buy time while the model gets fixed, and every one of them is defensible in an interview answer as a second step.
+
+Serial mode is the big one. Bulk API's default is parallel, which means multiple batches touching the same parent are in flight at once and one of them loses the lock. Serial mode processes one batch at a time, which removes the possibility of contention at the cost of throughput. [^7] Serial mode is the right tool when the data is concentrated and the volume is large, and the wrong tool when you could simply reorganize the batch instead. Salesforce's guidance is blunt about that preference: try reorganizing first, and reach for serial mode when the reorganization does not work.
+
+Reorganizing means grouping by parent. If every `AccountTeamMember` row for a given account sits in the same batch or job, only one transaction ever wants that account lock. [^10] Sorting the CSV by parent id before the load is cheap and it removes most of the contention that serial mode would have cost you throughput to avoid. On the classic bulk API, larger batches also mean fewer transactions and fewer chances to collide, within the platform's batch size limits.
+
+Avoid reparenting after load. A reparent is a child update that changes which parent is locked, and at volume it is the single most dangerous operation in this lesson. Which brings us to the third quiz question.
+
+### Why mass reparenting is the worst operation available
+
+Reparenting a high-volume set fans two kinds of work across millions of records. Each child write takes the old parent lock and the new parent lock, and each child write can trigger cascade and sharing recalculation work along the relationship. [^6][^3] Do that to a million children in one job and you are not doing a data correction, you are running a distributed race between batches for the same locks. The result is timeouts, row lock errors, partially applied changes, and an integration that has to be resumed from an unknown state.
+
+The answers in question three that talk about data types, validation rules, and external ids are all wrong for the same reason: reparenting does not change schema or behavior. It changes load. If a reparent is unavoidable, do it in chunks during off-peak hours, using Batch Apex or Bulk API, with retry logic and a checkpoint you can resume from. [^3][^6] That is not a comfortable answer. It is the correct one, and "spread it out and retry" is what an experienced architect actually says.
+
+### Sharing recalculation mitigation
+
+Where ownership skew amplifies sharing cost, these are the levers that reduce the base cost.
+
+Defer sharing calculation during the load. This suspends sharing rule and group membership recalculation so bulk changes complete, and then you resume and force a full recalculation. The trap is treating it as a setting you flip casually: the feature is not on by default, it has to be enabled by Salesforce Support, and if you do not run the full recalculation afterward you get inconsistent record access rather than fast access. [^5][^11] Deferring also does not defer everything. Manual shares, team and queue updates, and roles not referenced by sharing rules still evaluate immediately. [^11]
+
+Reduce the number of sharing rules. Redundant paths are the normal state of a five-year-old org. Two identical rules targeting two different public groups should be one rule targeting one group that contains both. [^3] Fewer rules means fewer evaluation passes over the same records.
+
+Flatten the role hierarchy. Salesforce recommends no more than 10 levels and warns against recreating the org chart as roles. [^3] Every level adds share materialization for the users below it, and the cost compounds when a large owner sits near the bottom.
+
+Limit team membership on high-volume objects. Account teams and opportunity teams are sharing. A team member added to a parent with millions of children is a share that has to be maintained, and team membership changes are exactly the kind of operation that triggers recalculation you did not plan for.
+
+### Implicit sharing: the load you can move without noticing
+
+Implicit sharing is the part of this objective that people skip, and the exam likes it because it links modeling to load. Parent implicit access gives a user read-only access to an account when they can see one of its child contacts, cases, or opportunities. Child implicit access gives the account owner visibility into those children depending on the owner's role settings. [^12]
+
+Two architect-level implications. First, moving a high-volume child object under a master-detail parent does not just change the relationship shape. It changes who can see the records, and it can concentrate implicit sharing work on the parent you just made hot. [^4] Second, implicit sharing is not a universal mechanism. It is defined for standard objects such as accounts and their contacts, cases, and opportunities, and it is not something you can turn on for a custom hierarchy. [^12] If your design leans on implicit sharing to avoid writing sharing rules, verify the object pair actually participates. This is also why Salesforce's guidance suggests setting child objects to Controlled by Parent wherever security allows, which avoids creating separate parent implicit shares. [^3]
+
+### Detecting extreme skew before it becomes an incident
+
+Skew that nobody measured becomes skew nobody can explain. The measurements are simple and you should name them in an answer.
+
+Records per owner, grouped by object, sorted descending. One row with seven or eight digits is your ownership skew. Children per parent, grouped on the lookup or master-detail field, with a threshold report at 10,000 and an alert well before it. [^3] Then time the operation: measure a bulk load, a sharing rule save, and a full recalculation before and after each change, because the degradation is gradual and the baseline is the only thing that proves it. Row lock timeout alerts exist as a proactive monitoring feature and they name the object and operation, which is how you find the hot parent without guessing. [^13] Finally, query plans and selective filters matter here for the same reason they matter in lesson 29: a query that scans a skewed parent is slow regardless of how the data is distributed.
+
+## Configuration Walkthrough
+
+Work these in order on a real org. The sequence matters, because most remediation projects fail by starting at step five.
+
+![The eight step remediation ladder in order: measure the skew, change the flow of new records, fix the owner sharing context, shard the hot parents, replace live roll-ups only after the aggregate is proven, reorganise the load, defer sharing calculation, then consolidate the access model](</diagrams/day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa/5-remediation-ladder.png>)
+
+1. Measure the skew. Build a report or a SOQL aggregate of record counts grouped by `OwnerId` for each high-volume object, and counts grouped by the parent field for each kid object. Flag anything above 10,000 and anything an order of magnitude above its peer group. [^3]
+2. Distribute ownership on new loads first. Before touching history, change the integration so it round-robins or partitions records across a pool of integration users or queues. If you have one load user, this is the highest-value change in the whole list. [^3]
+3. Fix the owner's sharing context. For any user who will still own a large set, remove the role, or place them at the top of the hierarchy, and keep them out of public groups referenced by sharing rules. Do this before redistributing existing records, so the recalculation that follows is cheaper. [^3]
+4. Shard the hot parents. Create the intermediate or pseudo-parent layer (division, segment, region) and reparent children in chunks, off-peak, with checkpoints and retries. Verify each chunk lands before starting the next. [^3][^6]
+5. Replace live roll-ups on skewed master-detail relationships. Build the scheduled aggregate first, populate the denormalized field, verify the numbers match the roll-up for a week, then remove the roll-up. Never remove it first. [^2][^8]
+6. Reorganize the load before you slow it down. Sort input by parent id so all children of one parent land in the same batch or job. Only if that still produces lock errors, move the object's job to serial concurrency mode. [^7][^10]
+7. Defer sharing calculation for the bulk window. Suspend, run the load, resume immediately, then run the full recalculation. Schedule it during low activity and confirm the feature is enabled before you plan around it. [^5][^11]
+8. Reduce the standing cost. Delete redundant sharing rules, flatten the role hierarchy toward the 10-level guidance, and audit team membership on the high-volume objects. [^3]
+
+## Exam Traps
+
+**Trap one: leaving one integration user as owner of tens of millions of records.** Ownership skew degrades sharing recalculation with no hot parent anywhere in the model, so it hides from every relationship-shaped diagnostic you run. [^3] The fix is distributing owners, not adding rules. Answer choices that increase sharing calculation (more rules) or change security structure (remove the hierarchy) do not address the concentration. [^3][^5]
+
+**Trap two: keeping a live roll-up on an extremely skewed master-detail relationship.** Each child write locks the parent, and the roll-up makes the parent's stored aggregate stale on top of that. [^2][^6] Replace it with a scheduled aggregation written to a denormalized field, and if the question also asks about contention, shard the relationship with intermediate parents. Adding another roll-up to the same hot parent compounds the problem.
+
+**Trap three: attempting a mass reparent of high-volume children.** Reparenting at volume fans lock acquisition and cascade work across millions of records, producing timeouts and lock errors. [^6] It does not change data types, disable validation rules, or strip external ids, so those distractors are always wrong. The defensible answer is chunked, off-peak, retried, and checkpointed.
+
+**Trap four: treating deferred sharing as a permanent fix.** Deferring is a maintenance window tool. It requires enabling by Support, it must be followed by a full recalculation, and it does not defer every sharing operation. [^5][^11] Recommending it as the resolution to structural skew is a wrong answer dressed as an operational one.
+
+## Try It
+
+First, the extreme ownership case. A bulk integration loads thirty million records, all assigned to a single integration user, and sharing recalculation runs for hours after every load. Name the skew, then choose. Distributing ownership across multiple integration users or queues is the fix, because it reduces the record count under any single owner and therefore the work every recalculation has to do. [^3] Say why the others fail: more sharing rules add evaluation passes over the same concentration, removing the role hierarchy breaks an access model without touching the distribution, and Platform Encryption is unrelated to sharing computation.
+
+Second, the two-answer question. Which two are advanced mitigations for extreme lookup or roll-up skew? Replacing live roll-ups on the skewed relationship with a scheduled aggregation to a denormalized field, and sharding the relationship by introducing intermediate parents. [^1][^2][^8] The failures are instructive: another roll-up on the hot parent adds recompute, and maximum parallel loading adds contention on the lock that is already the bottleneck.
+
+Third, write the sentence you would say in a design review about reparenting two million children in one job. Something close to: "That fans lock acquisition and cascade work across millions of records and will time out, so we chunk it by parent, run it off-peak in serial batches with retries, and checkpoint each chunk." Then add the part most people leave out, which is what you do before any of that: verify the new parent distribution actually fixes the skew, so you are not just moving the hot record.
+
+As a fourth exercise, sketch the numbers you would put in a one-page skew assessment for a service org with 200 million cases: records per owner, cases per account, share row count for the top ten owners, time to save a sharing rule, and row lock timeout rate over the last 30 days. If you can name those five measures, you can run the assessment.
+
+## What's Next
+
+You can now tell extreme skew from tunable skew, and you can pick between the three structural answers: redistribute ownership, reshape the relationship, or take the expensive work off the write path. You can also name the operational levers that buy time, and you can explain why mass reparenting is the operation to avoid rather than the operation to optimize. [^1][^3][^7]
+
+Lesson 42 closes the series with the governance side of moving data: data migration governance, covering cutover planning, rollback, and post-go-live validation (mg-3c). It is the lesson that turns everything from the migration domain into a plan with a go/no-go decision, a way back, and a way to prove the data arrived intact.
+
+## Related Requirements
+
+- Lesson 9 of 42 (dm-5a): Data skew: record locking, sharing recalculation, and excessive child-to-parent relationships
+- Lesson 10 of 42 (dm-5b): Data-skew scenarios: avoidance and design patterns
+- Lesson 29 of 42 (lv-1a): LDV fundamentals: skinny tables, indexing, selective filters
+- Lesson 37 of 42 (mg-2a): LDV migration performance: Data Loader, Bulk API, parallel versus serial
+- Lesson 42 of 42 (mg-3c): Data migration governance: cutover planning, rollback, and post-go-live validation
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide, Salesforce. Defines the Data Modeling/Database Design domain and requirement dm-5c: given a customer scenario, recommend approaches and techniques to avoid data skew (record locking, sharing calculation issues, and excessive child to parent relationships). The extreme-volume scope and advanced mitigation patterns in this lesson are this series' elaboration of that requirement, not wording from the guide. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&type=1)
+
+[^2]: Roll-Up Summary Field, Salesforce Help. Defines roll-up summary fields as values on the master record calculated from detail records in a master-detail relationship, and documents mass recalculation behavior when the definition changes. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.fields_about_roll_up_summary_fields.htm&language=en_US&type=5)
+
+[^3]: Best Practices for Optimizing Sharing Performance, Salesforce Help. States the ownership data skew guidance (do not let one user or queue own more than 10,000 records; distribute ownership; do not give that user a role, or place them at the top of the hierarchy and keep them out of public groups), the parent-child data skew guidance (do not associate more than 10,000 child records with one parent account; use a pool of accounts assigned round robin; redistribute in chunks off-peak with Batch Apex or Bulk API; consider Public Read/Write so the parent stays locked but sharing calculations do not occur), the 10-level role hierarchy recommendation, sharing rule consolidation, and the Controlled by Parent recommendation. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.security_sharing_performance.htm&language=en_US&type=5)
+
+[^4]: Parent-Child Data Skew, Designing Record Access for Enterprise Scale, Salesforce Developers. Explains that associating 10,000 or more child records with one parent account slows loads, updates, and even single-record operations, and walks the 300,000-contact example where removing access to one contact forces the platform to scan the remaining 299,999 to decide whether the parent implicit share still applies. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/draes/guide/draes-object-relationships-parent-child-data-skew.html)
+
+[^5]: Considerations for Making Sharing Updates, Salesforce Help. Documents that deferring sharing calculations requires the feature to be enabled, that a full sharing rule recalculation is required afterward to avoid record access inconsistencies, and that some sharing changes are not deferred. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.security_sharing_update_considerations.htm&language=en_US&type=5)
+
+[^6]: Record-Level Locking, Designing Record Access for Enterprise Scale, Salesforce Developers. States that for objects with a master-detail relationship, updating child records locks the parent and the child records to preserve referential integrity, and identifies simultaneous updates to a parent and its children, or to children sharing a parent, as the two configurations that produce lock errors. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/draes/guide/draes-object-relationships-record-level-locking.html)
+
+[^7]: General Guidelines for Data Loads, Bulk API 2.0 and Bulk API Developer Guide, Salesforce Developers. Defines parallel and serial concurrency modes, states that serial mode processes one batch at a time to minimize lock contention at the cost of longer processing, recommends reorganizing batches before choosing serial mode, and documents lock retry behavior including reprocessing a batch up to 10 times. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-planning-guidelines.html)
+
+[^8]: Use Bulk Query, Bulk API 2.0 and Bulk API Developer Guide, Salesforce Developers. Documents that Bulk API query does not support GROUP BY or aggregate functions such as COUNT(), which is why aggregates over very large child sets are computed by batch processing or outside the platform rather than by a single bulk query. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-using-bulk-query.html)
+
+[^9]: Relationships Among Standard Objects and Fields, Object Reference for Salesforce. Documents master-detail behavior: the detail record inherits the sharing and security settings of its master, the detail record's owner is set from the master, and deleting the master deletes its detail records. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/relationships_among_objects.htm)
+
+[^10]: Organize Data to Minimize Lock Contention, Bulk API 2.0 and Bulk API Developer Guide, Salesforce Developers. Recommends sorting records by parent so that children of the same parent are not split across jobs, using the AccountTeamMember example where multiple jobs referencing the same account all try to lock it and time out. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/datafiles-organize-data.html)
+
+[^11]: Defer Sharing Calculations, Salesforce Help. Documents suspending and resuming sharing rule and group membership calculations, notes that most sharing evaluations are disabled while deferred and that changes do not take effect until recalculations resume, and requires a full recalculation afterward. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.security_sharing_defer_sharing_calculations.htm&language=en_US&type=5)
+
+[^12]: Implicit Sharing, Salesforce Help, and Platform Sharing Architecture, Salesforce Architects. Define parent implicit access (access to a child case, contact, or opportunity grants read-only access to its account) and child implicit access (the account owner's role determines access to children), and state that implicit sharing applies to standard object pairs such as accounts with contacts, cases, and opportunities rather than custom hierarchies. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.sharing_across_objects.htm&language=en_US&type=5) and [architect.salesforce.com](https://architect.salesforce.com/docs/architect/fundamentals/guide/platform-sharing-architecture)
+
+[^13]: Proactive Alert Monitoring: Rowlock Timeout Errors, Salesforce Help. Explains that bulk API batches processed in parallel can attempt to update the same parent record at once, that reducing batch size, processing in serial mode, and sorting records by parent mitigate it, and that every child edit locks the parent, so reducing child records per parent is the structural remedy. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000384162&language=en_US&type=1)

@@ -1,0 +1,118 @@
+---
+title: "An Agent Is a User: Scoping Machine Access on Salesforce"
+slug: salesforce-agent-access-scoping-2026
+excerpt: "Every Flow, agent action, Apex class, and API call runs under one identity: the running user. Scope it right and the machine stays in its lane."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 15, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Salesforce, Agentforce, Security, Flow, Apex, API]
+bannerImage: "/banners/salesforce-agent-access-scoping-2026.webp"
+ogImage: "/banners/salesforce-agent-access-scoping-2026-og.jpg"
+---
+
+The permission model breaks the moment the caller stops being human. A person who hits a locked field edits around it, asks a colleague, or tries another screen. An agent either has the permission or it fails, usually with a generic error it then tries to narrate its way around.[^4] That is why the support ticket every Agentforce team eventually files looks the same: the agent understood the request, picked the right action, filled in the fields, and then could not save the record. The topic classified correctly. The model reasoned correctly. Everything died on a permission the machine never had.[^4]
+
+The instinct is to treat that as a prompt problem and reach for a stronger instruction set. It is not a prompt problem, and no amount of instruction-tuning fixes it.[^4] The agent does not have magic powers. Every action it takes, a SOQL read, a record update, a Flow, an Apex call, executes under a specific Salesforce user.[^4] The question that decides what the machine can do is not how well the model reasons. It is which user this agent runs as, and what that user is allowed to touch.[^4]
+
+This article maps that model across the 2026 stack: the running user that powers every Flow, Agentforce action, Apex class, and API integration; the run contexts that let each one hold the line or blow through it; the identity paths into an Experience Cloud agent; the authentication a headless caller should use; and the action fence that keeps a machine inside its scope. Salesforce's own architecture guidance calls the running user "your most fundamental security control for agent architecture."[^1] The practical work is deciding, for every machine, exactly which user that is.
+
+## The running user is the security boundary
+
+Salesforce authenticates humans and grants them permissions by profile and permission set, then gates record visibility through role hierarchy and sharing rules. Agents do not work that way.[^1] Every agent acts under a Salesforce identity, its running user, and that identity decides what data it can query, which records it can modify, and which platform operations it can perform.[^1] The running user is either the signed-in person whose context the agent inherits, or a dedicated identity you provision, depending on how the agent is invoked. Understanding that difference, that a machine does not authenticate like a person, is the core of agent security architecture.[^1] The full mechanics of what a user's profile, permission set, and sharing actually grant are the subject of our [sharing model walkthrough](/field-notes/salesforce-record-sharing-model-2026); this article is about which identity runs when the machine acts.
+
+Three principal models cover everything on this stack, and you should be able to state which one each machine uses:
+
+- An employee agent runs as the person using it. It inherits that user's profile, permission set, role, field-level security, and sharing.[^4] The same employee agent shows a rep and their manager different records, because the agent is only ever as powerful as the human driving it. That makes an employee agent a poor escalation path around your existing sharing model, which is the point. It also means "the agent cannot see that account" is often correct working behavior, not a bug.[^4]
+- A service or external agent runs as its own dedicated agent user, a specialized integration user, not as the customer.[^2][^3] Customers are not Salesforce users, they cannot be. Everything that agent may read or write lives on that one user, defined once and centrally.[^4] That is powerful and dangerous in equal measure, because a customer-facing agent's permissions apply to every anonymous person who talks to it. Design it as if an adversary is on the other end, because eventually one will be.[^4]
+- A system or API caller runs as a dedicated integration user, through client credentials or a signed bearer token, never as a shared account reused everywhere.[^1][^5]
+
+![Three ways a machine gets an identity: an employee agent runs as the signed-in person, a service agent runs as one dedicated agent user for every anonymous visitor, and a system or API caller runs as a dedicated integration user, each with a different risk posture](</diagrams/salesforce-agent-access-scoping-2026/1-three-principals.png>)
+
+Salesforce creates a new agent with zero rights, and any permission it later holds was explicitly authorized.[^3][^6] Treat that as a design brief, not a fact to fight. The agent needs a permission set built for its task list and nothing else: field-level security that keeps tax ID numbers and billing information out of scope, and a check of the data sharing rules that could hand the machine records it has no reason to see.[^6]
+
+One rule pays for itself. Never assign a system administrator as a running user.[^1] It is the fastest path to a demo that works, and it is the fastest path to an agent whose effective scope is the entire org, exercised programmatically at scale in ways a human administrator never would.[^1] Scope the running user to the minimum its defined work requires, then review which of those granted permissions the agent actually exercised after go-live so you can strip the rest.[^1]
+
+## Flow runs in a context, and the context decides
+
+Flow is where a machine starts to act. When an Agentforce action runs a Flow, both the flow's run context and the agent's execution context apply at once, and the flow's running user is what governs its access.[^2] Three flow contexts exist, and they differ in what they enforce:
+
+- User context. The flow runs as the running user, and its object access, field access, and sharing all follow that user's permissions.[^2] This is the fenced, default posture.
+- System context with sharing. Elevated access that still respects record-level visibility; object and field access are unrestricted, but sharing rules still apply.[^2]
+- System context without sharing. Background automation that needs full access; object, field, and sharing enforcement are all off.[^2]
+
+![Flow run context decides whether a machine is fenced: the user context runs under the running user's permissions and sharing, system context with sharing allows all objects and fields but still applies sharing rules, and system context without sharing removes object, field, and sharing enforcement entirely](</diagrams/salesforce-agent-access-scoping-2026/2-flow-contexts.png>)
+
+The part that catches teams is this. When a service agent runs in its agent-user context, the running user of any flow it invokes is the agent user, not the customer who typed the message.[^2] So a flow wired as system context without sharing behind a public agent is running with full access for every anonymous visitor who triggers it. Salesforce's enforcement direction has been steadily closing exactly this hole, which is why a flow that used to run wide starts failing in a user context you did not choose once the platform tightens the default. Treat flow run context as a deliberate decision for every flow an agent can reach, not an implementation detail.[^2]
+
+The security problem here is the same as the one Apex presents, and it is the load-bearing exception in the whole model. The agent framework enforces running-user constraints for declarative configuration, but custom actions are a designed exception: both Apex and Flows can run in system mode, bypassing the running user's permissions regardless of which user the agent runs as.[^1] The enforcement that protects a declarative topic stops at the boundary of any custom code you wire in. Verify, for every Flow and Apex action in an agent's action set, precisely what it runs under and whether that is intentional.
+
+## Apex is the escape hatch, unless you close it
+
+Apex is where a "scope the running user" conversation goes wrong, because Apex, in far too many orgs, does not care about the running user. A class declared without sharing bypasses record-level sharing rules. Code running in system context bypasses field-level security.[^1] A custom action that does nothing but write a record can therefore create fields and records its own agent user could never touch through the platform. Convenient in the moment, a hole in your permission model in production.[^4] The Apex migration behind this is covered in our [Apex v67 security guide](/field-notes/apex-summer-26-security-v67-migration).
+
+The fix is user mode. Run the class with sharing, query with `WITH USER_MODE`, and perform DML with `as user` so the database operations are checked against the running user, the same way declarative actions are.[^4] Salesforce's guidance is explicit: treat the running user as the foundational boundary, then verify that every Apex action in an agent's action set uses with sharing or inherited sharing unless system context is deliberate and documented.[^1] The one documented exception runs the other way. For guest-user actions, with their minimal sharing access, a deliberate without sharing context with code-enforced record filtering is sometimes more secure than pretending a guest can share records at all.[^1] The principle still holds, the boundary is just enforced in code instead of by the platform.
+
+![Apex is the escape hatch unless you close it with user mode: before, a without sharing class in system context writes fields its agent user could never edit; after, a with sharing class using WITH USER_MODE queries and as user DML enforces the running user's object, field, and sharing access](</diagrams/salesforce-agent-access-scoping-2026/3-apex-escape-hatch.png>)
+
+This is the single highest-leverage code review on an agent project. A misconfigured user makes one wrong decision at a time. A misconfigured agent with broad permissions, one whose Apex actions run in system mode, can execute a chain of wrong actions before anyone notices.[^1] Before you add any custom action to an agent, read its logic and confirm it respects user permissions under the identity it will actually run as.
+
+## Data Cloud grounds the answer on a separate permission plane
+
+An agent's grounding is not the same access as its record permissions. What the agent may retrieve from Salesforce records is governed by the running user's object, field, and sharing grants. What it retrieves from Data Cloud (Data 360) for grounding is governed by Data Cloud's own governance and sharing model.[^4] These are two independent reviews, and they fail and get fixed in different places. Do not try to solve a Data Cloud access problem by granting CRM field permissions, and do not assume the records the agent can read are all it can answer from.[^4]
+
+Two facts about grounding deserve a decision each. First, your field-level and object security also controls which Salesforce data is available for grounding, so the running user's FLS is what keeps sensitive objects out of the model's context.[^3] Second, for a public agent, anything the agent user can retrieve to ground an answer becomes, in practice, an anonymous read surface: a sufficiently clever visitor will try to coax it into surfacing data you never meant to expose. Scope the agent's grounding and its object access to precisely the public-safe slice, never the internal knowledge base, never fields carrying personal information you would not print on your homepage.[^4] The guest-user surface and its routing are treated in our [portal agent guide](/field-notes/agentforce-experience-cloud-portal-2026).
+
+The context variables a service agent carries are a separate trap. Variables such as `MessagingSession.ContactId` tell the agent who the customer is, but they do not control data access.[^2] Without additional configuration, that customer has access to every record the agent user can reach, and you have to proactively limit it.[^2] Pass verified identity into the session, then enforce which subset of that identity's records the agent may surface.
+
+## Experience Cloud decides whether the agent runs as a person or a stranger
+
+Put the same agent on an Experience Cloud portal and you get to choose its principal, which is a security decision that shapes everything downstream. Without credential-based user verification, the agent runs in its agent-user context and the site visitor is an anonymous guest behind it. With it, a service agent connected through Enhanced Chat to an Experience Cloud site runs as the logged-in site user, inheriting that specific person's profile, permissions, field-level security, and sharing.[^2] That is the difference between a machine that treats every visitor as the same privileged stranger and one that scopes every answer and action to the actual record owner on the other side.
+
+The same choice exists on the headless side. Salesforce maps each connection scenario to the identity and authentication you should use:[^1]
+
+- An external customer connects to an agent. The agent runs as a dedicated, least-privilege agent user that holds the backend identity.
+- A system connects to an agent. Use the client credentials flow against a dedicated integration user with its own context.
+- A system connects to an agent while carrying a user's context. Use OAuth 2.0 token exchange, where the client presents the identity provider's existing token and Salesforce issues an access token that keeps the user's identity across the hop instead of collapsing it to a shared account.
+- An internal user invokes a headless API. Use the JWT bearer flow, which maintains that specific user's context.
+- An external customer or partner invokes a headless API. Use the headless identity authorization code and credentials flow with PKCE, which maintains the external user's context.
+
+![Who connects decides whose identity the machine carries: an external customer maps to a least-privilege agent user, a system to a dedicated integration user with client credentials, a system carrying a user's context to OAuth token exchange, an internal headless call to the JWT bearer flow, and an external headless call to the authorization code and credentials flow with PKCE](</diagrams/salesforce-agent-access-scoping-2026/4-identity-connections.png>)
+
+Every entry point is a decision about whose identity the machine acts under, and the answer changes what it can see and do before the first line of logic runs.[^1]
+
+## Authenticate the machine, not the shared secret
+
+The oldest mistake in API integration is a shared client secret reused across every call. For agentic and headless work, Salesforce's guidance is explicit: use signed, per-identity credentials such as JWT-based OAuth flows rather than static API keys or shared secrets.[^1] A signed token ties each request to a specific Salesforce identity, the receiving system can validate it before trusting it, and you can rotate it without redistributing a shared secret to every agent that uses it.[^1][^5]
+
+The JWT bearer flow is the shape of that. A server signs a JSON web token with a certificate, posts it to Salesforce's OAuth token endpoint, and receives an access token, with no interactive login and no browser redirect.[^5] You configure it against an external client app, upload a public X.509 certificate, and grant approval up front.[^5] The certificate is the identity, and it is per machine, which is what makes accountability and rotation possible. When you build agent-to-service or cross-org workflows, design the surrounding architecture so every action traces back to an accountable identity: the owner accountable for the agent, and the human whose work it acts on, rather than collapsing into one shared account.[^1]
+
+## Fence the actions; the config is a boundary, not a suggestion
+
+What an agent may invoke is authorization, not just routing. If a subagent or action is not assigned in Agent Builder, the agent cannot invoke it, and that configuration is a permission boundary.[^1] Assume everything listed in the agent configuration is reachable through prompt manipulation, even if the agent was not designed to use it, and remove any subagent that carries a capability the agent does not need.[^1] An agent built to answer product questions should not have subagents that expose record modification, email sending, or flow invocation.[^1]
+
+![The action fence is a stack of containment layers: the running user's grants, the topics the agent may handle, the pre-approved actions it may invoke, and per-tool permission checks, with everything in the configuration treated as reachable and mandatory human oversight placed as a Flow checkpoint outside the agent's reasoning](</diagrams/salesforce-agent-access-scoping-2026/5-action-fence.png>)
+
+Limit the agent to the pre-defined, approved actions you have reviewed, the specific flows, Apex classes, or API calls, and restrict topics so it only handles the business functions it is meant for.[^3] Build the agent's permission set from the actions inward: list every action the agent can invoke, list every object and field each action reads or writes, grant exactly that set, and extend it deliberately when you add an action later instead of discovering the requirement as a production failure.[^4]
+
+Validate at the tool layer, not just the config layer. Salesforce's architecture guidance is blunt: even if an agent should not have access to a capability, the tool itself should verify the calling context has the right permissions before it executes.[^1] Treat tool outputs as untrusted input and validate their shape, constrain parameter ranges rather than letting the model pick arbitrary values, and make tools idempotent so a repeated invocation does not create a duplicate record or a second email.[^1] Filters and verified agent variables help here: hide a refund action until the customer is identified, and bind verified values between actions so an injection in one step cannot leak into the next.[^6]
+
+## Multi-agent chains escalate past a single boundary
+
+The moment an orchestrator routes to specialist agents, privilege can climb. An orchestrator can accomplish an operation it cannot perform directly by handing the work to a specialist whose running user is broader.[^1] If the orchestrator should not write to an object, it should not be able to write to it indirectly through a specialist that can.[^1] Map the effective permissions of the full orchestration chain before you deploy it, not the individual agents in isolation, and design the permission boundary across the whole workflow.[^1] When agents are discovered dynamically or cross company boundaries and you cannot map ahead, validate every hop as it happens and reject or escalate anything outside the callee's declared scope.[^1]
+
+Two controls keep autonomy honest. The first is human-in-the-loop done as architecture, not as a suggestion. Mandatory oversight belongs in a Flow checkpoint that executes before the action, not in an agent instruction the model can interpret and disregard. A step the agent must not take alone is a workflow gate outside the agent's reasoning path.[^1] The second is monitoring that measures what the machine actually did. Setup audit trails show who changed the configuration and when; they do not show which permissions the agent exercised at runtime. That is what Event Monitoring is for: analyze the API event logs for the real data-access patterns and action invocations, then remove permissions the agent never used.[^1]
+
+## The scoping checklist
+
+Read this against a real org and you will find at least one machine running wider than it should. Keep the pattern in your head: every Flow, every Agentforce action, every Apex class, and every API integration on this stack resolves to a single running user, and that identity is the security boundary. Scope it explicitly, run declarative work behind it, close the Apex escape hatch with user mode, ground only the safe slice, choose the portal principal on purpose, authenticate machines with signed per-identity tokens, and fence the actions so the configuration is a boundary and not a suggestion. Retrofitting this after a deployment is more expensive and more disruptive than building it in from the start, which is Salesforce's own closing note for the agentic stack.[^1]
+
+[^1]: Salesforce Architects, "Trust for the Agentic Enterprise," Well-Architected Framework. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/well-architected/guide/agentic-enterprise-trust.html)
+[^2]: Salesforce Help, "Agent Execution Context and Data Access by Type." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=ai.agent_execution_data.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Agentforce Security and the Shared Responsibility Model." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005315874&language=en_US&type=1)
+[^4]: MindBlaze, "The Agentforce agent user: which user your agent runs as, and why it can't update the record." [mindblaze.ai](https://mindblaze.ai/blog/agentforce-agent-user-permissions/)
+[^5]: Salesforce Help, "OAuth 2.0 JWT Bearer Flow for Server-to-Server Integration." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.remoteaccess_oauth_jwt_flow.htm&language=en_US&type=5)
+[^6]: Manras Technologies, "5 Critical Guardrails That an Agentforce Forward Deployed Engineer Must Setup For Secure Automation." [manras.com](https://www.manras.com/agentforce-forward-deployed-engineer/)

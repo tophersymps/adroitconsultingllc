@@ -13,6 +13,13 @@ export interface BlogPost {
   tags: string[];
   /** Optional banner image path (public/) — gradient fallback when absent. */
   bannerImage?: string;
+  /**
+   * Optional OG/social card path (public/), 1200x630 JPEG. Kept separate from
+   * `bannerImage` because the on-page banner is a 1600px WebP while social
+   * scrapers still want a raster PNG/JPEG at a 1.91:1 ratio. Falls back to
+   * `bannerImage` when absent.
+   */
+  ogImage?: string;
   /** Optional draft flag: "draft" is excluded from public build data. Default "published". */
   status?: "draft" | "published";
 }

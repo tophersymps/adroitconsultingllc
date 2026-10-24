@@ -13,17 +13,16 @@ import { NextRequest } from "next/server";
 
 const { mocks } = vi.hoisted(() => {
   const getSupabaseServerClient = vi.fn();
-  const getSupabaseServiceClient = vi.fn();
+  const insertQuizRun = vi.fn();
   const getUser = vi.fn();
   const from = vi.fn();
-  const serviceFrom = vi.fn();
   const decideCourseAccess = vi.fn();
   return {
-    mocks: { getSupabaseServerClient, getSupabaseServiceClient, getUser, from, serviceFrom, decideCourseAccess },
+    mocks: { getSupabaseServerClient, insertQuizRun, getUser, from, decideCourseAccess },
   };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({
     auth: { getUser: mocks.getUser },
     from: mocks.from,
@@ -31,9 +30,10 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 // Server-write-only (t_bb6ed113): quiz_run writes MUST go through the
-// service-role client, never the RLS-bound (anon/cookie) server client.
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => ({ from: mocks.serviceFrom }),
+// privileged direct-SQL helper (R2-2), never the RLS-bound (anon/cookie)
+// server client.
+vi.mock("@/lib/db/service", () => ({
+  insertQuizRun: mocks.insertQuizRun,
 }));
 
 // The route gates through the access seam (t_10214e52). Default granted.
@@ -71,17 +71,10 @@ function makeFrom(table: string, attemptRows: unknown) {
   return {};
 }
 
-/** Service-role client: quiz_run insert → sink (the ONLY quiz_run write). */
-function makeServiceFrom(table: string) {
-  if (table === "quiz_run") {
-    return {
-      insert: async (row: unknown) => {
-        writeSink.quizRunInserts.push(row);
-        return { error: null };
-      },
-    };
-  }
-  return {};
+/** Privileged quiz_run insert → sink (the ONLY quiz_run write). */
+function insertRunSink(row: unknown) {
+  writeSink.quizRunInserts.push(row);
+  return { error: null };
 }
 
 function authedUser(id = "user-1") {
@@ -93,7 +86,7 @@ beforeEach(() => {
   writeSink.quizRunInserts.length = 0;
   mocks.decideCourseAccess.mockResolvedValue({ kind: "granted" });
   mocks.from.mockImplementation((table: string) => makeFrom(table, []));
-  mocks.serviceFrom.mockImplementation((table: string) => makeServiceFrom(table));
+  mocks.insertQuizRun.mockImplementation(async (row: unknown) => insertRunSink(row));
 });
 
 describe("POST /api/progress/quiz/run — server-side scoring (F1)", () => {
@@ -171,7 +164,7 @@ describe("POST /api/progress/quiz/run — server-side scoring (F1)", () => {
 
     // The graded-read is on the RLS server client; the run WRITE is on the
     // service-role client — so an anon-key + JWT caller cannot forge it.
-    expect(mocks.serviceFrom).toHaveBeenCalledWith("quiz_run");
+    expect(mocks.insertQuizRun).toHaveBeenCalledTimes(1);
     expect(writeSink.quizRunInserts).toHaveLength(1);
 
     // The RLS/anonymous server client must never be used to write quiz_run.

@@ -1,0 +1,133 @@
+---
+title: "Lesson 65: Enterprise AI Reference Architectures: RAG, Agent Platforms, and LLM Gateways"
+slug: enterprise-ai-reference-architectures-rag-agent-platforms-llm-gateways
+series: "salesforce-architect"
+lesson: 65
+excerpt: "The reference architecture an enterprise uses to wire AI systems to its data at scale: how retrieval-augmented generation grounds answers in enterprise data, how an agent platform orchestrates multi-step work, and how an LLM gateway becomes the single control point for model access, cost, and governance."
+date: "October 11, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Architecture, AI, Enterprise, RAG, Agents]
+---
+
+Lesson 55 built RAG from first principles: retrieval, generation, an augmented prompt, a fresh index. Lesson 64 built the data strategy that keeps enterprise data governed, quality-checked, and traceable. This lesson steps up one level. It answers the question those two lessons raise but never address directly: how does an enterprise wire all of this together at scale, so that a hundred agents do not each reinvent model access, data grounding, and guardrails on their own?
+
+That is what a reference architecture is for. A reference architecture is a proven, reusable blueprint of the layers and components a system needs, plus the standard interfaces between them. It is the answer an architect gives to the question "show me what the whole thing looks like," as opposed to a single pattern like RAG or a single decision like which model to use. Enterprise AI reference architectures keep rewarding the same three patterns, and the three you are studying show up in every credible one: retrieval-augmented generation for grounding, an agent platform for orchestration, and an LLM gateway for model access. Learn to name the pattern, say what it does, and point at where it sits in the stack, and you can reason about any vendor's AI architecture you will ever be shown.
+
+## Define the terms first
+
+- **Reference architecture**: a reusable blueprint of the layers, components, and standard interfaces a class of system needs, used to keep many separate implementations consistent. It is a template, not a specific build.
+- **Retrieval-augmented generation (RAG)**: the architecture that grounds an LLM's answers in current, authoritative enterprise data by retrieving relevant passages and adding them to the prompt at answer time, instead of retraining the model. [^1]
+- **Agent platform**: the runtime and tooling that hosts, orchestrates, and governs AI agents, giving them reasoning, memory, tool access, and lifecycle control in one place. [^1]
+- **LLM gateway**: a middleware layer that sits between applications and model providers, giving teams a single entry point for model calls and handling routing, token-based rate limiting, caching, failover, cost tracking, and observability. [^2]
+- **Model gateway**: the specific routing engine that handles model inference requests within an enterprise AI layer, managing calls to internal and external models to optimize for cost, performance, and compliance. [^3]
+- **Orchestration**: the coordination of multi-step work across agents, humans, and deterministic systems, so that many pieces complete one coherent business outcome within defined guardrails. [^4]
+
+Keep the relationship straight, because the three names get used loosely. RAG is a pattern for grounding one answer in data. An agent platform is where a fleet of agents live and run. An LLM gateway is the control plane in front of the models. They are different things that compose, and a reference architecture shows how.
+
+![Three distinct jobs: RAG grounds answers in data, the agent platform hosts a fleet of agents, and the LLM gateway is the control plane that owns model access, cost, and failover](</diagrams/enterprise-ai-reference-architectures-rag-agent-platforms-llm-gateways/1-three-patterns.png>)
+
+## The layered picture
+
+The cleanest way to hold an enterprise AI architecture is as a stack of layers. Salesforce's reference architecture for the "agentic enterprise" is a useful version of this: it takes the five layers a traditional enterprise already has (infrastructure, data, integration, application, experience) and adds four that AI work specifically needs (an agentic layer, an AI/ML layer, a semantic layer, and an enterprise orchestration layer), with security and IT operations spanning them all. [^1]
+
+You do not need to memorize every layer. You need to see where your three patterns sit, because that is what makes a reference architecture useful to you. RAG lives where the data layer meets the AI/ML layer: a vector database in the data layer stores the embeddings, and the retrieval and generation machinery in the AI/ML layer grounds the model in that data. [^5] The agent platform is the agentic layer itself, the runtime where agents reason, remember, and call tools. [^1] The LLM gateway is part of the AI/ML layer, the single entry point that controls how every agent and application reaches a model. [^3]
+
+Once you can place the pattern, you can explain what "enterprise" adds over a prototype. A prototype wires one model to one app and calls it done. An enterprise build adds the layers that let many apps and agents share the same model access, data grounding, and guardrails without duplicating them. That sharing is the entire point.
+
+![The layered enterprise AI reference architecture: the five traditional layers plus the four AI layers, with security and IT operations spanning them, and the three patterns placed where they live](</diagrams/enterprise-ai-reference-architectures-rag-agent-platforms-llm-gateways/2-layer-stack.png>)
+
+## RAG as a systems component
+
+Lesson 55 went deep on the mechanics, so this section keeps to how RAG behaves as a component in the larger architecture. Recall the two phases: retrieval pulls the relevant passages from a knowledge base, then generation composes the answer from an augmented prompt. [^1] In enterprise terms, retrieval is where your data strategy from lesson 64 pays off, because the knowledge base is the governed, lineage-rich data you built. The vector index is a derived artifact over that source, and it stays trustworthy only while it stays fresh.
+
+Two system-level facts matter here. First, RAG is the pattern that lets an enterprise use a foundation model it does not control while still controlling the facts the model argues from. The model is generic; the grounding is yours. Salesforce's reference architecture names RAG as the approach that grounds foundation models in enterprise-specific data to improve accuracy and reduce hallucinations. [^3] Second, RAG does not live in one box. It spans the vector store, the embedding pipeline, the retrieval service, and the generation path. That means it has an index freshness problem (lesson 55) and a security problem (lesson 55 again) that an architect designs for across the whole span, not in a single service.
+
+In the layered picture, treat RAG as the grounding subsystem. It answers "what facts is this answer based on," and it is the thing that lets a gateway and an agent platform produce answers worth trusting. Without it, the agent reasons from nothing the enterprise controls.
+
+## The agent platform: orchestration with a memory and tools
+
+An agent platform is what takes a model and turns it into work an enterprise can trust. On its own, a model answers text. An agent platform gives that model a body: it can reason through multi-step problems, hold context, call tools, and act on systems while a human can watch and interrupt. In Salesforce's reference architecture, the agentic layer is the dedicated runtime where agents are developed, stored, and executed, with lifecycle control, reasoning, memory, tool utilization, and policy enforcement. [^1]
+
+The components worth naming, because you will see them in every platform:
+
+- **Runtime and lifecycle**: the environment agents run in, plus the management of their states and versions. This is the difference between a script you run once and an agent you can deploy, update, and retire. [^1]
+- **Reasoning and planning**: the cognitive framework that decomposes a goal into steps and decides what to do next. [^1]
+- **Memory and context**: the store that lets an agent recall previous interactions and keep context across a session. Without it, every turn starts from nothing. [^1]
+- **Tool access**: a curated registry of internal actions, APIs, and external capabilities the agent can call. This is how an agent does work, not just talk. [^1] [^5]
+- **Interoperability protocols**: standard interfaces (such as the Model Context Protocol for tools and agent-to-agent protocols for collaboration) so agents from different sources can work together instead of being locked to one vendor. [^1]
+- **Governance and guardrails**: the controls that keep an agent inside its scope, enforce permissions, and allow intervention. Google frames this as giving every agent "a trackable identity and enterprise-grade guardrails." [^5]
+
+The orchestration question is how many agents and systems work together on one business outcome. An enterprise does not want a thousand agents each doing an isolated task and each enforcing its own rules. It wants an orchestration layer that coordinates agents, humans, and deterministic systems under shared policies, tracks the workflow end to end, and keeps human oversight at the decision points. [^1] [^4] That is what turns "capable individual agents" into a trustworthy workforce.
+
+## The LLM gateway: one control point for every model call
+
+Now the pattern that gets the least airtime but carries the most enterprise weight: the LLM gateway. An LLM gateway is a middleware layer between your applications and one or more model providers. It gives teams a single integration point and a single entry point for model traffic, and it applies routing, policy, and normalization before a request reaches a provider. [^2]
+
+Why does an enterprise need this? Because a model call is not like any other API call. Cost and capacity are measured in tokens, not requests. A request-count rate limit lets one user consume fifty tokens or a million and the gateway cannot tell the difference, so traditional API gateways measure the wrong thing. [^2] A gateway purpose-built for LLM traffic handles the properties that make LLM calls unique:
+
+- **Token-based rate limiting**: limits mapped to actual token consumption and cost, so budget and provider capacity are enforced, not just request counts. [^2]
+- **Semantic caching**: matching an incoming prompt against cached responses when it means the same thing as an earlier one, even if the wording differs, so a repeated question does not re-incur model cost. [^2]
+- **Multi-provider routing and failover**: directing each request to the right model based on cost, latency, or task, and automatically retrying against a fallback provider when the primary one throttles or fails. [^2] [^6]
+- **Cost tracking and budget controls**: per-request token counting and cost attribution by team, project, or user, with real-time caps and alerts. [^2]
+- **Access control and audit logs**: middleware that authenticates, authorizes, and logs every request and response, which is required for compliance and for debugging production behavior. [^2]
+
+In the reference architecture, this is the model gateway: the routing engine that acts as a single entry point for all model inference requests, managing calls to internal and external models to optimize cost, performance, and compliance. [^3] The consequence of a good gateway is that application teams never integrate with a provider directly. They integrate with the gateway, and the gateway handles provider differences, failover, budgets, and logs. When a better or cheaper model ships, the architect swaps it at the gateway instead of rewriting every consumer.
+
+The Salesforce point-of-view ties these together into one "LLM routing and management layer": enterprises rarely rely on a single model, different tasks need different trade-offs between capability, cost, latency, and compliance, and a routing layer directs each request to the right model automatically, stays model-agnostic so teams can integrate with multiple providers without rebuilding workflows, and keeps operations running through failover and load balancing. [^6] That is the enterprise version of what a gateway does mechanically: it turns "pick a model" from a per-app decision into a governed, centralized one.
+
+## The three compose: a worked example
+
+Put all three together on a real scenario, the field-services company from lessons 14, 15, and 55, the one with technicians, services, and sites. The company wants an AI assistant that technicians can ask questions to and that can also do bounded work: look up the right procedure, check a part in inventory, and open a follow-up service case.
+
+Start with the LLM gateway, because it is the base. The company uses a large hosted model for general reasoning and a smaller, cheaper model for simple lookups, because most technician questions are classification and lookup and do not need the big model. The gateway sits in front of both. It rate-limits per technician to protect the budget, semantically caches the frequently asked procedure questions so a repeated third of traffic never touches the model, and falls back to the second provider if the primary is down. Every call is logged with the technician identity and token count, so finance can see the cost of the assistant per site. [^2]
+
+Now the RAG grounding. The technician asks "what is the torque spec for a compressor lockout on the 400 series?" The retrieval layer searches the vector index built from the operations manuals, filters to the 400-series product line, and returns the relevant manual section. The generation step builds an augmented prompt from that section and produces an answer that cites it. Because the index stays fresh and the retrieval respects the technician's entitlements, the answer is current and the technician only sees manuals they are allowed to see. That is lesson 55's design, running as the grounding subsystem. [^1]
+
+Then the agent platform ties the two together. The assistant is an agent, not a bare model call. It reasons that answering the torque question requires looking up the manual, so it invokes the RAG grounding to get the spec. It remembers the technician's site and service history from the last session. When the answer involves a part, it calls the inventory tool through the agent's tool registry to check stock, and when the technician confirms they want a case opened, it calls the service-case action and escalates to a human for approval before creating it. The platform gives the agent this reasoning, memory, tool access, and the guardrail that says it may open a case only with human approval. [^1] [^5]
+
+Read the workflow and you see the delegation of concerns. The gateway owns the models, the cost, and the failover. The RAG layer owns the facts. The agent platform owns the reasoning, the memory, and the actions. None of them tries to do the other's job. That separation, more than any single component, is what makes the architecture survive at enterprise scale: when a new model is cheaper, the gateway absorbs the change; when a manual updates, the RAG index absorbs it; when a new tool ships, the agent registry absorbs it. Each change is local, because the reference architecture drew clear boundaries.
+
+![The field-services worked example flows through all three patterns: the LLM gateway fronts the models, RAG grounding retrieves and cites the manual answer, and the agent platform reasons, checks inventory with a tool, and escalates the service case to a human for approval](</diagrams/enterprise-ai-reference-architectures-rag-agent-platforms-llm-gateways/3-worked-example.png>)
+
+## Security and governance across the three
+
+The patterns compose on security too, and an architect who treats the layers as separate misses where the risk actually sits. Security is enforced at every boundary, not in any one layer.
+
+The gateway enforces authentication, authorization, and audit at the model access point, so only entitled callers reach a model and every call is traceable. [^2] The RAG layer enforces retrieval entitlements, so a caller cannot summon knowledge they have no right to see even if the downstream model would happily quote it. The agent platform enforces the action guardrails and keeps humans in the loop for high-stakes steps, because an agent that can open a case feels different from one that can spend money or change a record, and both need tighter control than one that only reads. [^1] [^5]
+
+The enterprise reference architecture names this as trust throughout: dynamic, task-based permissions and rigorous validation of AI outputs against defined policies before they are used or delivered. [^1] For you, the practical take is that each layer has a security job, and you design all of them together. The AI-safety lesson from this course's earlier AI security material applies here: prompt injection, unauthorized tool use, and unintended actions are first-class risks in an agentic architecture, and the gateway, the retrieval layer, and the agent platform each contribute a line of defense.
+
+## The pitfalls to design around
+
+Naming the failure modes up front is how you tell a real architecture from a demo.
+
+![The four enterprise AI pitfalls and the fix each needs: routing LLM calls through a plain API gateway, letting every team call providers directly, running agents with no orchestration or guardrails, and letting the index go stale all get corrected by a token-aware gateway, a single governed gateway, an agent platform with guardrails, and a fresh entitlement-aware grounding layer](</diagrams/enterprise-ai-reference-architectures-rag-agent-platforms-llm-gateways/4-pitfalls.png>)
+
+**Treating the LLM call as just another API call.** The single most common enterprise mistake is to route model traffic through a plain API gateway. It rate-limits by request, so a user can blow the budget in long documents, it caches by exact match so repeated questions reaccrue cost, and it fronts one provider with no failover. [^2] The fix is an LLM gateway that understands tokens.
+
+**Letting every team integrate with providers directly.** If each app calls OpenAI or Anthropic on its own, there is no one place to enforce budget, log access, or swap models. A pivot from one provider to another becomes a rewrite of every caller. The gateway is what makes model selection a governed decision instead of a hundred local ones. [^6]
+
+**Building agents with no orchestration or guardrails.** A handful of agents each doing a narrow task is fine. Let a network of agents run cross-domain work with no shared policy, no memory, and no human oversight, and you get actions that happen at machine speed with nobody accountable. [^1] The agent platform and its guardrails are not overhead; they are the difference between an assistant and a liability.
+
+**Forgetting the index goes stale.** Lesson 55 made the point and it bears repeating here. RAG is only as good as the freshness and entitlement of its index. In an enterprise architecture that reuses the index across many agents, a stale or over-permissive index poisons every consumer at once. The grounding layer is a shared trust boundary, and it must be budgeted like one. [^1]
+
+## Try it yourself
+
+1. In two sentences each, say what value RAG, an agent platform, and an LLM gateway add, and name the layer of the reference architecture where each sits.
+2. A client wants to deploy an assistant that answers from its product manuals and can also update inventory records. List which of the three patterns handles each piece, and say where the human-approval guardrail belongs.
+3. Your enterprise routes all model traffic through the API gateway that already fronts its REST services. Using the lesson, identify at least two problems with that choice and what an LLM gateway changes.
+4. Explain in a short paragraph why a good gateway turns "pick a model" into a governed, centralized decision instead of a decision each application makes on its own.
+
+When you are done, check that your three answers give each pattern a distinct job. If you find yourself saying the agent platform "runs RAG" or the gateway "is RAG," you have collapsed two concerns the reference architecture keeps separate, and a judge will find the seam.
+
+## What's next
+
+This lesson gave you the reference architecture for enterprise AI: RAG grounding answers in governed data, an agent platform orchestrating reasoning, memory, and actions, and an LLM gateway owning model access, cost, and governance. The next lesson shifts from the shape of the architecture to how it moves through an organization. Lesson 66 covers **development lifecycle and deployment architecture, DevOps at enterprise scale**: how enterprise teams take the builds from this course and get them from a developer's machine to a monitored, released, production system through source control, CI/CD pipelines, environment promotion, and observability. That is where the AI architecture you just designed gets operated, and the deployment discipline is what keeps a working architecture working.
+
+[^1]: Salesforce Architects. [The Agentic Enterprise: The IT Architecture for the AI-Powered Future](https://architect.salesforce.com/docs/architect/fundamentals/guide/agentic-enterprise-it-architecture.html). The reference architecture adds agentic, AI/ML, semantic, and enterprise orchestration layers to the traditional five; the AI/ML layer names RAG as a pipeline that grounds foundation models in enterprise-specific data to reduce hallucinations, and the agentic layer defines the runtime, reasoning, memory, tool, registry, policy, and interoperability capabilities of an agent platform.
+[^2]: Mastra. [AI gateway: one integration point for every provider](https://mastra.ai/articles/ai-gateway). Defines an AI gateway as a middleware layer between applications and model providers and walks through token-based rate limiting, semantic caching, multi-provider routing and failover, cost tracking, and access control and audit logs as the things that make it different from a general-purpose API gateway.
+[^3]: Salesforce Architects. [The Agentic Enterprise: The AI/ML Layer](https://architect.salesforce.com/docs/architect/fundamentals/guide/agentic-enterprise-it-architecture.html#aiml-layer). Defines the Model Gateway as a routing engine that acts as a single entry point for all model inference requests, managing calls to internal and external models to optimize cost, performance, and compliance, and names retrieval-augmented generation among the layer's key capabilities.
+[^4]: Salesforce. [Enterprise AI Orchestration: A Complete Guide](https://www.salesforce.com/welcome-to-the-agentic-enterprise/enterprise-ai-orchestration/). Describes orchestration as the connective tissue between models, data, and business applications, and lists the LLM routing and management layer as one of the five essential elements of a mature AI orchestration platform, with pre-built routing for capability, cost, latency, and compliance plus failover and load balancing.
+[^5]: Google Cloud. [Introducing Gemini Enterprise Agent Platform](https://cloud.google.com/blog/products/ai-machine-learning/introducing-gemini-enterprise-agent-platform). Outlines an enterprise agent platform's build, scale, govern, and optimize pillars, including agent identity, registry, and gateway for governance and agent evaluation and observability for optimization.
+[^6]: Salesforce. [Enterprise AI Orchestration: The LLM routing and management layer](https://www.salesforce.com/welcome-to-the-agentic-enterprise/enterprise-ai-orchestration/). States that enterprise AI deployments rarely rely on a single model, that different tasks demand different trade-offs between capability, cost, latency, and compliance, and that an LLM routing layer directs each request to the right model, stays model-agnostic, and keeps operations running through failover and load balancing.

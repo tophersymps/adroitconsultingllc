@@ -1,0 +1,183 @@
+---
+title: "Lesson 76: Cost Architecture: Licensing, API Consumption, Storage, and Optimization"
+slug: cost-architecture-licensing-api-consumption-storage-optimization
+series: "salesforce-architect"
+lesson: 76
+excerpt: "Every Salesforce design carries a price, and the price is set by four separate meters: seats, API calls, storage, and AI credits. This lesson defines each meter, shows how each one is calculated, and works through an org whose integration design quietly overspends on all four."
+date: "October 22, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Salesforce, Architecture, Cost, Licensing, FinOps]
+---
+
+# Lesson 76: Cost Architecture: Licensing, API Consumption, Storage, and Optimization
+
+A solution design that ignores cost is incomplete. Not because cost is the most important constraint, but because cost is the one constraint nobody notices until the renewal conversation. A design can pass every security review, meet every non-functional requirement, and still be wrong: too many full seats for people who log in twice a month, an integration that burns a third of the API allocation on polling, a file storage habit that forces an add-on purchase, and an agent that reprocesses the same 6,000-token context on every turn.
+
+The architect's job is to know which meter is running, how fast, and what a design decision does to the number. That is what this lesson covers: the four cost meters in a Salesforce architecture, the arithmetic behind each, and the optimization moves that actually change the bill.
+
+## Four meters, not one
+
+Most cost conversations collapse into "what does a license cost." That is one meter out of four, and often not the one that grows fastest.
+
+1. **Seats and licenses.** What each user is entitled to, and how many of each license type you buy. Fixed, contractual, and renegotiated annually.
+2. **API consumption.** Inbound calls against a daily allocation sized from your license mix. Free at the margin until it is not, and then production integrations start failing with `REQUEST_LIMIT_EXCEEDED`.
+3. **Storage.** Data storage and file storage are counted separately, allocated per org plus per user, and priced through add-ons when you exceed them.
+4. **AI consumption.** Agent actions and LLM prompts metered in Flex Credits against a rate card, which turns prompt design and agent design into line items.
+
+Each meter has a different owner, a different unit, and a different failure mode. Seats fail at renewal. API allocation fails at 3am during a batch window. Storage fails quietly until an admin sees the warning banner. AI credits fail at the end of the quarter when finance asks why consumption doubled while conversation volume stayed flat.
+
+![Four cost meters compared: seats, API consumption, storage, and AI consumption, each with its own billed unit, growth driver, failure signal, and architecture lever](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/1-four-meters.png>)
+
+
+## Define the terms
+
+- **User license**: the entitlement that sets the maximum functionality a user can have. Every user has exactly one. [^4]
+- **Permission set license**: a purchasable entitlement that unlocks specific features beyond what the base user license allows, without upgrading the user to a more expensive license. [^5]
+- **Feature license**: an add-on entitlement for a named capability, such as Knowledge or a console. [^4]
+- **API request allocation**: total inbound API calls allowed per 24-hour period, calculated from edition, license counts, and purchased add-ons. [^1]
+- **API call metering**: how a given interaction is counted. One HTTP request is one call; a composite request is one call carrying multiple subrequests. [^1]
+- **Bulk API batch allocation**: a separate pool of 15,000 batches per rolling 24 hours, shared between Bulk API and Bulk API 2.0. [^3]
+- **Data storage**: space consumed by records across standard and custom objects. [^2]
+- **File storage**: space consumed by Files, attachments, CRM Content, Chatter files, Documents, and Site.com assets, counted separately from records. [^2]
+- **Flex Credit**: the unit AI consumption is billed in. Raw units (actions, prompts) are converted to credits using multipliers on the Agentforce rate card. [^6] [^7]
+- **Prompt unit**: one block of up to 2,000 processed tokens, rounded up. A 6,500-token request is four units. [^8]
+
+## Meter one: seats and licensing architecture
+
+The most common licensing mistake is buying one license tier for everyone because role mapping is tedious. A 500-person org where 80 people actually need full Sales Cloud and 420 need to read cases and update a status field is paying full seat price for 420 people who will never open a report builder.
+
+The architecture move is to separate *who a person is* from *what a person can do*. Salesforce structures this deliberately: the user license defines the ceiling, permission sets define the subset inside that ceiling, and permission set licenses raise the ceiling for specific people. [^4] [^5] That gives you three levers:
+
+- **Downgrade the base license** for users whose real work fits a lower tier, then grant the two or three specific capabilities they need through permission set licenses. [^5]
+- **Use community licenses** for external users. Customer Community and Customer Community Plus are priced and allocated very differently from internal seats, and the API math reflects that: in an Enterprise org, a Customer Community license contributes zero API calls while a Customer Community Plus license contributes 200. [^1]
+- **Separate integration identities from human identities.** A system-to-system account does not need a human seat's feature set. Whatever license type you use for it, its API allocation contribution is what matters, and that contribution varies enormously by license type, which is the next section.
+
+Two constraints keep this honest. First, permission sets cannot grant beyond the license ceiling; if the license does not support the permission, the assignment fails. [^4] Second, license changes are contractual, so the architecture recommendation has to survive a procurement conversation. Model the license mix in the design document with a table of role, base license, permission set licenses, and justified count. That table is the artifact that lets a client's procurement team argue with the vendor instead of with you.
+
+## Meter two: API consumption
+
+API allocation is arithmetic, and the arithmetic is published. For Enterprise Edition (and Professional with API access enabled), the total is:
+
+**100,000 + (number of licenses × calls per license type) + purchased API call add-ons**, per 24 hours. [^1]
+
+The per-license rates that matter most: 1,000 for a Salesforce license, 1,000 for a Salesforce Platform license, 5,000 for either in Unlimited or Performance Edition, 200 for Customer Community Plus or Partner Community, 10 for the login-based community licenses, and 0 for Customer Community and Customer Community Login. [^1] External Identity licenses come in tiers with much larger allocations, and the documentation explicitly tells you to confirm which tier you hold with your account representative rather than guess. [^1]
+
+Work the number for a mid-size manufacturer on Enterprise Edition: 260 Salesforce licenses, 300 Salesforce Platform licenses, 4,000 Customer Community Plus licenses, 1,200 Partner Community Login licenses.
+
+- Base: 100,000
+- Salesforce: 260 × 1,000 = 260,000
+- Platform: 300 × 1,000 = 300,000
+- Customer Community Plus: 4,000 × 200 = 800,000
+- Partner Community Login: 1,200 × 10 = 12,000
+
+Total: 1,412,000 calls per 24 hours.
+
+That looks generous until you count what the integrations do. A status-check integration polling an external order system every 30 seconds consumes 2,880 calls per day per poller. Twenty pollers is 57,600 calls, all of it producing "nothing changed" responses. A middleware retry loop without idempotency can double or triple the call count for a single business event. The allocation is not the budget; the allocation is the ceiling, and the budget is what your design actually spends.
+
+![The API allocation formula with per-license call rates, set against the cost of one polling integration and the difference between per-record REST upserts and a Bulk API 2.0 job](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/2-api-allocation-vs-spend.png>)
+
+
+Two structural facts change the math:
+
+- **Composite requests count once.** A REST composite request bundles subrequests into a single call. Ten record updates through one composite request cost one call, not ten. [^1]
+- **Bulk has its own meter.** Any operation over roughly 2,000 records belongs in Bulk API 2.0, which runs asynchronously and draws from the separate 15,000 batch pool rather than the daily request allocation. [^3] In Bulk API 2.0, query jobs do not consume batches; ingest jobs do. [^3]
+
+The architectural lesson: the unit of cost is the *call*, not the *record*. Designs that think in records (one callout per order line) are expensive. Designs that think in calls (one composite request per order, one bulk job per nightly load) are cheap. A 400,000-record nightly sync through a per-record REST integration is 400,000 calls. The same sync through Bulk API 2.0 is a job with a modest number of ingest batches. Same data, same outcome, two very different bills.
+
+## Meter three: storage
+
+Storage splits into two counters that do not substitute for each other, and conflating them is a recurring admin error.
+
+**Data storage** covers records: accounts, contacts, cases, leads, opportunities, custom objects, tasks, events, notes, and the rest of the list Salesforce maintains. [^2] In Enterprise Edition the allocation is 10 GB per org plus 20 MB per user license. Performance and Unlimited get 120 MB per user license; the file storage allocation stays at 10 GB per org regardless of edition or seat count. [^2]
+
+For the manufacturer above, counting only the 260 Salesforce and 300 Platform licenses: 10 GB + (560 × 20 MB) = 10 GB + 11.2 GB = 21.2 GB of data storage, and 10 GB of file storage flat. Note the caveat in the documentation: the minimum per-user values apply to Salesforce and Salesforce Platform licenses, and orgs with custom user licenses must confirm their exact allocation with Salesforce. [^2] Do not silently extend 20 MB per head to 4,000 community users and call it a forecast.
+
+Now the growth question. A case record with a dozen fields and two child records is small, tens of kilobytes at most. Five thousand cases a day for three years with two children each is roughly 5.5 million records. Attachments are the real consumer: one 2 MB PDF per case, 5,000 cases a day, and you have 10 GB of file storage in ten days. This is why file storage runs out first in service orgs and why "archive to an external store, keep a link" is a standard pattern rather than an optimization.
+
+Big Objects give you a different trade. Each org gets storage for 1 million big object records, and the allocation for active production orgs is contractual, so exceeding it blocks writes rather than quietly billing you. [^2] That makes Big Objects excellent for long-retention audit and history data, provided the design accounts for the record ceiling up front.
+
+## Meter four: AI consumption
+
+AI changes the cost model because the meter moves from named users to units of work. Salesforce meters two shapes: agentic usage, counted in actions an agent invokes, and prompt-based usage, counted in LLM requests. Both get converted into Flex Credits through multipliers on the Agentforce rate card. [^6]
+
+The rate card published August 31, 2026 lists, among others: Standard Action 20 credits in production and 16 in sandbox, Custom Action 20 and 16, Standard and Custom Voice Action 30 and 24, Starter Prompts 2, Basic Prompts 2, Standard Prompts 4, Advanced Prompts 16, and Help Agent Resolutions 400. [^7] Prompt billing works in 2,000-token blocks rounded up, so a 500-token prompt and a 2,000-token prompt both cost one unit while a 6,500-token prompt costs four. [^8] For the same token volume, an Advanced prompt costs four times what a Standard prompt does. [^8]
+
+That rounding rule is the single most useful fact for an agent architect. Consider an agent handling 40,000 conversations a month at six actions each: 240,000 actions × 20 credits = 4.8 million credits. Now look at prompt context. If each turn carries a 6,500-token context because someone pasted the entire knowledge article and the full order history into the prompt, every turn bills four units. Trim the context to under 2,000 tokens and the same conversation bills one unit per turn. Nothing about the user experience changed; the design did.
+
+![Prompt billing in 2,000-token blocks, from one unit up to five, beside the credit cost of standard and custom actions and standard and advanced prompts](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/3-prompt-units.png>)
+
+
+Sandbox is not free either. The rate card prices sandbox actions at 16 against production's 20, which is a discount, not an exemption. [^7] Test suites that replay thousands of agent conversations in a sandbox show up on the same invoice.
+
+## A worked example: the same requirements, two designs
+
+A distributor needs order status visible in Salesforce, a nightly product catalog sync, and a service agent that answers "where is my order" in chat.
+
+**Design A, the direct build.** A scheduled Apex job polls the ERP every minute for order updates: 1,440 calls a day. A trigger fires a callout per order line to fetch pricing: 40,000 order lines a day, 40,000 calls. The nightly catalog load of 300,000 products runs as per-record REST upserts: 300,000 calls. The service agent's prompt includes the full order history and the entire policy document: about 9,000 tokens per turn, five units per turn, 30,000 turns a month.
+
+**Design B, the cost-aware build.** The ERP publishes order changes to Platform Events or a webhook, and Salesforce subscribes: near-zero polling, and latency drops from a minute to seconds. Pricing is fetched once per order through a composite request that carries all lines: 4,000 orders a day, 4,000 calls. The catalog load runs through Bulk API 2.0: one job, ingest batches against the separate 15,000-batch pool. The agent gets a retrieval step that pulls only the order in question plus the two relevant policy paragraphs: under 2,000 tokens per turn, one unit per turn.
+
+Design B meets the same requirements with roughly two orders of magnitude fewer API calls and a 5x reduction in AI credits per conversation. It also costs more engineering time up front. That trade is the actual architectural decision, and it belongs in the design document with the arithmetic attached.
+
+![Side-by-side comparison of the direct build and the cost-aware build across order status, order line pricing, catalog sync, and the agent prompt, with call counts and prompt units for each design](</diagrams/cost-architecture-licensing-api-consumption-storage-optimization/4-two-designs.png>)
+
+
+## Where cost actually leaks
+
+Seven patterns account for most of the overspend I see in real orgs:
+
+1. **Polling where events exist.** Every poll is a call that returns "no change." Replace with Platform Events, change data capture, or webhooks.
+2. **Per-record callouts inside loops.** One composite request per parent instead of one callout per child. This is also a governor limit fix, which is why it shows up twice in this course.
+3. **Retry storms without idempotency.** A failing endpoint plus naive retries multiplies call volume and can turn a transient error into an exhausted allocation.
+4. **File hoarding.** Attachments and generated PDFs in Salesforce storage when the durable copy belongs in an external store with a link.
+5. **Full sandboxes for every team.** Full sandboxes carry their own large API allocation and their own refresh cost; most teams need partial or developer sandboxes.
+6. **Uniform license tiers.** Full seats for read-mostly users, when permission set licenses would cover the real need. [^5]
+7. **Fat prompts and chatty agents.** Context stuffed into every turn, and agents that call four actions where two would do.
+
+## The optimization playbook, in order of leverage
+
+**Measure first.** Setup gives you API usage over the last 24 hours and storage usage by category. [^1] [^2] If you cannot name your top three call consumers and your file storage growth rate, you are optimizing by feel.
+
+**Cut calls per business event.** This is the highest-leverage change because it is permanent and compounds. Composite requests, Bulk API for volume, event-driven instead of polling. [^1] [^3]
+
+**Change the channel.** Move bulk data flows off the synchronous API entirely. A nightly 300,000-record sync does not belong on the same meter as interactive user traffic.
+
+**Cap the context.** For AI, the 2,000-token block structure makes context size a direct multiplier. Retrieve narrowly, summarize history, cache stable policy text. [^8]
+
+**Reduce actions per conversation.** Action count is the agentic meter. A confirmation step that calls an action to re-read data it already has is pure cost. [^7]
+
+**Archive and externalize.** Move closed cases and old attachments out on a schedule, keep Big Objects for long-retention records within the 1 million record allocation. [^2]
+
+**Right-size licenses annually.** Build the role-to-license table once and revisit it at renewal, when the commercial lever actually exists. [^5]
+
+## Add a cost section to the design document
+
+If the design document has sections for security, integration, and non-functional requirements, it needs one for cost. Minimum contents: the license mix table with justified counts, the API budget showing allocation against forecast peak-day consumption per integration, the storage forecast at 12, 24, and 36 months with the archive trigger point, and the AI consumption model with actions per conversation, prompt units per turn, and monthly volume.
+
+That section changes review conversations. Instead of "is this design good," the question becomes "is this design worth its run rate," which is the question the client is actually paying you to answer.
+
+## The pitfall to avoid
+
+**Optimizing the meter you can see instead of the meter that is growing.** A team will spend a month shaving license count by 8 percent while a polling integration quietly consumes 40 percent of the API allocation and file storage doubles every quarter. Rank the meters by growth rate first, then by absolute spend, and fix in that order. The renewal line item is the least likely thing to break your system; the consumption meter is the one that pages someone at 3am.
+
+## Try it
+
+1. An Enterprise org has 40 Salesforce licenses, 10 Salesforce Platform licenses, and 500 Customer Community Plus licenses. What is the daily API allocation before add-ons? *(Answer: 100,000 + 40,000 + 10,000 + 100,000 = 250,000 calls per 24 hours.)* [^1]
+2. A nightly load upserts 250,000 products with one REST call per record. What should it be, and which allocation does it draw from? *(Answer: Bulk API 2.0, because anything over about 2,000 records belongs there. Ingest batches draw from the separate 15,000-batch pool shared by Bulk API and Bulk API 2.0, not from the daily request allocation.)* [^3]
+3. An Unlimited Edition org has 400 Salesforce licenses. What are its data and file storage allocations? *(Answer: 10 GB + 400 × 120 MB = 10 GB + 48 GB = 58 GB of data storage, and 10 GB of file storage for the org.)* [^2]
+4. An agent runs 25,000 conversations a month at five standard actions each. Using the August 2026 rate card, what is the monthly action consumption? *(Answer: 125,000 actions × 20 credits = 2.5 million Flex Credits in production. The same volume in a sandbox would be 2 million credits at the 16-credit sandbox action price.)* [^7]
+5. A prompt carries 4,100 tokens per turn. How many prompt units does each turn bill, and what happens if you cut it to 1,900? *(Answer: 4,100 tokens rounds up to 3 units because billing is in 2,000-token blocks; 1,900 tokens bills 1 unit. The same conversation costs a third as much.)* [^8]
+
+## What's next
+
+You can now size the four cost meters, read a rate card, and connect a design decision to a run rate. The next lesson turns to the other half of the capacity question: planning for load rather than for spend. It covers capacity planning and performance at scale, including headroom targets, peak versus average load, forecasting growth from real telemetry, and how to decide when a design needs more capacity versus a better design.
+
+[^1]: Salesforce Developers. "API Request Limits and Allocations." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-api.html)
+[^2]: Salesforce Help. "Data and Storage Resources." [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.admin_monitorresources.htm&type=5)
+[^3]: Salesforce Developers. "Bulk API and Bulk API 2.0 Limits and Allocations." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-bulkapi.html)
+[^4]: Salesforce Help. "Licenses Overview." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_licenses_overview.htm&type=5&language=en_US)
+[^5]: Salesforce Help. "Permission Set Licenses." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_permissionset_licenses_overview.htm&language=en_US&type=5)
+[^6]: Salesforce Help. "Agentforce and Generative AI Usage and Billing." [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=ai.generative_ai_usage.htm&type=5)
+[^7]: Salesforce. "Flex Credits Rate Card 08.31.2026." [salesforce.com](https://www.salesforce.com/en-us/wp-content/uploads/sites/4/assets/pdf/agentforce/Flex-Credits-Rate-Card-08.31.2026.pdf)
+[^8]: Salesforce Developers. "Estimate Flex Credits Usage." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/agentforcevibes/guide/afv-flex-credits-estimator.html)

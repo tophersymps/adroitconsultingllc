@@ -22,7 +22,7 @@
  * learner keeps uncompleted lessons individually open to revisit (Chris
  * decision 2026-09-07) while the course itself reads complete.
  */
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { appendCompletionEvent } from "@/lib/completion";
 import { findSeriesForLessonSlug, getLessonsForSeries } from "@/lib/learn";
 import { getKnowledgeChecks, scoreQuizAttemptsByQuiz } from "@/lib/quiz";

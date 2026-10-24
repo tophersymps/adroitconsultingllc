@@ -1,0 +1,165 @@
+---
+title: "Data Architect MG-2A: LDV Migration Performance: Data Loader, Bulk API, Parallel Jobs, and Batching"
+slug: day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par
+series: salesforce-data-architect
+lesson: 37
+excerpt: "Compare and contrast techniques for improving performance when migrating large data volumes into Salesforce, including Data Loader, Bulk API (serial vs parallel), batch sizing, ETL tools, and API limits. This lesson, the first of the Data Migration domain's Volume objectives (mg-2a), is where a migration stops being a correctness problem and becomes a speed problem. You will learn why the synchronous SOAP and REST APIs are the wrong choice for millions of records, and why the asynchronous, job-based Bulk API exists. You will contrast parallel and serial concurrency modes, tuning batch size against the twin risks of overhead and failure blast radius, choosing the right load client, and watching bulk and governor limits so a fast load does not exhaust the org or slow it for the users who are trying to work. You will work the locked-parent failure, the twelve-million-row load that dies on 'unable to obtain row lock' because Contacts and their Accounts ran concurrently, and you will fix it by loading parents first, grouping children by parent, and falling back to serial mode. You will defer sharing calculation during the load, schedule off-peak, and make every job re-runnable by keying it on external IDs. You will run the five-step configuration walkthrough and close with the three exam traps, including the costliest one, maximizing concurrency without watching the limits you are about to exhaust.",
+date: "October 18, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Data Architecture, Data Migration, LDV, Bulk API, Data Loader, Batching, Serial Mode, Parallel Mode, API Limits, ETL, Certification]
+---
+
+Lesson 36 closed the quality half of migration: keep the data right at load time. [^1] This lesson, mg-2a of the Data Migration domain, opens the volume half. The data is clean, mapped, and reconciled on paper. Now it has to actually move, and moving a large data volume fast without breaking the org is a different skill than keeping it clean. [^2]
+
+The exam frames the objective as a comparison: compare and contrast the techniques for improving performance when migrating large data volumes into Salesforce, including Data Loader, Bulk API in serial and parallel modes, batch sizing, ETL tools, and API limits. [^3] Read that list carefully. It is not asking you to name an API. It is asking you to choose the right API for the volume, the right mode, the right batch size, the right load client, and the right way to stay inside the limits that are watching you. The whole lesson is one decision ladder: volume up, then API, then mode, then batch, then client, then limits.
+
+## Choose the right API for the volume
+
+Salesforce gives you two families of load APIs, and they exist for different jobs. [^4]
+
+The synchronous APIs, SOAP and REST, send records in a request and return a response in the same call. They are real-time by design. [^4] A REST create call inserts a record and returns its ID before the caller moves on. That immediacy makes them right for interactive work: a user's form saves a Contact, an integration validates and updates a single Opportunity, a small script nudges ten records. They are also limit-bound and chatty. Every call is a separate request that consumes API calls, and every record in a synchronous batch is processed in its own transaction. [^4]
+
+The Bulk API is the opposite. It is asynchronous and job-based. [^5] You create a job, define the object and the operation, upload your records in batches, close the job, and poll for each batch's result. Nobody waits for a single response, because there is no single response. Salesforce runs the batches in the background and tells you when each one finished. [^5] Bulk processes data in much larger batches than the synchronous Batch API, which lowers API usage per operation when you are loading thousands of records at once. [^4] The Salesforce guidance is direct: any data operation of more than about 2,000 records is a candidate for Bulk, while smaller jobs belong in bulkified synchronous calls. [^6]
+
+The reason the exam keeps hammering this choice is that people reach for the API they know. [^2] A developer who built integrations with REST is comfortable with REST, so a twelve-million-row load becomes twelve million tiny REST calls. Each one hits the API usage limits, each one runs in its own transaction, and the load grinds on for days while a Bulk job would chew through the same volume in hours. [^4] The performance decision is made at this step, before any batch is sized. For large data volumes, Bulk API is the best option. [^4]
+
+Data Loader, the native client, sits on top of this choice. [^7] It reads CSV files, maps fields, and sends records to whichever API you select. By default it uses the SOAP-based API, which is fine for small files. When you enable the Use Bulk API option, it drives the Bulk API and the loads get substantially faster, because the same file is processed asynchronously in large batches instead of one record at a time. [^7] It also runs from the command line, which is what makes it schedulable and scriptable for a migration that runs overnight. [^8] The threshold the vendor gives is practical: use the Bulk mode when records total in the hundreds of thousands or more. [^7]
+
+![The load-API decision ladder: route volumes above about 2,000 records to the asynchronous Bulk API and smaller jobs to bulkified synchronous SOAP or REST calls, then use Data Loader's Use Bulk API option once records reach the hundreds of thousands.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/1-choose-load-api.png>)
+
+## Parallel versus serial mode
+
+The Bulk API's concurrency modes decide how many batches run at once, and that decision sits inside the job definition, not the client. [^2]
+
+Parallel mode is the default. [^2] Batches run concurrently with other batches from the same job and with batches from other parallel-mode jobs. More work happens at the same time, so the load completes faster. [^2] That speed has a cost: parallel batches can collide on the same record. When two batches both try to modify the same parent record, they both try to lock it, and one of them waits. [^9] If it waits too long, the record is marked failed. [^2]
+
+Serial mode is the opposite. [^2] Batches run one at a time, each batch completing before the next starts, and this applies across serial-mode jobs from the same org. [^10] Because only one batch touches a record at a time, the possibility of lock contention is minimized. [^10] The cost is processing time. A serial load of a million records takes noticeably longer than the same load in parallel, because you have abandoned the parallelism that made Bulk fast. [^10]
+
+So the trade-off is exact, and the exam tests it directly. Parallel is faster but risks record-lock contention on shared parents. Serial avoids that contention but is slower. [^10] Neither is universally right. The guidance from Salesforce is to use parallel whenever you can, and to avoid serial unless parallel would otherwise produce lock timeouts that you cannot prevent by reorganizing batches. [^2] The correction to the eleven-o'clock mistake is not to reach for serial first; it is to reorganize first and fall back to serial only when organization is not enough.
+
+There is a class of operations that force the serial question, because they are structurally prone to locking. Creating users, updating ownership of records under private sharing, updating user roles, and updating territory hierarchies all lock shared rows. [^2] If your migration touches these, plan a separate job for them and run that job in serial mode, rather than folding them into a parallel load and watching them fail. [^2]
+
+![Parallel versus serial mode: parallel batches run concurrently for a faster load but risk record-lock contention on shared parents, while serial batches run one at a time to avoid contention at the cost of speed, with user-role, territory, and sharing operations forcing the serial question.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/2-parallel-vs-serial.png>)
+
+## Tune the batch size
+
+Batch size is where the abstract API decision becomes a concrete number, and the number moves two ways at once. [^2]
+
+The Bulk API's maximum batch is 10,000 records, and Salesforce recommends starting there. [^2] Larger batches reduce per-batch overhead: fewer batches, fewer requests, less network round-trip, and fewer chances to hit the daily batch limit. [^2] But a larger batch is a larger blast radius. The API processes records in chunks of 200, so when a row fails, the failure can cascade and mark more of the batch's work for resubmission. [^5][^11] Smaller batches isolate failures: one bad batch fails cleanly, and the rest of the load proceeds. [^2]
+
+The balancing act is to measure, not to guess. [^2] Salesforce's guidance is explicit: adjust batch size based on processing time. If a batch takes too long and times out, reduce the batch size and resubmit. If the load finishes in seconds, increase the batch size toward the maximum. [^2] The reason you avoid needlessly small batches is the limit you met earlier: every batch you submit counts against the daily batch allocation, so a migration split into thousands of tiny batches can exhaust that allocation before the data is loaded. [^2][^6]
+
+There is a second limit inside the job, the one that bites when you misjudge contention. The Bulk API waits a few seconds for a lock to release, and if a batch has trouble acquiring locks on more than a hundred records, it puts the rest of the batch back in the queue. [^2] The API retries the batch up to ten times, and records already marked failed are not retried. [^2] So a batch that repeatedly stalls on locks is not a batch that eventually succeeds; it is a batch that eventually fails, with the orphaned records waiting for you to resubmit them. [^2] That is why tuning for contention is not optional polish. It is the difference between a load that completes and one that spawns a cleanup project.
+
+![Tune the batch size between two risks: larger batches near the 10,000-record maximum cut per-batch overhead but widen the blast radius of a 200-record-chunk failure, while smaller batches isolate failures but spend the daily batch allocation faster.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/4-batch-size-tuning.png>)
+
+## Why parent lock contention breaks parallel loads, and how to fix it
+
+Here is the failure that the first quiz question is built around, so follow it closely. [^3]
+
+You are migrating twelve million Contacts and their parent Accounts. You launch the Account load and the Contact load concurrently, both in parallel mode, because you want everything done fast. The load fails with `unable to obtain row lock`. [^9] Every time a Contact inserts or updates, Salesforce locks that Contact's parent Account for the duration of the transaction, because every child edit re-locks the parent. [^9] When two parallel batches contain Contacts that point at the same Account, both batches try to lock that Account at the same time. One wins, the other waits, and after ten seconds it gives up. [^9]
+
+The first quiz option is a trap: increase the batch size. That makes it worse. [^2][^9] Bigger batches put more children of the same parent into contention, not less. The correct fix is to remove the collision. [^9]
+
+![Why parent lock contention breaks a parallel load: concurrent Contact and Account loads re-lock shared parent Accounts, throwing unable to obtain row lock, fixed by loading parents first, grouping children by parent into the same batch, and falling back to serial mode when necessary.](</diagrams/day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par/3-parent-lock-contention.png>)
+
+The fix has three parts, and you can use any of them alone or together. [^9]
+
+First, load parents before children. Load all the Accounts first, then load the Contacts. When the Contacts load runs, its parent Accounts already exist and are not being concurrently modified, so there is no one to collide with. [^9] This is the same parent-before-child ordering you used in lesson 36 for external ID lookup resolution, and it pays off in both directions: it resolves lookups and it avoids locks. [^1][^9]
+
+Second, group children by parent within the batches. If two batches each contain Contacts that point at the same Account, they collide. If every Contact that points at a given Account lands in the same batch, that batch locks the Account once and no other batch tries to touch it. [^2][^9] Grouping by parent is often enough to break the collision and let you stay in fast parallel mode, which is the outcome Salesforce prefers. [^10]
+
+Third, when grouping is not enough, fall back to serial mode for the child load. [^2][^9] Serial mode guarantees only one batch runs at a time, so no two batches ever contend for the same parent lock. [^10] It is slower, and that is acceptable when the alternative is a load that fails and has to be resubmitted, because a resubmission is slower still. [^2]
+
+This is what the exam means when the trap asks which change most directly fixes the failed load. [^3] Ordering and grouping attack the root cause, the collision itself. Switch to serial mode attacks the collision when you cannot organize your way out of it. Bigger batches amplify the collision, and synchronous APIs make everything worse from the first step. [^9]
+
+## Defer sharing and rollup cost, and schedule off-peak
+
+The load does not compete only with itself. It competes with the org, and two background costs dominate. [^2]
+
+Sharing calculation is the big one. When you load a large volume, every record that lands can trigger sharing rule and group membership recalculation, and under a heavy load those recalculations get long and can time out. [^12] Salesforce provides defer sharing calculation for exactly this case: an administrator suspends the sharing calculations, runs the load, then resumes the calculations during a maintenance period and completes a full recalculation. [^12] The classic pattern is to suspend during the working hours without waiting recalculations to stall the org, then let the full recalculation run overnight or over a weekend. [^12]
+
+The caveat is non-negotiable. While calculations are deferred, sharing changes do not take effect, and you must resume and run a full sharing recalculation after the load. [^12] Skipping that step leaves record access inconsistent, which is a data integrity failure as serious as any duplicate. [^12] Deferring sharing is a way to make the org survive the load, and it only works if you close the loop. [^12]
+
+Rollup summary recalculation is the quieter cousin. A child insert can trigger a parent's rollup summary field to recalculate, and when you load millions of children underneath a few heavily populated parents, the aggregate work can be significant. [^2] The architect's move is to minimize the number of fields that carry expensive compute during the load, and to be aware that foreign key, lookup, and rollup summary fields are the ones most likely to slow processing. [^2] Where a heavy rollup exists and cannot be deferred through configuration, plan it into the off-peak window rather than surprising the org at noon. [^2]
+
+The scheduling decision follows from both. A load running at full throughput during business hours consumes CPU, locks records, and triggers recalculations that live users depend on. [^2] The standard pattern is to run migrations off-peak, when the only people waiting on locks and recalculation are the migration itself. [^2][^12] If a big load must touch records during the day, defer the sharing and schedule the heavy recalculation for the weekend, as the deferral feature is designed around. [^12]
+
+## Watch the limits, and make every run re-runnable
+
+Bulk API is fast, and fast is not free. The limits are there whether you watch them or not. [^6]
+
+The headline numbers, from the limits reference, are these. You can submit up to 15,000 batches per rolling 24-hour period, shared between Bulk API and Bulk API 2.0. [^6] The maximum records uploaded per 24-hour period is 150 million, which is exactly what you get from 15,000 batches at 10,000 records each. [^6] A batch can hold at most 10,000 records. [^6] A job must close within 24 hours, and jobs and batches in a terminal state are removed after seven days. [^6] On top of the bulk limits sit the general API usage limits, because every Bulk request counts toward them, and the per-transaction governor limits that apply to each 200-record chunk. [^5][^13]
+
+The trap the exam sets is concurrency without monitoring. [^3] Cranking every object to maximum parallel mode to get the load over with faster can exhaust the daily batch allocation, spike API usage, or saturate the asynchronous queue and slow the org for everyone else. [^2][^6] The guidance is to monitor the limits as you load, using the org's limits endpoint, which reports the maximum allocation and the remaining allocation for each limit, including the daily bulk batches. [^13] Know the remaining room before you submit, not after a job fails at the 14,999th batch.
+
+There is also a queue fairness limit that most people miss. Salesforce routes asynchronous work, including Bulk batches and batch Apex, through a shared queue, and when a single org has more than 2,000 unprocessed requests waiting, further requests from that org are delayed so the queue can serve other orgs. [^2] The practical rule is to minimize the number of batches you submit at once, rather than flooding the queue and then wondering why the load slowed to a crawl. [^2]
+
+Retries bring the whole performance story back to data design. Because any batch can fail, and because failures are not retried automatically, every job should be re-runnable without loading duplicates. [^2] The mechanism is the external ID keyed upsert: you match records on a source key stored in an external ID field, so re-running a failed batch updates the records that already loaded instead of inserting them again. [^1] This is the same external ID discipline from lesson 36, and it is what makes retry safe. A migration that cannot be re-run is a migration that turns one late-night failure into a full reconciliation. [^1][^2]
+
+## Configuration walkthrough: tune a large-volume load
+
+Work these steps in order. This is the recommendation you give when a client asks how to make a multi-million-row migration fast and safe. [^3]
+
+1. Select the Bulk API for the volume. In Data Loader, enable the Use Bulk API option, or configure your ETL tool's Salesforce connector for Bulk. Do not drive millions of records through synchronous SOAP or REST calls. [^4][^7]
+2. Choose the concurrency mode by object. Run parallel mode for objects that are independent and have no heavy parent fan-out. Identify the objects with skewed parents or complex sharing, and prepare serial mode for them. [^2][^10]
+3. Size and order the batches. Start at 10,000 records, then measure processing time and adjust. Group child records by parent so all children of one Account share a batch, and load parents before children. Fall back to serial mode for a child object only when grouping cannot prevent lock timeouts. [^2][^9]
+4. Defer sharing calculation for the load window and schedule the job off-peak. Suspend sharing and group membership calculations, run the load when the org is quiet, then resume and complete a full sharing recalculation. [^12]
+5. Monitor the bulk and API limits, and make the job re-runnable. Check remaining allocation before submitting. Key every operation on an external ID so a failed batch can be resubmitted without duplicating records. [^6][^13][^1]
+
+## Exam traps
+
+Three traps cover this objective, and the exam leans on them hard. [^3]
+
+The first is using synchronous SOAP or REST APIs for millions of records. They are limit-bound and slow for LDV, one record per transaction and one request per record. Bulk API is the answer the moment the volume passes the low thousands. [^4][^6]
+
+The second is loading children in parallel with their parents. Concurrent loads of Contacts and their Accounts collide on parent locks, throw `unable to obtain row lock`, and fail. Load parents first, group children by parent, and use serial mode only when your organization cannot prevent the contention. [^9][^10]
+
+The third is maximizing concurrency without watching the limits. Uncontrolled parallelism exhausts the bulk batch allocation, spikes API usage, and saturates the asynchronous queue, degrading the org for live users. Monitor the limits, minimize batches in the queue, and schedule the heaviest work off-peak. [^2][^6][^12]
+
+## The performance levers, in one line
+
+Bulk API for the volume, the right mode for the object, tuned batch sizes, parent-before-child ordering, deferred sharing, off-peak scheduling, and ETL or custom orchestration for retries: that is the full mg-2a performance recipe. [^2][^6][^12]
+
+## Try it for yourself
+
+Take a flat CSV of a thousand child records that all point at one of ten parent records. Simulate the lock decision by hand: split the children into batches of 200 and count how many batches would touch the same parent twice if the parents and children loaded concurrently. Then group the CSV by parent so each parent's children stay in one batch, and state how many batches would still collide. Now write the two-line answer to the trap: if a twelve-million-row Contacts-and-Accounts load fails on `unable to obtain row lock`, what do you change, and why does increasing the batch size make it worse? Finish by laying out, in order, the parallel-versus-serial decision and the batch-size tuning rule you would apply to a job schema. [^2][^9]
+
+## What's next
+
+Lesson 38 of 42 is up next: LDV migration scenarios (mg-2b). Where this lesson gave you the performance levers, lesson 38 turns them into a migration strategy decision: incremental versus big bang cutover, the cutover event itself, and continuous sync. If this lesson made the load fast and safe in isolation, lesson 38 sequences multiple loads against the business's go-live.
+
+## Related lessons
+
+- Lesson 36 of 42 (mg-1b): High data quality at load: scenario-driven techniques
+- Lesson 35 of 42 (mg-1a): Data quality at load: the method
+- Lesson 2 of 42 (fd-1a): Data modeling and large data volumes
+
+## References
+
+[^1]: Salesforce Data Migration Best Practices, Salesforce Help. Lays out the migration workflow of preparing the destination org with External ID fields, loading in parent-before-child order, and validating with exception reports, and the principle that every record is accounted for and re-runnable by key. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385417&language=en_US&type=1)
+
+[^2]: General Guidelines for Data Loads, Bulk API and Bulk API 2.0 Developer Guide, Salesforce Developers. Defines parallel and serial concurrency modes and their speed-versus-lock-contention trade-off, recommends starting at the 10,000-record maximum batch size and adjusting based on processing time, advises organizing batches by parent to minimize lock contention, be aware of operations like user creation and ownership updates that force serial mode, and notes the 2,000-request async queue delay and the ten-time batch retry. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-planning-guidelines.html)
+
+[^3]: Salesforce Certified Platform Data Architect Exam Guide, Salesforce. Defines the Data Migration (15%) domain and the objective mg-2a: compare and contrast various techniques for improving performance when migrating large data volumes into Salesforce, including Data Loader, Bulk API (serial vs parallel), batch sizing, ETL tools, and API limits. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+
+[^4]: Importing Data into Salesforce, Dataloader from MuleSoft, Salesforce Developers. Compares the Bulk API with the synchronous Batch (SOAP) API, states that Bulk is optimized for large data sets of 10,000 or more records with lower API usage per operation and asynchronous batch processing, and that the Batch API is best for smaller real-time sets. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/dataloader/guide/import-data.html)
+
+[^5]: Introduction to Bulk API 2.0 and Bulk API, Salesforce Developers. Explains that the Bulk API processes records asynchronously in background batches through jobs, that each record is processed in a 200-record chunk as a separate transaction, and how results are retrieved per batch. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/api-asynch-introduction-how-bulk-api-works.html)
+
+[^6]: Bulk API and Bulk API 2.0 Limits and Allocations, Salesforce Developers. States that operations over about 2,000 records are candidates for Bulk API 2.0, lists the 15,000-batch-per-24-hour allocation shared across Bulk APIs, the 150-million-record-per-day cap, the 10,000-record maximum per batch, and the seven-day lifespan of jobs and batches. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-bulkapi.html)
+
+[^7]: Use Data Loader with the Bulk API, Salesforce Help. States that Data Loader handles a large range of data, that the Bulk API mode is recommended when records total in the hundreds of thousands, and explains how selecting the Use Bulk API option creates a Bulk Data Load Job server-side. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000382601&language=en_US&type=1)
+
+[^8]: Data Loader Guide, Salesforce. Describes Data Loader as a client application for bulk import and export that reads CSV files, supports both a user interface and a command-line mode for automated processing, and notes the maximum import batch size of 10,000 records for the Bulk API. [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/salesforce_data_loader.pdf)
+
+[^9]: Salesforce Error 'Unable to lock row - Record currently unavailable', Salesforce Help. Explains that Bulk API batches are processed in parallel by default, that when two parallel batches contain records pointing to the same parent record both try to lock the parent and cause the error, and that the resolution is to reduce batch size, use serial mode, or sort records by parent ID so records sharing a parent are grouped in one batch. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000387767&language=en_US&type=1)
+
+[^10]: Proactive Alert Monitoring: Rowlock Timeout Errors, Salesforce Help. States that inserting or updating records through the Bulk API can cause multiple updates on the same parent record at once because batches are processed in parallel, and that mitigation is to reduce batch size, process in serial mode, and sort records by parent. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000384162&language=en_US&type=1)
+
+[^11]: Work with Batches, Bulk API and Bulk API 2.0 Developer Guide, Salesforce Developers. Explains that each batch is processed independently and not necessarily in order, that batches can be processed in parallel, that a batch times out if processing takes too long, and to split a batch into smaller batches if a timeout occurs. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-batches-intro.html)
+
+[^12]: Defer Sharing Calculation, Best Practices for Deployments with Large Data Volumes, Salesforce Developers. Describes deferring sharing rule and group membership calculations to avoid long evaluations or timeouts during a large load, running the load first, and resuming calculations with a full recalculation during a maintenance period. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-techniques-deferred-sharing-calculation.html)
+
+[^13]: Limits resource, REST API Developer Guide, Salesforce Developers. Describes the /limits resource, which returns the maximum allocation and remaining allocation for each org limit, including the Daily Bulk API batches limit. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-limits.html)

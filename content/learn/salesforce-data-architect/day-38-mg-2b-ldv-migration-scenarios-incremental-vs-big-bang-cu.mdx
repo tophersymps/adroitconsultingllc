@@ -1,0 +1,209 @@
+---
+title: "Data Architect MG-2B: LDV Migration Scenarios: Incremental vs Big Bang, Cutover, Continuous Sync"
+slug: day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu
+series: salesforce-data-architect
+lesson: 38
+excerpt: "Compare and contrast techniques for migrating large data volumes into Salesforce by scenario, applying incremental versus big-bang approaches, cutover planning, and continuous synchronization to real engagements. This is the scenario lesson of the Data Migration domain's Volume objectives (mg-2b), the one that takes the performance levers from lesson 37 and asks how to sequence them when a business is actually going live. You will learn why a migration that works in isolation can fail as a go-live event, why the modern default for large, business-critical data is an initial full load followed by continuous delta sync until a short cutover, and why a single freeze window big-bang is reserved for small, simple datasets with a low tolerance for parallel-run cost. You will define the cutover plan: the freeze window, the rehearsed final delta sync, the go/no-go checks, the user communications, and the timed rollback. You will work the forty-million-record business-critical case that cannot tolerate a long freeze, and you will learn to keep the legacy system read-only after cutover for a defined rollback window rather than decommissioning it on day one."
+date: "October 19, 2026"
+author: "Adroit Consulting"
+readTime: "22 min read"
+tags: [Salesforce, Data Architecture, Data Migration, LDV, Big Bang, Incremental Migration, Cutover, Continuous Sync, Change Data Capture, Delta Sync, Rollback, Certification]
+---
+
+Lesson 37 gave you the machinery: Bulk API, serial and parallel modes, batch sizing, parent-first ordering, deferred sharing, off-peak scheduling. [^1] This lesson, mg-2b of the Data Migration domain, takes that machinery and asks a harder question: how do you sequence a set of loads against the business's actual go-live? A load that runs beautifully on its own can still wreck a migration if you schedule it at the wrong moment, freeze the source at the wrong time, or cut the org over with no way back. [^2]
+
+The exam frames it as a comparison task. Compare and contrast the techniques for improving performance when migrating large data volumes into Salesforce, applying incremental versus big-bang approaches, cutover planning, and continuous synchronization to real scenarios. [^2] Read that as: half of this objective is strategy, and the other half is a sequence of decisions that turns a strategy into a date on a calendar. You are not picking an API here. You are picking how the whole migration unfolds, and you are proving you can apply that choice to a stated scenario instead of just naming it.
+
+## Two families: big-bang and incremental
+
+Every data migration comes down to choosing between two ways of getting from the old system to the new one: move it all at once, or move it in pieces. [^3]
+
+A big-bang migration moves all the data in one cutover window. The source system is frozen, the full volume is loaded into Salesforce, and the org goes live in a single, defined event. [^3] It is simpler to reason about, because there is exactly one transition and one set of things to check. The cost is that it carries the highest risk and the largest downtime and sync burden, because the legacy system has to be frozen at cutover. [^3] Everything depends on the one window going well, and if it does not, everything is in trouble at once.
+
+An incremental migration moves data in waves. [^3] You split the population by region, division, or data domain, and migrate each wave separately over multiple windows. Because you run multiple waves, you reduce risk and you get to learn between them: the problems you hit loading the first region inform how you handle the second. [^3] The trade-off is that the legacy system and Salesforce both run during the transition, so you must keep data in sync between them throughout, and that synchronizing cost is the price of the reduced risk. [^3]
+
+There is a natural instinct to read those as "big-bang is bad, incremental is good." That is not what the exam wants. [^2] The two approaches suit different scenarios, and the objective is to know which one a given migration calls for. [^3]
+
+![Comparison of the two migration families: big-bang moves all records in one cutover window with the highest risk and no sync burden, while incremental moves data in waves with a lower risk and an ongoing sync burden, each suited to a different scenario](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/1-big-bang-vs-incremental.png>)
+
+## Big-bang: when one window is the right answer
+
+Big-bang migrates every record in a single cutover event, and it is the right tool for a narrower set of situations than people admit. [^3]
+
+Its strength is conceptual simplicity. There is one load, one validation, one moment of go-live, and one set of users to train and switch over. [^3] For small, simple datasets with a low tolerance for the cost of running two systems in parallel, that is exactly what you want. [^3] If the source holds a few tens of thousands of records across a couple of objects, there is no reason to pay the ongoing sync overhead of a parallel run. You freeze, you load, you verify, you open the org, and you are done.
+
+The price of that simplicity is that everything stakes on the single window. [^3] The legacy system must be frozen at cutover, which means no one can work in it for as long as the cutover takes. [^3] The longer the load and validation take, the longer the freeze. If the dataset is large or the objects are complex, a big-bang window stretches from hours to a full weekend, and the business is simply down or frozen for all of it. [^3] There is also nowhere to hide: if the load fails halfway through the window, you are re-planning a go-live that everyone's calendar already assumes happened.
+
+So the exam's rule of thumb is consistent. Big-bang suits small or simple datasets with low business criticality and low tolerance for parallel-run cost. [^3] The moment the volume is large or the data is business-critical, big-bang stops being the safe default.
+
+## Incremental migration: waves reduce risk
+
+An incremental migration moves the data in waves, and each wave is a smaller, safer version of the same idea. [^3]
+
+You pick a split that makes sense to the business. By region, so North America migrates first, then EMEA, then APAC. By division, so one business unit goes live before another. By data domain, so reference data and Accounts go first, then transactional history, then archival records. [^3] Each wave is loaded, validated, and cut over on its own schedule, and the problems you find in wave one are fixed before wave two starts. [^3]
+
+That learning-between-waves quality is the reason large, business-critical programs reach for incremental migration. [^3] You never expose the whole migration to a single point of failure. A defect that would have taken down a full big-bang instead takes down one region, and you know about it before the next region migrates. [^3] The users of the first region go live and prove the new workflow while the other regions still work in the legacy system.
+
+The cost is the parallel run itself. [^3] Because different waves live in different systems at the same time, both Salesforce and the legacy system are active simultaneously, and everything that happens in the legacy system after a wave's data was extracted has to be brought over to Salesforce. [^3] That is the sync burden, and it is real work. If you run incremental waves without syncing between legacy and Salesforce, the two systems drift apart, and the business gets confused about which system holds the truth for the still-migrating regions. [^3]
+
+Incremental is not a way to avoid delta sync; it is a way to make each delta smaller and each decision less catastrophic. [^3]
+
+## Delta and continuous sync: shrink the freeze to the final delta
+
+This is the technique that makes a long migration and a short cutover coexist, and it is the modern default for large migrations. [^3]
+
+The pattern has two halves. First you do an initial full load of the entire dataset into Salesforce, ahead of the cutover, while the legacy system is still running normally. [^4] Then you keep the source and target aligned with incremental change capture until cutover: you capture only what changed since the last sync and apply those deltas, so Salesforce stays current with the legacy system throughout the lead-up. [^4] At cutover, you run one final delta, then you stop the legacy writes and switch to Salesforce. [^3][^4]
+
+The reason this matters is the freeze window. In a big-bang, the freeze covers the entire load. [^3] With an initial full load plus continuous delta sync, the full volume is already in Salesforce long before go-live, so the only thing the freeze has to cover is the final delta, the changes that accumulated since the last sync. [^3] For a large, business-critical migration that cannot tolerate a long downtime, that is the whole point: the freeze shrinks from days to the time it takes to sync the final delta. [^3]
+
+![Initial full load plus continuous delta sync: the full volume loads ahead of go-live, continuous delta keeps Salesforce current with the legacy system, and the freeze at cutover covers only the final delta instead of the entire load](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/2-full-load-plus-delta-sync.png>)
+
+The quiz builds its hardest question directly on this. [^2] A business-critical migration cannot tolerate a long downtime but has 40 million records. A single big-bang load on a cutover weekend needs a long freeze, because all 40 million records move in that window. [^3] An initial full load plus continuous delta sync moves the 40 million records ahead of time, so the go-live freeze only has to cover the final delta, which is a fraction of the volume. [^3] Manual weekend re-entry and loading only current-year data do not meet the requirement at all, the first because it is not a real migration and the second because it abandons history. [^2] The continuous-delta answer wins because it is the only one that both moves the full volume and keeps the freeze short.
+
+### Capturing the delta
+
+Continuous sync needs a way to know what changed, and there are two broad mechanisms.
+
+The first is Change Data Capture, the platform's real-time change stream. [^4] Salesforce describes data replication in three stages: an initial copy of the entire dataset, continuous synchronization of new and updated data, and reconciliation of the two systems. [^4] Change Data Capture is the continuous-synchronization stage. [^4] It publishes the deltas of Salesforce data, the create, update, delete, and undelete operations, as a stream of events that an integration app receives and applies to the external system in near real time. [^4] Because the changes arrive as events rather than as full-table polls, the receiving system stays fresh without re-reading the whole dataset each cycle. [^4]
+
+The second is the delta extract, which polls for changes by timestamp. [^5] The Replication API does this with two calls: getUpdated returns the IDs of newly created and updated records since a given time, and getDeleted returns the IDs of deleted records. [^5] Once you have the ID lists, you retrieve the changed records in batches and apply them. [^5] A simpler variant queries records by SystemModstamp or a last-modified timestamp, and pulls anything changed since the previous sync. [^5] The Replication API is the more robust of the two, because it is designed so you cannot miss records and will not retrieve duplicates, which is an advantage over querying directly on CreatedDate or LastModifiedDate fields that can miss in-flight transactions. [^5]
+
+Which one you choose depends on whether you are syncing into Salesforce or out of it, and on latency. When a legacy system writes changes and you need them inside Salesforce, you capture deltas on the source, whether by CDC if the source is another Salesforce org or by timestamped extracts if it is a conventional database. [^4][^5] When you need to keep an external store current with Salesforce, CDC's event stream is the near-real-time option and the Replication API is the polling option. [^5]
+
+### Gaps, overflow, and reconciliation
+
+Delta capture is not magic, and the exam wants you to know its failure modes. [^4]
+
+Change Data Capture is not a transactional guarantee. Salesforce queues and buffers events and attempts to publish them asynchronously, and in rare cases some events are not persisted and are not recoverable. [^4] The system tries to make this visible: when the subscriber misses changes, it can receive gap events that signal the stream skipped something, and the correct response is a reconciliation, re-reading the affected records to bring them back in line. [^6][^4] Overflow events likewise signal that the event buffer overflowed and the entity needs a resync. [^6] Any replication design that ignores gap and overflow handling is a design that quietly drifts and then surprises you at cutover.
+
+The lesson is scaffolding. Delta capture does not absolve you of building reconciliation into the process. [^4] The three-stage model, initial copy, continuous sync, and reconciliation, names reconciliation as an explicit stage, not an afterthought. [^4]
+
+## Cutover planning: the event you rehearse
+
+The cutover is the moment all this preparation serves, and it is an event, not an impulse. [^3]
+
+A sound cutover plan has a defined shape: the freeze window, the final delta sync, the go/no-go checks, the user communications, and the rollback plan. [^3] Let us name each element, because the quiz asks which two belong in a sound plan, and the two wrong answers are the ones that sound tempting.
+
+![The cutover plan sequence: freeze window, final delta sync, go/no-go checks, user communications, and rollback plan, with a rehearsed final delta and go/no-go checks as the two essential elements](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/3-cutover-plan.png>)
+
+The freeze window is the block of time during which the legacy system stops accepting writes. [^3] It has a start and an end, and every user who touches the source system needs to know it is coming. The final delta sync is the last application of changed data before go-live, and it is the load that actually determines whether the cutover fits in the freeze. [^3] Say the freeze is four hours. The final delta must finish inside those four hours, or the cutover pushes and the freeze extends. That is why the final delta has to be rehearsed and timed, not assumed. [^3] Its duration depends directly on the change volume since the last sync, so a rehearsed run tells you how long a given volume of changes takes to apply, and that number is what you budget against the freeze. [^3]
+
+The go/no-go checks are the explicit conditions that must be true before you commit. [^3] Counts reconcile at the record level, field samples match, relationships resolved, key reports return the expected totals. [^3] Each check has an owner and a pass threshold, and the cutover does not proceed until they pass. [^3] The user communications are the plan for telling people what is happening: freeze start, expected downtime, when to stop entering data in the legacy system, what to expect on the first day in Salesforce. [^3] Communicating is not optional polish. Users who keep typing into the frozen legacy system create changes that never reach Salesforce and confusion about which system holds the truth.
+
+The rollback plan is the answer to the question nobody wants to ask: what do we do if go-live goes badly? [^3] Because the legacy system is often still available right after cutover, you can design a rollback. The standard move is to keep the legacy system read-only for a defined window so the migration can be reversed if critical issues appear in the first days, then decommission it after the window closes. [^3] That preserved window is the difference between a bad go-live you can pull back from and one you cannot.
+
+The quiz checks this exact pair. A rehearsed final delta sync with measured timing, and go/no-go checks with a defined rollback window: those are the two essential elements. [^2] Immediate decommission of the legacy system at cutover is the trap, because it removes the rollback path. [^3] And no user communication until after cutover creates exactly the confusion the plan exists to prevent. [^3]
+
+### Rehearse, and time it
+
+The single most important property of a cutover is that it has been practiced. [^3] Run through the whole sequence at least once, ideally in a full-copy sandbox at production volume, and measure the duration of each step. [^3] The dry run is where you discover that the final delta takes six hours when your freeze is four, or that a validation query that seemed instant on small data takes twenty minutes on a 40-million-record org. [^2][^3] A cutover that has never been rehearsed is a cutover whose freeze window is a guess, and a guess can sink the whole go-live.
+
+The rehearsal also produces the numbers the go/no-go checks rely on. [^3] If the dry run tells you the final delta takes ninety minutes for the change volume it carried that week, then on cutover weekend, when changes may have accumulated more, you know to expect longer and to have accounted for it. [^3] Timing measurement is what turns a runbook from a list of intentions into a schedule you can hold a freeze against.
+
+## Rollback: keep the door open, then close it deliberately
+
+Rollback is designed before the go-live, not discovered after it. [^3]
+
+At cutover, the legacy system has the data as of the final freeze. [^3] That makes it a natural rollback target: if the new Salesforce org develops a critical issue in the first hours or days, the team can reverse direction and let users return to the legacy system, which still holds a complete copy of the migrated data. [^3] To make that possible, you keep the legacy system read-only for a defined rollback window. [^3] Read-only is the key word. If users keep working in it, it diverges from the frozen state you began with, and it stops being a reliable rollback image. It stays available as a safety net, not as a second live system.
+
+The window is finite and deliberate. [^3] After the agreed number of days, the team confirms the migration has held, and the legacy system is decommissioned. [^3] Decommissioning is a single, explicit decision made after the rollback window closes, and it is the opposite of the exam trap that decommissions immediately at cutover. [^3][^2] Immediate decommission looks decisive and reads as confidence, but it eliminates the only path back if something critical surfaces. The architect's discipline is to preserve that path for a defined window and to close it on purpose when the period is up.
+
+![Rollback window timeline: the legacy system stays read-only for a defined window after cutover, then is decommissioned on purpose, preserving a path back instead of decommissioning on day one](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/5-rollback-window.png>)
+
+## Continuous sync technologies: matching the tool to the volume
+
+The delta you sync is only as good as the machinery that moves it, and the choice of machinery depends on volume, latency, and whether the source supports change capture. [^7]
+
+The options you will be asked to compare are these.
+
+Middleware or ETL with delta capability. Most mature ETL tools can identify records in the source that changed since the last extract, which reduces the amount of record processing dramatically. [^7] This is the workhorse for very high volumes from conventional databases: the tool runs change capture against the source, transforms the changed records, and calls the Bulk API to apply them to Salesforce. [^7] It is the right option when the source is a large relational system and the migration is an ongoing process rather than a one-off event.
+
+Change Data Capture change events. When the change stream is on the Salesforce side, either because you are moving data between Salesforce orgs or keeping an external store fresh with Salesforce, CDC is the near-real-time option. [^4] It publishes deltas as events and scales to millions of events per day. [^4] It requires an integration app to receive the events and apply them, and it retains events for a limited window so a subscriber can catch up. [^4][^6]
+
+Salesforce Data Pipelines. When you want to consolidate and prepare data inside the Salesforce ecosystem, Data Pipelines can sync data into connected objects and supports incremental sync by default, meaning only changed data is synced rather than the whole set. [^8] It is the native option that keeps large volumes of external and Salesforce data in the trusted environment, and its incremental sync aligns with the continuous-delta pattern this lesson describes. [^8][^9]
+
+The decision rule the exam rewards is scenario-based. [^2] Very high volume from an external database headed into Salesforce: ETL with CDC against the source, driving the Bulk API. [^7] Near-real-time replication of Salesforce changes to a data warehouse: Change Data Capture. [^4] Consolidating data across systems without leaving the Salesforce trust boundary: Data Pipelines with its incremental sync. [^8]
+
+![Decision tree for continuous sync technology: ETL with CDC driving the Bulk API for very high volume from an external database into Salesforce, Change Data Capture for near-real-time Salesforce to warehouse, and Data Pipelines for consolidation inside the Salesforce trust boundary](</diagrams/day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu/4-sync-technology-decision.png>)
+
+## Performance during migration waves
+
+Continuous sync reduces the freeze, but it does not change the fact that each load still has to be fast and safe, and that is where the lesson 37 levers come back. [^3]
+
+Apply the LDV migration levers per wave, not once for the whole migration. [^3][^10] Each wave uses the Bulk API, chooses parallel or serial mode based on the objects in that wave, sizes and orders batches, defers sharing during the load, and schedules the heavy work off-peak. [^3][^10] The reason to re-apply them per wave is that a wave is a unit of learning. If wave one taught you that a particular object locks when you load it in parallel with its parent, wave two is where you apply that. [^3]
+
+Monitoring is continuous. Bulk and API limits are shared across the whole migration, and a migration runs many jobs over many weeks, so the 15,000-batch and 150-million-record allocations have to be budgeted across all the waves, not just the current one. [^10][^11] Watch the limits as you go, and keep the org healthy for the live users who are already in Salesforce for the migrated waves. [^10]
+
+The scenario guidance ties all of this together. [^3] A big, business-critical migration gets incremental waves plus continuous delta sync, because the freeze must be short and no single load should be able to take the whole migration down. [^3] A small, simple migration gets a big-bang, because the freeze is short anyway and there is no benefit to paying the parallel-run sync cost. [^3]
+
+## Worked example: the 40-million-record go-live
+
+Put the pieces together on the case the quiz uses. [^2] A business-critical migration holds 40 million records, and management has said the org cannot be down for a long weekend. That constraint rules out a big-bang immediately, because a big-bang freeze has to cover loading all 40 million records, which is days, not a weekend. [^3]
+
+Design it as an initial full load plus continuous delta sync. [^3] Months before the go-live, you load the full 40 million records into Salesforce in waves, region by region, applying the bulk, batching, parent-first, and deferred-sharing levers that lesson 37 covered. [^3][^10] From the moment the first region's full load completes, you run continuous delta sync, capturing what changed in that region since its last extract and applying it on a rolling basis. [^4][^5] The business keeps working in the legacy system throughout, and Salesforce stays current with it. [^3]
+
+At the go-live, you begin the cutover plan. [^3] You communicate the freeze window to every user. You stop writes to the legacy system. You run the final delta sync, the changes that accumulated since the last extract, and you do it against a delta volume you have rehearsed and timed, so you know how long it will take relative to the four-hour freeze. [^3] The full 40 million records never move during the freeze; only the final delta does, which is why the freeze fits. [^3]
+
+You run the go/no-go checks: record counts reconcile, field samples match, relationships resolved, key reports return expected totals. [^3] You keep the legacy system read-only for a defined rollback window, watching the first days closely. [^3] When the window closes and the migration has held, you decommission the legacy system, on purpose, as a single deliberate step. [^3] That is the full mg-2b scenario in one run: incremental waves, continuous delta, a rehearsed and timed cutover, and a rollback window that you close on schedule rather than throwing away on day one.
+
+## Configuration walkthrough: sequence a migration scenario
+
+Work these steps in order. [^2] This is the recommendation you give when a client asks how to structure a large migration that cannot stop the business.
+
+1. Choose big-bang versus incremental based on volume, business criticality, acceptable downtime, and parallel-run cost. [^3] Small or simple data with a short tolerable freeze and low parallel-run cost: big-bang. Large or business-critical data where downtime and risk must be minimized: incremental waves plus delta sync. [^3]
+2. Implement an initial full load, then continuous delta sync until cutover. [^3] Load the full volume ahead of time in waves. Capture changes with CDC on the source or with delta extracts keyed on SystemModstamp or last-modified (or the Replication API's getUpdated and getDeleted), and apply them on a rolling schedule so Salesforce stays current. [^4][^5]
+3. Rehearse the cutover. [^3] Define the freeze window, the final delta, the go/no-go checks, and the communications. Run the sequence at least once at production volume and measure the timing of each step, especially the final delta, whose duration depends on the change volume since the last sync. [^3][^2]
+4. Keep the legacy system read-only post-cutover for a defined rollback window, then decommission. [^3] Preserve the rollback path for the agreed period, and close it deliberately when the window ends. [^3]
+5. Apply the LDV performance levers per wave and monitor Bulk and API limits throughout. [^3][^10] Bulk API, the right mode, tuned batches, parent-first, deferred sharing, off-peak scheduling, and a running watch on remaining allocation across all waves. [^10][^11]
+
+## Exam traps
+
+Three traps cover this objective, and each one is a real go-live mistake. [^2]
+
+The first is attempting a big-bang cutover with no delta-sync rehearsal, so the final sync takes far longer than the freeze window allows. [^3] A rehearsed, timed final delta is how you know the cutover fits the freeze. [^3] Without rehearsal, you discover the six-hour delta inside your four-hour window, at go-live, with no room to move. [^3]
+
+The second is running incremental waves without a sync between the legacy system and Salesforce, causing data drift and user confusion during the parallel run. [^3] Incremental migration does not remove sync responsibilities; it makes each sync smaller. [^3] Skip the sync and the two systems diverge, and nobody can trust either one while the transition is underway. [^3]
+
+The third is decommissioning the legacy system immediately at cutover, eliminating the rollback path. [^3] The preserved rollback window is exactly what makes a bad go-live recoverable. [^3] Decommission on a schedule, after the window closes, never on day one. [^3]
+
+## The migration strategy, in one line
+
+For large, business-critical data, the shape is fixed: full load, delta sync, rehearsed cutover, and a rollback window, with big-bang reserved for small, simple datasets. [^3]
+
+## Try it for yourself
+
+Take the 40-million-record business-critical case and write the plan in five bullets: the migration family you choose and why the other family fails the downtime constraint; the technique that keeps the freeze short; the four elements of a cutover plan in the order you would sequence them; how you determine the freeze window in hours; and what you do with the legacy system at cutover and after the rollback window. Then reverse the exercise: state the scenario where a big-bang is the better choice, and name the two costs you avoid by not running an incremental migration in that scenario. Finally, write the two-line answer to the trap: why does a rehearsed, timed final delta sync matter, and why does immediate decommission of the legacy system remove a safety you are not done with? [^3][^2]
+
+## What's next
+
+Lesson 39 of 42 is up next: Exporting from Salesforce (mg-3a). Where this lesson brought data into Salesforce at scale and sequenced the cutover, lesson 39 works the other direction. It covers getting data out of Salesforce through Data Export, Data Loader export, the API, and reports, which is how you reconcile the migration, feed downstream systems, and keep an external copy of the org's data. Your snapshot of the legacy system serves as the rollback image; lesson 39 is the mirror, making sure the data you have in Salesforce can also be extracted when you need it.
+
+## Related lessons
+
+- Lesson 37 of 42 (mg-2a): LDV migration performance: Data Loader, Bulk API, parallel jobs, and batching
+- Lesson 36 of 42 (mg-1b): High data quality at load: scenario-driven techniques
+- Lesson 42 of 42 (mg-3b): Data migration governance
+
+## References
+
+[^1]: General Guidelines for Data Loads, Bulk API and Bulk API 2.0 Developer Guide, Salesforce Developers. Defines parallel and serial concurrency modes, batch sizing, parent-first organization, and deferring sharing, the performance levers this lesson sequences into a strategy. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-planning-guidelines.html)
+
+[^2]: Salesforce Certified Platform Data Architect Exam Guide, Salesforce. Defines the Data Migration (15%) domain and the objective mg-2b: compare and contrast various techniques for improving performance when migrating large data volumes into Salesforce, applying incremental vs big-bang approaches, cutover planning, and continuous synchronization to real scenarios. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&language=en_US&type=1)
+
+[^3]: Salesforce Data Migration Without Disruption Guide, Minuscule Technologies. Describes working in phases rather than a single risky switchover: migrate in phases, run the legacy system in parallel, use delta loads at cutover so downtime stays to minutes, and keep the source system as a fallback until the migration holds. The big-bang versus phased and parallel-run contrast directly backs the scenario trade-offs in this lesson. [minusculetechnologies.com](https://www.minusculetechnologies.com/blogs/salesforce-data-migration-without-disruption)
+
+[^4]: When Do You Use Change Data Capture?, Change Data Capture Developer Guide, Salesforce Developers. Explains that data replication has three stages (initial copy, continuous synchronization, and reconciliation), that Change Data Capture is the continuous-synchronization stage publishing deltas for new and changed records, and that events are queued and buffered asynchronously with rare unrecoverable losses. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/change-data-capture/guide/cdc-when-to-use.html)
+
+[^5]: Data Replication Using Change Event Streams or Replication API, Salesforce Help. Compares Change Data Capture for real-time streaming with the Replication API for polling-based replication, and explains that the Replication API has two calls, getUpdated and getDeleted, whose design ensures you cannot miss records or retrieve duplicates, unlike querying directly on CreatedDate or LastModifiedDate. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000386267&language=en_US&type=1)
+
+[^6]: Transaction-Based Replication Steps, Change Data Capture Developer Guide, Salesforce Developers. Explains how a subscriber reconciles gap and overflow events by re-reading the affected records so the replicated data comes back in line, the reconciliation discipline this lesson treats as a required stage of delta sync. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/change-data-capture/guide/cdc-replication-steps.html)
+
+[^7]: Integration Patterns, architect.salesforce.com. States that most mature ETL tools provide change data capture, identifying records in the source that changed since the last extract, and that where an external system sends large amounts of data into Salesforce, a third-party ETL tool runs change capture against the source and calls the Bulk API to issue DML. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html)
+
+[^8]: Connect and Sync Your Data to Data Pipelines, Salesforce Help. Explains that Salesforce Data Pipelines data sync can extract source data into connected objects on a schedule and that it can sync supported local Salesforce data incrementally by default, meaning only changed data gets synced. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.sdp_connectors.htm&language=en_US&type=5)
+
+[^9]: Modify and Enrich Salesforce Data with Data Pipelines, Salesforce Help. Describes Salesforce Data Pipelines as a high-performance data platform inside the trusted Salesforce environment that consolidates scattered CRM data and prepares large volumes before loading. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.sdp.htm&language=en_US&type=5)
+
+[^10]: Best Practices for Deployments with Large Data Volumes, Salesforce Developers. Documents the LDV deployment techniques, including deferred sharing calculation and parent-before-child loads, that this lesson re-applies per migration wave. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-techniques-deferred-sharing-calculation.html)
+
+[^11]: Bulk API and Bulk API 2.0 Limits and Allocations, Salesforce Developers. Lists the 15,000-batch-per-24-hour allocation shared across Bulk APIs and the 150-million-record-per-day cap, the limits a multi-wave migration must budget across all its jobs. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-bulkapi.html)

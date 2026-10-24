@@ -17,8 +17,10 @@ vi.mock("@/lib/access", () => ({
   getAccessUserId: mocks.getAccessUserId,
 }));
 
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => mocks.service,
+// R2-2: the admin surface reads and writes through the Data API client, whose
+// RLS `is_admin()` policies gate it — there is no service-role client any more.
+vi.mock("@/lib/db/server", () => ({
+  getSupabaseServerClient: async () => mocks.service,
 }));
 
 import { GET } from "./route";

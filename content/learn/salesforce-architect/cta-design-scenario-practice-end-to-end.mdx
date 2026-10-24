@@ -1,0 +1,120 @@
+---
+title: "Lesson 69: CTA Design Scenario Practice: A Real Scenario End to End"
+slug: cta-design-scenario-practice-end-to-end
+series: "salesforce-architect"
+lesson: 69
+excerpt: "Taking the whole architect toolkit and pointing it at one messy client scenario: how to read a requirement, fix the system of record, design the data, integration, identity, and security models as one coherent whole, write measurable targets, record the tradeoffs you accepted, and turn it all into a board-grade presentation you can defend."
+date: "October 15, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, CTA, Certifications]
+---
+
+# Lesson 69: CTA Design Scenario Practice: A Real Scenario End to End
+
+Lesson 61 gave you the map of the CTA. This lesson is the drill. Every principle in this track, integration patterns, data modeling, identity, sharing, environment strategy, reliability, performance, gets pointed at a single messy client scenario and has to come out as one coherent architecture you can defend out loud. The material is not new. The skill is. It is the difference between knowing the components and being able to assemble them into a whole, under a clock, in front of a board.
+
+This lesson walks one scenario end to end, the way you would actually attack it on the exam. I show my working at each stage: what I read, what I decided, what I weighed, and what I gave up. Then there is a fresh scenario for you to run the same drill on. Do not read the worked example and feel prepared. Run the second one yourself and check your answers against the criteria the board applies, because that is the only repetition that builds the skill.
+
+## Define the terms
+
+- **Design scenario**: the exam's core task. A rich client case with functional requirements, non-functional requirements, constraints, and an existing environment you do not control, which you must solve and then defend. [^1]
+- **Board answer**: a solution structured as a set of choices, each justified by a requirement or constraint, that holds together across data, integration, identity, security, and governance at once.
+- **Justification**: the reason a choice is right, stated as a connection between the scenario's requirements and a concrete architecture component, including the tradeoff you accepted. A choice with no explained cost is not justified. [^3]
+- **System of record**: the authoritative home for a piece of data. Pluralism here, two systems both claiming to own the same fact, is where most scenario solutions rot.
+- **Non-functional requirement (NFR)**: how well the system must behave, expressed with a measurable target, such as availability, latency, or recovery time. [^2]
+- **Tradeoff**: the cost you accept when you pick one option over another. Every design accepts several. The failure is leaving them implicit instead of recorded. [^3]
+- **Existing environment**: the client's situation at the start, the ERP they run, the identity provider in place, the budget and schedule that do not stretch. The exam hands you an installed base; you fit new architecture into what is already there. [^1]
+
+Keep these terms pinned while you read the walkthrough. Every decision in it is one of these verbs: fix the system of record, design a seam, set a target, record a tradeoff.
+
+## The method: an order that keeps the whole from collapsing
+
+A scenario feels like a wall of text. The way through it is a fixed sequence, and the sequence matters because the pieces depend on each other. Here is the order I use, and it is the order the walkthrough follows.
+
+1. **Read for the why, then restate the requirements in your own words.** Pull the business need out of the wording before you touch a diagram. If you solution the literal sentences, you build whatever the client described instead of whatever the business needs. [^4]
+2. **Fix the system of record for every key entity.** Before you can design an object model or an integration, you have to decide who owns each fact. Get this wrong and everything downstream is bent.
+3. **Design the data model to serve the decision above.** Shape the objects and fields so the data your system of record owns is stored cleanly and queryably.
+4. **Design the integration seams, including the failure cases.** Decide how systems exchange data and what happens when a call fails, a message duplicates, or data lands out of order.
+5. **Set the identity and access model.** How users and systems prove who they are, and what each role may see and touch.
+6. **Write the NFRs with numbers.** Availability, latency, scale, recovery. Vague quality wishes are not requirements.
+7. **Record the tradeoffs as decision records.** List the options, the final choice, the tradeoff accepted, and the reason. This is what you defend. [^3]
+8. **Assemble and present the board answer.** Lead with the client's existing environment and the why, then walk from data to integration to identity to the numbers, keeping every choice tied to a requirement.
+
+Steps 2 and 3 could swap order in some cases, but step 2 is almost always first. You cannot decide what integration pattern to use until you know which system is the source of truth for what.
+
+![The CTA method as a fixed eight-step sequence, from reading for the why through fixing the system of record, the data model, integration seams, identity, the numbers, and the tradeoffs, ending in the board answer](</diagrams/cta-design-scenario-practice-end-to-end/1-cta-method-sequence.png>)
+
+## Worked example: Aurora Manufacturing Group, walked end to end
+
+Let me run the method on a full scenario. I will invent this one in the shape a real board scenario takes.
+
+> **Scenario.** Aurora Manufacturing Group (1,800 employees) makes industrial pumps and compressors. They run Salesforce Sales Cloud today, used only as an opportunity tracker by the sales team. Order fulfillment lives in a 12-year-old on-premises ERP behind a SOAP API that is reliable on small payloads but degrades badly under load. Procurement, engineering, and field service each keep their own spreadsheets. The board wants three things: a guided product configurator so sales can price custom configurations without a specialist; a single customer view across sales, orders, and service history; and a field service mobile app for technicians. They have an existing ADFS identity store and want single sign-on. Budget and schedule are fixed at twelve months, and no new middleware license is in the budget. A past third-party project failed and reviews are cautious.
+
+That is a dense paragraph, and it contains most of the traps this track warns about. Let me work it.
+
+**Step 1: extract the why and restate the requirements.** The literal asks are a configurator, a single customer view, and a field service app. The why under all three is that the business cannot price, sell, or service a product without a specialist, and nobody, sales, service, or the customer, can see the full picture of an account. The spreadsheets are the symptom of no authoritative home for service history. So the real requirement is not three apps. It is one joined data model plus the rules that run it, surfaced through three channels. [^4]
+
+I also note the constraints: the ERP stays, its API is flaky at volume, there is no new middleware budget, and stakeholder trust is low after a failed project. That last one matters more than any technical detail. A cautious stakeholder is a reason to prefer fewer moving parts and a clear proof of value early. [^3]
+
+**Step 2: fix the system of record.** This is the decision everything hangs on. Salesforce becomes the system of record for accounts, opportunities, quotes, and service work orders, because that is where sales and service both need to operate and where the single customer view has to live. The ERP stays the system of record for inventory quantities, pricing master data on finished goods, and the order's financial fulfillment state. The spreadsheet data for service history migrates into Salesforce so service work order history is authoritative there. Three facts, three owners, no overlap. Any fact with two owners will drift apart and take the single customer view down with it. [^1]
+
+![Aurora Manufacturing system-of-record split: Salesforce owns accounts, opportunities, quotes, and service work orders; the ERP keeps inventory quantities, pricing master data, and order fulfillment state; spreadsheet service history migrates into Salesforce](</diagrams/cta-design-scenario-practice-end-to-end/2-system-of-record-ownership.png>)
+
+**Step 3: design the data model.** On the Salesforce side: Account is the anchor. Opportunity tracks the sale. Quote heads a quote for a configured product, and the configuration itself becomes a Quote Line Item tree holding each selected component and its option choices, so the configurator's output is queryable data, not a text blob. Work Order (standard field service object) carries the service history and links back to the related Order. Because guided selling needs real-time availability, inventory is not duplicated in Salesforce; it is fetched from the ERP at the moment of pricing. The standard objects are the first choice here, per the platform guidance to use the prebuilt model before inventing a custom one. [^3]
+
+**Step 4: design the integration seams, including failure.** The ERP's SOAP API, flaky under load, is the seam to protect. A synchronous call on every quote save is exactly what will burn it down at quarter end. So pricing availability is fetched via queueable Apex with a short freshness window, cached briefly, and the quote carries the availability snapshot it was priced against. Order placement, the highest-volume and highest-value operation, goes through an outbound message into a queue that the ERP polls in batches, so the ERP consumes at its own pace. Every handler is idempotent, keyed on a quote or order number, so a retried delivery cannot create a duplicate fulfillment. When a call fails, the work stays in the queue and a monitoring alert fires instead of the data silently vanishing. This is the seam designed for the failure case, not the happy path, and it is where the board will probe hardest. [^2]
+
+**Step 5: set identity and access.** Employees sign on through ADFS with single sign-on and just-in-time provisioning from the existing identity store, so no new credentials sprawl. The field service technicians are the risk surface, because they use a mobile app outside the corporate network. They get the same identity model plus a separate connected app with device and session restrictions. Customers do not get access at all in this phase; the single customer view is internal. Sharing is locked down by role: sales sees their territory's accounts, service sees work orders, and the guided configurator exposes only the product catalog, never negotiated prices, to non-sales. Least privilege is a design posture here, not a checkbox, because service and sales should not see each other's commercial lines. [^3]
+
+**Step 6: write the NFRs with numbers.** This is where vague words die. On the Salesforce side, the configurator must price a configuration in under four seconds on a typical connection at a peak of 1,500 concurrent sales users. Order placement must not fail or silently drop more than one in a thousand at peak, and any failed handoff to the ERP must recover automatically without data loss. Availability for the Salesforce platform, which is service-bound and business-hours for quoting, targets 99.5% during working hours. Recovery targets, owned by the ERP for fulfillment data, come from the disaster recovery pattern: the business accepts a defined RPO and an RTO it can answer for, and the plan is drilled, not just written. [^2] Every number here is chosen to fit the client's reality: quarterly peaks, business-hours users, and an old ERP that cannot take real-time load. A target that ignores the client's reality is a target the board will dismiss.
+
+**Step 7: record the tradeoffs.** Here is the heart of what you defend, and the honest costs of the design above. [^3]
+
+![Aurora Manufacturing tradeoffs: queue plus cache for ERP availability, standard objects first, no new middleware, and no customer portal in phase one, each with the cost accepted and the reason it was chosen](</diagrams/cta-design-scenario-practice-end-to-end/4-tradeoffs.png>)
+
+- **Real-time ERP availability via queue plus cache** instead of synchronous pricing on every save. Tradeoff accepted: availability data may be a few minutes stale, and stale pricing risks a quote issued on an outdated quantity. Chosen because the ERP cannot survive synchronous load; the fresh-snapshot tradeoff is recorded and the snapshot is shown on the quote.
+- **Standard objects first** instead of a custom order model. Tradeoff accepted: less custom flexibility, but far lower maintenance and standard reporting. Matches a cautious, budget-constrained stakeholder. [^3]
+- **No new middleware**, queueing inside the platform. Tradeoff accepted: the queue is not as rich as an ESB, and replay and reconciliation logic must be built by hand. Chosen because the budget rules out middleware and the volume is manageable in-platform.
+- **No customer portal in phase one.** Tradeoff accepted: the single customer view stays internal and the client does not get self-service yet. Chosen because the why is the internal single view, and self-service was not in the actual requirements.
+
+Each tradeoff names what was given up. That is what transforms a list of choices into a defensible architecture.
+
+**Step 8: assemble the board answer.** The presentation leads with the client's existing environment and the why, then walks data, then integration, then identity, then the numbers, then the decision records. Every slide ties a choice back to a requirement or constraint: the queue exists because of the unreliable ERP; the standard model exists because of the budget and the cautious stakeholder; the identity model exists because ADFS is already there. The closing is a short risk register, the top risks being stale pricing and the hand-built replay logic, each with a mitigation. That structure, open with the installed base, close with acknowledged risk, is the shape of a board-grade answer. [^1]
+
+## The failure modes the board punishes
+
+The worked example goes right. Let me name the ways it goes wrong, because recognizing them is half the exam.
+
+![The five failure modes the board punishes: two systems owning the same fact, designing only the happy path, NFRs with no numbers, tradeoffs presented as free, and solutioning the words instead of the why](</diagrams/cta-design-scenario-practice-end-to-end/3-failure-modes.png>)
+
+- **Two systems owning the same fact.** The instant you keep order status in both Salesforce and the ERP without a single owner, the single customer view drifts and the board has its first question. One fact, one owner.
+- **Designing only the happy path.** A design that assumes every API call succeeds is not a design. The ERP is flaky under load by the scenario's own words. The absence of a failure, retry, and reconciliation story is a fatal seam.
+- **NFRs with no numbers.** "The system should be fast and reliable" is not an NFR. The board wants a target they can test, and if you cannot name the target, you have not designed for it. [^2]
+- **Tradeoffs presented as free.** Every choice has a cost. A candidate who presents a solution with no acknowledged tradeoff reads as someone who has never made a real call. [^3]
+- **Solutioning the words instead of the why.** Building the literal portal, the literal app, while the business need was a joined data model and shared rules. Reframing that ask was step 1, and skipping it is the most common way a competent candidate hands in the wrong solution. [^4]
+
+## Try it
+
+Run the method on a fresh scenario, end to end, before you read the checkpoints. Give yourself the three hours the real exam allows, or a tight ninety minutes if you are rehearsing under pressure.
+
+> **Scenario.** Calico Health, a supply distributor for regional clinics, runs Salesforce Service Cloud for a tired service desk and a second, disconnected Salesforce org for a pilot sales team. The clinics place orders by phone and email, and nobody can see a clinic's full ordering and support history in one place. An on-premises professional services automation system is the system of record for quotes. The CFO wants a self-service clinic portal for ordering and case logging, the VP of Sales wants the two orgs merged so sales sees service history, and the VP of Service wants an integration so service reps can see open quotes. Contracts require audit-grade logging of every action on patient-adjacent supply orders for three years. No migration budget. Six months.
+
+Work these:
+
+1. What is the why under the three separate asks, and why does it change the design? *(Answer this before any diagram. The three asks are channels for a joined customer view plus compliance constraints. If you solution the words, you build a portal, a merge, and an integration as three projects; if you solution the why, you build one joined model with controlled access.)*
+2. Which system is the system of record for quotes, and what does that force on the integration? *(The PSA system stays the system of record for quotes. Salesforce must read quote data, not own it, so the integration is the service reps reading quote status, and the portal reads it too, which removes a whole class of data-ownership conflict.)* [^1]
+3. The compliance requirement says audit-grade logging for three years. Where does that target belong, and what NFR does it become? *(It belongs in the reliability and retention model. It becomes a measurable target, such as logs retained and immutable for three years and every mutation captured, with the data retention rule applied at design time, not discovered at audit time.)* [^2]
+4. List two tradeoffs you accepted and name what each cost you. *(Example: merging the two Salesforce orgs gains the single customer view but costs a migration and a sharing-model reconciliation with no migration budget, so you accept the cost and argue the value on the joined view. Staging quote reads from the PSA behind a cache gains responsiveness but costs freshness, so you record the snapshot tradeoff.)*
+5. How would you open the board presentation, given a cautious CFO who named compliance first? *(Lead with the client's existing environment and the compliance constraint, so the CFO hears that the audit-grade logging the business depends on is the spine of the design, not an afterthought. Everything else ties back to it.)* [^4]
+
+Check each answer against the board criterion: does it connect a requirement or constraint to a concrete component and justify the choice? Any answer that is platform trivia with no tie to the scenario is not a board answer. Run it again on the same scenario with a different constraint removed each time, until the sequence is reflexive.
+
+## What's next
+
+You can hold a full scenario together now: requirements to system of record, data model, integration, identity, the numbers, and the tradeoffs you would defend. The next lesson changes the lens from building the system to keeping it alive. It is lesson 70, general systems architecture: reliability engineering, where we take the SLIs and SLOs that measure whether a system is actually meeting its promises, adopt runbooks and on-call discipline, and apply all of it to how autonomous agent operations run. The scenario gave you targets; that lesson gives you the machinery to prove and preserve them after go-live.
+
+[^1]: Salesforce. [Certified Technical Architect credential](https://trailhead.salesforce.com/credentials/architectreviewboard)
+[^2]: Salesforce Well-Architected. [Reliability: build systems that continue working and recover gracefully when something fails](https://architect.salesforce.com/docs/architect/well-architected/guide/reliable)
+[^3]: Salesforce. [Architect Decision Guides](https://architect.salesforce.com/decision-guides)
+[^4]: salesforce.com. [Read Requirements Like an Architect](https://www.salesforce.com/blog/read-requirements-like-an-architect/)

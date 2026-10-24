@@ -1,0 +1,240 @@
+---
+title: "Lesson 77: Agent-to-Agent Communication: Protocols, Contracts, and Discovery"
+slug: agent-to-agent-communication-protocols-contracts-discovery
+series: "agentic-ai"
+lesson: 77
+excerpt: "Lesson 76 gave you the record an agent leaves behind. This lesson is about the boundary where two agents meet and neither can read the other's memory, prompts, or tools. You learn how agent discovery works through the Agent Card, why the task lifecycle is the real contract between peers, how transport and version negotiation prevent silent breakage, and which parts of the agreement the protocol leaves for you to write."
+date: "October 22, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [A2A, Agent Interoperability, Agent Discovery, Protocol Design, Trust]
+---
+
+# Lesson 77: Agent-to-Agent Communication: Protocols, Contracts, and Discovery
+
+Lesson 76 was about the record an agent leaves behind. This one is about the boundary where two agents meet.
+
+Suppose your triage agent needs a vendor risk verdict from the risk team's agent. Different codebase, different framework, possibly a different company. Neither one can read the other's memory, prompts, or tools. Everything that matters between them crosses a network boundary, which means everything that matters is an agreement.
+
+Three things have to be true before one agent can usefully delegate work to another. The client has to find the other agent and learn what it actually does. The two have to agree on the shape of the work and the states it can pass through. And they have to agree on the bytes. Discovery, contract, transport, in that order, because each one constrains the next.
+
+The Agent2Agent protocol, A2A, is the standard that covers all three. Its latest released specification is version 1.0.0, published at a2a-protocol.org, with 0.3.0 and earlier versions still documented for migration. [^1]
+
+## Two edges, two protocols
+
+MCP and A2A get compared constantly, usually as rivals. They sit on different edges of the same system.
+
+MCP standardizes how a model reaches tools, APIs, and data. It runs on JSON-RPC 2.0 between a host application and servers, and it exposes resources, prompts, and tools to the model. [^3] A2A standardizes how independent, often opaque agent systems talk to each other as peers. Its stated goal is that agents collaborate without needing access to each other's internal state, memory, or tools. [^1] The A2A specification says it plainly in its appendix on the relationship: MCP is the how-to for using a specific capability, and A2A is how agents partner and delegate. [^1]
+
+The test that decides which one you need is not about which is newer. Ask what sits on the far side of the boundary. If it is a function with a deterministic result, wrap it as a tool and use MCP. If it is a system that plans, loops, and makes its own decisions, you have an agent boundary, and wrapping that system as a tool throws away exactly the things you need: a durable task identifier, a cancellable unit of work, partial artifacts, and a way for the peer to say "I need more input before I can continue."
+
+![MCP sits on the model to capability edge and A2A on the agent to agent edge, with the boundary test that decides between them](</diagrams/agent-to-agent-communication-protocols-contracts-discovery/1-two-edges.png>)
+
+One historical note matters because it explains documentation you will find in the wild. IBM's Agent Communication Protocol, ACP, was a competing REST-based design for agent interoperability. It is now folded into A2A under the Linux Foundation, and the ACP documentation states that outright at the top of its own site. [^5] If a vendor page still advertises ACP support, the question to ask is whether they mean the retired standalone protocol or the A2A successor.
+
+## Discovery: what an agent publishes about itself
+
+A2A handles discovery with a single JSON document called the Agent Card. A server publishes it at a well-known path on its own domain, `https://{agent-server-domain}/.well-known/agent-card.json`, following the RFC 8615 convention for well-known URIs. [^2] That path is the whole point: a client that knows only a domain name can find the card without any out-of-band coordination.
+
+The required fields are few. The card must carry `name`, `description`, `version`, `supportedInterfaces`, `capabilities`, `defaultInputModes`, `defaultOutputModes`, and `skills`. [^1] Optional fields cover the provider, documentation URL, security schemes, signatures, and an icon.
+
+Here is a card for the risk team's agent, trimmed to what a client actually reads:
+
+```json
+{
+  "name": "Vendor Risk Agent",
+  "description": "Produces a vendor risk verdict from financial statements and security questionnaire answers.",
+  "version": "2.3.0",
+  "supportedInterfaces": [
+    {
+      "url": "https://risk.example.com/a2a/v1",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "capabilities": { "streaming": true, "pushNotifications": true },
+  "defaultInputModes": ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json"],
+  "skills": [
+    {
+      "id": "vendor-risk-verdict",
+      "name": "Vendor risk verdict",
+      "description": "Scores a vendor against a four-quarter financial and security rubric and returns a verdict plus rationale.",
+      "tags": ["risk", "vendor", "compliance"],
+      "examples": ["Assess Acme Corp for onboarding given attached 10-Qs and SOC 2 report."],
+      "outputModes": ["application/json"]
+    }
+  ],
+  "securitySchemes": {
+    "oauth": {
+      "oauth2SecurityScheme": {
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://risk.example.com/oauth/token",
+            "scopes": { "risk:assess": "Submit vendor assessments" }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Two fields carry more weight than they look like they do. `supportedInterfaces` is an ordered list, and the first entry is the preferred one, which is how an agent advertises the same skill over JSON-RPC, gRPC, and HTTP+JSON at once. [^1] And each skill's `examples` array is the closest thing the card has to a specification of intent. A skill named "vendor-risk-verdict" with no examples is a name, not a capability.
+
+Discovery itself comes in three shapes, and the choice is a security decision as much as an architectural one. [^2]
+
+- **Well-known URI.** The client knows the domain and fetches the card. Simple and standards-based, and the right default for public or domain-controlled agents. The endpoint serving the card needs authentication if the card describes anything sensitive.
+- **Curated registry.** A central service holds cards and clients query by skill or tag. This gives you governance, capability search, and selective disclosure, where the registry returns different cards depending on who is asking. The A2A specification does not prescribe a registry API, so every registry you meet is proprietary. [^2]
+- **Direct configuration.** The client is handed the card URL or its contents by config. Fine for tightly coupled systems and development, useless for dynamic discovery, and it means every capability change needs a client redeploy.
+
+Cards change rarely, so the spec leans on ordinary HTTP caching: servers should send `Cache-Control` and an `ETag`, and clients should revalidate with `If-None-Match` instead of refetching the whole document. [^2] That detail sounds like plumbing. It becomes a contract problem the first time a stale cached card tells your client that a retired skill still exists.
+
+![Three discovery shapes compared by what each buys and costs, plus the stale cached card that resurrects a retired skill](</diagrams/agent-to-agent-communication-protocols-contracts-discovery/2-discovery-shapes.png>)
+
+## The contract is the task lifecycle
+
+People talk about "the agent contract" as if it were a schema. The schema matters, but the state machine is what a client actually has to code against.
+
+In A2A the unit of work is the `Task`, which is stateful and identified by an id that persists across interactions. [^1] A task moves through a fixed set of states: `TASK_STATE_SUBMITTED`, `TASK_STATE_WORKING`, `TASK_STATE_COMPLETED`, `TASK_STATE_FAILED`, `TASK_STATE_CANCELED`, `TASK_STATE_INPUT_REQUIRED`, `TASK_STATE_REJECTED`, and `TASK_STATE_AUTH_REQUIRED`. [^1] Four of those are terminal, marked as such in the spec: completed, failed, canceled, rejected.
+
+The two interrupted states are where most integrations quietly break. `TASK_STATE_INPUT_REQUIRED` means the agent needs more information and is pausing, and `TASK_STATE_AUTH_REQUIRED` means it needs credentials before it can continue. [^1] Neither is a failure. A client that only handles completed and failed will abandon work that was sitting there waiting for one clarification, and the task will look like a hang in its own logs while the peer's logs show it politely waiting.
+
+![Task lifecycle state machine with four terminal states and the two interrupted states most integrations mishandle](</diagrams/agent-to-agent-communication-protocols-contracts-discovery/3-task-lifecycle.png>)
+
+Messages are the transport unit inside that lifecycle. A `Message` carries a required `messageId`, an optional `contextId` that groups related tasks into one conversation, an optional `taskId`, a `role`, and one or more content `parts`. [^1] Results come back as artifacts made of parts, attached to the task rather than returned as a bare blob. A completed response looks roughly like this:
+
+```text
+task.id        = "d8c6243f-..."
+task.contextId = "c295ea44-..."
+task.status    = { state: "TASK_STATE_COMPLETED", timestamp: ... }
+task.artifacts = [ { parts: [ { text: "{...verdict json...}" } ] } ]
+```
+
+Idempotency deserves a paragraph because it is the part clients get wrong under retry pressure. A2A says `SendMessage` may be idempotent, and the mechanism is the `messageId`: a server can use it to detect that a client resent the same message after a timeout instead of asking for a second assessment. [^1] "May" is doing real work in that sentence. If your client retries and your peer does not deduplicate by `messageId`, you have two vendor assessments and two charges. Confirm the behavior in writing before you turn on retries.
+
+Errors are part of the contract too, and the spec splits them into categories with different handling: authentication, authorization, validation, resource, and system errors, each with expected status semantics. [^1] The A2A-specific errors have fixed codes across bindings, for example `TaskNotFoundError` at JSON-RPC `-32001` and `VersionNotSupportedError` at `-32009`. [^1] Map them explicitly in the client. An integration that treats every error as retryable will hammer a peer that just told it the input was invalid.
+
+## Transport and version negotiation
+
+A2A separates the data model from the wire, which is why one agent can speak JSON-RPC to one peer and gRPC to another. The core bindings are `JSONRPC`, `GRPC`, and `HTTP+JSON`, and each interface in `supportedInterfaces` names its own binding and protocol version. [^1]
+
+The JSON-RPC binding is JSON-RPC 2.0 over HTTP with PascalCase method names (`SendMessage`, `GetTask`, `CancelTask`, `SubscribeToTask`), and streaming uses Server-Sent Events. [^1] Long-running work has two delivery mechanisms besides polling: streaming for a connected client, and push notifications where the server POSTs task updates to a client-provided webhook, which is what you use when the client cannot hold a connection open. [^1]
+
+Version negotiation is where a small omission causes a large outage. Clients must send the `A2A-Version` header with each request, carrying `Major.Minor` only, with patch versions ignored for compatibility. [^1] Servers must process the request under the semantics of the requested version, and must return `VersionNotSupportedError` if they cannot. [^1] Then the detail worth memorizing: an empty version is interpreted as 0.3. [^1] If your client forgets the header and your server supports 1.0 with 0.3 semantics still wired up, you will not get an error. You will get old behavior that looks like a new bug. Send the header explicitly, and make the client fail loudly rather than falling back to an older version.
+
+![Version negotiation compared: an explicit header fails loudly while a missing header is read as 0.3 and returns old behavior silently](</diagrams/agent-to-agent-communication-protocols-contracts-discovery/4-version-negotiation.png>)
+
+## Worked example: delegating a vendor risk review
+
+The triage agent has a vendor onboarding request. It has already extracted the documents. It needs the risk verdict, and it has to stay correct when the peer asks for something.
+
+Step one is discovery and a capability check. Fetch the card, confirm the skill exists, confirm the interface binding the client speaks, and confirm the security scheme. Do this before sending anything. The spec says clients should validate capability support from the card rather than discovering gaps through failed calls. [^1]
+
+```python
+import httpx
+
+CARD_URL = "https://risk.example.com/.well-known/agent-card.json"
+
+async def load_peer(card_url: str) -> dict:
+    card = (await httpx.AsyncClient().get(card_url, timeout=10)).json()
+    skill_ids = {s["id"] for s in card["skills"]}
+    if "vendor-risk-verdict" not in skill_ids:
+        raise RuntimeError(f"peer has no vendor-risk skill: {sorted(skill_ids)}")
+    iface = card["supportedInterfaces"][0]
+    return {"url": iface["url"], "version": iface["protocolVersion"]}
+```
+
+Step two is the send. The client attaches a `messageId` it can reuse on retry, a `contextId` for the onboarding case, and a task-level payload it controls:
+
+```python
+async def submit(peer: dict, payload: dict, message_id: str, context_id: str) -> dict:
+    body = {
+        "jsonrpc": "2.0",
+        "id": "1",
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": message_id,
+                "contextId": context_id,
+                "role": "ROLE_USER",
+                "parts": [{"data": {"skillId": "vendor-risk-verdict", "input": payload}}],
+            }
+        },
+    }
+    r = await httpx.AsyncClient(timeout=60).post(
+        peer["url"], json=body, headers={"A2A-Version": peer["version"]}
+    )
+    r.raise_for_status()
+    return r.json()["result"]
+```
+
+Step three is the state loop, and this is the code that decides whether the integration works in production:
+
+```text
+SUBMITTED or WORKING   -> poll GetTask, or hold the stream open
+INPUT_REQUIRED         -> attach the missing field, send another message on the same taskId
+AUTH_REQUIRED          -> refresh the credential out of band, then continue; do not resend as new work
+COMPLETED              -> read artifacts, validate against the output schema
+FAILED / REJECTED      -> surface the reason code; do not blind retry
+CANCELED               -> record the cancellation in your own audit trail
+```
+
+Step four is the part no protocol covers: the peer's artifact is untrusted data. Validate it against the schema you agreed on before your own agent reads it as a finding, because the far side is another model, and model output is not a fact until something checks it.
+
+## The contract the protocol does not write for you
+
+A2A gives you discovery, a lifecycle, and error codes. It does not give you the agreement that makes delegation safe, and every mature integration ends up writing that agreement down somewhere. In practice it contains these items, and the work of producing them is a half-day conversation, not a coding task.
+
+- **Input schema.** A JSON Schema for the payload, versioned, with required fields named and optional fields bounded. The card's `examples` are documentation; the schema is the enforced boundary.
+- **Output artifact schema.** The exact shape of the verdict, including what "insufficient evidence" looks like. A peer that can only return confident verdicts will return a confident verdict on missing data.
+- **Success criteria.** What counts as done, and who owns the decision when the peer returns a low-confidence result.
+- **Deadline and cancellation policy.** A maximum wall clock for a task, what the client does at the deadline, and whether cancellation is expected to be honored mid-task.
+- **Retry and idempotency.** Which errors are retryable, how many attempts, backoff shape, and a written confirmation that `messageId` deduplication is implemented on the server.
+- **Cost ceiling.** Token or per-call budget per task, and what happens when the peer would exceed it.
+- **Data handling.** What the peer may log, how long it retains artifacts, and whether the payload may leave a region.
+- **Skill versioning.** What a version bump means. The card carries an agent `version`, but the skill's semantics live in your agreement. Decide whether a description change is a minor bump or a breaking one, then hold clients to it.
+
+The Fortress runs into this in miniature all the time. Handoffs between its agents go through files and kanban state, which is a contract with no protocol at all: every field is convention, and every convention drift shows up as a worker reading a field that changed shape two runs ago. Adding a wire protocol would not fix that by itself. Writing the contract down, and testing it, is the fix. A protocol only removes the ambiguity it defines.
+
+## Trust at the boundary
+
+A card is an advertisement written by the party asking for your work. Treat it as data about a stranger, not as instructions from a colleague.
+
+The specification gives you mechanisms to pin identity. Agent Cards may be signed with JSON Web Signatures per RFC 7515, with the card canonicalized using the JSON Canonicalization Scheme before signing, and the `signatures` field excluded from the signed content to avoid a circular dependency. [^1] Signed Agent Cards were one of the features called out in the 1.0 release, and the Linux Foundation's announcement describes them as cryptographic identity verification. [^4] That same announcement reports the project past 150 supporting organizations, with integrations in Google, Microsoft, and AWS platforms, and production use in financial services, insurance, supply chain, and IT operations. [^4]
+
+Signature verification answers one question: this card came from the provider it claims. It does not answer whether the provider is trustworthy, whether the skill description is accurate, or whether the peer will honor the deadline.
+
+The sharper risk is that a card is text your model reads. Skill names, descriptions, and examples are free-form strings controlled by the remote party, and an agent that loads a card into its context is loading remote text into a prompt. This is the prompt injection surface from Lesson 17, wearing business attire. Declared capability is not authorization. Your client should decide what to delegate from its own policy, then use the card to check that the peer can do it, not the other way around.
+
+Credentials do not belong in cards. The spec recommends out-of-band dynamic credentials rather than static secrets embedded in the Agent Card, and the discovery guidance recommends serving sensitive cards behind mTLS, network restrictions, or OAuth, with registries disclosing different cards to different callers. [^1] [^2] An API key pasted into a public card is a credential leak with a discovery URL.
+
+## Failure modes
+
+**Treating the card as documentation.** Cards get written once and never updated, so clients build against a stale picture. Gate discovery on a runtime capability check and pin the protocol version in the request.
+
+**Ignoring the interrupted states.** A client with no branch for `INPUT_REQUIRED` or `AUTH_REQUIRED` leaves work stranded and calls it a timeout. Handle both explicitly, and log which one fired.
+
+**Fire-and-forget delegation.** Sending a request and dropping the task id means no cancellation, no audit trail, and no answer to "what did the peer do with our vendor data" three weeks later. Store the task id with the request.
+
+**Trusting the artifact shape.** A peer that changes its output will not usually announce it. Validate artifacts against the agreed schema before any downstream agent reads them.
+
+**Point-to-point sprawl.** Every new peer added by hand doubles the number of one-off integrations. Registries and a shared contract template exist to stop that count from growing.
+
+## Try it
+
+1. **Publish a card for an agent you already run.** Create `/.well-known/agent-card.json` with the required fields and at least one skill carrying real `examples`. Serve it behind the same auth as your API. Then fetch it with `curl -s https://your-host/.well-known/agent-card.json | jq .skills`.
+2. **Write a client that refuses to guess.** Load a card, check the skill id and the first interface's `protocolBinding`, and fail with a clear error when either is missing. No fallback to a hardcoded endpoint.
+3. **Drive a task through every state.** Point your client at a test peer and force an `INPUT_REQUIRED` and an `AUTH_REQUIRED` response. Confirm both recover without creating a second task.
+4. **Write the one-page contract.** Fill in the eight items above for that peer. Every line you cannot fill in is a decision you have not made yet.
+5. **Break the contract on purpose.** Change a skill description and bump the agent version, then run your client against it. If nothing in your pipeline notices, your contract test does not exist.
+
+## What's next
+
+You now have two agents that can find each other, agree on a task, and finish one. Lesson 78 asks whether they should be agents at all. Workflow engines and agents both orchestrate multi-step work, and the choice between them determines your cost, your debuggability, and how often the system surprises you. You learn when deterministic orchestration is the right answer, when a model-driven loop earns its variance, and how to mix the two without pretending the boundary is not there. [^1]
+
+[^1]: a2a-protocol.org. [Agent2Agent (A2A) Protocol Specification 1.0.0](https://a2a-protocol.org/latest/specification/)
+[^2]: a2a-protocol.org. [Agent Discovery in A2A](https://a2a-protocol.org/latest/topics/agent-discovery/)
+[^3]: modelcontextprotocol.io. [Model Context Protocol Specification](https://modelcontextprotocol.io/specification/latest)
+[^4]: linuxfoundation.org. [A2A Protocol Surpasses 150 Organizations, Lands in Major Cloud Platforms, and Sees Enterprise Production Use in First Year](https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year)
+[^5]: agentcommunicationprotocol.dev. [Agent Communication Protocol: Welcome](https://agentcommunicationprotocol.dev/introduction/welcome)

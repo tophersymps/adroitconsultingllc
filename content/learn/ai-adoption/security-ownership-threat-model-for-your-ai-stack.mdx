@@ -1,0 +1,133 @@
+---
+title: "Lesson 19: Security Ownership: Threat Model for Your AI Stack"
+slug: "security-ownership-threat-model-for-your-ai-stack"
+series: "ai-adoption"
+lesson: 19
+excerpt: "You procured the tool in Lesson 18 and read the contract, but the contract names the vendor's liabilities, not anyone inside your company who answers when the tool is running. This lesson is about deciding, plainly and before an incident, what could actually go wrong with your AI stack and whose job it is to catch and answer each failure. It defines a threat model in plain language, adapts it to the specific ways AI breaks security assumptions, walks a worked example that builds a threat map for one real AI use case and scores each risk, then gives you a procedure for assigning a named owner to every risk so security is a set of accountable jobs rather than a vague wish that IT handles it."
+date: "October 10, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Learn, AI, Leadership, Security]
+---
+
+Lesson 18 ended with you holding the contract for an AI tool and knowing what you legally bought: the rights, the costs, the risks, and the exit path. That was the right place to stop. But a signed agreement answers who the vendor is, not who inside your company answers when the system is running. The contract names the vendor's liabilities. It does not name the person on your payroll who is accountable for securing the thing in use, catching its failures, and deciding when a risk is acceptable.
+
+This lesson is about that gap. It teaches you to build a threat model for your AI stack: a plain, written map of what could go wrong, how likely each thing is, how much it would hurt, and, crucially, whose name is on each risk. The point is not to make you a security engineer. The point is to give a non-technical owner a method for forcing accountability so the hard question, "who owns this?", has a named answer before an incident answers it for you.
+
+## What a threat model is, and what it is for
+
+A threat model is a structured way to think through what could go wrong with a system before it goes wrong, instead of reacting after the fact. It sounds like a piece of engineering vocabulary, but the underlying habit is ordinary. When you plan a road trip, you do not just pack and leave. You think about a flat tire, the weather, running out of gas, a wrong turn, and, for each problem, who handles it. A threat model is that trip plan, written down for a system your organization depends on.
+
+Four terms carry the whole idea:
+
+- An **asset** is something of value that must be protected: a client database, a trade secret, a financial report, a customer relationship.
+- A **threat** is something that could harm an asset, whether deliberate or accidental: a hacker stealing data, an employee pasting confidential material into a public tool, a vendor losing control of a model.
+- A **vulnerability** is a weakness that lets a threat succeed: a tool that accepts unrestricted input, a policy that does not say what can be entered, a review step nobody enforces.
+- A **risk** is the combination of how likely a threat is and how much damage it would cause if it happened.
+
+The purpose of the exercise is not perfect foresight. No model predicts every failure. It is to move the difficult decisions from the heat of an incident, where the pressure is high and time is short, to a calm moment when you can think, rank, and assign ownership. NIST, the body that publishes the AI Risk Management Framework most organizations lean on, frames this as a risk-based discipline organized into govern, map, measure, and manage: you decide how much risk is acceptable, map what could happen, measure how likely and how harmful, and manage the exposures you find.[^1]
+
+![The four terms that carry a threat model: an asset is something of value, a threat is something that could harm it, a vulnerability is a weakness that lets the threat succeed, and risk combines how likely a threat is with how much damage it would cause](</diagrams/security-ownership-threat-model-for-your-ai-stack/1-four-terms.png>)
+
+## Why AI breaks the security assumptions you grew up with
+
+If AI were just another software subscription, the threat model would be one more item in your existing security review. It is not, and the reasons matter because they tell you what to look for.
+
+First, your data leaves your boundary. With most tools you control where data sits. With AI, the input to a model is processed on infrastructure you do not run, and it may be retained, reviewed, or used to improve the model unless the contract you read in Lesson 18 says otherwise. That is why a consumer AI tool that is fine for personal use can be a serious exposure for confidential client data: the moment an employee pastes it in, control of that copy moves to a third party you cannot reach into and delete from. The Samsung incident is the canonical case: employees in three separate incidents uploaded proprietary semiconductor code and manufacturing data to a public chatbot, and the company responded by banning the tools because material sent to them is stored on external servers that the company cannot retrieve or erase.[^2][^3]
+
+Second, the output is probabilistic and can act. A normal tool returns what you coded it to return. A language model can produce plausible output that is wrong, and, in the more capable setups, it can take actions with the permissions it has been given. Security researchers now publish a recurring list of the ways generative AI gets abused, and two patterns should matter to an owner who does not write code: prompt injection and sensitive information disclosure.[^4] Prompt injection means an instruction hidden somewhere, in a prompt, a pasted document, or a web page the tool reads, changes what the model does in a way nobody intended, potentially exposing data or triggering an action. Sensitive information disclosure means a model can repeat back material it should not, including the private content other users or the organization itself put into it, or material an attacker coaxes out by asking cleverly. Neither of these has a clean on-off switch, which is why they need an owner, not a hope.
+
+Third, the stack is partly out of your hands. The model, the supplier, and the infrastructure are all third-party, and each can change underneath you. A threat model for AI has to treat the supply chain itself as something to map, the same way the shared genealogy of training data, models, and deployments is treated as a risk surface in the guidance NIST publishes for generative AI.[^5]
+
+## Build the map before you score the risks
+
+The method below is the transferable core. It does not assume you can write code or read a log file. It assumes you can hold a document with columns and answer honest questions.
+
+**Step one: list the assets.** For each AI use case your organization runs or plans to run, write down every set of information that flows into the tool and every action it can take. Be specific. "Client data" is too vague. "Customer names and account numbers, pasted to draft replies to support tickets" tells you what is actually at risk if that copy leaves the building.
+
+**Step two: classify the data.** Most organizations work with four levels, and the discipline here is to be honest about which bucket each asset sits in. **Public** is safe to share with anyone. **Internal** is fine inside the company but should not leak, like internal memos. **Confidential** is restricted to a defined team, like pricing or a strategy that would hurt if disclosed. **Restricted** is the most sensitive, harm if exposed, limited to specific people, typically covering personally identifiable information, payment or health data, and intellectual property.[^6] The classification decides what a data safety rule must allow: whether an asset can go into a public tool at all, and, if it can, under what conditions. Most serious AI data incidents trace back to restricted data crossing a boundary it should never have crossed.
+
+**Step three: enumerate the threats.** Work through what could actually go wrong, deliberately and accidentally. A useful prompt for a non-technical owner is to take each threat worry from the security world and ask "could this happen here?". One widely used cheat sheet organizes threats into six buckets: spoofing (someone pretending to be someone else), tampering (altering data), repudiation (denying an action happened, with no record), information disclosure (data getting out), denial of service (the tool unavailable), and elevation of privilege (someone getting more access than they should).[^7] To that, add the AI-specific items you can now name: prompt injection, sensitive information looping back out of a model, a supplier changing or removing the model you rely on, and an employee using a tool for a high-sensitivity task it was never approved for. Do not try to be exhaustive. Ten good, concrete threats beat fifty abstract ones.
+
+**Step four: score each threat.** For each one, give two one-to-three ratings, one for how likely it is on an ordinary scale and one for how much damage it would cause if it happened. Multiply them for a rough score, or simply sort into low, medium, and high. The numbers are not science. They are a ranking device so you spend your limited attention on the risks that matter instead of the ones that sound scary but barely touch you. Write down your reasoning so a future reviewer can see why you ranked something the way you did.
+
+**Step five: name an owner and a response for every medium and high risk.** This is the step every model skips, and it is the entire point of the lesson. For each risk above a low score, write a person's name, not a department, and a concrete thing they will do: "Maria reviews every customer-facing draft before it is sent," or "Dev checks the access log weekly for entries from accounts that should not be there." If you cannot name the owner and the action, the risk is unresolved.
+
+NIST's own guidance for generative AI reaches the same place from the security side: engage in threat modeling to anticipate risk, and apply security measures that assess things like data exposure, compromised dependencies, bypass, and extraction of an attacker abusing the system.[^5] The framework is the map. The owner is what makes it real.
+
+![The five-step threat-modeling method: list the assets, classify the data, enumerate the threats, score each threat, and name an owner and a response for every medium and high risk](</diagrams/security-ownership-threat-model-for-your-ai-stack/2-five-steps.png>)
+
+## Worked example: one AI use case on the table
+
+Let me run the method on a single realistic use case so you can see the document come together. This is an illustration, not a real company, and the score numbers are placeholders for your own judgment; replace them with your situation before you trust the result.
+
+Imagine a mid-size professional-services firm, about 180 staff, that has adopted an AI assistant to draft replies to client support tickets. Call it "the drafting tool". The assets are client names, contact details, account numbers, and the content of the tickets themselves, which sometimes include sensitive operational detail. In step two, that material sits squarely in the confidential and restricted buckets, because client account numbers are the kind of restricted data that, if disclosed, harms the firm and violates what clients expect.
+
+Now step three, the threat list, worked out by a non-technical owner asking "could this happen here?":
+
+| Threat | Likelihood (1-3) | Impact (1-3) | Score | Has a named owner? |
+| --- | --- | --- | --- | --- |
+| An employee pastes restricted client data into the tool, and the copy leaves the firm | 2 | 3 | 6 | No |
+| A support staffer trusts a wrong-sounding draft and sends an inaccurate or harmful reply to a client | 3 | 2 | 6 | No |
+| Prompt injection: a pasted attachment or link in a ticket changes the tool's behavior and it retrieves or sends something it should not | 2 | 3 | 6 | No |
+| The vendor changes or retires the model, and the firm's dialogs stop working or change behavior | 2 | 2 | 4 | No |
+| A staffer uses the personal version of the tool for firm work because the approved one is slow | 2 | 3 | 6 | Yes (the vendor contract, from Lesson 18, but only nominally) |
+
+Three columns of this table are honest and unremarkable. The fourth is where this lesson bites. Every row above a low score needs a name, and "the vendor contract" is not an owner; it is a piece of paper. So step five names people and actions:
+
+- For the top three rows, Maya, the head of client services, owns the rule that no restricted data goes in, and she owns the review step that approves which ticket types may be drafted at all. She reviews the risk every quarter.
+- For the vendor-change row, Dev, the one technical person in the firm, owns a monthly check that the model has not changed and a fallback of turning the tool off and reverting to manual drafting.
+- For the unsanctioned-personal-tool row, the firm owns it in a way that only shows it has not yet named a single accountable person, which the next lesson teaches you to fix.
+
+The difference between "that sounds risky" and this table is that you can now act. You can ask Maya whether her review step actually blocks restricted data, and you know exactly whose answer to trust. That is the whole job: not eliminating risk, which is impossible, but making sure every material risk has a name attached to it, and that the name has a concrete action you can verify.
+
+![The worked example threat list for the drafting tool: five scored threats with likelihood, impact, and score, showing that every row above a low score needs a named owner](</diagrams/security-ownership-threat-model-for-your-ai-stack/3-worked-example.png>)
+
+## Security is a set of named jobs, not a vibe
+
+Once the map exists, the second half of the lesson is about the ownership model itself, because a threat list only works if the accountability is real.
+
+The central rule is that a risk needs one accountable owner, not a committee and not a department. Writing an AI risk owner into the record means giving one person the authority and accountability to identify, assess, approve, monitor, escalate, and accept the risk for a given use case.[^8] The common mistake is the opposite: spreading tasks across security, IT, legal, privacy, and the business team until everybody is loosely responsible and nobody is answerable. Governance practice is blunt about this. Shared input is useful, but it is not shared accountability, and when accountability is split, difficult decisions tend to wait.[^8]
+
+There is also a discipline that ownership does not mean the business owner gets to rubber-stamp their own tool. The person who is most excited about a use case should not be the only person deciding the risk is acceptable, because the incentives run the wrong way. So the model separates the accountable business owner, who decides, from an independent challenge, risk, compliance, internal audit, or a governance committee, that reviews the decision. If nobody can stop the system without a small committee saying yes, you do not actually have effective governance.[^8]
+
+A practical test for whether you have real ownership: pick one AI use case and ask three questions. Who can decide to pause it? Who must be told if it fails? Who can explain the decision to leadership? If the answers are the same person with clear authority, you have an owner. If they point to different people with no clear path, you have a gap, and the gap itself is the finding.
+
+![Real ownership means one accountable business owner who decides, backed by an independent challenge, while the common mistake spreads tasks across teams until nobody is answerable](</diagrams/security-ownership-threat-model-for-your-ai-stack/4-ownership.png>)
+
+## The tension with adoption, and the guardrail that keeps both
+
+There is a live tension you should name rather than pretend away: locking everything down kills adoption, and letting everything through creates risk. The organizations that thread this do it with classification, not with a blanket rule. A public tool is allowed to touch public and carefully scrubbed internal data. Confidential and restricted data has a named rule about whether it can enter a tool at all, and if it can, under what conditions, who reviews, and what happens to the copy. The classification in step two is what makes this possible, because it lets you say a clean sentence that people can actually follow, "inside this line, fine; outside it, no", instead of a vague "be careful."
+
+The threat map is the same way. It does not tell you to ban AI. It tells you which use cases need the most control, which need a reviewer, and which are fine with light guardrails, so you can let the good uses run without carrying every risk at maximum weight.
+
+## Try it: build a threat map for one AI use case
+
+Take one AI use case that actually runs or is planned in your organization. It can be the same tool you scored in Lesson 17 and contracted in Lesson 18. Produce the one-page document this lesson describes:
+
+1. List the assets, specifically: every kind of information that flows in and every action the tool can take.
+2. Classify each asset as public, internal, confidential, or restricted, and be honest about which bucket it is really in.
+3. Enumerate five to ten concrete threats, drawn from both the ordinary threats (someone unauthorized, someone mistaken, data leaking, the tool going down) and the AI-specific ones (prompt injection, sensitive data looping out of a model, the supplier changing the model, staff using an unapproved tool).
+4. Score each threat by likelihood and impact, multiply or sort for a low, medium, or high rank, and write down why.
+5. For every medium and high risk, write a named person and a concrete action. Then ask the three ownership questions, who can pause it, who must be told, who explains it to leadership, and write the answers next to each risk.
+
+Bring the finished chart to whoever owns security, whether that is a CISO, a managed IT provider, or an IT generalist, and use it as the discussion document, not the vendor's brochure. If you find a high risk with no name attached, you have found the thing this lesson is about: an exposure waiting for an incident to assign it a victim. Decide who owns it now, while you still can.
+
+## What's next
+
+You have now learned to look at your AI stack and see a set of risks, each with a named owner and a concrete response. That assumes you know what is in your stack, which is where the method hits its limit. A threat model only covers the tools you know about.
+
+The next lesson is Shadow IT: discovering and governing unsanctioned AI, Lesson 20 of the course. It picks up exactly where a threat model falls short: the unsanctioned tools your people are already using that never appeared in your inventory, your contract review, or your threat map. Lesson 20 shows you how to discover what unsanctioned AI is actually running in your organization, why banning it outright usually backfires, and how to bring the hidden, high-value uses into your governed program instead of letting them sit as risk you cannot even see.
+
+For now, hold the core idea: security for AI is not a product you buy, it is a set of named jobs. Build the map, score the risks, and put a person's name on every one that could hurt you, because the incident you cannot think of in advance is exactly the one already looking for an opening.
+
+[^1]: NIST, "AI Risk Management Framework" (voluntary guidance with four core functions, govern, map, measure, and manage, for managing AI risk across the lifecycle; the framework page is the entry point). [nist.gov/itl/ai-risk-management-framework](https://www.nist.gov/itl/ai-risk-management-framework)
+[^2]: Bloomberg, "Samsung Bans Generative AI Use by Staff After ChatGPT Data Leak" (reports that Samsung employees uploaded sensitive code to a public chatbot and that the company banned the tools because data sent to them is stored on external servers it cannot easily retrieve or delete). [bloomberg.com](https://www.bloomberg.com/news/articles/2023-05-02/samsung-bans-chatgpt-and-other-generative-ai-use-by-staff-after-leak)
+[^3]: CIO Dive, "Samsung employees leaked corporate data in ChatGPT: report" (documents multiple separate incidents in which Samsung staff uploaded proprietary code and manufacturing data, prompting the ban). [ciodive.com](https://www.ciodive.com/news/Samsung-Electronics-ChatGPT-leak-data-privacy/647137/)
+[^4]: OWASP GenAI Security Project, "LLM01:2025 Prompt Injection" (defines prompt injection as user input altering model behavior in unintended ways, including indirect injection via external content like documents or web pages, and lists consequences that include disclosure of sensitive information, unauthorized access, and executing commands in connected systems). [genai.owasp.org](https://genai.owasp.org/llmrisk/llm01-prompt-injection/)
+[^5]: NIST, "AI Risk Management Framework: Generative Artificial Intelligence Profile (NIST AI 600-1)" (a cross-sectoral companion profile that directs organizations to engage in threat modeling and to apply security measures assessing vulnerabilities and threats, including data exposure, compromised dependencies, bypass, extraction, and model theft). [nvlpubs.nist.gov](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf)
+[^6]: Linford & Company LLP, "What is Data Classification? A Guide to Levels & Compliance" (defines the four common classification levels, public, internal, confidential, and restricted, and notes restricted typically covers personally identifiable information, cardholder and payment data, health information, and intellectual property). [linfordco.com](https://www.linfordco.com/blog/what-is-data-classification-levels-compliance/)
+[^7]: Microsoft, "Microsoft Threat Modeling Tool threats" (defines the STRIDE model: spoofing, tampering, repudiation, information disclosure, denial of service, and elevation of privilege). [learn.microsoft.com](https://learn.microsoft.com/en-us/azure/security/develop/threat-modeling-tool-threats)
+[^8]: Martin Tyson, "Who Owns AI Risk? How to Assign AI Governance Ownership Before Your Board Asks" (defines AI risk ownership as the authority and accountability to identify, assess, approve, monitor, escalate, and accept risk for a use case; argues shared input is not shared accountability and that one accountable business owner should be named per use case; and warns that the person promoting a use case should not be the only one deciding its risk is acceptable). [tysonmartin.com](https://tysonmartin.com/who-owns-ai-risk)
+
+*Note: the framework, threat list, and scoring grid in this lesson are a way of deciding who owns security risk, not a substitute for your organization's security team, auditor, or counsel. Likelihood and impact ratings are judgment calls, not measurements; treat your own risk appetite and the specifics of your data and tools as the binding input before acting on the example.*

@@ -1,0 +1,118 @@
+---
+title: "Lesson 69: Agent Frameworks: Build vs Buy, Lock-In, and Escape Hatches"
+slug: agent-frameworks-build-buy-lock-in-escape-hatches
+series: "agentic-ai"
+lesson: 69
+excerpt: "You can build an agent from primitives, adopt an open-source framework, or rent a whole platform. This lesson defines the three paths, the orchestration layer at the center of the decision, the lock-in each one quietly costs you, and the escape hatches, MCP first among them, that let you leave. Its worked example is an invoice-triaging agent Adroit weighed across all three routes before shipping."
+date: "October 14, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Agent Frameworks, Build vs Buy, LangGraph, MCP, Vendor Lock-In, Orchestration]
+---
+
+Every lesson so far has assumed you have an agent to run. This one backs up and asks a question you can only answer safely before you write code: where does the agent come from? Pick wrong and you spend six months rebuilding plumbing. Pick right and the framework you chose becomes invisible, the way a good database driver does. The choice has three real options, not two. You can build from primitives, adopt an open-source framework, or rent a managed platform. Each one trades ownership against speed, and each one quietly collects a tax you will not see until years later: the lock-in you accepted on the day you chose it.
+
+This lesson is about making that choice with open eyes. We will define the three paths, locate the orchestration layer as the part that actually decides the outcome, walk through the lock-in each path costs, and then look at the escape hatches that keep you able to leave. The worked example is a real decision Adroit faced: an agent that triages incoming vendor invoices. By the end you should be able to say, for your own agent, which path you are on and what it would take to change paths later.
+
+## The three paths
+
+An agent is a program that runs a loop: it perceives, reasons, calls tools, and observes. Every framework in this space is just a different way of supplying the middle of that loop, the orchestration that decides when to call which tool and how to hand state from one step to the next. [^1] The market has settled into three tiers:
+
+**Build from primitives.** You write the loop yourself. You call the model API, define your own tool schemas, write your own router, store your own state, and build your own retry and error handling. This is maximum control and maximum work. It is the right call only when the framework cannot express what you need, which is rarer than people think.
+
+**Adopt an open-source framework.** You use a library that supplies the loop and the orchestration conventions, and you keep control of the runtime, the tools, the prompts, and the models. LangGraph is the clearest example: a low-level orchestration framework for long-running, stateful agents that lets you mix hand-coded, deterministic steps with model-driven steps in one graph. [^1] You install it, you run it on your own infrastructure, you own the deploy. The framework helps with the hard parts; it does not own your architecture.
+
+**Rent a managed platform.** You buy orchestration, memory, observability, and often the model, as a service. The vendor runs the loop, hosts the state, and gives you a console. Speed is the selling point, and it is real: managed platforms ship materially faster than custom orchestration, which for most teams becomes a multi-quarter effort. [^2] The cost is that the platform sits between you and your own agent.
+
+The decision is not about which is better. It is about which tax you prefer to pay.
+
+![The three paths to an agent: build from primitives, adopt an open-source framework, or rent a managed platform, each with the lock-in tax it collects, and the rule that the faster something ships, the more it costs to leave](</diagrams/agent-frameworks-build-buy-lock-in-escape-hatches/1-three-paths-lockin.png>)
+
+## The orchestration layer is the real question
+
+All of the debate collapses onto one slice of the stack: orchestration. That is what every framework and platform is really selling. [^3] To see why, separate an agent into the layers that matter:
+
+1. The foundation model (Claude, GPT, Gemini, or a local model).
+2. The orchestration layer: task decomposition, tool routing, retry logic, state management.
+3. Tool integrations: the connectors to your systems.
+4. Domain logic: the business rules, compliance checks, and proprietary decisions.
+5. Observability: logging, tracing, evaluation.
+
+Nobody should build the foundation model. You buy that as an API or serve an open-weight model. The interesting question is the orchestration layer, because it is the one layer where every option exists. [^3] Domain logic is the one layer where building is consistently justified, because it is the thing competitors cannot replicate by buying the same vendor you use. [^3] Everything else has a commodity path.
+
+This reframing is the whole trick. The build-versus-buy argument is not "build your whole stack or rent the whole stack." It is: buy the things that are commodities, build the thing that is your product, and choose your orchestration layer deliberately. As Adroit's consulting rule puts it: buy the inference, buy or open-source the orchestration, and build everything that touches your customers' data or your regulator's eyes. [^2]
+
+![Separate the agent into five layers: foundation model, orchestration, tool integrations, domain logic, and observability, with the buy-versus-build call on each, and Adroit's rule to buy the commodities and build the domain logic that is your product](</diagrams/agent-frameworks-build-buy-lock-in-escape-hatches/2-agent-layers-buy-build.png>)
+
+## The lock-in each path costs
+
+Lock-in is the invisible tax. It never appears on an invoice, and it only shows up when you try to leave. Walk through the three paths and ask what you would lose in each.
+
+**Build-from-primitives lock-in is self-inflicted.** The code is yours, so in theory you can move freely. In practice you have reimplemented orchestration, and you now maintain that code forever. The lock-in is to your own maintenance burden. When the model vendors change their APIs you own every migration. When a new framework ships a better retry primitive, you cannot take it without rewriting. Ironically, worst-control-scenario building can lock you in harder than a framework, because your bespoke code is now a dependency only you understand.
+
+**Open-source framework lock-in is moderate and mostly skills-based.** An open-source framework does not lock you to a vendor, because you run it yourself and you can read, fork, or patch the code. But it locks you to a community and a knowledge base. If you build deeply on LangGraph idioms, your team's skills, your stack traces, and your debugging habits all point in one direction, and moving means retraining. [^4] The good news is that this is the mildest form of lock-in, because it never blocks you technically. The code is open. You can leave any time, at the cost of learning a new way of working.
+
+**Managed platform lock-in is the sharpest.** You do not store the state, you do not write the routing, and you cannot read the code that runs your loop. Leaving a managed platform means reimplementing orchestration you never wrote, porting state formats you never saw, and re-teaching your team a runtime they only used through a console. [^2] The platform's convenience is precisely what makes it hard to leave. Every hour you saved during onboarding is an hour you will pay back on exit.
+
+The decision rule that follows is blunt: the faster something lets you ship, the more it costs to leave. Speed and portability are inverse. You are not buying a tool. You are choosing where to permanently park the orchestration layer of your product.
+
+## The escape hatch: MCP
+
+Every path has its exit cost, but there is one standard that lowers it across all three: the Model Context Protocol (MCP). MCP is an open standard for connecting AI applications to the tools, data, and context they need. [^5] Anthropic released it in November 2024 to replace the integration sprawl of wiring every model to every tool by hand. [^6] You expose a capability once as an MCP server, and any MCP-compatible application can use it, which collapses the integration cost from N times M (every app wired to every tool) to N plus M (a standard connector on each side). [^6]
+
+MCP matters for lock-in because it moves the thing you most want to protect, your tool integrations and your data access, out from behind any single framework. [^5] If your invoice agent talks to your ERP through an MCP server, that connection is portable. You can swap the orchestration framework under it, switch the model vendor, or move from an open-source runtime to a platform, and the ERP connection comes with you unchanged. The escape hatch does not make leaving free. It makes the most expensive part of leaving, rebuilding every integration, unnecessary.
+
+![MCP collapses the integration cost from N times M, every app wired to every tool, to N plus M, a standard connector on each side, which is why it is the escape hatch that keeps tool integrations portable across frameworks](</diagrams/agent-frameworks-build-buy-lock-in-escape-hatches/3-mcp-integration-collapse.png>)
+
+Two commitments matter for trusting it. First, governance: in December 2025 Anthropic donated MCP to the Agentic AI Foundation, a directed fund under the Linux Foundation, so the standard is now governed as a vendor-neutral community project rather than as one company's property. [^6] Second, adoption: OpenAI, Google DeepMind, and Microsoft have all integrated MCP, so it is not a single-vendor format you would be betting on. [^6] MCP is not a framework, and it does not replace orchestration. It is the portability layer under it, and it is the single most effective hedge against the lock-in every path charges.
+
+## Worked example: an invoice-triaging agent
+
+Adroit needed an agent that reads incoming vendor invoices, extracts the line items, flags anomalies against the purchase order, and drafts the payment approval for a human. It ran in our consulting stack, it touched financial data we did not want leaving our infrastructure, and its core value was the domain logic: the anomaly rules, the approval thresholds, the regulatory checks, all proprietary.
+
+We laid out the three paths.
+
+**Managed platform.** Fastest to a demo. The vendor's orchestration, memory, and observability ship in the box, and we would not have rebuilt any state machine. But the platform would hold the orchestration of a system that touches customer financial data, and our own rule said build what touches the data your regulator sees. [^2] On top of that, the retry and routing behavior would live in a black box we could not audit, and our anomaly-failure handling needed deterministic steps we could read in a diff. Platform was out on governance grounds before cost even factored.
+
+**Open-source framework.** This is the path we took. We built on LangGraph because it runs on our own infrastructure, it gives durable state across steps, and it lets us interleave hand-coded deterministic steps (the P.O. comparison, the threshold check) with the model-driven steps (extracting line items, drafting the narrative). [^1] Domain logic became our code, freighted into the graph as nodes. The tool integrations, including the ERP read, sat behind an MCP server so they stay portable. [^6] We own the runtime. The lock-in we accepted is skills and habits, the mildest kind.
+
+**Build from primitives.** We could have written the loop by hand. It would have given us total control and zero dependency on LangGraph. But it would also have meant reimplementing checkpointing, retries, and state persistence, which are exactly the parts that are hard to get right and easy to get wrong. The framework solved a real problem for us, and the cost of that dependency was lower than the cost of the code we did not have to write. [^4]
+
+The pattern we used, and the one worth copying:
+
+1. Separate the layers. Know which is your product (domain logic) and which is commodity (inference, most integrations). [^3]
+2. Choose orchestration deliberately. OSS framework for control and auditability, platform for speed, primitives only when nothing fits.
+3. Put portability where it is cheapest. Build the tool integrations against MCP, not against a framework, so they survive a path change. [^6]
+4. Price the lock-in you actually accepted. Write down what you would lose if you left today, and check that the thing you are losing is not your product.
+5. Keep the exit cheap. Never let a single vendor own both your orchestration and your data access.
+
+## The pattern to take away
+
+The build-versus-buy question is really a question of where you permanently park your orchestration layer. [^3] The pattern that makes the decision defensible:
+
+1. Own what you are selling. Domain logic, the part competitors cannot copy by buying the same vendor, is the only place building is consistently justified. [^3]
+2. Buy the commodities. The foundation model and the standard connectors are not where your differentiation lives.
+3. Choose your orchestration risk knowingly. A managed platform ships fastest and locks hardest. An open-source framework is slower and locks mildest. Primitives lock you to your own maintenance. [^2][^4]
+4. Measure lock-in as the cost of leaving, not the cost of joining. The platform that was free on day one is the one that bills on exit. [^2]
+5. Build your escape hatch first. Standardize tool access on MCP, a vendor-neutral protocol under Linux Foundation governance, so your integrations survive whatever framework churn comes next. [^6]
+
+Get this right and the framework disappears into the background, a utility you chose once and mostly forgot. Get it wrong and your agent is a hostage: every new requirement runs through a vendor decision you made before you understood the problem.
+
+## Try it
+
+Take an agent you have actually built in this course and run the three-path exercise on it. Write down the orchestration layers it needs: routing, retry, state, human-in-the-loop. For each one, say whether you would build it, take an open-source framework, or rent it, and name what you would own in each case. Now write the lock-in ledger: if you adopted a managed platform today, what specifically would you lose if you left in a year, and which of those things is your product? [^2] Then design the escape hatch: pick one tool or data source your agent touches, and sketch the two sentences of interface you would need to expose it as an MCP server so another framework could use it unchanged. [^6] The goal is not to pick a winner. It is to prove you can say exactly what adopting any path costs, and exactly what leaving would require.
+
+## What's next
+
+This lesson asked where the skeleton comes from: build it, borrow it, or rent it, and what each choice costs you on the way out. The next lesson pushes one level deeper into the machinery you just chose. Lesson 70 is the architecture spectrum: orchestration versus autonomy, and when to use which. Where this lesson was about picking the framework your agents are built on, the next one is about how much of the driving you hand to the model versus keep in deterministic code.
+
+## Summary
+
+An agent framework is a way of supplying the orchestration at the center of the agent loop, and the build-versus-buy question is really about where you park that layer. [^1] The market offers three paths: build from primitives, adopt an open-source framework, or rent a managed platform, and each collects a different lock-in tax. [^2][^4] Managed platforms ship fastest and lock hardest, because you never own the code that runs your loop. Open-source frameworks give you control and portability at the cost of retraining, and building your own makes you the permanent maintainer of code you should not have to write. [^4] The orchestration layer is the decision: buy the commodity layers, build the domain logic that is your product, and choose orchestration deliberately. [^3] The escape hatch is MCP, an open standard, now under Linux Foundation governance, that makes your tool integrations portable so you can change frameworks or models without rebuilding every connector. [^5][^6] The pattern: own what you sell, buy the commodities, measure lock-in as the cost of leaving, and build your escape hatch before you need it.
+
+[^1]: "LangGraph overview," LangChain docs. LangGraph is a low-level orchestration framework and runtime for long-running, stateful agents that lets you mix deterministic and model-driven steps. https://docs.langchain.com/oss/python/langgraph/overview
+[^2]: "Build vs Buy: AI Agent Platform for Financial Services," Interexy. Includes the "buy the inference, buy or open-source the orchestration, build everything that touches customer data or regulator eyes" heuristic. https://interexy.com/build-vs-buy-ai-agent-platform/
+[^3]: "7 Multi-Agent Orchestration Platforms: Build vs Buy in 2026," Augment Code. Breaks the decision into layers and concludes domain logic is the only layer where building consistently outperforms purchasing. https://www.augmentcode.com/tools/multi-agent-orchestration-platforms-build-vs-buy
+[^4]: "Agentic Operating System: Build vs Buy (2026 Verdict)," DEV. Notes that custom orchestration becomes a multi-quarter effort and that LangGraph carries a learning and integration cost worth paying only when control matters. https://dev.to/shaam_ai/agentic-operating-system-build-vs-buy-2026-verdict-35ik
+[^5]: "Introducing the Model Context Protocol," Anthropic. MCP is an open standard for connecting AI systems to data and tools, replacing fragmented integrations with a single protocol. https://www.anthropic.com/research/model-context-protocol
+[^6]: "Model Context Protocol (MCP): The Complete Guide," Agen. Details MCP's architecture, the N-times-M to N-plus-M integration collapse, and its December 2025 donation to the Agentic AI Foundation under the Linux Foundation. https://agen.co/learning-center/model-context-protocol

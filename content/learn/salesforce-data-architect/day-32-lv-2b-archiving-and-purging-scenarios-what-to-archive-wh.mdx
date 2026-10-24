@@ -1,0 +1,154 @@
+---
+title: "Data Architect LV-2B: Archiving and Purging Scenarios: What to Archive, When, Compliance"
+slug: day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh
+series: salesforce-data-architect
+lesson: 32
+excerpt: "Given a customer scenario, recommend an archiving and purging plan that is optimal for the customer's data storage management needs, deciding what to archive, when, and how to satisfy compliance requirements. Builds on lesson 31's archiving and purging fundamentals by turning the decision into a method. Covers how to classify what to archive by value and access (closed, inactive, rarely queried records go cold), when to archive (age and status triggers, statutory minimum retention, and a defined maximum), the compliance constraints that override deletion (legal hold, GDPR storage limitation, sector rules), the three purge outcomes (delete, anonymize-and-retain, archive-then-delete), the on-platform Big Object versus off-platform storage trade-off, referential integrity across parents and children, and the audit trail that evidences what was archived, when, by which job, and under which rule. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 13, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [Salesforce, Data Architecture, Archiving, Purging, Compliance, GDPR, Certification]
+---
+
+Lesson 31 taught you the machine: archiving moves cold records to a secondary store, purging removes them for good, and the two must be sequenced copy then delete. This lesson, requirement lv-2b of the Large Data Volume (LDV) Considerations domain, turns that machine into a decision method. The exam hands you a customer scenario, a pile of objects, a storage bill, and a compliance team, and asks you to recommend an archiving and purging plan that is optimal for their storage management needs. [^1] The requirement text names the three decisions explicitly: what to archive, when, and how to satisfy compliance requirements. [^1]
+
+Everything you are about to read is a way of answering those three questions in order. Decide what to archive by distinguishing value from volume. Decide when by reading the retention triggers on the record and the law that overrides them. Decide how by separating the compliance constraints from the storage trade-off and the operational realities of running the job. Get all three right and you shrink the working set, keep the platform fast, and keep the org on the right side of every retention rule in sight. Get one wrong and the disaster takes a recognizable shape: a parent deleted with orphaned children, data purged a month before a legal hold demanded it, or a plan that keeps everything forever and calls it safe.
+
+## Decide what to archive: value and access, not size
+
+The first question is which records leave the hot object. The useful rule is not stated in terms of old or big. It is stated in terms of value and access. A record belongs on the hot object while it is either still part of active work or queried often enough that moving it would cost more than keeping it. A record belongs in the archive when it is closed or inactive, has passed its access window, and is rarely queried. [^2]
+
+Walk that rule across a concrete object, say Case. An open case is active work. It is being edited, assigned, escalated, and read by the agent who owns it every day. It stays on the hot object no matter how old it is, because its value is current. A case that was closed three years ago is a different animal. Nobody is editing it. Nobody is assigning it. It is only ever read when a compliance lookup or a customer dispute pulls it up, which happens rarely. The record carries real value, it has to survive for retention, but it has no active value and no recurring access. That is the profile of an archive candidate. [^2]
+
+Volume alone is the wrong trigger. A record can be large, some fields hold megabytes of text and attachments, and still be squarely in the working set if it is an open opportunity everyone touches. A record can be tiny, a single status flag and a date stamp, and still be actively harmful to performance if it is one of twenty million closed cases dragging down every query that scans Case. The deciding variable is not the byte size of the record, it is whether the record is part of the daily working set. The LDV best-practices guidance frames the whole discipline as reducing the number of records the system must process, which is a working-set principle, not a byte principle. [^2]
+
+There is a second, subtler reason to archive records you might technically be able to keep. Every record you keep on a hot object extends the surface you must query, secure, and back up. Data that has outlived its useful life is not inert, it is a liability you keep paying to store and protect. Classifying it as archival and moving it is how you stop paying. That framing, value first and access second, is the one the exam rewards, because it produces a plan that is optimal for the customer's storage management needs rather than a plan that merely moves bytes around.
+
+![Working records stay on the hot object because their value is current, while closed, inactive records that are past their access window and rarely queried become archive candidates, decided by value and access rather than size.](</diagrams/day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh/1-hot-vs-archive-classification.png>)
+
+## Decide when: age, status, and the statutory floor
+
+Once you know what to archive, the next question is when the move happens. The trigger is usually a retention threshold measured in age, a state change such as closed or cancelled, or both, and the combination is the most auditable because it is deterministic. [^2] You archive a record when it has finished its active life, marked by a status guard such as Closed or Cancelled, and when enough time has passed, marked by an age guard on a date field such as ClosedDate, CreatedDate, or a custom activity date, that it is safe to call it cold.
+
+The status guard protects records that are still being worked. It stops the job from touching an open case merely because the case is old, which would archive a record the business still needs every day. The age guard protects records that are too recent to be safely cold. It stops the job from archiving everything the status guard catches the day they close, before the access window on recent data has passed. Together they select the genuinely cold set: finished and old. That is the criterion lesson 31 named as the default, and this lesson applies it to the decision of when.
+
+Compliance adds the wrinkle that turns a simple timer into a legal constraint. Some data has a statutory minimum retention, a floor below which deletion is not allowed regardless of what your storage bill says. [^1] Financial records, health records, tax documents, and certain regulated categories carry mandated retention periods measured in years. A service org might be allowed and eager to delete five-year-old closed cases, but if the relevant regulation requires financial transaction records be kept for seven years, then those records must survive no matter how comfortably past the working set they are. The minimum retention period is not a suggestion, it is a hard floor, and the plan must encode it.
+
+The mirror image is the statutory maximum. Data protection regimes like the GDPR carry a storage-limitation principle: personal data must be kept for no longer than is necessary for the purposes for which it is processed. [^4] This sets an upper bound. You cannot hold personal data indefinitely "just in case," because holding it beyond its purpose is itself a violation. The compliance question is therefore not a single number. It is a window bounded in both directions: keep at least until the minimum retention the law requires, and do not keep past the maximum the storage-limitation principle allows. The exam tip for this lesson is blunt on this exact point: encode a minimum and a maximum retention, because a plan that only has one bound is a plan that will fail. [^1]
+
+![Compliance is a keep window bounded in both directions: a statutory minimum floor below which deletion is not allowed, and a storage-limitation maximum ceiling above which data must not be kept, with a legal hold that freezes deletion and overrides every other rule.](</diagrams/day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh/2-retention-window-when.png>)
+
+## Compliance constraints: legal hold, storage limitation, sector rules
+
+The "how to satisfy compliance" half of the requirement lives in three constraint families you must recognize and encode.
+
+The first is legal hold. A legal hold is an order, often issued during litigation, an investigation, or a pending regulatory action, that freezes retention and prohibits the destruction of records relevant to the matter. [^1] A legal hold overrides every other retention rule in the system. It does not matter that your retention policy says these records are past their maximum and ready for purge. While a legal hold applies, you do not delete them, and you do not let a scheduled purge job reach them. A working archive and purge plan therefore has to be able to suspend deletion for specific records or categories, and the architect has to build that suspension in rather than hoping a purge job never runs during a hold. [^1]
+
+The second family is storage limitation and erasure under data protection law. The GDPR storage-limitation principle caps how long personal data can be kept, and the right to erasure gives data subjects the power to demand removal of their personal data when it is no longer necessary or when consent is withdrawn. [^4][^5] This is the constraint that drives anonymize-and-retain and it is directly examinable, so the next section gives it the depth it deserves.
+
+The third family is sector rules. Financial services, healthcare, insurance, and other regulated industries carry their own retention mandates beyond the general data-protection floor. These tend to specify minimum keep periods for transactional and compliance records, which is why the same plan must hold both a statutory minimum and a data-protection maximum in tension. The architect's job is to classify each data category, write down its minimum and its maximum, note any legal hold, and let the schedule enforce all of them at once. That classification is the load-bearing artifact of the whole plan. [^1]
+
+## The purge decision: delete, anonymize-and-retain, archive-then-delete
+
+Archiving is not the same as the end of a record's life. When a record reaches the end of its mandated and permitted retention, the plan must decide what happens to it, and there are three legitimate end-states a record can take: deleted, anonymized and retained, or archived and then deleted. The choice depends on two questions: does the record still have legal or financial value, and does it hold personal data?
+
+Delete outright is for records that have reached their minimum retention and have nothing further to preserve. The record is no longer legally required, no longer financially load-bearing, and holds nothing anyone needs to see again. You purge it. On Salesforce this means a delete that passes through the Recycle Bin and then on to permanent deletion, and if your compliance posture demands the data be gone immediately, the plan must account for that Recycle Bin window rather than assuming the delete is instantly final. [^2]
+
+Anonymize-and-retain is the pattern that resolves the conflict between erasure and the value of retained data. When a record holds personal data whose retention period has ended, but the underlying transactional or financial data still has legal or analytical value, you do not hard-delete, and you do not keep the personal data. You replace the identifying fields with pseudonymized or anonymized values, erasing the personal data while preserving the shell of the record that the business still needs. [^5] This works because the value is often in the shape of the transaction, the amount, the date, the product line, not in who the transaction belongs to. The right to erasure is satisfied because the record can no longer be tied back to the individual; the financial retention is satisfied because the transaction survives for the seven years the law demands.
+
+This is the exact scenario the exam's Q1 sets up: a customer must purge customer data to satisfy GDPR storage limitation but also retain financial transactions for seven years. The correct plan is to anonymize the personal fields on transactions older than the retention point while retaining the financial records for the full seven years. Indiscriminate deletion breaks the retention floor, keeping everything indefinitely breaks storage limitation, and archiving everything to a Big Object with no deletion satisfies neither the erasure nor the storage-limit obligation because the personal data still lives, just moved. Anonymize-and-retain is the plan that honors all three at once. [^5]
+
+Archive-then-delete is the two-stage end-state for records that must survive beyond the hot object but not forever. You archive the record to a secondary store at the end of the active period, keep it there for a second, longer retention period, and then purge even the archived copy when the final statutory or business need expires. [^2] This is how a ten-year compliance requirement interacts with an org that only needs five years of active access: active and recent data stays hot, the next five years live in the archive, and at the ten-year mark the record is gone entirely.
+
+![At the end of retention a record takes one of three end-states: delete outright through the Recycle Bin, anonymize-and-retain which pseudonymizes identifying fields while keeping the financial shell, or archive to a secondary store and delete only at a second, longer expiry.](</diagrams/day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh/3-three-purge-end-states.png>)
+
+## Storage management trade-off: on-platform versus off-platform
+
+The target store decision, which lesson 31 introduced, carries a storage-management trade-off this lesson must make explicit because it drives optimality. On-platform archiving to a Big Object keeps the data queryable inside Salesforce through Async SOQL, but it still consumes Salesforce storage, because the data physically remains in the org. [^3] Off-platform archiving to a warehouse, an object store, or a customer-managed database frees Salesforce storage entirely, because the data leaves the org, but it loses native Salesforce query and reporting on the archive. [^3] You pick per data category by asking whether the platform must serve the archived data.
+
+If users, auditors, or integrations periodically need the archived records inside Salesforce, a Big Object keeps them reachable and you accept the storage cost. If the data is only ever needed by an analytics tool or a warehouse and Salesforce never has to show the rows, off-platform is the cheaper and correct choice, because you stop paying Salesforce storage for data the platform does not serve. The exam's Q3 tests exactly this distinction.
+
+![Choosing a target store is an on-platform versus off-platform trade-off: a Big Object keeps the archive queryable inside Salesforce via Async SOQL but consumes Salesforce storage, while a warehouse or object store frees storage but loses native query and reporting, and retention rules apply to both.](</diagrams/day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh/4-on-vs-off-platform-storage.png>)
+
+Off-platform archiving is chosen for some categories precisely because it frees Salesforce storage when the platform does not need to serve the data. It does not keep data editable in Salesforce, off-platform data is not directly editable in org. It does not add native reports, an off-platform archive is not native Salesforce reporting. And it absolutely does not avoid the need for retention rules, because the legal obligations follow the data, not the store it lives in. The retention policy applies to off-platform data with the same force it applies to on-platform data. [^3]
+
+## Operational safety: off-peak, idempotent, monitored jobs
+
+An archiving and purging plan is only as good as the job that runs it, and the exam's practical traps concentrate here. Archive and purge jobs must run off-peak, because a job moving millions of rows is heavy and should not compete with the workday. Use Bulk API for the copying and the deleting, because bulk processing handles large volume far better than per-record DML. Make the jobs idempotent and resumable, so a failed run can restart without double-copying or double-deleting, which means the job must recognize records it already processed and skip them. [^2] And monitor them. A purge job that runs at 3 a.m. and deletes records while nobody watches is the most dangerous automation in the org unless the job is logged and its effects are visible.
+
+Bounded, irreversible operations get two extra requirements. Validate the archive and purge pipeline against a representative dataset before it touches production, so the selection criteria, the referential-integrity handling, and the delete step all run against known data in a sandbox first. [^2] And have a rollback plan before any irreversible deletion. Once archived records are purged, a mistake is expensive to reverse, so you test the recovery path before you trust the delete. That discipline is what separates an architect from someone who just scheduled a job.
+
+## Referential integrity and auditability
+
+Deleting and archiving a parent record is where the plan can quietly corrupt the org. When a record you are archiving or purging is a parent, you must decide what happens to its children first, and the choice is not optional. [^2] Deleting a parent with children must respect the cascade and reparent rules on the relationship. Archiving a parent may require archiving its children with it or rerouting them, and any lookups from records that remain on the hot object to records you have archived must be handled, either by archiving the children too or by nulling the lookup. [^2]
+
+The failure mode is a dangling lookup: a child record on the hot object whose lookup points at a parent that no longer exists. That is not a cosmetic glitch, it is data corruption, and it breaks reports, integrations, and the referential integrity that makes the model trustworthy. The exam's Q2 tests this directly in the context of a parent object with millions of child records. The two things that must be part of the plan are handling referential integrity, by archiving the children or rerouting the lookups, and defining retention per data category with any legal hold. Leaving dangling child lookups corrupts the data, and disabling audit logging removes the evidence, so both are the wrong answers. [^2][^3]
+
+The second non-optional piece is auditability. A compliance-ready archive and purge job does not just move records, it records what it did. The audit log must capture what was archived or purged, when, by which job, and under which retention rule, so the org can evidence its compliance to an auditor. [^1] When a regulator asks why a record was retained or deleted, "the scheduled job did it" is not an answer. "It was archived on this date by job X under the seven-year financial retention rule, and purged on this date when that rule expired" is an answer. The audit trail is the evidence that the plan is being honored, and a plan with no audit trail is a plan that cannot be defended.
+
+## Worked example: GDPR erasure meets seven-year financial retention
+
+Put the whole method together with the scenario the exam's Q1 presents. A financial services customer holds both customer records and transaction records. The compliance team must honor GDPR storage limitation and erasure of personal data, and simultaneously retain financial transaction records for seven years.
+
+Decide what to archive. The transaction records have ongoing financial value, they must survive seven years, so they are archive candidates past their active window, not delete candidates. The personal customer information attached to old transactions, the name, email, address, and contact details, has value only for as long as the business actively engages the customer, and it is subject to storage limitation.
+
+Decide when. Financial transactions have a statutory minimum of seven years, so nothing touching them gets deleted before the seven-year mark. Customer personal data past its purpose and past its active relationship hits the storage-limitation maximum and must not be kept longer than necessary. The plan encodes both a minimum, seven years for the financial records, and the erasure obligation for the personal data.
+
+Decide how. The purge job runs anonymize-and-retain on old transactions. It replaces the identifying personal fields with pseudonymized values, so the financial transaction rows survive with their amounts, dates, and product line intact for the full seven years, while the personal data required by GDPR erasure is gone. The job runs off-peak on Bulk API, it is idempotent so a failure restarts cleanly, and it writes an audit record for every anonymization naming the rule that authorized it. At the seven-year mark, a second stage purges the now-anonymous transaction shells that no longer have financial value, because their statutory retention has expired and they are no longer identifiable.
+
+That is the answer to Q1 and the shape of every compliance-aware archive and purge plan the exam will hand you: the personal data is erased, the financial record is retained exactly as long as the law demands, and the whole thing is audited and reversible.
+
+![A worked example of the GDPR erasure scenario run in order: decide what to archive so transactions with ongoing financial value stay as archive candidates, decide when against the seven-year statutory floor and the erasure obligation, then decide how with an off-peak, idempotent anonymize-and-retain job on Bulk API that writes an audit record for every anonymization.](</diagrams/day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh/5-worked-example-q1.png>)
+
+## Config walkthrough: building an optimal archive and purge plan
+
+Here is the numbered walkthrough the exam expects you to reason through when handed a scenario.
+
+1. Classify the data categories with retention bounds. For each object and category, write down the minimum retention the law or the business requires, the maximum the storage-limitation principle permits, and any legal hold that freezes deletion. This classification drives every later decision, so it comes first.
+
+2. Define the archive selection and the target store per category. Decide the age and status criteria that select records for archive, closed and old, and choose the target, a Big Object on-platform if the platform must serve the data, off-platform if it need not. Record both decisions per category.
+
+3. Handle referential integrity before any deletion. For every parent you archive or purge, archive the children with it or reroute and null the lookups, so no child is left pointing at a parent that no longer exists. Do this in the design before the job runs.
+
+4. Implement off-peak, idempotent archive-then-delete jobs with Bulk API. Select the cold records, copy them to the archive, then delete from the hot object. Make the job recognize records it already handled so a retry is safe, log every run, and schedule it away from the workday. [^2]
+
+5. Provide query access to archived data and an audit trail. For a Big Object, expose Async SOQL or Batch Apex; for off-platform, an External Object. Record what was archived or purged, when, by which job, and under which retention rule, so the org can evidence compliance to an auditor. [^3]
+
+## The three exam traps
+
+Trap one, deleting data under a legal or regulatory minimum retention. A plan that only encodes a maximum, or that purges records too early, destroys data the law requires the org to keep. The fix is to encode a minimum keep period, not just a maximum, and to recognize when a statutory floor, like a seven-year financial retention, overrides an aggressive purge. This is the exam's Q1.
+
+Trap two, archiving a parent while leaving orphaned children or dangling lookups on the hot object. A child whose parent has vanished is corrupted data, and the corruption propagates through reports and integrations. The fix is to handle referential integrity before deletion, archiving the children or rerouting and nulling the lookups, and to define retention per category with legal hold accounted for. This is the exam's Q2.
+
+Trap three, running irreversible purges without a tested rollback and a logged audit trail. A purge that cannot be rolled back and is not logged is an unrecoverable, undefendable operation. The fix is to validate at representative volume, keep a rollback plan, log every run with its rule, and disable nothing that evidences the job. [^2]
+
+## Try it for yourself
+
+In a Developer Edition org with Big Objects and Salesforce Connect available, build a miniature version of the Q1 scenario. Create a small custom object that models a transaction with a personal-data field, a row that holds a customer name and email, and a financial field that holds an amount and a date. Define a pretend seven-year financial retention and a pretend erasure obligation on the personal fields.
+
+Write a Batch Apex or scheduled job that selects transactions older than your active window, copies them to a Big Object, anonymizes the personal fields on the retained copies, and then deletes the originals from the hot object. Confirm the anonymized transactions survive in the Big Object with the amounts and dates intact but the identifying fields gone, so an auditor checking the seven-year rule finds the records and a data subject check finds nothing tying them to an individual. Then write a second stage that purges the archived shells once the pretend seven-year mark passes, and confirm the audit records show which rule authorized each archive, anonymization, and purge. The point is to feel the whole plan, the classification, the anonymize-and-retain pattern, the target-store trade-off, the referential integrity, and the audit trail, on data small enough to inspect, because that identical sequence on a production object is the entire lesson.
+
+## What's next
+
+You can now recommend an archiving and purging plan from a customer scenario. You know to decide what to archive by value and access rather than size, closed, inactive, rarely queried records go cold while working records stay hot. You know to decide when by age and status triggers, to encode both a minimum retention, the statutory floor that overrides deletion, and a maximum, the storage-limitation ceiling that forbids keeping data longer than necessary, and to honor legal hold. You know the three end-states, delete, anonymize-and-retain for records whose personal data must be erased but whose financial or legal value survives, and archive-then-delete for records that must outlive the hot object but not forever. You know the on-platform versus off-platform storage trade-off, the off-peak, idempotent, Bulk API jobs that run them, the referential-integrity handling that keeps parents and children intact, and the audit trail that evidences the whole plan.
+
+Lesson 33 of 42 is up next: virtualized data fundamentals, covering External Objects, Salesforce Connect, and Data Connect (lv-3a). Where this lesson archived data to stores inside and outside the org, lesson 33 teaches the alternative to archiving and replicating: querying external data in place through an External Object, so the archival and off-platform decisions of the last two lessons gain a third option, the data stays where it lives and Salesforce reaches it over Salesforce Connect without moving a copy.
+
+## Related Requirements
+
+- Lesson 32 of 42 (lv-2b): Archiving and purging scenarios: what to archive, when, compliance
+- Lesson 31 of 42 (lv-2a): Archiving and purging fundamentals: strategies, Big Objects, retention policies
+- Lesson 26 of 42 (gv-1b): GDPR scenarios: consent, retention, field-level controls, deletion
+- Lesson 33 of 42 (lv-3a): Virtualized data fundamentals: External Objects, Salesforce Connect, Data Connect
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Large Data Volume Considerations (20%) domain and the objective to recommend an archiving and purging plan that is optimal for the customer's data storage management needs, deciding what to archive, when, and how to satisfy compliance requirements, including retention, legal hold, and storage-limitation considerations. [trailhead.salesforce.com](https://trailhead.salesforce.com/credentials/platformdataarchitect)
+
+[^2]: Best Practices for Deployments with Large Data Volumes, Salesforce Developers. Frames the main approach as reducing the number of records the system must process, recommends a policy of archiving or discarding data at the same rate it arrives, and covers archival selection by age and status, moving data into Big Objects with Bulk API or Batch Apex, idempotent and monitored jobs, and the Recycle Bin. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-best-practices.html)
+
+[^3]: Big Objects Implementation Guide, Salesforce Developers. Documents Big Objects as on-platform storage queryable via Async SOQL, and contrasts the on-platform archive option (which consumes Salesforce storage) with off-platform stores that free storage at the cost of native query. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/big-object-impl-guide/guide/big-object.html)
+
+[^4]: GDPR, Article 5(1)(e). States the storage-limitation principle, that personal data must be kept in a form which permits identification of data subjects for no longer than is necessary for the purposes for which the personal data are processed. [gdpr-info.eu](https://gdpr-info.eu/art-5-gdpr/)
+
+[^5]: GDPR, Article 17. Establishes the right to erasure, that the data subject has the right to obtain the erasure of personal data concerning them when the data are no longer necessary or consent is withdrawn, while data kept for compliance and legal obligations can be retained in anonymized or processed form. [gdpr-info.eu](https://gdpr-info.eu/art-17-gdpr/)

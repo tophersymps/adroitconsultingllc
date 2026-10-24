@@ -1,0 +1,126 @@
+---
+title: "Lesson 64: CTA Data: Data Strategy, Governance, Quality, and Lineage"
+slug: cta-data-data-strategy-governance-quality-lineage
+series: "salesforce-architect"
+lesson: 64
+excerpt: "The CTA data domain as a design discipline: deciding what data the enterprise actually needs, who owns and governs it, how it stays trustworthy under constant change, and how lineage makes every transformation traceable from raw source to the harmonized single source of truth."
+date: "October 10, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, CTA, Data, Certifications]
+---
+
+Lesson 63 built the security model: the shared responsibility line, federated identity, the four-layer access model, and encryption. This lesson takes the next CTA domain to the same depth. The data domain is where security stops being a set of controls and becomes a question about the data itself: what data the enterprise needs, who is allowed to treat it as dependable, how it stays dependable as it flows between five systems, and how anyone can trace where a number came from. The two domains meet because access controls are only as good as the governance that decides who owns each piece of data and how it may be used. You cannot defend data you have not decided is worth defending.
+
+Let me be direct about what this domain actually tests. When you are asked to design a single data model, you decide which objects and fields capture the business. When you are asked to design an enterprise data architecture, you are answering different questions: what data is an asset the business depends on, which system is the source of truth for each domain, who owns and stewards that data, what standards keep it trustworthy, and how you can prove to an auditor where a figure came from and how it was changed. Those are strategy and governance questions, not modeling questions, and the board judges your answers to them. [^1]
+
+## Define the terms first
+
+- **Data strategy**: the set of decisions about what data the enterprise treats as an asset, what each piece of data is for, and who is responsible for it. It turns "we have a lot of data" into "this data, in this form, enables this business outcome." A strategy names the outcomes first and then the data that serves them. [^1]
+- **Single source of truth (SSOT)**: the one agreed source for a piece of data in a given domain, so that when two systems disagree, it is clear which one wins. It is a governance decision, not an automatic property of any system. [^1]
+- **Data governance**: the framework of policies, roles, and controls that decide who may access, use, and change data, and what standards it must meet. It is the discipline that makes data trustworthy, secure, and compliant across its whole lifecycle. [^2]
+- **Data steward**: the named person accountable for the quality and fitness of a data set or domain. Stewardship is an assignment, not a title; someone has to answer for the customer master even when hundreds of people contribute to it.
+- **Data quality**: the fitness of data for its intended use, measured against dimensions such as accuracy, completeness, consistency, and timeliness. Quality is not an absolute; a record can be excellent for one use and useless for another.
+- **Data lineage**: the traceable record of where data originated and every transformation it passed through to reach its current form. Lineage is what lets you answer "where did this number come from" with a path, not a guess. [^3]
+
+## The data strategy: decide what is worth governing
+
+The CTA data domain does not assume data is inherently valuable. It assumes data becomes valuable when someone decides what it is for. A data strategy starts with business outcomes and works backward: the enterprise wants to reduce customer churn, so it needs a reliable view of a customer's lifetime value, so it must agree which system owns subscription and usage data, so it must treat that system as the source of truth. Every decision downstream hangs off that chain.
+
+Salesforce frames this as a design principle: data becomes operational, trusted, and real-time when it is organized on purpose rather than left where it landed. [^1] The strategy has three moves, and they come in order.
+
+**Name the source of truth per domain.** For each business domain (customer, product, subscription, order), decide which system owns the canonical record. Two systems can hold related data, but only one is authoritative for the identity and core attributes of that entity. The architecture then routes reads and writes accordingly. When you do not do this, you get the classic failure: three systems each believe they own the customer, nobody can say which one is right, and every report reconciles them by hand.
+
+**Decide what is shared and what stays local.** Not everything needs to be a company-wide asset. Some data is local to one department and pulls value only from being used there. The strategy separates the data that is genuinely enterprise-wide (a customer, a product, a contract) from data that belongs to a single workflow. Govern the shared set tightly; leave the rest to its owning team.
+
+**Bind data to the outcome it serves.** A customer record that exists "because we should have customer data" has no quality bar, because nobody can say what good looks like. A customer record that exists to drive a single unified profile for a loan agent has a measurable quality bar: it must be complete enough and current enough to support a credit decision. State the use, and quality becomes testable. This is the single most useful thing a CTA does in this domain, because it turns airy talk about "clean data" into a concrete contract.
+
+![The data strategy cascade: business outcomes at the top, then the data assets that serve them, the single source of truth for each domain, and the governed access that lets systems use it](</diagrams/cta-data-data-strategy-governance-quality-lineage/1-data-strategy-cascade.png>)
+
+## The data lifecycle: raw to harmonized to consumed
+
+A data strategy is only real when data actually moves through it. The useful mental model is a lifecycle with named stages, because each stage has different governance and different quality concerns. Salesforce organizes this as a progression from raw ingested data, to a persistent lake layer, to a harmonized model layer that acts as the source of truth. [^1]
+
+Raw data arrives as-is from a source system: a CRM, a warehouse, a file, an event stream. At this point it is a faithful copy of the source, warts and all. Minimal inline cleaning happens at ingestion (trimming, normalizing, concatenating), enough to keep the data usable, but the raw layer does not pretend to be authoritative. [^4]
+
+The persistent layer stores cleaned, transformed data. The important property is that it is organized and repeatable: the same source produces the same persistent result. This is where joins, aggregations, and the first meaningful cleaning live, and it is the layer downstream work builds on. [^4]
+
+The harmonized layer is where the strategy pays off. Source fields are mapped onto the agreed enterprise data model, so a customer that appeared in four source systems now appears once, in a consistent shape, in the single source of truth. Downstream consumption (profiles, segmentation, activation, AI) reads from this layer. [^1]
+
+The point of separating stages is not bureaucracy. It is that the same physical number exists in different states, and those states have different trust levels. An auditor wants to know which number was certified. A change to raw data ripples forward, so lineage (below) matters more the more the data is reused.
+
+![The data lifecycle and lineage: raw source data refined through persistent storage into a harmonized single source of truth, with lineage tracing the thread through every transformation](</diagrams/cta-data-data-strategy-governance-quality-lineage/2-data-lifecycle-lineage.png>)
+
+## Data governance: who decides what can be touched
+
+Data governance is the standing set of decisions about who may access, use, and change data, and under what rules. It is not a compliance checkbox. It is the mechanism that makes the strategy enforceable and the quality standards meaningful, because a data set you cannot control is a data set you cannot trust. [^2]
+
+The governance model has four working parts, and a CTA should be able to name each and say why it is there.
+
+**Roles and ownership.** Every shared data domain has a named owner (the business accountable for it) and a steward (the person accountable for its fitness). Ownership answers "who decides what this data means"; stewardship answers "who keeps it usable." The two can be the same person on a small domain, but the accountabilities are distinct.
+
+**Classification and tagging.** Data is labeled by sensitivity and meaning (for example, that a field holds an email address or a name, or that a record is subject to financial data rules). Classification is what lets governance act on all PII uniformly instead of on a case-by-case basis. Salesforce applies automated tagging and classification to identify sensitive categories in both structured and unstructured data. [^2]
+
+**Policy, decision, and enforcement points.** A modern governance architecture separates the three concerns so a policy can be changed without rewriting every consumer. The information point holds the tags and classifications and policy definitions. The decision point evaluates an access request against those policies and attributes. The enforcement point sits in front of the data and intercepts every access, consulting the decision point before letting it through. Splitting them is not an implementation detail; it is what lets one classification decision apply consistently across direct queries, AI retrieval, and CRM enrichment. [^2]
+
+**Access control model.** Governance is only as good as the access model it enforces. Attribute-based access control (ABAC) decides access from attributes of the user, the data, and the environment, rather than only from a fixed role. That lets policies express context, such as "a member of the fraud team may read a card number while handling a case, but the field is masked to everyone else." ABAC scales to environments where roles are too coarse, because the policy rides on the data's attributes, including its classification. [^2]
+
+Salesforce wraps these into data spaces: logical containers that separate data for business units, regions, or brands while keeping enterprise-wide visibility and lineage. Isolation and access control are enforced per data space, and operations within one are logged with audit trails. Data spaces are how governance becomes both centralized in policy and decentralized in execution. [^1]
+
+![The governance architecture: classification feeds a policy information point, a decision point evaluates requests against policy, and an enforcement point guards every data access](</diagrams/cta-data-data-strategy-governance-quality-lineage/3-data-governance-abac.png>)
+
+## Data quality: the standards that make data usable
+
+Data quality is the discipline of keeping data fit for the uses the strategy named. Because quality is always measured against a purpose, the first act of quality is defining the dimensions that matter for the data and the use. Four dimensions cover most decisions.
+
+- **Accuracy**: the data reflects the real-world fact it claims to represent. A customer's address is accurate if it is the current real address, not just well formatted.
+- **Completeness**: the fields the use needs are populated. A record can be 70% complete and perfectly good for one report and unacceptable for another that needs every field.
+- **Consistency**: the same fact is represented the same way everywhere. The same customer should not have their name spelled three ways across three systems if that name drives identity matching.
+- **Timeliness**: the data is current enough for the use. A balance is "right" the moment it changes, but stale the moment it does not update. Timeliness is measured from the pace of the underlying business event, not from a calendar.
+
+Salesforce bakes quality work into the pipeline at the points where it is cheapest. Inline transformations clean data as it is ingested, so bad data does not accumulate in the lake. [^4] Data transforms clean, enrich, and shape raw data into normalized assets, and streaming transforms standardize formats and validate sensitive fields as records flow through in near real time. [^4] The architect's job is to put a quality gate where the data actually enters the trusted zone, and to define what failure looks like at that gate: does a transform that hits a malformed record skip it, quarantine it, or fail the run?
+
+A trap worth naming: data quality is not the same as data unification. When multiple records describe the same real-world customer, unifying them into one profile is an identity resolution problem, not a quality fix. Salesforce is explicit that a unified profile is not a "golden record," and that identity resolution does not pick winning values or overwrite source data. It links the records so you can choose the right source value for a given use. Do not present unify-as-overwrite as good design; it destroys the traceability the next two sections depend on. [^5]
+
+![The data quality gate: data passes through a gate before it is trusted, judged against the dimensions of accuracy, completeness, consistency, and timeliness](</diagrams/cta-data-data-strategy-governance-quality-lineage/4-data-quality-gate.png>)
+
+## Data lineage: the audit trail that makes trust provable
+
+Data lineage is the record of a datum's journey: where it came from, and every transformation it passed through to reach its current form. It exists to answer questions that quality and governance raise but cannot answer alone. When a number in an executive dashboard looks wrong, lineage answers "where did it come from and what was done to it." When a regulator asks why a data set contains a certain figure, lineage answers "this source, this transform, this rule produced it." Without lineage, those answers are someone's memory, and memory is not an audit.
+
+Lineage earns its keep in exactly the places the data is reused most. It powers impact analysis (change this source field, which downstream models and reports break?). It powers classification propagation (a field tagged as sensitive at the source stays tagged as it is copied, joined, and derived, so governance does not leak). And it gives auditors a continuous path instead of a snapshot. Salesforce treats lineage as a built-in property of the platform rather than an afterthought: classifications propagate along lineage as data moves from raw, to persistent, to the harmonized layer and through derived data, so a tag you apply at the source follows the data wherever transformation takes it. [^3] [^2]
+
+The discipline lesson here is that lineage must span the whole path. Most organizations can draw the lineage of a data set the engineers built last month and none of the lineage for the data that existed before the project. Real lineage starts at the source system and does not stop until the report or model that consumes the data. If any hop in the middle is a black box (a spreadsheet, a SQL someone ran once, a hand-mapped field), the chain is broken and the audit answer becomes a shrug.
+
+## Worked example: a lending bank's data strategy
+
+Put the four pieces together on a real scenario. A regional bank runs Salesforce for customer management, a core banking system for accounts and balances, and a warehouse for reporting. The board has asked for a data architecture that supports a new automated loan-approval agent, and the CTA is asked to design it.
+
+**Strategy.** The loan agent needs a reliable view of a customer: identity, credit history, account balances, and employment details. The bank names the core system as the source of truth for account and balance data (it is the only place a transaction actually completes), Salesforce as the source of truth for customer interactions and identity, and the warehouse as the source for historical analytics. The loan data itself gets a defined owner and a stated use, which is what lets the bank say what "good" means for it.
+
+**Governance.** The bank defines ABAC policies riding on classification: a customer's yearly income is masked to call-center agents and unmasked only to underwriters while a loan is in review. Fields that touch financial rules are tagged at the source, and the bank relies on classification propagating along lineage so a field keeps its sensitivity as it is copied into the unified profile. Audit trails record every access, so the bank can show a regulator who saw a customer's bank statement and why.
+
+**Quality.** The bank names the dimensions that gate the loan agent: accuracy of identity (does this record refute or confirm the applicant exists), completeness of the credit and employment fields the approval model needs, consistency of the customer's name across the three systems so identity resolution finds one person, and timeliness of balances (a seven-day-old balance must never reach an approval decision). A quality gate rejects or quarantines records that fail, and the failure count is watched as an incident metric, not a silent drop.
+
+**Lineage.** Every figure the loan agent shows the customer carries a path: raw account data from the core system, transformed into the harmonized profile, joined with credit history, consumed by the approval model. When a customer disputes an approval and the bank must answer where the balance came from, lineage produces the exact chain. Because lineage spans the whole path, the answer is a path, not a person's memory.
+
+The test of the whole design is whether the four pieces cohere. A strategy with no governance leaks data its own quality bar says is sensitive. Governance with no lineage cannot explain its own decisions. Quality with no strategy measures the wrong dimensions. Each piece earns its place by making the other three actionable, and that is the integration a board is really asking to see.
+
+## Try it yourself
+
+1. Pick a business domain you know (customers, orders, inventory, subscriptions) and name the source of truth for it, then list the two systems most likely to disagree with it and what you would do when they do.
+2. For one sensitive field in that domain (a salary, a health attribute, a card number), write an ABAC rule using the user's, the data's, and the environment's attributes, then say which classification the data must carry for that rule to work.
+3. Define a quality bar for that data set against the four dimensions: accuracy, completeness, consistency, timeliness, each worded as a testable statement a team could automated-check.
+4. Draft the lineage chain for one report metric end to end, from the source system to the report, and mark every hop you cannot currently trace.
+
+When you are done, check the four decisions against each other. If your quality bar assumes a field is always populated but your lineage shows it only reaches the profile through an optional join, the design is incoherent and a judge will find the seam.
+
+## What's next
+
+This lesson built the CTA data domain from its decisions: data strategy, the data lifecycle, governance, quality, and lineage. Lesson 65 moves from data as its own domain to the systems that consume it: general systems architecture and enterprise AI reference architectures, covering RAG, agent platforms, and LLM gateways. You will learn how an enterprise wires AI systems to its data at scale, and how the trusted, governed, lineage-rich data this lesson designed is exactly what a retrieval-augmented generation pipeline and a fleet of agents depend on to produce answers worth trusting. That is where the data strategy and the AI architecture have to agree, because an AI system is only as sound as the governed data it is built on.
+
+[^1]: Salesforce Architects. [Data 360 Architecture](https://architect.salesforce.com/docs/architect/fundamentals/guide/data-360-architecture.html). The design-principles section frames data as operational, trusted, and real-time when organized on purpose; the Data Organization section describes the progression from raw ingested data, to persistent lake objects, to harmonized model objects that form the single source of truth, and the data space model with enterprise-wide lineage and audit trails.
+[^2]: Salesforce Architects. [Data 360 Architecture: Data Governance in Data 360](https://architect.salesforce.com/docs/architect/fundamentals/guide/data-360-architecture.html#data-governance-in-data-360-a-foundation-of-trust-and-control). Describes governance as a foundation of trust across the data lifecycle, automated tagging and classification of sensitive categories, attribute-based access control with CEDAR policies, and the policy information, decision, and enforcement points that enforce access consistently.
+[^3]: Salesforce Architects. [Data 360 Architecture: Data Governance in Data 360](https://architect.salesforce.com/docs/architect/fundamentals/guide/data-360-architecture.html#data-governance-in-data-360-a-foundation-of-trust-and-control). States that tag propagation occurs along data lineage from raw ingested data to the harmonized model layer and through derived data, so classifications follow transformations automatically.
+[^4]: Salesforce Architects. [Data 360 Architecture: Data Lifecycle and Object Types](https://architect.salesforce.com/docs/architect/fundamentals/guide/data-360-architecture.html#data-lifecycle-and-object-types). Describes inline transformations applied during ingestion to ensure preliminary data quality and cleanliness, and Data Transforms that clean, enrich, and shape raw data into normalized, actionable assets including streaming transforms that standardize formats and validate sensitive fields.
+[^5]: Salesforce Architects. [Data 360 Architecture: Identity Resolution](https://architect.salesforce.com/docs/architect/fundamentals/guide/data-360-architecture.html#identity-resolution). States that a unified profile is not a golden record, that identity resolution does not pick winning values or overwrite source data, and that reconciliation rules populate the profile without overwriting source data.

@@ -1,0 +1,130 @@
+---
+title: "Reports and Dashboards: Folder Sharing, Run-in-Context, Aggregate-Data Exposure"
+slug: day-29-o-1a-reports-and-dashboards-folder-sharing-run-in-conte
+series: salesforce-sharing-visibility-architect
+lesson: 29
+excerpt: "How reports and dashboards expose data that is not stored in standard or custom objects: folder sharing that controls who can view and edit each artifact, run-in-context which filters every report and dashboard to the viewing user's own record access, and the aggregate-data exposure risk that exists before a single record is opened."
+date: 2026-10-11
+author: Jimmy Olsen
+readTime: "15 min read"
+tags: [salesforce, sharing, visibility, architect, reports, dashboards, folders, running-user, run-as, field-level-security, aggregate, exposure]
+---
+
+So far this course has been about records: org-wide defaults, role hierarchies, sharing rules, manual shares, and Apex grants all shape who can open which object record. Lesson 29 steps outside that model. Reports and dashboards do not hold records; they summarize them, and the access you grant to a report or a dashboard is a separate decision from the access that filters the data inside it. The exam objective o-1a is explicit about why this deserves its own room under Access to Other Data: report and dashboard data is not stored in standard or custom objects, so the normal sharing machinery does not reach it, and two new controls appear in its place, the folder that governs the artifact and the running user that governs the data.[^1]
+
+The trap that frames this whole lesson is the assumption that giving someone access to a report gives them access to the data in the report. It does not. Folder access tells the platform who can open, run, edit, or share the report as an artifact. The rows that come back on screen are computed fresh for each viewer against their own sharing and field access, unless an administrator deliberately overrides that. Learn to keep those two layers separate, keep the running user honest, and watch aggregate totals, and you have mastered the objective.[^1]
+
+## Define the terms
+
+**Report folder.** A container that grants users the rights to view, edit, or share the reports and dashboards inside it. Folders are where access to reporting artifacts is decided, and they sit completely outside the sharing model that governs records. In Lightning the modern default is enhanced folder sharing, where you grant specific users and groups explicit access to a folder rather than inheriting a broad public-folder model. Creating a folder, adding reports to it, and setting who can see it is the equivalent, for reporting, of choosing object-level security for records.[^2][^3]
+
+**Folder permission (report).** The granular rights a folder grants, which normalize to three levels: View, Edit, and Manage. View lets a user open and run the reports, Edit lets them change and save them, and Manage adds the ability to change the folder's sharing and access. The classic permission set behind these includes "View Reports in Public Folders" to see the folder at all, "Create and Customize Reports" to build or clone reports, "Run Reports" to execute them and see results, and "Manage Public Reports" to change sharing. The exam is careful about the difference between being able to view a report and being able to run it against data, because those two use different permissions for shared users.[^4]
+
+**Folder permission (dashboard).** The dashboard equivalent of the report controls. View lets a user open and see the dashboard, Edit lets them change components, and Manage adds the right to control the folder and its audience. The permission behind seeing dashboards is "View Dashboards in Public Folders," and building or changing them requires "Create and Customize Dashboards." Keep the symmetric shape in mind, folders treat reports and dashboards the same way at the artifact level.[^5]
+
+**Run-in-context (run as the logged-in user).** The behavioral default for reports, and the behavior you must preserve for least-privilege reporting. When a report has no override, each user who runs it sees the data that user is allowed to see: the rows are filtered by the viewer's own org-wide defaults, role hierarchy, sharing rules, and field-level security. The same report definition yields different results for different viewers, because the query is re-run in the context of whoever clicked Run. This is the property that keeps a shared report honest, and it is the property to protect when a report must mean different things to different people.[^6][^7]
+
+**Dashboard running user (view-as / run-as).** The identity whose data access a dashboard uses to compute its components. A dashboard is not a stored data window; it is a live set of queries against whatever the running user can see. Set to "Run as logged-in user" (the dynamic dashboard model), every viewer sees the dashboard filtered to their own access. Set to a specific running user, every viewer sees the dashboard filtered to that user's access, which is usually far broader than the viewer's own.[^5][^8]
+
+**Aggregate-data exposure.** The leak that does not require opening a single record. A summary report or a dashboard component displays totals, counts, averages, and sums that can reveal information about records a user could not open one by one. A sales rep who cannot open a single record in a restricted account still learns from a count or a sum that such records exist and what they total. Because the exposure happens at the aggregation level, restricting record access alone does not seal it; you must also control the folder, the running user, and the fields those aggregates read.[^6]
+
+**Field-level security in reports.** The layer that filters which fields appear in report output. FLS hides a field from a user across reports, list views, search, and the API, so a report that references a field the user cannot see returns that field blank or drops it from the output the user is allowed to build. FLS governs field visibility, but it does not, by itself, remove the object's rows from a count or total; a user can still learn aggregate facts about records they cannot open, which is exactly how aggregate leakage happens even where FLS is applied correctly.[^6][^7]
+
+## Why it matters for the exam and for real builds
+
+Requirement o-1a asks you to pick the right access control for report and dashboard data, and the exam returns to four scenarios again and again. A manager builds a report that every rep must run while each rep sees only their team's data. A dashboard summarizes metrics that must not leak one manager's view to another. A user can open a folder but still cannot see the records in the report. And a low-privilege user learns too much from a summary without ever opening a record. Each scenario has a correct control, and each rewards the same instinct: the artifact access and the data access are two decisions, and you must get both right.[^1]
+
+In production this matters because reporting is where least-privilege designs quietly fail. Record sharing can be locked down perfectly, and then a single dashboard set to run as a system administrator re-exposes an entire org's data to everyone who can open the dashboard. A summary report in a public folder can hand a low-privilege user counts and totals over records they should not know exist. These failures do not show up in a record-level audit because no record was shared; the leak happened at the folder and the running user, which is why they are real access controls and not cosmetic settings.[^8]
+
+The exam also rewards remembering that report results are computed per viewer, not stored. When a rep runs a report, the platform re-derives the result set from the underlying records using that rep's sharing and field access. This is the run-in-context behavior that lets one report serve many different audiences safely, and it is the specific behavior question one in the quiz tests. Preserve it and you get honest reporting; break it by setting a broad running user and you have turned every viewer into the broad user.[^6]
+
+## Folder access and record access are independent
+
+Hold this one distinction and most of the objective falls into line. The folder decides who can find, open, run, and edit the report as a thing. The data inside the report is decided by each viewer's own sharing model, because reports run as the viewer. The folder does not stamp the data with view access; it does not grant the underlying records to anyone. So the architect can, and should, grant a folder to a wide audience while the data stays narrow for each of them.[^2][^6]
+
+This is why question three, in the quiz, asks why putting a report in a folder a user can open does not guarantee that user sees the report's records. The answer is that folder access governs access to the report artifact, while the rows are filtered by the viewer's own record sharing and field security, and the two are independent. If the user has no access to the underlying records, the report opens but returns nothing (or only what that user can see), which is exactly the correct, privacy-preserving result.[^2][^4]
+
+The independence works the other direction too. Granting a user access to a record does not, on its own, put that record into a report the user cannot reach; the user still needs folder access to find and run the report. So you control the artifact with the folder and you control the data with the sharing model, and you get correct least privilege only by setting both. A folder opened wide over records that are locked down is safe by the record side; records opened wide under a narrow folder are safe by the artifact side; but the common failure is opening both because one felt like a shortcut for the other.[^2][^4]
+
+![Two independent decisions: the folder governs who can view, edit, and manage the report or dashboard as an artifact, while the viewer's own sharing model filters the rows that come back](</diagrams/day-29-o-1a-reports-and-dashboards-folder-sharing-run-in-conte/1-two-layer-model.png>)
+
+### The permissions, spelled out
+
+The folder model normalizes to View, Edit, and Manage, but the exam will test whether you know the classic permission names that sit behind them, because scenario language often uses them. To see a report folder exists and to open and run a report in it, a user needs "View Reports in Public Folders." To run a report as a shared user, in the classic model, the user also needs "Run Reports." To build or clone a report, "Create and Customize Reports." To change a report's definition, the Edit right on the folder. To change who can access the folder, Manage.[^4]
+
+The same set mirrors for dashboards: "View Dashboards in Public Folders" to see and open, "Create and Customize Dashboards" to build or change, and View, Edit, and Manage on the folder for the intermediate steps. When a scenario names one of these permissions, map it straight to the folder right it implies, and remember that being able to view a report in a folder is never the same as being granted the data the report summarizes.[^5]
+
+## Run-in-context keeps one report honest for many viewers
+
+The single most important behavior to preserve in reporting is that reports run as the logged-in user. When there is no override, the platform builds the result set by running the report's query in the context of whoever clicked Run. Org-wide defaults, role hierarchy, sharing rules, and field-level security all apply, so a manager and a rep running the same report definition get different rows, because each sees the records their own access allows. The report definition is the blueprint; the result is always the viewer's own slice.[^6][^7]
+
+This is the behavior question one tests. A manager creates a report in a public folder, and every rep who runs it should see only their own team's data. The control that makes this happen is leaving the report running as the logged-in user. Because the report runs in each rep's context, each rep sees only the records the rep's sharing permits, which is the team's data and nothing above it. Setting the report to run as the manager, or granting View All, would collapse every rep into the manager's broad view and hand each rep data they should not see. So the correct answer is not an action; it is declining to override the default.[^6][^7]
+
+![One report definition, a different slice per viewer: a manager and a rep running the same report get different rows because the query re-runs in the context of whoever clicked Run](</diagrams/day-29-o-1a-reports-and-dashboards-folder-sharing-run-in-conte/2-run-in-context.png>)
+
+For the architect the practical rule is: do not add a running-user override to a plain report unless a named requirement forces it. Keep run-in-context as the default, and the report stays safe for every current and future viewer, including users added after the report was built. The moment you set a report to run as a specific user, you freeze the result set to that user's access and every viewer after that inherits it, which is a real exposure decision, and rarely the right one for a shared report.[^8]
+
+### Why aggregate exposure survives without record access
+
+Run-in-context filters rows by the viewer's own sharing, but it does not remove the object from the reporting model. A summary report still counts and totals records the viewer can open through the sharing model, and a field-level-security setting hides a field from the output while leaving the record's existence and any aggregate that uses the field's summarized value intact. So a low-privilege user who can open zero records in a restricted account still learns, from a count or a sum, that those records exist and what they total. This is the subtle leak victims never test for, because they test record access and stop there.[^6][^7]
+
+![Aggregate leakage: a low-privilege user who can open zero records in a restricted account still learns from a summary report's count, total, and average that such records exist and what they sum to](</diagrams/day-29-o-1a-reports-and-dashboards-folder-sharing-run-in-conte/4-aggregate-leak.png>)
+
+Field-level security is not the cure by itself. FLS hides the field, but a summary aggregating that field still returns a total derived from rows the user cannot open; the total is a different fact than the rows. The design rule is to control the artifact that produces the aggregate: keep sensitive summary reports in private or restricted folders, keep the running user narrow, and treat any report or dashboard that surfaces counts or sums as a sharing decision in its own right, separate from the record access below it.[^6]
+
+## Dashboard running user is an exposure decision
+
+A dashboard is not a saved picture of data; it is a set of queries executed as a designated running user every time someone views it. There are two settings, and they mean opposite things for privacy. "Run as logged-in user" computes every component in the context of the viewer, so each viewer sees the dashboard filtered to their own access. "Run as a specific user" computes every component in the context of that one user, so every viewer, no matter how restricted their own access, sees the dashboard as that specific user would.[^5][^8]
+
+Set to run as a system administrator or a broad data owner, a dashboard becomes a data broadcast: every person who can open it sees the administrator's entire org in the summarized metrics. That is how a dashboard leaks other managers' data to a viewer, and it is precisely the scenario question two tests. When a dashboard must not reveal another manager's data to a viewer, the correct setting is running as the logged-in user, because that filters the dashboard to the viewer's own access. Running as an administrator or a data owner exposes that person's broad view to everyone who opens it, which is the exact failure the question is asking you to avoid.[^5][^8]
+
+![Dashboard running user: two settings with opposite privacy, run as the logged-in user filters each viewer to their own access, while run as a specific user such as a system administrator broadcasts that user's view to everyone who opens the dashboard](</diagrams/day-29-o-1a-reports-and-dashboards-folder-sharing-run-in-conte/3-dashboard-running-user.png>)
+
+The architect's rule mirrors the report rule. Default dashboards to run as the logged-in user. Reserve a specific running user for the cases that genuinely need it, such as a dashboard meant to present a consistent, cross-team view to an audience that should all see the same numbers, and when you do set a specific running user, choose the least-privilege identity that still produces correct data, never the system administrator as a convenience. Then document the choice, because "run as user X" is a standing exposure of X's data to everyone who views the dashboard, and whoever audits access later must be able to see that decision and its reason.[^5][^8]
+
+## Configuring folders and running users, step by step
+
+Walk the configuration in order; each step produces the input the next one reads.
+
+**Step 1: Create the report or dashboard folder and set its sharing.** In Reports and Dashboards, create a folder and grant View, Edit, or Manage to the specific groups that must reach the artifacts inside. Prefer named groups over individuals so access follows membership, not a person, and prefer private or restricted folders for anything sensitive rather than a public folder everyone inherits. This is the artifact-side control.[^2][^3]
+
+**Step 2: Confirm the report's run-as stays the logged-in user.** For each report, verify that no running-user override is set, so results respect each viewer's own sharing, hierarchy, and field-level security. If a report currently runs as a broad user and nothing requires it, clear the override back to run-in-context. This is the data-side control for reports.[^6][^7]
+
+**Step 3: Confirm the dashboard's running user is the logged-in user or the least-privilege identity.** Open Dashboard Properties and check the View Dashboard As setting. It should read "Run as logged-in user" for anything that must stay personal to each viewer. If a specific running user is required, set it to the narrowest user that still produces correct data, never a system administrator. This is the data-side control for dashboards.[^5][^8]
+
+**Step 4: Restrict folder membership to named groups and test a viewer's slice.** Remove broad or individual grants and make membership group-scoped. Then log in as a low-privilege viewer and confirm that running the report returns only the subset that viewer's sharing permits, and that the dashboard components reflect that viewer's access, not a broader identity. Testing as a real low user is the only way to see the actual slice.[^2][^4]
+
+**Step 5: Audit for aggregate leakage as a low-privilege test user.** View each sensitive summary report and dashboard as that low user and check whether the displayed counts, totals, and averages leak facts about records the user cannot open. If they do, tighten the folder (narrow membership), narrow the running user (or restore logged-in), and reconsider whether the aggregate belongs in a public artifact at all. The audit closes the gap that record-level testing always misses.[^6]
+
+## Exam traps to avoid
+
+**Trap: assuming folder access grants data access.** Folder access governs the report artifact; the data is filtered by each viewer's sharing and field security. A user who can open a folder still sees only the records their own access permits, possibly nothing at all. Granting a wide folder over locked-down records is safe on the record side, but do not confuse the two controls; a scenario that pairs a wide folder with a wide running user is a leak even if every record stays private.[^2][^6]
+
+**Trap: letting a dashboard run as a broad user because it is easier.** "Run as system administrator" makes every component compute with org-wide access, so every viewer sees data they should not. A dashboard set to a broad running user is a standing data broadcast to everyone who can open it. Default to logged-in, and when a specific user is required, pick the least-privilege identity, never the administrator as a convenience.[^5][^8]
+
+**Trap: thinking field-level security seals aggregate leakage.** FLS hides fields from output, but a summary report or dashboard still returns counts, totals, and averages derived from records the user cannot open. The total is a different fact than the rows, and it leaks. Control the folder and the running user to stop aggregate exposure; FLS alone does not.[^6][^7]
+
+**Trap: granting View All or relaxing sharing to "fix" a report that returns nothing.** A report that comes back empty for a user usually means the user has no access to the underlying records, which is correct least privilege, not a bug. Handing out View All or a folder-wide override to populate the report re-exposes the data to everyone and destroys the privacy the empty result was protecting. Investigate whether the user needs the data at all before widening anything.[^1][^4]
+
+**Trap: forgetting the running-user limit and licensing cost.** Dynamic dashboards, those that run as the logged-in user, consume a running-user license for each distinct viewer, and there are limits on how many can run per org and per user. Architecting your whole report and dashboard estate to run-as-logged-in can hit a licensing wall at scale, which pushes teams to a specific running user precisely to save licenses, and that is the exact trade-off that re-introduces exposure. Weigh the license cost against the data risk and document the call.[^8]
+
+## Try it yourself
+
+In a sandbox, build the two-layer model end to end. Create an object with org-wide defaults set to private, add records owned by two different managers, and create a manager role plus rep roles beneath them in the hierarchy. Create a report folder, set its sharing to a group that includes both managers and both reps, and build one summary report in it that counts records while keeping the running user at the logged-in user. Now log in as a rep and run the report: you should see counts and totals only for the records that rep can reach through the sharing model, and you should see fewer aggregates than a manager sees, even though the report definition and folder are identical. Then log in as a rep and open a dashboard whose running user is a broad data owner: you should immediately see the owner's far larger slice, which demonstrates why the setting is an exposure decision. Finally, add a field, remove it from the rep's field-level security, and confirm the report drops or blanks that field for the rep while a count that used the field still reflects the records beneath it. You have now watched run-in-context, dashboard running user, and aggregate leakage behave in real time, which is the fastest way to trust the design rules.
+
+## The design frame, in one screen
+
+Keep three controls straight and the objective is half done. The folder controls who can view, edit, or manage the report or dashboard as an artifact; restrict it to named groups and to private folders for anything sensitive. The running user controls whose data access the report or dashboard computes against; keep it as the logged-in user for anything personal, and choose the least-privilege specific user only when a consistent, cross-team view is genuinely required. Aggregate totals and counts leak facts about records a user cannot open, so audit summary output as a low user and seal it by tightening the folder and the running user, because field-level security alone cannot. Get these three right and reporting stays honest for every viewer without a single record being shared.[^1][^6][^8]
+
+## What's next
+
+Tomorrow is lesson 30, Files, Knowledge, and Custom Metadata/Settings Security, which carries the same underlying idea into a different set of artifacts. Where today you learned that reports and dashboards expose data through their folders and running users, lesson 30 applies the principle to files and to the metadata and settings that have no record underneath them at all. Bring the same two-layer instinct: for each artifact type, name the control that decides who can reach it, then name the control that decides what data the reach reveals. Files, knowledge articles, and custom metadata each answer those two questions differently, and lesson 30 walks every one.[^1]
+
+[^1]: Salesforce, "Salesforce Certified Platform Sharing and Visibility Architect Exam Guide," Salesforce Help, https://help.salesforce.com/s/articleView?id=005298977&language=en_US&type=1
+[^2]: Salesforce, "Share a Lightning Report or Dashboard Folder," Salesforce Help, https://help.salesforce.com/s/articleView?id=analytics.rd_folders_share_enhanced.htm&language=en_US&type=5
+[^3]: Salesforce, "Access to Report Folders," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=analytics.access_report_folders.htm&type=5
+[^4]: Salesforce, "Reports," Salesforce Help, https://help.salesforce.com/s/articleView?language=en_US&id=analytics.rd_reports_overview.htm&type=5
+[^5]: Salesforce, "Configure Dashboard Data Visibility in Lightning Experience," Salesforce Help, https://help.salesforce.com/s/articleView?id=analytics.dashboards_view_as.htm&language=en&type=5
+[^6]: Salesforce, "Salesforce Reports: Fields Hidden by Field-Level Security Are Removed When an Editor Saves the Report," Salesforce Help Knowledge Article, https://help.salesforce.com/s/articleView?id=000989537&language=en_US&type=1
+[^7]: Salesforce, "Report Displays a Hidden Field to Unintended Users," Salesforce Help Knowledge Article, https://help.salesforce.com/s/articleView?id=000387842&language=en_US&type=1
+[^8]: Salesforce, "Dynamic Dashboard Limits: How to Find, Manage, and Request an Increase," Salesforce Help Knowledge Article, https://help.salesforce.com/s/articleView?id=000385369&language=en_US&type=1

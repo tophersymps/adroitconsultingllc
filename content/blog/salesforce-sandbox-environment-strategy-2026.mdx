@@ -1,0 +1,125 @@
+---
+title: "The Environment Is Part of the Architecture"
+slug: salesforce-sandbox-environment-strategy-2026
+excerpt: "A sandbox is a copy with documented deltas. Ignore them and passed in the sandbox quietly becomes works in production, usually six weeks after go-live."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 22, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Salesforce, Sandboxes, Delivery, DevOps, Data 360, Agentforce, Release Management, Testing]
+bannerImage: "/banners/salesforce-sandbox-environment-strategy-2026.webp"
+ogImage: "/banners/salesforce-sandbox-environment-strategy-2026-og.jpg"
+---
+
+Every Salesforce programme eventually produces a document like this one: a UAT pack, signed, with a column of green checks and a line at the bottom saying every test passed. Six weeks after go-live something breaks in production that the pack says was verified. The postmortem blames test coverage, the team adds test cases, and the new cases run in the same environment that missed the problem in the first place.
+
+The missed test was not the issue. The environment was. A sandbox is a copy of production with a documented set of deltas, and those deltas decide which claims a test result can support. A Partial Copy sandbox holding 5 GB of sampled data cannot prove a query will perform against 40 million rows. A sandbox whose email deliverability is set to internal system mail cannot prove an approval notification reaches a customer. A preview sandbox six weeks ahead of production cannot prove behaviour on the release production is running today.
+
+None of that is a scandal. It is the specification. The failure is that almost nobody writes the deltas down, so the sign-off silently upgrades "passed on a 5 GB sample of one release" into "will work in production". Environment design is architecture, and on the stack most teams are building in 2026 it matters more than it did three years ago, because the layers that reproduce worst (the data platform and the agent sitting on it) have moved into the middle of the architecture instead of living off to the side.
+
+Four deltas decide whether a sandbox result transfers: what gets copied, what a refresh destroys, which release the org is running, and how much data plus which external systems are present. This article takes them one at a time, then covers the operating model that keeps them honest.
+
+## What a sandbox actually copies
+
+All four sandbox types copy metadata. Only the two testing types copy data. That one line explains most of the strange behaviour teams hit in a Developer sandbox, where a validation rule that depends on an existing related record never fires because no records exist[^1].
+
+The types also come with fixed economics. A Developer sandbox holds 200 MB of data and 200 MB of files and can be refreshed every day. Developer Pro holds 1 GB of data and 1 GB of files, also on a one day refresh. Partial Copy holds 5 GB of data with file storage equal to production, requires a sandbox template, and refreshes every 5 days. Full gets production's storage and data and refreshes every 29 days[^1]. A Partial Copy sample runs to at most 10,000 parent records plus their children, or 5 GB total, whichever limit lands first[^2].
+
+The licence allocation surprises people who assumed sandboxes were free. An Enterprise Edition org ships with 25 Developer sandboxes, one Partial Copy, and one Full. Unlimited gives you 100 Developer, 5 Developer Pro, and one each of Partial Copy and Full[^1]. In practice that means exactly one environment capable of holding production-shaped data, which is a capacity constraint before it is a technical one.
+
+Then the exclusions, which are where the false passes live. Even a Full sandbox leaves out Chatter feeds unless you tick the copy box, the setup audit trail, archived activities older than a year, and password history[^3]. Big object records are not copied at all; the sandbox carries the definition and none of the records[^17]. Contact data is not copied into Developer or Developer Pro sandboxes[^4]. Email deliverability defaults to System email only, so automatically generated mail such as password resets works and everything else does not[^5].
+
+Put those two facts together and you get a very specific failure. A Flow that sends a case notification, an approval that alerts a manager, a journey that fires an email: all of them complete in a sandbox without delivering anything, and the test reports success. The logic ran. The delivery path never did. If the thing you are shipping is a communication, the sandbox tested half of it.
+
+![Four sandbox types compared on what they copy, refresh interval, storage and template requirement, with the deltas that most often produce a false pass called out](</diagrams/salesforce-sandbox-environment-strategy-2026/1-sandbox-types-matrix.png>)
+
+## A refresh is a delete, so treat it like one
+
+Salesforce is explicit: refreshing a sandbox deletes it and recreates it as a new copy of production[^6]. The org ID changes every time[^7]. That single fact has a blast radius most delivery plans never account for.
+
+Connected apps lose their authorization. Named credentials that pointed at the production endpoint now point at production from a sandbox, which is either a security incident or a silent write to live data depending on what the integration does. Site and community URLs change with the org ID. Scheduled jobs arrive in the new org still enabled, now processing a copy of production's records. Custom links built with absolute URLs stop working in sandboxes, which is one reason Salesforce recommends relative URLs in production[^8]. Even the 15 day Recycle Bin purge runs on a different schedule per server, so anything that depends on the deleted records API returns different answers in the two orgs[^8].
+
+The practical consequence is that a sandbox is not a durable artifact. It is a disposable environment with an expiry you control, and the only way to keep it useful is to automate its recovery. Salesforce provides exactly one hook for that: an Apex class implementing SandboxPostCopy, named in the create or refresh form, runs at the end of the copy[^9]. The class must exist in the source org, and it runs as a special Automated Process user without access to every object, so heavier work has to be chained to a queueable or run after activation[^9]. Teams that use it well do four things with it: disable scheduled jobs that must not run against sample data, stamp the org ID into a custom setting so integrations know which environment they are in, repoint callouts at sandbox endpoints, and delete the records they do not want to inherit.
+
+Two smaller facts belong in the same conversation. A sandbox nobody logs into for 180 days is deleted, permanently[^10]. And sandbox storage does not warn you when it fills: writes simply stop[^1]. Both are manageable when environments are scheduled and owned. Both are how a temporary sandbox quietly becomes the only place a piece of configuration exists.
+
+![What a sandbox refresh invalidates: org ID, connected app authorization, credential endpoints, site URLs, scheduled jobs and test data all reset when the environment is recreated](</diagrams/salesforce-sandbox-environment-strategy-2026/2-refresh-blast-radius.png>)
+
+## Version skew is on a calendar
+
+The second delta is release version, and unlike the first it is entirely predictable. Salesforce runs every major release through a preview window: a set of sandbox instances upgrades first, and everything else follows roughly six weeks later. For Winter '27, preview instances were upgraded on August 28 and 29, 2026, and non-preview instances on October 9 and 10[^6]. The cutoff for getting a sandbox onto a preview instance was 6:00 PM PT on August 27[^6].
+
+The trap sits in the same article. Refresh a sandbox that is already on a preview instance after the cutoff and it is routed to a non-preview instance, reverting to the previous release[^6]. So the refresh a developer runs to pick up a config change can silently move the environment back a release, and the next test result comes from an org that is not testing what anyone thinks it is testing. Cloning during the window carries the source sandbox's release with it, which means the clone inherits an assumption nobody wrote down[^6].
+
+The operating rule is to hold both versions on purpose. One sandbox pinned to preview, so the new release meets your real customizations before it meets your users. One pinned to the current release, so that when production misbehaves you can tell whether the bug is new or pre-existing. Before Winter '27 that second sandbox was hard to get, because staying on non-preview required either an org permission enabled by Salesforce Customer Support or a refresh after the cutoff[^6].
+
+Whichever way you set it up, put the release version in the test artifact. "Passed" without a version is not a result. It is a timestamp.
+
+![Release skew on a six week preview window, showing preview sandboxes on Winter 27 while production and non-preview sandboxes stay on Summer 26 until October 9](</diagrams/salesforce-sandbox-environment-strategy-2026/3-release-skew-timeline.png>)
+
+## Volume decides which questions an environment can answer
+
+The third delta is data volume, and it is the one teams hand-wave most often. Partial Copy holds 5 GB of sampled data[^1]. If production holds 40 million records, the sandbox is testing a different system in every way that matters for query cost: index selectivity, the optimizer's choice of plan, and whether a filter is selective enough to use an index at all. A query that returns in 200 ms against a sampled 5 GB org can time out against the real one, which is the subject of our piece on [large data volume query performance](/field-notes/salesforce-ldv-query-performance-2026).
+
+Salesforce's own documentation is blunt about the limit: only Full sandboxes support performance testing, load testing, and staging[^11]. If the claim you need to defend is "this page loads in under two seconds with our real data", no other environment can make it. For peak traffic above roughly 120 requests per second, Salesforce also sells Scale Test, which runs JMeter or Playwright workloads against a Full sandbox whose infrastructure is temporarily matched to a production instance. It needs two weeks of booking notice and a trial run within the previous 15 days before you can book a full test[^12]. It exists precisely because even a Full sandbox is a copy of data, not a replica of traffic.
+
+Everything below the performance line can and should be proven in cheaper environments. The useful discipline is to sort test claims by which environment can answer them, then stop treating a pass in the cheap environment as evidence for the expensive claim. A sign-off that names the environment ("verified in Partial Copy at 5 GB with 10,000 parent records on Summer '26") tells a reader what the result covered. A sign-off that says "verified in sandbox" tells them nothing.
+
+![The promotion ladder from developer sandbox to production, showing which claim each stage can and cannot prove](</diagrams/salesforce-sandbox-environment-strategy-2026/4-what-each-environment-proves.png>)
+
+## The layers that reproduce worst are now in the middle
+
+Here is the part that changed. Three years ago the hard-to-reproduce pieces of a Salesforce stack were integrations at the edge. In 2026 the hardest layer is the data platform, and the agent sits directly on top of it.
+
+Data 360 provisions in a sandbox as metadata only. Salesforce states it plainly: you cannot replicate data even in Partial Copy and Full Copy sandboxes[^13]. Connections are replicated but their authorization is not, so every connection arrives inactive and has to be re-authenticated and re-ingested[^13]. Sandbox usage draws credits from the production org[^13]. Cloning is the one shortcut on that side: clone a sandbox that already has Data 360 provisioned and the same Data 360 metadata and configurations come with it, so the setup does not have to be repeated, though the data streams still need reauthorizing because credentials are not copied[^14].
+
+The consequence for anything agentic follows directly. If an agent grounds its answers on unified profiles and the sandbox has no profiles, what you validated is the wiring: the topic routes to the right action, the action reads the right field, the permission set lets the running user see it. You did not validate answer quality, because there was nothing to answer from. Teams that miss this distinction ship an agent that passed every structural test and produces confident nonsense on day one, then spend three weeks tuning prompts for what is actually a data problem.
+
+The honest split is to test structure in the sandbox and to test answers against data that exists, which usually means re-ingesting a masked subset through the same pipeline production uses, or running a read-only pilot in production behind an allowlist. Both are more work than clicking test in a sandbox. Both are cheaper than discovering the difference in front of a client.
+
+![Fidelity by layer across core CRM metadata, Data 360, the agent and Experience Cloud, showing what each layer reproduces in a sandbox and where the gap opens](</diagrams/salesforce-sandbox-environment-strategy-2026/5-layer-fidelity.png>)
+
+## Sandbox data is customer data
+
+Everything above treats the sandbox as a testing problem. It is also a data protection problem, and one that gets underweighted because the environment feels temporary.
+
+A Full sandbox is a copy of production records, which means live customer data now exists in a second place with a second access model. Sandboxes are not contractually required to use multi-factor authentication, though Salesforce strongly recommends it for any sandbox holding customer data or intellectual property[^15]. Data masking has a deadline attached: service for the Data Mask managed package ends on December 31, 2026, with Anonymize and Seed positioned as the replacement path[^16]. A team that built its sandbox data policy around Data Mask has a document describing a product with a fixed end date.
+
+The email default cuts both ways. Setting new sandboxes to System email only protects real customers from a test run that loops through every contact record, which is a good default. It also means that any email-dependent step in your flows was never exercised. Both things are true, so the delivery plan has to say which one it is relying on.
+
+## The operating model that holds
+
+Five practices do most of the work.
+
+Name environments by the claim they support, not by their type. Build, integrate, prove, rehearse. A team that says "that is a prove question, it goes to the Partial Copy" is making an argument about evidence. A team that says "test it in the dev sandbox" is not.
+
+Tie the refresh calendar to the release calendar. Refresh windows, preview cutoffs, and production upgrade weekends are published months ahead[^6]. A refresh that lands during a preview window without a decision attached is a refresh that changes which release you are testing.
+
+Automate post-copy recovery and write down what a refresh breaks. The SandboxPostCopy class handles the mechanical part[^9]. The written list handles the part Apex cannot: which integrations need re-authentication, which external systems need a sandbox endpoint, which stakeholders need to know the environment is being rebuilt.
+
+Make the definition of done name the environment. "Verified in Full with production-shaped data on Winter '27" is a claim someone can audit. "Verified" is a mood.
+
+End every UAT report with a short paragraph listing what the environment could not prove. One release, one data volume, one set of integrations. Naming the limits is what separates a sign-off that survives a postmortem from one that becomes the first exhibit in it.
+
+The question worth asking before the next sign-off is not whether the tests passed. It is what the pass was evidence of. If nobody can answer that without opening Setup, the environment is doing the deciding, and it has no idea what you are promising the client.
+
+[^1]: Salesforce Help, "Sandbox Licenses and Storage Limits by Type," on sandbox types, refresh intervals, storage limits, what each type copies, and per edition allocations. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_environments.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Salesforce Sandbox Types and Management Best Practices," describing the Partial Copy sample as up to 10,000 parent records and related children, or 5 GB total. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000387743&language=en_US&type=1)
+[^3]: Salesforce Help, "Configuring Full Sandboxes," on Chatter data being excluded by default, and the setup audit trail, archived activities, and password history not being copied. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_configuring_full_sandboxes.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Sandboxes: Staging Environments for Customizing and Testing," on big object records not being copied and Contact data not being copied to Developer or Developer Pro sandboxes. [resources.docs.salesforce.com](https://resources.docs.salesforce.com/latest/latest/en-us/sfdc/pdf/deploy_sandboxes.pdf)
+[^5]: Salesforce Help, "Email Deliverability," on new and refreshed sandboxes defaulting to the System email only setting. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_email_deliverability.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Salesforce Sandbox Preview Instructions," covering the Winter '27 preview windows, the August 27, 2026 cutoff, refresh behaviour on preview instances, clones during the window, and the statement that refreshing a sandbox deletes and recreates it. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000391927&language=en_US&type=1)
+[^7]: Salesforce Help, "Refresh Your Sandbox," noting that the org ID changes each time a sandbox is refreshed. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_refresh.htm&language=en_US&type=5)
+[^8]: Salesforce Help, "Other Service Differences," on login history, the Recycle Bin purge running on a different schedule per server, and absolute URL custom links failing in sandboxes. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_other_service_differences.htm&language=en_US&type=5)
+[^9]: Salesforce Developers, "SandboxPostCopy Interface," on the interface running at the end of a sandbox copy under the Automated Process user and requiring the class to exist in the source org. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexref.meta/apexref/apex_interface_System_SandboxPostCopy.htm)
+[^10]: Salesforce Help, "Inactive Sandbox Expiration," on sandboxes not accessed for 180 days being deleted without recovery. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_inactive_sandbox_expiration.htm&language=en_US&type=5)
+[^11]: Salesforce Help, "Sandbox Types and Templates," stating that only Full sandboxes support performance testing, load testing, and staging. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.create_test_instance.htm&language=en_US&type=5)
+[^12]: Salesforce Help, "Scale Test," on the 120 requests per second recommendation, Full sandbox requirement, two week booking notice, and trial run within 15 days. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.scale_test_overview.htm&language=en_US&type=5)
+[^13]: Salesforce Help, "Data 360 in a Sandbox," stating that a sandbox contains only metadata, cannot replicate data even in Partial Copy and Full Copy, that connections arrive needing re-authentication, and that sandbox usage consumes credits from the production org. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=data.c360_a_data_cloud_sandbox.htm&language=en_US&type=5)
+[^14]: Salesforce Help, "Replicate Data 360 Sandboxes Using Cloning," stating that cloning a sandbox with Data 360 provisioned carries over the same Data 360 metadata and configurations, that stream definitions are copied but connections must be reauthorized, and that access credentials are excluded. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=data.c360_a_use_cloning_to_replicate_data360_sandboxes.htm&language=en_US&type=5)
+[^15]: Salesforce Help, "Sandbox Setup Considerations," noting that sandbox environments are not contractually required to use multi-factor authentication while recommending it for sandboxes holding customer data or intellectual property. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_implementation_tips.htm&language=en_US&type=5)
+[^16]: Salesforce Help, "Sandboxes: Staging Environments for Customizing and Testing," noting that Salesforce ends service for the Data Mask managed package on December 31, 2026. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.deploy_sandboxes_parent.htm&language=en_US&type=5)
+[^17]: Salesforce Help, "Customization and Data Changes," stating that Big Object records are not copied to a sandbox and that the sandbox contains the Big Object definition but none of the records. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.data_sandbox_customization_and_data_changes.htm&language=en_US&type=5)

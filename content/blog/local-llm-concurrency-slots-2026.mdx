@@ -1,0 +1,101 @@
+---
+title: "One Server, One Slot: The Real Concurrency of Local LLMs"
+slug: local-llm-concurrency-slots-2026
+excerpt: "A self-hosted LLM is a fixed pool of slots, not a stateless API. Point a fleet at it, and the slot count plus the queue it hides decide your throughput."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 18, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "10 min read"
+tags: [AI Infrastructure, Local LLMs, Multi-Agent Pipelines, Concurrency, Model Serving]
+bannerImage: /banners/local-llm-concurrency-slots-2026.webp
+ogImage: /banners/local-llm-concurrency-slots-2026-og.jpg
+---
+
+You bought the GPU, loaded the weights, and pointed your agent fleet at it expecting the same freeform concurrency your cloud provider gave you. Then five agents show up at once and four of them sit in a queue you never configured. The model is not slow. There is no error. Work just stacks up behind the one job that got in.
+
+That is the reality of running your own inference, and almost nobody plans for it, because the mental model is wrong. A local or self-hosted LLM server is not a stateless API that answers any number of callers. It is a **fixed pool of slots**, and each slot is a slice of KV-cache memory that must be carved out before a request can run.[^1] Your concurrency ceiling is not how many requests your framework can send. It is how many slots you configured, what that cost you in context, and how many jobs are already waiting in the queue that the server hides from you.
+
+This article maps that slot model, shows the memory math that actually caps your concurrency, explains why a single hung request can wedge a whole fleet, and gives you the monitoring signals and sizing ritual that keep a shared local model from becoming a silently blocked bottle neck. We have run a local model as a shared subsystem at Adroit, and the failures below are the ones that bit us, generalized past our internal names so they read as the general problem.
+
+## The slot is the unit of concurrency
+
+The llama.cpp server, the most common way people self-host, is explicit about this. It is started with a `--parallel` flag that sets the number of server slots, each of which holds one concurrent conversation, and the total context you give the server is divided across those slots.[^1] Give it `--ctx-size 4096 --parallel 4` and each request can use at most 1024 tokens of context. Raise the slot count and you raise the concurrency ceiling, but you shrink every slot's context in the same step.[^2]
+
+The price of a slot is concrete. Every active sequence needs its own KV-cache state, so memory use scales with parallel request count multiplied by context length.[^3] Ollama, the layer many people run on top, exposes the same three controls: `OLLAMA_NUM_PARALLEL` (parallel requests per loaded model, default 1), `OLLAMA_MAX_QUEUE` (how many requests wait before the server refuses new ones, default 512), and `OLLAMA_MAX_LOADED_MODELS` (how many models stay resident when they fit, default 3 times the GPU count).[^4]
+
+That default of 1 is the trap. Out of the box, Ollama serves one loaded model one request at a time. A second request is not refused and does not get a partial answer; it waits in a queue until a slot is free, then runs at normal speed.[^5] So the default configuration of the most popular local-model wrapper serializes every caller. If you gently concurrency-tested on a cloud API, where parallel calls just work, and then moved to a local model without changing anything, you shipped a fleet that can only ever do one thing at a time.
+
+![Three requests arriving at a one-slot local server: the first occupies the slot and streams tokens, the second and third are parked in a wait queue that the server never surfaces, with a note that slot count times context length is the real memory cost.](</diagrams/local-llm-concurrency-slots-2026/1-single-slot-queue.png>)
+
+## Context is the concurrency limit, not tokens
+
+The instinct when the queue builds is to raise the parallel count. That is where the memory math bites, and it is why there is no safe universal number. On a model like `qwen3-coder:30b` with an f16 KV cache, the weights alone are about 18.6 GB, and a KV cache costs roughly 0.1 GB per 1,000 tokens of total context on top of that.[^6]
+
+Run the multiplication and the tradeoff becomes obvious. One 32K slot needs about 21.8 GB. Four 32K slots need about 31 GB. One 262K slot needs about 44 GB, the same as four 64K slots. And four 262K slots, which sounds like a comfortable amount of parallelism, needs about 122.9 GB and simply will not fit on most single-GPU boxes people self-host.[^6] Four parallel requests with 64K context each cost the same memory as one request with a 262K context, so "more slots" is not free; it is directly traded against how deep any one agent can think.
+
+This is why agent workloads are the worst case. An agent that reasons across a long conversation, tools, and retrieved context can allocate far more context than a short classifier prompt, and the memory it needs for a single slot scales up with every token you let it use.[^6] A fleet of long-context agents does not need more slots; it needs a machine that can afford the KV-cache memory those slots multiply by. A 64K classification job that only uses 1K is wasting the slot. A 64K agent session that actually fills its context is the single most expensive thing you can run.
+
+The industry frameworks are honest about this. vLLM logs, at startup, a line that says `Maximum concurrency for 40,960 tokens per request: 15.70x`, which is a direct statement of how many requests can share the GPU when each needs that many tokens.[^7] That number is the KV-cache budget divided by the per-request maximum sequence length. It is the exact slot math above, computed for you, and it reads as a warning: the concurrency you can afford collapses as the context each caller needs grows.
+
+![A bar comparison of qwen3-coder:30b: 18.6 GB of weights in every case, with one 32K slot at about 21.8 GB, four 32K slots at 31 GB, one 262K slot at 44 GB, and four 262K slots at 122.9 GB, each labeled with slot count and context.](</diagrams/local-llm-concurrency-slots-2026/2-slot-memory-math.png>)
+
+## The queue you cannot see
+
+Once every slot is full, incoming requests enter a queue, and here is the part that breaks the mental model: the queue is invisible to its callers in most cases. The llama.cpp metrics endpoint tracks two gauges, `requests_processing` (requests currently in a slot, which caps at the slot count) and `requests_deferred` (requests queued because no slot is free).[^2][^8] A saturated server shows a full processing gauge and a slowly growing deferred counter, but the metric that any dashboard shows by default, CPU, stays near idle, because the GPU is busy generating tokens for the one request that owns the slot, and the CPU has nothing to do with waiting requests.[^9]
+
+So the load on a self-hosted inference server is exactly the thing that naive monitoring misses. Your dashboard reads a calm server while a queue nobody charted builds behind it. Requests wait, and the only signal is that callers eventually time out or the queue finally overflows with a 503, which Ollama returns only when it cannot even admit a request because its max queue is full.[^4][^5] For a model that is already loaded, the queue wait has no limit; a request waits for a slot for as long as it takes, and the server never refuses it.[^5] That is a recipe for an agent sitting quietly doing nothing while work piles up behind the job that can't finish.
+
+The single biggest operational mistake with self-hosted inference, in our experience and in the community reports, is treating this waiting as harmless. It is not. A request that waits in the queue still holds its own resources on the caller side, and in an agent pipeline it is often the whole agent blocked on one call, incapable of doing anything else while it waits.[^10] A long generation in the slot does not just finish slowly; it holds every other agent hostage for the entire duration, and if that generation never completes, the queue behind it grows without bound.
+
+![How one hung request wedges a fleet: Agent A holds the single busy slot and loops without returning, while agents B, C, and D line up in the hidden queue that gives them no signal, ending in the fix that a reaper frees a slot when it stops producing rather than when it simply runs long.](</diagrams/local-llm-concurrency-slots-2026/4-wedge-fleet.png>)
+
+![The two server gauges side by side: a processing gauge that caps at the configured slot count and reads a few busy slots, and a deferred gauge showing a long queue building silently, with a note that CPU stays idle and the queue gives the callers no signal.](</diagrams/local-llm-concurrency-slots-2026/3-invisible-queue.png>)
+
+## How a single hung request wedges a fleet
+
+Here is the failure pattern that will cost you a day, and we have lived it. One request takes a slot, begins generating, and never finishes: it hits a pathological long generation, a client that stops reading the stream so the server stalls, or a model that loops on a tool call. Because the slot is occupied and the slot count is fixed at 1 in the dangerous default, every other request in the fleet waits in the queue while that one job spins.
+
+The community has documented this at length. One production deployment reported requests queuing for six to ten hours instead of processing in parallel, with different models serializing instead of running concurrently, and users waiting hours when a few people messaged the assistant within minutes.[^10] The reported cause was exactly this mechanism: a fixed concurrency model where one long job or a stuck slot held up everything else. Their conclusion, that this makes a multi-user deployment effectively unusable, is the honest version of what every team eventually hits when it points more than one consumer at a single local model.[^10]
+
+The wedge is worse than a plain queue because of what you cannot see. The server metrics tell you a slot is full and requests are deferred, but they do not tell you whether the request in the slot is making progress or is stuck, because there is no error counter and no latency histogram on that metrics surface.[^2] End-to-end latency and errors have to come from the client or from a proxy in front of the server, which most local setups do not run.[^2] By the time your callers time out and you look, the fleet has been waiting behind a dead slot for hours, and nothing in your dashboard flagged it as a stuck request rather than a slow one.
+
+## The fix: probe it, size it, and watch the deferred counter
+
+The remedy is not magical. It is the same discipline you would apply to any shared bottleneck, applied to a resource whose concurrency is fixed and whose memory cost is the real constraint.
+
+**Probe before you commit.** Do not copy a `--parallel` number from a blog post. Measure. Run one request alone and record latency, tokens per second, memory, and whether the model is fully accelerated. Then test concurrency 2 with the same context and prompts, then concurrency 4 only if memory stays comfortable, and compare aggregate throughput, p50 and p95 latency, and errors.[^6] The right level is the one that survives your actual prompt shape, which for agents means long-context sessions, not one-sentence calls.[^6]
+
+**Watch the deferred counter, not CPU.** The signal that a server is out of headroom is `requests_deferred` rising, or the `requests_processing` gauge pinned at the slot count for a sustained period.[^2][^8] Alert on that, not on CPU, which will read idle while the GPU is the bottleneck. The starter alerts are a deferred counter above zero for a few minutes, meaning every slot is busy and work is waiting, and a processing gauge at the slot count for a sustained window, meaning saturation.[^2] Both are cheap to wire and they catch the wedge before your callers do.
+
+**Watch for progress, not just duration.** The single-slot wedge is a liveness problem, and it needs a liveness check. A reaper that reclaims a slot when its owner stops producing is the right shape; one that kills a job purely because it has run longer than average will murder legitimate long generations.[^10] The lesson from the reaper failures in the tooling ecosystem is that a request should be released when it stops progressing, not when it has merely taken a while.[^10]
+
+**Size context against the longest call, not the average.** Because slot count multiplied by context length is the memory budget, the shortest way to run out is to let one request allocate a huge context and then discover that consumed the slot you needed for everyone else.[^6] Decide the longest prompt plus generation your agents will actually produce, carve that into your context budget, and let every slot share the rest. If an agent needs more context than a slot gives, that is a machine problem, not something you tune around by throwing slots at it.
+
+**Bound the queue.** A default max queue of 512 hides an enormous amount of waiting work inside the server and defers the decision about overload until your users have already waited past reason.[^4][^5] When the queue fills with truly unusable work and the server returns 503, that is not a failure; it is the backpressure surfacing so you can scale. Do not raise the queue to stop the error and pocket the latency. Fix or expose the capacity problem instead.[^6]
+
+## When you should just not self-host this
+
+The slot constraint is one more argument for the decision that the economics already push. For roughly 95 percent of production workloads, cloud APIs still win on cost, and they do so partly because the concurrency is someone else's problem.[^11] If your agent fleet runs short, bursty conversations, cloud batching absorbs them and you pay per token without thinking about slots. If your fleet runs long, context-heavy agent sessions, the KV-cache memory per slot gets punishing on local hardware, and the same sessions on a cloud model do not force you to size a GPU.
+
+There is a narrow band where local deliberately wins: regulated data that cannot leave your boundary, sustained volume that keeps the GPU busy, or latency that justifies paying for the metal.[^11] Our deeper take on when hardware you own is worth it, and when it is not, lives in the [self-hosting decision](/field-notes/self-hosted-inference-decision-2026) guide. Within that band, the slot discipline above is not optional dressing; it is the difference between a model that serves your pipeline and a model that silently meters one job at a time. The teams that succeed with self-hosted inference treat the slot count and the context budget as first-class configuration, monitored at the deferred counter, and sized by probe. The teams that fail copy a parallel flag, point four agents at the box, and discover the queue the dashboard never showed them.
+
+## A start-Monday checklist
+
+Put a local model in front of a pipeline and you can have this right in an afternoon. First, read the startup line or the docs for your server and confirm the actual slot count, because the default is 1. Second, run a concurrency probe on the exact prompt shape your agents use, including long-context sessions, and record where memory stops being comfortable. Third, wire a deferred-counter alert on top of a processing gauge, and ignore CPU for saturation decisions. Fourth, add a liveness reaper that frees a slot when a request stops producing. Fifth, bound the queue so overload surfaces as a 503 you can act on instead of a silent hours-long wait. Your cloud provider handled all five invisibly. Your own server will not, and knowing that is the whole job.
+
+*Fortress infrastructure references reflect Adroit's own internal systems, generalized here for confidentiality. The specific numbers quoted are the live sources cited below.*
+
+[^1]: llama.app, "Running a server," the `--parallel` slot flag and context division. [llama.app/docs/serve](https://llama.app/docs/serve)
+[^2]: base14 Scout, "llama.cpp OpenTelemetry Monitoring," the `requests_processing` and `requests_deferred` gauges and the slot-count controls concurrency rule. [docs.base14.io](https://docs.base14.io/instrument/component/collecting-llama-cpp-telemetry/)
+[^3]: Ollama docs FAQ (v0.40.4), "How does Ollama handle concurrent requests?", the two levels of concurrency and queuing behavior. [github.com/ollama](https://github.com/ollama/ollama/blob/v0.40.4/docs/faq.mdx)
+[^4]: Ollama docs FAQ (v0.40.4), the environment-variable reference for OLLAMA_NUM_PARALLEL, OLLAMA_MAX_QUEUE, and OLLAMA_MAX_LOADED_MODELS and their defaults. [github.com/ollama](https://github.com/ollama/ollama/blob/v0.40.4/docs/faq.mdx)
+[^5]: ssdnodes.com, "Ollama concurrency: NUM_PARALLEL and MAX_QUEUE," the three request fates and the unbounded loaded-model wait. [ssdnodes.com](https://www.ssdnodes.com/learn/ollama-num-parallel-and-max-queue)
+[^6]: ollamaherd.com, "Ollama Concurrent Requests: Tune Parallelism Without OOMs," the probe-first cycle and the 18.6 GB / 0.1 GB-per-1000-token memory model. [ollamaherd.com](https://ollamaherd.com/guides/ollama-concurrent-requests)
+[^7]: vLLM docs, "Parallelism and Scaling," the Maximum-concurrency startup line. [docs.vllm.ai](https://docs.vllm.ai/en/stable/serving/parallelism_scaling/)
+[^8]: ggml-org/llama.cpp, tools/server README, the Prometheus metrics export. [github.com/ggml-org](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)
+[^9]: ggml-org/llama.cpp, tools/server directory, the request_processing and request_deferred gauges exported with `--metrics`. [github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master/tools/server)
+[^10]: ollama/ollama, GitHub issue #3902, "Model Pooling and Instance Management", production reports of hours-long queueing and the fixed concurrency model. [github.com/ollama/ollama](https://github.com/ollama/ollama/issues/3902)
+[^11]: Adroit Consulting, "Which Inference Belongs on Hardware You Own", the self-hosting decision analysis. [/field-notes/self-hosted-inference-decision-2026](https://adroit.io/field-notes/self-hosted-inference-decision-2026)

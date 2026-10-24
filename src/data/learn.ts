@@ -1093,9 +1093,294 @@ export const learnSeries: LearningSeries[] = [
           "MLOps"
         ],
         "status": "published"
+      },
+      {
+        "slug": "fine-tuning-vs-rag-decision-framework",
+        "title": "Lesson 64: Fine-tuning vs RAG: The Decision Framework",
+        "series": "agentic-ai",
+        "lesson": 64,
+        "excerpt": "The two ways to make a model fit your data live at opposite ends of a spectrum. RAG hands the model new knowledge at answer time without touching a weight. Fine-tuning changes the weights so the model behaves how you need it to. This lesson gives you the decision framework for choosing between them, the costs each one hides, and the hybrid pattern that pairs behavioral skill from fine-tuning with current facts from retrieval.",
+        "date": "October 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "LLMs",
+          "AI Agents",
+          "Fine-tuning",
+          "RAG",
+          "Retrieval Augmented Generation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "fine-tuning-in-practice-datasets-lora-evaluation-pitfalls",
+        "title": "Lesson 65: Fine-tuning in Practice: Datasets, LoRA, Evaluation, and Pitfalls",
+        "series": "agentic-ai",
+        "lesson": 65,
+        "excerpt": "Deciding you need to fine-tune is only the first move. This lesson is the manual for doing it well: how to shape a dataset that actually teaches a model, how Low-Rank Adaptation (LoRA) makes training affordable on a single GPU by freezing the model and updating a few million parameters instead of billions, how to evaluate a tuned model against a held-out set before you trust it, and the pitfalls that sink fine-tuning projects in practice.",
+        "date": "October 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "Fine-tuning",
+          "LoRA",
+          "Evaluation",
+          "Machine Learning"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "multimodal-agents-vision-audio-documents-structured-data",
+        "title": "Lesson 66: Multimodal Agents: Vision, Audio, Documents, and Structured Data",
+        "series": "agentic-ai",
+        "lesson": 66,
+        "excerpt": "An agent that only reads text is blind to most of the real world. This lesson shows how multimodal models give agents eyes and ears: how a model turns images, audio, and documents into tokens it can reason over, how vision maps to token cost, how documents get their structure back instead of being flattened into text, and how to decide when a general multimodal model beats a specialized extraction pipeline.",
+        "date": "October 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Multimodal",
+          "Vision",
+          "OCR",
+          "Document Understanding",
+          "Structured Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "voice-agents-stt-tts-latency-interruptions-barge-in",
+        "title": "Lesson 67: Voice Agents: STT, TTS, Latency, Interruptions, and Barge-In",
+        "series": "agentic-ai",
+        "lesson": 67,
+        "excerpt": "A voice agent is an LLM agent with a voice I/O layer bolted on the front and back. This lesson shows how that layer works: how speech-to-text and text-to-speech turn audio into tokens and back, why the latency budget is the whole game, how turn detection decides when the agent should speak, and how barge-in lets a caller interrupt without the conversation falling apart.",
+        "date": "October 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Voice Agents",
+          "Speech-to-Text",
+          "Text-to-Speech",
+          "Latency",
+          "Barge-In"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "computer-use-agents-browser-automation-safety-guardrails",
+        "title": "Lesson 68: Computer-Use Agents: Browser Automation, Safety, and Guardrails",
+        "series": "agentic-ai",
+        "lesson": 68,
+        "excerpt": "A computer-use agent operates software the way a person does: it reads a screen and returns clicks, keystrokes, and scrolls instead of calling an API. This lesson explains the perceive-think-act loop behind browser agents, the three ways an agent sees a page, why prompt injection is the defining risk of the category, and the guardrails, allowlists, approval gates, and in-context instruction sets that keep it from doing damage while it clicks.",
+        "date": "October 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Computer-Use Agents",
+          "Browser Automation",
+          "Prompt Injection",
+          "Safety",
+          "Guardrails",
+          "Accessibility Tree"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-frameworks-build-buy-lock-in-escape-hatches",
+        "title": "Lesson 69: Agent Frameworks: Build vs Buy, Lock-In, and Escape Hatches",
+        "series": "agentic-ai",
+        "lesson": 69,
+        "excerpt": "You can build an agent from primitives, adopt an open-source framework, or rent a whole platform. This lesson defines the three paths, the orchestration layer at the center of the decision, the lock-in each one quietly costs you, and the escape hatches, MCP first among them, that let you leave. Its worked example is an invoice-triaging agent Adroit weighed across all three routes before shipping.",
+        "date": "October 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Agent Frameworks",
+          "Build vs Buy",
+          "LangGraph",
+          "MCP",
+          "Vendor Lock-In",
+          "Orchestration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "architecture-spectrum-orchestration-vs-autonomy",
+        "title": "Lesson 70: The Architecture Spectrum: Orchestration vs Autonomy",
+        "series": "agentic-ai",
+        "lesson": 70,
+        "excerpt": "Every agentic system you will build sits somewhere on a spectrum between full orchestration and full autonomy. At one end the code decides the path: LLM calls and tools wired into predefined steps, which gives you predictability and a fixed cost. At the other the model decides the path: an agent given a goal and a set of tools chooses its own steps, which gives you flexibility at the price of trust. This lesson gives you a decision framework: how to read a task and place it correctly on that line, when an orchestrating workflow is the right call, when a single autonomous agent is, and how to hybridize the two so the deterministic parts stay deterministic and only the genuinely open-ended parts get agency.",
+        "date": "October 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Orchestration",
+          "Autonomy",
+          "Workflow",
+          "Agent Design",
+          "Architecture Spectrum",
+          "Decision Framework"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-agent-platforms-serving-control-plane-data-plane",
+        "title": "Lesson 71: Enterprise Agent Platforms: Serving, Control Plane, and Data Plane",
+        "series": "agentic-ai",
+        "lesson": 71,
+        "excerpt": "A single agent is a program you can run on a laptop. An enterprise agent platform is the infrastructure that lets hundreds of them run safely, governed, and at scale. This lesson breaks a platform into the three planes the industry has converged on: the serving plane that hosts your model and runs inference, the control plane that governs identity, policy, and lifecycle, and the data plane where agents actually reason, call tools, and move context. You will learn what each plane owns, why the separation between them is the load-bearing idea, and how to read any vendor's platform through this lens.",
+        "date": "October 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Agent Platform",
+          "Serving Plane",
+          "Control Plane",
+          "Data Plane",
+          "Inference",
+          "Governance",
+          "Enterprise AI"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-the-platform-control-plane-data-plane-gateway-policy-layer",
+        "title": "Lesson 72: Building the Platform: Control Plane, Data Plane, Gateway, and Policy Layer",
+        "series": "agentic-ai",
+        "lesson": 72,
+        "excerpt": "Lesson 71 taught you how to read a platform through its three planes. Building one is a different job. This lesson is about constructing the four concrete pieces: the gateway that sits in the traffic path, the policy layer that makes the decisions, the control plane that governs identity and lifecycle, and the data plane that carries the agent's work. The load-bearing seam between them is the gateway, because it is the one place where policy can actually meet traffic and stop an action before it happens. You will learn the policy decision point versus policy enforcement point split, how policy as code with a default-deny rule turns governance into something you can review and roll back in git, and how token budgets and a single structured log turn the whole thing into a system you can operate.",
+        "date": "October 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Agent Platform",
+          "API Gateway",
+          "Policy as Code",
+          "Control Plane",
+          "Data Plane",
+          "OPA",
+          "Rego",
+          "Enterprise AI"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-architecture-token-budgets-infrastructure-finops",
+        "title": "Lesson 73: Cost Architecture for Enterprise AI: Token Budgets, Infrastructure, and FinOps",
+        "series": "agentic-ai",
+        "lesson": 73,
+        "excerpt": "Lesson 72 showed you how to build the platform that enforces policy. This lesson is about what that platform costs to run, because an agent bills the moment it thinks and never stops until a budget stops it. A single agent task can fan out into dozens of model calls, tool invocations, and retries, and the token bill compounds in ways a normal API call never does. You will learn the three-lever cost identity that frames every optimization, why cost per completed task beats cost per token as your operating metric, how token budgets and throughput planning keep a runaway loop from emptying the account, the crossover where self-hosted infrastructure beats a managed API, and how FinOps turns the whole thing into a number a finance team can argue with.",
+        "date": "October 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Cost Architecture",
+          "Token Budgets",
+          "FinOps",
+          "Prompt Caching",
+          "Model Routing",
+          "Unit Economics",
+          "Enterprise AI"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-review-full-threat-model-agent-system",
+        "title": "Lesson 74: The Security Review: A Full Threat Model for an Agent System",
+        "series": "agentic-ai",
+        "lesson": 74,
+        "excerpt": "A security review for an agent is not the same checklist you run on a web service. Legacy threat modeling assumed a deterministic process with predictable inputs, outputs, and failure modes; an agent is a chain where the user prompt, retrieved documents, tool results, and memory all merge into one context window that decides the next action. That changes what you are protecting and how an attacker reaches it. This lesson builds a full threat model for an agent, one that starts by naming the assets and trust boundaries, then runs the threat set: prompt injection, tool misuse, excessive agency, and data exfiltration. It re-reads STRIDE as threats to an agent rather than threats to a process, walks a complete attack chain on a refund agent, and turns the whole thing into a written security review you can audit and re-run when the system changes.",
+        "date": "October 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Security",
+          "Threat Modeling",
+          "Prompt Injection",
+          "Excessive Agency",
+          "Data Exfiltration",
+          "MITRE ATLAS",
+          "STRIDE"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "incident-response-hallucinations-data-leaks-rollback-postmortems",
+        "title": "Lesson 75: Incident Response for Agents: Hallucinations, Data Leaks, Rollback, and Postmortems",
+        "series": "agentic-ai",
+        "lesson": 75,
+        "excerpt": "Lesson 74 mapped what can go wrong and how to audit against it. This lesson covers what you do when the controls break anyway and an agent takes an action you did not authorize. An agent incident is not a service outage: the actor is an autonomous system that acted while nobody watched, the evidence is volatile, and part of the harm cannot be undone, only compensated. This lesson gives the full responder arc: detecting the incident with tripwires, triaging it into the failure class that decides the first move, freezing the trace before any rollback, containing with a kill switch, rolling back or compensating by action class, and running a blameless postmortem that ships a fix. It walks one complete incident on an order-support agent and lays out the runbook you should have written before the page landed.",
+        "date": "October 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Incident Response",
+          "Hallucination",
+          "Data Leak",
+          "Rollback",
+          "Postmortem",
+          "SRE"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "auditing-agents-logs-replay-forensics-compliance-evidence",
+        "title": "Lesson 76: Auditing Agents: Logs, Replay, Forensics, and Compliance Evidence",
+        "series": "agentic-ai",
+        "lesson": 76,
+        "excerpt": "Lesson 75 taught you to freeze the trace during an incident. This lesson is about the standing record you build so every investigation and every regulator has something to read. An agent is not a service you can restart and hope: it is a system that looped, branched, called tools, and acted, and the only way to answer what it did and why is to audit the record. This lesson covers what the audit record must capture, the trace structure that names every step, how replay turns that record into a reproducible witness, how digital forensics makes it admissible as evidence, and how the same logs satisfy GDPR accountability and the EU AI Act's record-keeping duty.",
+        "date": "October 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Agent Observability",
+          "Audit Logging",
+          "Replay",
+          "Digital Forensics",
+          "Compliance",
+          "Evidence"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-to-agent-communication-protocols-contracts-discovery",
+        "title": "Lesson 77: Agent-to-Agent Communication: Protocols, Contracts, and Discovery",
+        "series": "agentic-ai",
+        "lesson": 77,
+        "excerpt": "Lesson 76 gave you the record an agent leaves behind. This lesson is about the boundary where two agents meet and neither can read the other's memory, prompts, or tools. You learn how agent discovery works through the Agent Card, why the task lifecycle is the real contract between peers, how transport and version negotiation prevent silent breakage, and which parts of the agreement the protocol leaves for you to write.",
+        "date": "October 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "16 min read",
+        "tags": [
+          "A2A",
+          "Agent Interoperability",
+          "Agent Discovery",
+          "Protocol Design",
+          "Trust"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "workflow-engines-vs-agents-deterministic-orchestration",
+        "title": "Lesson 78: Workflow Engines vs Agents: When to Use Deterministic Orchestration",
+        "series": "agentic-ai",
+        "lesson": 78,
+        "excerpt": "Lesson 77 gave you two agents that can find each other and finish a task. This lesson asks whether the task needed an agent. You learn what a workflow engine actually guarantees (durable state, replay, retries, exactly-once execution), what an agent buys in exchange for variance, a five-question test that separates the two, and how to put an agentic step inside a deterministic skeleton without poisoning either one.",
+        "date": "October 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Workflow Engines",
+          "Durable Execution",
+          "Deterministic Orchestration",
+          "Temporal",
+          "Step Functions",
+          "Agents"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 63,
+    "totalLessons": 78,
     "curriculumLessons": 90
   },
   {
@@ -1387,10 +1672,791 @@ export const learnSeries: LearningSeries[] = [
           "Procurement"
         ],
         "status": "published"
+      },
+      {
+        "slug": "licensing-and-procurement-what-you-are-actually-buying",
+        "title": "Lesson 18: Licensing and Procurement: What You Are Actually Buying",
+        "series": "ai-adoption",
+        "lesson": 18,
+        "excerpt": "The demo ended and the contract arrived. This lesson is about what you are actually buying when you sign for an AI tool: a bundle of rights, costs, and risks that no sales call will show you. It defines the licensing models you will be quoted (per seat, per token, per activity, per outcome, and the hybrid most vendors actually sell), walks a worked example that prices the same assistant three different ways and shows how wildly the annual bill and its predictability can differ, then takes you clause by clause through the contract language that hides the real deal: who owns the outputs, whether your data trains the model, who pays when the output is wrong, and what happens when the vendor changes the model or silently renews the term. It ends with a try-it exercise that reads the AI agreement your organization is actually considering and decides, before you sign, what you are really buying.",
+        "date": "October 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Procurement"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "security-ownership-threat-model-for-your-ai-stack",
+        "title": "Lesson 19: Security Ownership: Threat Model for Your AI Stack",
+        "series": "ai-adoption",
+        "lesson": 19,
+        "excerpt": "You procured the tool in Lesson 18 and read the contract, but the contract names the vendor's liabilities, not anyone inside your company who answers when the tool is running. This lesson is about deciding, plainly and before an incident, what could actually go wrong with your AI stack and whose job it is to catch and answer each failure. It defines a threat model in plain language, adapts it to the specific ways AI breaks security assumptions, walks a worked example that builds a threat map for one real AI use case and scores each risk, then gives you a procedure for assigning a named owner to every risk so security is a set of accountable jobs rather than a vague wish that IT handles it.",
+        "date": "October 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "shadow-it-discovering-and-governing-unsanctioned-ai",
+        "title": "Lesson 20: Shadow IT: Discovering and Governing Unsanctioned AI",
+        "series": "ai-adoption",
+        "lesson": 20,
+        "excerpt": "Your people are already using AI tools you never approved, and banning them makes it worse. This lesson is about shadow IT in its newest form: the unsanctioned AI that has already arrived before you know it exists. It defines the terms, shows why prohibition fails, walks you through a concrete discovery and triage of a real inventory, and ends with a try-it exercise that finds and governs the shadow AI in your own organization. The goal is not detection theater. It is a repeatable loop that turns invisible usage into a governed, usable inventory.",
+        "date": "October 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "privacy-compliance-gdpr-ccpa-and-your-ai-use",
+        "title": "Lesson 21: Privacy Compliance: GDPR, CCPA, and Your AI Use",
+        "series": "ai-adoption",
+        "lesson": 21,
+        "excerpt": "AI training and inference run on personal data, which means your AI use is anchored to privacy law whether you planned for it or not. This lesson walks a non-technical owner through the two frameworks you are most likely to meet: the EU General Data Protection Regulation (GDPR) and California's Consumer Privacy Act (CCPA). It defines personal data and automated decision-making, explains what each law actually requires of an organization that runs AI, separates the real obligations from the myths, and gives you a plain checklist for figuring out which rules apply to your own AI use cases before a regulator does.",
+        "date": "October 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Privacy"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "incident-response-when-an-ai-tool-goes-wrong",
+        "title": "Lesson 22: Incident Response: When an AI Tool Goes Wrong",
+        "series": "ai-adoption",
+        "lesson": 22,
+        "excerpt": "Every AI program eventually hits the moment a tool fails, and the difference between a bad outcome and a disaster is whether you had a plan before it happened. This lesson teaches a non-technical owner how to respond when an AI tool goes wrong. It defines what an AI incident actually is, separates an incident from a near miss, walks you through a concrete response sequence, and ends with a try-it exercise that builds your own incident response plan before you need it.",
+        "date": "October 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "model-and-provider-risk-dependency-and-lock-in",
+        "title": "Lesson 23: Model and Provider Risk: Dependency and Lock-In",
+        "series": "ai-adoption",
+        "lesson": 23,
+        "excerpt": "Most of the AI in your organization runs on models and services someone else built and controls. That dependency is a risk, and it is easy to underestimate. This lesson teaches a non-technical owner where model and provider risk lives, what lock-in actually costs, and how to build resilience into an AI program so a vendor's model change, outage, price increase, or shutdown does not become your incident. It defines the terms, works a concrete example where a provider retires the exact model a team built around, and ends with a try-it exercise that turns your top AI tool into a one-page dependency and exit plan.",
+        "date": "October 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "intellectual-property-your-data-your-outputs",
+        "title": "Lesson 24: Intellectual Property: Your Data, Your Outputs",
+        "series": "ai-adoption",
+        "lesson": 24,
+        "excerpt": "When your team uses AI, two things leave your control: the data you put in and the outputs you get out. Both raise ownership questions that most organizations never answer until a dispute, a registration, or an audit forces them. This lesson teaches a non-technical owner where the intellectual property risk in AI actually lives. You will learn that copyright only protects what a human wrote, that a contract saying you own an output cannot manufacture a copyright the law does not recognize, that the vendor's right to train on your data is the single most important clause to check, and how to protect the outputs your business actually depends on.",
+        "date": "October 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "guardrails-for-agentic-and-automated-ai",
+        "title": "Lesson 25: Guardrails for Agentic and Automated AI",
+        "series": "ai-adoption",
+        "lesson": 25,
+        "excerpt": "The moment AI stops waiting for you and starts acting on its own, the rules of oversight change. This lesson is about guardrails: the boundaries and controls that keep an automated or agentic AI system inside its lane even when the model is wrong, stubborn, or tricked. You will learn what agentic AI is and how it differs from the tools you have already governed, why guardrails must be deterministic when the model is probabilistic, and how to build five families of guardrails: scope, permission, reversibility, observability, and containment. A worked example shows a leader letting an automation run while keeping the failures cheap and reversible.",
+        "date": "October 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "auditing-ai-use-on-a-regular-cadence",
+        "title": "Lesson 26: Auditing AI Use on a Regular Cadence",
+        "series": "ai-adoption",
+        "lesson": 26,
+        "excerpt": "Setting up an AI policy is a start. Knowing it is still true is a separate, repeated job. This lesson is about auditing: the scheduled, evidence-based check that your AI inventory, your policy, your controls, and your real usage still match. You will learn the difference between an audit and continuous monitoring, why a calendar cadence is what keeps a governance program honest, how to define a concrete scope and pull evidence instead of opinions, and how to turn each audit into a short list of fixes you can actually schedule. A worked example walks through a quarterly audit that catches a license mismatch, a drift in tool usage, and a stale policy before any of them became an incident. The lesson ends with a try-it that runs your own first audit and a teaser for the next lesson on budgeting AI spend across teams.",
+        "date": "October 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "budgeting-ai-spend-across-teams",
+        "title": "Lesson 27: Budgeting AI spend across teams",
+        "series": "ai-adoption",
+        "lesson": 27,
+        "excerpt": "AI spend does not act like the software budgets you already run. It is partly fixed and partly usage-driven, it scales to match adoption, and it spikes exactly when a workflow succeeds. This lesson gives you a way to budget for that: split the spend into a central foundation, seats sized to the people who actually use the tools, and a capped, attributed pool for the usage that grows. You will learn why per-seat and usage-based pricing behave differently, how showback and chargeback turn visibility into ownership, and how to run a monthly review with unit economics instead of a guess. A worked example shows a mid-size company building a whole-year AI budget and putting controls on the volatile part.",
+        "date": "October 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Finance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "proving-the-ai-programs-roi-to-the-business",
+        "title": "Lesson 28: Proving the AI program's ROI to the business",
+        "series": "ai-adoption",
+        "lesson": 28,
+        "excerpt": "Adoption is everywhere in most organizations and the financial proof is not. This lesson closes that gap. It defines ROI, baseline, and total cost of ownership for AI, lays the evidence out in four layers so a CFO can read it, and stress tests the headline number so you never hand finance a claim that collapses. A worked example turns a support automation pilot into a realized return, and a try-it prompt builds one case you can defend before the next budget conversation. It ends with the next lesson on scaling from pilot to org-wide.",
+        "date": "October 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Finance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "scaling-from-pilot-to-org-wide",
+        "title": "Lesson 29: Scaling from Pilot to Org-Wide",
+        "series": "ai-adoption",
+        "lesson": 29,
+        "excerpt": "A pilot that proves value and a program that runs at scale are two different things, and most organizations are stuck between them. This lesson defines the terms, shows why scaling breaks what the pilot proved, walks you through the four phases and decision gates that get a use case from pilot to business as usual, and ends with a try-it exercise that builds a scale decision gate for one of your own pilots. It is the lesson where one credible use case becomes a portfolio.",
+        "date": "October 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Strategy"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-a-cross-functional-ai-council-or-governance-group",
+        "title": "Lesson 30: Building a Cross-Functional AI Council or Governance Group",
+        "series": "ai-adoption",
+        "lesson": 30,
+        "excerpt": "A scaling discipline run by one person, however good, is still a personal system, and personal systems do not survive contact with the rest of the company. This lesson turns the program into the organization's: it defines what an AI council is and what it is not, shows why advisory bodies without decision rights become governance theater, walks through the cross-functional membership, decision rights, and escalation lines a council actually needs, and builds a worked example of a council that owns approving, pausing, and stopping AI use. It ends with the next lesson on standardizing tools and avoiding pile-up.",
+        "date": "October 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "standardizing-tools-and-avoiding-pile-up",
+        "title": "Lesson 31: Standardizing tools and avoiding pile-up",
+        "series": "ai-adoption",
+        "lesson": 31,
+        "excerpt": "Tool pile-up is what happens when buying is easy, approving is slow, and nobody owns the list of what the company runs. This lesson gives you the standard stack: a short, owned list of primary tools mapped to the jobs people actually do, plus a written path for the exceptions. You will learn how to inventory what is really in use (including the subscriptions on company cards and the AI tiers hidden inside existing software), how to classify tools by job instead of by feature, how to consolidate at renewal rather than someday, and how to keep the stack from refilling. A worked example takes an organization from twenty AI tools down to seven without losing a single workflow.",
+        "date": "October 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "access-and-licensing-rollout-at-scale",
+        "title": "Lesson 32: Access and licensing rollout at scale",
+        "series": "ai-adoption",
+        "lesson": 32,
+        "excerpt": "A rollout is two systems wearing one name. Access decides who can open the tool, what they can reach inside it, and when that access ends. Licensing decides what you are committed to pay for, how seats move between people, and how you get them back. This lesson defines the vocabulary, compares per-seat and consumption licensing and what each one does to your ability to shrink, walks the provisioning chain from identity provider to platform seat, and shows the seat funnel that turns purchased licenses into habitual use. A worked example takes a 1,650-person insurer from a 1,000-seat annual commitment to a 820-seat renewal without losing anyone who actually uses the tool.",
+        "date": "October 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "17 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "Leadership",
+          "Operations"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 17,
+    "totalLessons": 32,
     "curriculumLessons": 40
+  },
+  {
+    "slug": "ai-power-user",
+    "name": "AI Power User",
+    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
+    "gradient": "from-cyan-500 to-purple-600",
+    "lessons": [
+      {
+        "slug": "from-user-to-power-user-owning-your-workflow",
+        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
+        "series": "ai-power-user",
+        "lesson": 1,
+        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
+        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
+        "series": "ai-power-user",
+        "lesson": 2,
+        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
+        "date": "September 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "decomposing-a-task-into-a-repeatable-flow-input-tool-output-review",
+        "title": "Lesson 3: Decomposing a Task into a Repeatable Flow: Input, Tool, Output, Review",
+        "series": "ai-power-user",
+        "lesson": 3,
+        "excerpt": "Lesson 2 gave you a named task, the frequent, same-shaped, low-risk one. This lesson turns that task into a flow by decomposing it into the four parts every workflow needs: input, tool, output, and review. It defines each part, walks through one person decomposing their weekly status email, and ends with a try-it prompt that produces your own four-part design, ready for Lesson 4.",
+        "date": "September 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-a-custom-tool-tailored-instructions-saved-context-your-own-project",
+        "title": "Lesson 4: Building a Custom Tool: Tailored Instructions, Saved Context, Your Own Project",
+        "series": "ai-power-user",
+        "lesson": 4,
+        "excerpt": "Lesson 3 decomposed your task into input, tool, output, and review, and you named the tool part. This lesson builds that tool properly. It defines what a custom tool is, why one prompt and a bit of setup beats re-explaining yourself every time, and how the three pieces, tailored instructions, saved context, and a project of your own, come together to give you something you control. A worked example follows one person building theirs, and a try-it prompt walks you through your own.",
+        "date": "September 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Custom Tools"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "connected-tools-stitching-the-apps-you-already-use",
+        "title": "Lesson 5: Connected Tools: Stitching the Apps You Already Use",
+        "series": "ai-power-user",
+        "lesson": 5,
+        "excerpt": "Lesson 4 gave you a custom tool built to your task. This lesson turns outward. It stitches the apps you already use into one connected flow, so one app's output feeds the next app's input instead of stopping at the chat window. It defines connected workflows, explains the handoff that makes them work, walks through the pattern tool-agnostically, and ends with a try-it prompt that maps a two-step chain of your own.",
+        "date": "September 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Connected Tools"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "structured-output-getting-data-back-in-a-format-downstream-tools-can-consume",
+        "title": "Lesson 6: Structured Output: Getting Data Back in a Format Downstream Tools Can Consume",
+        "series": "ai-power-user",
+        "lesson": 6,
+        "excerpt": "A connected workflow hands one step's output to the next, and that only works when the output arrives in a shape the next step can read. This lesson defines structured output, plain words for the JSON format at its center, and why a table or list beats a paragraph when a downstream tool is doing the consuming. A worked example follows one person turning meeting notes into actions a tracker can read, and a try-it prompt walks you through getting your own output into a shape that carries.",
+        "date": "September 25, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Structured Output"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "parameterized-prompts-templates-that-scale",
+        "title": "Lesson 7: Templates That Scale: Parameterized Prompts You Reuse With Different Inputs",
+        "series": "ai-power-user",
+        "lesson": 7,
+        "excerpt": "Lesson 6 fixed the shape of your answer. This lesson fixes the shape of your question: a template prompt you write once and reuse run after run with only a few variable slots filled fresh. It defines a parameterized prompt in plain words, shows why a stable frame beats re-deciding everything each time, and walks a worked example of someone turning a recurring weekly task into one reusable prompt. A try-it prompt gets you building your own template, and the close points at the real skill behind it: knowing when a task earns a template at all.",
+        "date": "September 28, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Prompt Templates"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "choosing-what-to-own-when-a-one-off-is-better-than-a-workflow",
+        "title": "Lesson 8: Choosing What to Own: When a One-Off Is Better Than a Workflow",
+        "series": "ai-power-user",
+        "lesson": 8,
+        "excerpt": "Lessons 3 through 7 taught you how to build workflows. This lesson is the discipline of choosing what to own, and it is the judgment that decides where all that building effort goes. It defines a one-off against a workflow, names the real cost of ownership (build cost plus the maintenance you carry forever), and gives you a three-question test for whether a task deserves a workflow at all. A worked example shows someone deciding one task earns a workflow while another stays a one-off, and a try-it prompt gets you running the test on your own work.",
+        "date": "September 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Ownership"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "versioning-your-tools-and-instructions-knowing-what-changed-and-why",
+        "title": "Lesson 9: Versioning Your Tools and Instructions: Knowing What Changed and Why",
+        "series": "ai-power-user",
+        "lesson": 9,
+        "excerpt": "A workflow that worked last month stops working this month, and you cannot say what changed. That is a version problem, not an AI problem. This lesson defines a version, a baseline, a changelog, and a rollback in plain words, shows why a running record of changes is the only reliable way to know what broke (and how to get the good version back), and walks a worked example of someone tracing a broken report back to a single tweak. A try-it prompt gets you building a one-line-per-change log for your own tools and instructions, and the close points at the underlying habit: treating every change as something you can name, date, and undo.",
+        "date": "September 30, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "8 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Versioning"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "testing-a-workflow-dry-runs-edge-cases-catching-bad-output",
+        "title": "Lesson 10: Testing a Workflow: Dry Runs, Edge Cases, and Spotting Bad Output Before It Ships",
+        "series": "ai-power-user",
+        "lesson": 10,
+        "excerpt": "The workflow you trust produced wrong output, and you only found out after it shipped. That is a testing problem, not a bad-luck problem. This lesson defines a dry run, an edge case, and bad output in plain words, shows why checking a workflow before it acts for real is the difference between catching a mistake and living with it, and walks a worked example of someone dry-running a report, probing awkward inputs, and catching a confident-looking error before anyone saw it. A try-it prompt gets you wrapping your own tool in a check-before-you-trust routine, and the close points at the underlying habit: treat whatever the tool produces as unverified until you run it somewhere safe first.",
+        "date": "October 1, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Testing"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "handling-failure-silent-errors-hallucinations-tools-that-break-mid-flow",
+        "title": "Lesson 11: Handling Failure: Silent Errors, Hallucinations, and Tools That Break Mid-Flow",
+        "series": "ai-power-user",
+        "lesson": 11,
+        "excerpt": "Testing reduces the chance a bad output ships, but it cannot make failure impossible. This lesson is the plan for when something goes wrong anyway. It defines a silent error, where a step fails and nothing tells you, a hallucination, where the output is confidently wrong and your check may still miss it, and a mid-flow break, where the automation stops partway and you have to pick it up. A worked example shows Priya catching each of the three in her own workflow, and a try-it prompt gets you writing a failure plan for one of yours. The close points at the next lesson on scheduling and triggers, the cadence that decides how often your workflow runs and what happens when a run does not finish.",
+        "date": "October 2, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Failure"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "scheduling-and-triggers-cadence-batching-queues-event-hooks",
+        "title": "Lesson 12: Scheduling and Triggers: Cadence, Batching, Queues, and Event Hooks",
+        "series": "ai-power-user",
+        "lesson": 12,
+        "excerpt": "A workflow that only runs when you remember to start it is not yet owned. This lesson is the rhythm that makes a workflow run on its own. It defines cadence, the schedule that decides how often your automation runs, draws the line between a scheduled run and a triggered run, and walks the four choices that control the rhythm: how often it runs, whether it processes work one item at a time or in a batch, how it handles work that arrives faster than it can keep up, and whether it starts on a clock or on an event. A worked example shows Priya taking her monthly vendor summary and turning it into a cadence she sets once and stops thinking about. A try-it prompt gets you defining the cadence for one of your own workflows, and the close points at the next lesson on review gates, the human checkpoints that make a workflow you can trust.",
+        "date": "October 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Scheduling"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "review-gates-human-checkpoints-built-in-not-bolted-on-after",
+        "title": "Lesson 13: Review Gates: Human Checkpoints Built In, Not Bolted On After",
+        "series": "ai-power-user",
+        "lesson": 13,
+        "excerpt": "A review gate is a deliberate pause in a workflow where a person checks the output before the tool acts on it. This lesson shows why the gate has to be built into the design, placed at the step where it earns its interruption, and never added on at the end as an afterthought. It defines human-in-the-loop oversight, separates a mandatory gate from a monitoring glance, and names the failure that undoes both: automation complacency. A worked example walks Priya through placing three gates in her vendor summary so it can run unattended without eroding her judgment. A try-it prompt maps a workflow of yours, step by step, to the moments that deserve a human in the path. The close points at the next lesson on treating prompts like code.",
+        "date": "October 4, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Learn",
+          "AI",
+          "AI Power User",
+          "Workflow",
+          "Review Gates"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "treating-prompts-like-code-structure-maintainability-comments",
+        "title": "Lesson 14: Treating Your Prompts Like Code: Structure, Maintainability, Comments",
+        "series": "ai-power-user",
+        "lesson": 14,
+        "excerpt": "A prompt that works once is not the same as a prompt you can live with. This lesson is about treating your prompts like code, the way a developer treats a file they will have to read again. It defines structure, the clear sections and delimiters that let a future reader, human or model, parse what a prompt is asking, maintainability, the quality that lets you change one rule without breaking the rest, and comments, the notes that record why a rule exists and not just what it does. A worked example shows Dev recovering from a prompt that drifted into a fragile blob, and a try-it prompt gets you refactoring one of your own. The close points at the next lesson on assembling a multi-step pipeline from the pieces.",
+        "date": "October 6, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Prompt Structure"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "assembling-a-multi-step-pipeline-from-the-pieces",
+        "title": "Lesson 15: Assembling a Multi-Step Pipeline from the Pieces",
+        "series": "ai-power-user",
+        "lesson": 15,
+        "excerpt": "The pieces are built. Now they become a machine. This lesson is about assembling the components from earlier lessons into a single multi-step pipeline, one where data flows from an input step through a series of tool and review steps to a finished output. It defines a pipeline, a step, and a handoff, shows why the interface between steps is where pipelines break, and walks a worked example of someone wiring four components into one running flow. A try-it prompt gets you assembling your own pieces end to end, and the close points at the next lesson, the first full worked example of an ops and reporting workflow.",
+        "date": "October 7, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Pipeline"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "worked-example-a-an-ops-and-reporting-workflow-end-to-end",
+        "title": "Lesson 16: Worked Example A: An Ops and Reporting Workflow, End to End",
+        "series": "ai-power-user",
+        "lesson": 16,
+        "excerpt": "The pattern is built. Now watch it run. This lesson is the first full worked example of the course: a real operational and reporting job, taken from its first trigger through every step and handoff to its finished output, with the reasoning at each join made visible. It defines a worked example, an ops workflow, and a reporting workflow in plain words, then walks one person's weekly operations report end to end, showing where the pieces from earlier lessons earn their keep and where a simpler flow would have been better. A try-it prompt gets you auditing your own recurring report against the same moves, and the close points at the second worked example, a marketing and content workflow.",
+        "date": "October 8, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Reporting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "worked-example-b-a-marketing-and-content-workflow-end-to-end",
+        "title": "Lesson 17: Worked Example B: A Marketing and Content Workflow, End to End",
+        "series": "ai-power-user",
+        "lesson": 17,
+        "excerpt": "The second full worked example of the course, and this time the job is marketing and content. It defines a marketing workflow, a content workflow, a content calendar, and a brand voice in plain words, then follows one person's weekly content production from its first trigger through the data pull, the draft, the repurpose step, the review gate, and the finished output. It shows where the pieces from earlier lessons earn their keep, where a simpler flow would have been better, and how a review gate catches a fabricated statistic before it ships. A try-it prompt gets you auditing your own recurring content against the same moves, and the close points at the next lesson, the quality bar.",
+        "date": "October 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Marketing",
+          "Content"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "the-quality-bar-measuring-accuracy-and-catching-regressions",
+        "title": "Lesson 18: The Quality Bar: Measuring Accuracy and Catching Regressions",
+        "series": "ai-power-user",
+        "lesson": 18,
+        "excerpt": "The quality bar lesson turns from building and running workflows to judging them. It defines a quality bar, accuracy, and a regression in plain words, explains why a working workflow can quietly stop working, and gives you a small, repeatable way to measure whether a workflow is actually good: a golden set of known-good cases you re-run after every change. It defines the it-runs versus it-works-correctly gap that makes AI output hard to judge, follows one person's weekly report through building a ten-case bar and watching it catch a regression, and points out where the bar is cheap and where it is overkill. A try-it prompt gets you building your first bar on a workflow you already trust, and the close points at the next lesson, cost and limits.",
+        "date": "October 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Quality",
+          "Reliability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-and-limits-token-budgets-rate-limits-and-your-tools-constraints",
+        "title": "Lesson 19: Cost and Limits: Token Budgets, Rate Limits, and Your Tool's Constraints",
+        "series": "ai-power-user",
+        "lesson": 19,
+        "excerpt": "The cost and limits lesson turns from judging a workflow to affording it. It defines a token, the unit of text a model processes, a context window, the amount a model can consider at once, a token budget, the amount a workflow can afford to spend, and a rate limit, the cap on how fast a tool will respond. It explains why bigger context windows cost more to run, why providers cap how often you can call a tool, and how a spend cap protects you from a runaway run. A worked example follows Priya as her weekly report grows until it stops fitting, then hits a rate limit, then quietly runs up her bill, and it shows the small habits that fix all three. A try-it prompt gets you auditing your own workflows for the same three constraints, and the close points at the next lesson on when automation is wrong.",
+        "date": "October 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Cost",
+          "Limits"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "when-automation-is-wrong-what-stays-manual-and-sunsetting-honestly",
+        "title": "Lesson 20: When Automation Is Wrong: What Stays Manual, and Sunsetting Honestly",
+        "series": "ai-power-user",
+        "lesson": 20,
+        "excerpt": "Everything before this lesson made the case for automation. This one is the honest counterweight: when automation is the wrong answer, what you should keep doing by hand, and how to retire a workflow that has stopped earning its keep. It defines automation bias, the cognitive pull that makes you over-trust a tool, and total cost of ownership, the reason every workflow quietly costs more than the hours it saves. A worked example shows Priya spotting both problems in her own stack and retiring a workflow honestly, and a try-it prompt gets you running an honest review of one of yours. The close points at the next lesson on documenting your automation stack, which is what makes every future decision about retire or keep a fast one.",
+        "date": "October 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Sustaining"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "documenting-your-automation-stack-a-personal-runbook",
+        "title": "Lesson 21: Documenting Your Automation Stack: A Personal Runbook",
+        "series": "ai-power-user",
+        "lesson": 21,
+        "excerpt": "An automation you cannot explain six months from now is an automation you will eventually lose. This lesson defines a runbook, a personal runbook, and the automation stack in plain words, shows why the written record matters more than the workflow itself, and walks a worked example of someone who documents their own five automations before the details slip. A try-it prompt gets you writing one runbook entry for a workflow you already run, and the close points at the habit underneath: your automations are not finished when they first work, they are finished when someone (including your future self) can run and repair them from a written page alone.",
+        "date": "October 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Documentation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "sharing-advanced-workflows-team-multiplier",
+        "title": "Lesson 22: From Power User to Team Multiplier: Sharing Advanced Workflows",
+        "series": "ai-power-user",
+        "lesson": 22,
+        "excerpt": "You mastered a workflow and wrote it down in a runbook. That makes you a power user. This lesson is about the next step: turning that individual skill into capability your whole team can use. It defines a team multiplier, a shared workflow, a community of practice, and shadow AI in plain words, then follows one person turning the runbook entry from Lesson 21 into a workflow four teammates actually run, keeping the review gate, the version discipline, and the data rules intact as it spreads. A try-it prompt gets you packaging one of your own workflows for a teammate, and the close points at the next lesson, keeping current as tools and models update.",
+        "date": "October 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Team",
+          "Collaboration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "keeping-current-adapting-to-tool-and-model-updates",
+        "title": "Lesson 23: Keeping Current: Adapting to Tool and Model Updates",
+        "series": "ai-power-user",
+        "lesson": 23,
+        "excerpt": "Tools and models change under you, often invisibly. This lesson shows how to notice an update before it breaks a workflow, and when to ride it out versus adapt.",
+        "date": "October 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Maintenance",
+          "Updates"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "failure-post-mortem-when-a-workflow-died-what-you-do-next",
+        "title": "Lesson 24: Failure Post-Mortem: When a Workflow Died, What You Do Next",
+        "series": "ai-power-user",
+        "lesson": 24,
+        "excerpt": "A workflow that dies is not a dead end. It is a source of information. This lesson shows how to run a blameless post-mortem: separate the symptom from the root cause, trace the chain with five whys, and turn the failure into fixes that keep the same mistake from taking down the next workflow.",
+        "date": "October 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Reliability",
+          "Post-Mortem"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "judging-a-tools-reliability",
+        "title": "Lesson 25: The Power User's Mental Model: Judging a Tool's Reliability",
+        "series": "ai-power-user",
+        "lesson": 25,
+        "excerpt": "Before you trust a tool, a model, or a platform with a workflow, you need an honest estimate of how reliable it is. This lesson builds the mental model that separates a dependable tool from a fragile one, weighs a vendor's track record against its promises, and matches a tool's reliability to what your workflow actually needs.",
+        "date": "October 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Reliability",
+          "Judgment"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "building-a-personal-automation-library-that-compounds",
+        "title": "Lesson 26: Building a Personal Automation Library That Compounds",
+        "series": "ai-power-user",
+        "lesson": 26,
+        "excerpt": "Every workflow you have built so far has been a single, finished thing. This lesson is the turn where you stop collecting finished workflows and start building a library of reusable pieces, the kind that makes each new automation cheaper than the last. It defines an automation library, compounding, a reusable building block, and the DRY principle in plain words, then follows Priya as she takes four workflows she already built and extracts the parts that transfer, so her next workflow costs half the time of her first. It shows what belongs in a library, how to structure it so you can actually find the pieces, and how a compound stack is the difference between working in AI and owning your workflow. The close points at the capstone, where you stop building pieces and build a full workflow of your own, end to end.",
+        "date": "October 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Sustaining",
+          "Library"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-a-choose-and-scope-your-own-end-to-end-workflow",
+        "title": "Lesson 27: Capstone A: Choose and Scope Your Own End-to-End Workflow",
+        "series": "ai-power-user",
+        "lesson": 27,
+        "excerpt": "The capstone is where the course stops being a set of lessons and becomes one workflow you actually own. This first capstone lesson covers the two decisions that decide whether your build succeeds before you build anything: which workflow to take on, and how to write a scope precise enough to build from. It gives you five selection tests, a seven-part scoping template, and a worked example of Priya choosing her fifth workflow and writing the scope that Capstone B will assemble. It ends with a try-it prompt that walks you through choosing and scoping your own capstone.",
+        "date": "October 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-b-build-it-design-and-assemble",
+        "title": "Lesson 28: Capstone B: Build It (Design and Assemble)",
+        "series": "ai-power-user",
+        "lesson": 28,
+        "excerpt": "Capstone A gave you a scope and a definition of done. This lesson takes that page and turns it into a workflow that actually runs. It covers how to design the pipeline from the scope, reusing the pieces you already built instead of writing fresh ones, and how to assemble the whole thing in the right order so you find wiring mistakes early. A worked example follows Priya building her vendor risk digest against the scope and definition of done she wrote in Capstone A. It ends with a try-it prompt that assembles your capstone and runs its first dry test.",
+        "date": "October 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-c-harden-it-test-review-gates-reliability",
+        "title": "Lesson 29: Capstone C: Harden It (Test, Review Gates, Reliability)",
+        "series": "ai-power-user",
+        "lesson": 29,
+        "excerpt": "Capstone B left you with a workflow that passed one dry run. This lesson makes it durable. It covers three layers of hardening: a regression set of past inputs you can re-run after every change, review gates that stop a bad output instead of merely noticing it, and failure handling that makes a broken run loud, early, and cheap. A worked example follows Priya hardening her vendor risk digest and finding three real breaks before the first real month. It ends with a try-it prompt and a hardening checklist you can run against your own capstone.",
+        "date": "October 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capstone-d-ship-document-and-reflect-on-the-full-stack",
+        "title": "Lesson 30: Capstone D: Ship, Document, and Reflect on the Full Stack",
+        "series": "ai-power-user",
+        "lesson": 30,
+        "excerpt": "Capstone C left you with a workflow that has been tested, gated, and instrumented. This final lesson closes the capstone by making it something other than your private knowledge: a runbook entry another person can operate from, a decision record that explains why it is built the way it is, a retro built from measured numbers rather than memory, and a handover test that proves the documentation works before you rely on it. A worked example follows Priya shipping her vendor risk digest and running the retro that changes her next build. It ends with a try-it prompt, one pass back over the whole course, and the series restarting at Lesson 1.",
+        "date": "October 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "LLMs",
+          "AI Power User",
+          "Workflow",
+          "Capstone"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 30,
+    "curriculumLessons": 30
   },
   {
     "slug": "salesforce-architect",
@@ -2455,9 +3521,273 @@ export const learnSeries: LearningSeries[] = [
           "Certifications"
         ],
         "status": "published"
+      },
+      {
+        "slug": "cta-security-enterprise-grade-security-model-across-systems",
+        "title": "Lesson 63: CTA Security: Designing an Enterprise-Grade Security Model Across Systems",
+        "series": "salesforce-architect",
+        "lesson": 63,
+        "excerpt": "The CTA security domain as a design discipline: drawing the shared responsibility line, making one identity provider the single source of truth, applying the four-layer access model, choosing an encryption strategy, and layering controls so a hub that aggregates five systems is not only as safe as its weakest credential.",
+        "date": "October 09, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "CTA",
+          "Security",
+          "Certifications"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cta-data-data-strategy-governance-quality-lineage",
+        "title": "Lesson 64: CTA Data: Data Strategy, Governance, Quality, and Lineage",
+        "series": "salesforce-architect",
+        "lesson": 64,
+        "excerpt": "The CTA data domain as a design discipline: deciding what data the enterprise actually needs, who owns and governs it, how it stays trustworthy under constant change, and how lineage makes every transformation traceable from raw source to the harmonized single source of truth.",
+        "date": "October 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "CTA",
+          "Data",
+          "Certifications"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "enterprise-ai-reference-architectures-rag-agent-platforms-llm-gateways",
+        "title": "Lesson 65: Enterprise AI Reference Architectures: RAG, Agent Platforms, and LLM Gateways",
+        "series": "salesforce-architect",
+        "lesson": 65,
+        "excerpt": "The reference architecture an enterprise uses to wire AI systems to its data at scale: how retrieval-augmented generation grounds answers in enterprise data, how an agent platform orchestrates multi-step work, and how an LLM gateway becomes the single control point for model access, cost, and governance.",
+        "date": "October 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Architecture",
+          "AI",
+          "Enterprise",
+          "RAG",
+          "Agents"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "development-lifecycle-deployment-architecture-devops-enterprise-scale",
+        "title": "Lesson 66: Development Lifecycle and Deployment Architecture: DevOps at Enterprise Scale",
+        "series": "salesforce-architect",
+        "lesson": 66,
+        "excerpt": "How enterprise teams take a build from a developer's machine to a monitored, released production system. Source control and branching strategy, continuous integration and continuous delivery, environment promotion through the sandbox chain, and the observability that tells you a release is actually working.",
+        "date": "October 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Delivery",
+          "DevOps"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "identity-at-enterprise-scale-sso-scim-jit-provisioning-federation",
+        "title": "Lesson 67: Identity at Enterprise Scale: SSO, SCIM, JIT Provisioning, and Federation",
+        "series": "salesforce-architect",
+        "lesson": 67,
+        "excerpt": "How enterprise teams manage who their users are across many systems. Single sign-on and federated identity let one set of credentials work everywhere, while SCIM and just-in-time provisioning keep user records in sync without manual administration.",
+        "date": "October 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Identity",
+          "Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "disaster-recovery-backup-restore-rto-rpo-drills",
+        "title": "Lesson 68: Disaster Recovery: Backup, Restore, RTO, RPO, and Drills",
+        "series": "salesforce-architect",
+        "lesson": 68,
+        "excerpt": "What recovery actually means for a Salesforce org. The difference between backup and restore, how Recovery Time Objective and Recovery Point Objective turn fuzzy promises into measurable targets, which native tools get you there, and why a backup you have never restored is a backup you do not have.",
+        "date": "October 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Reliability",
+          "Disaster Recovery"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cta-design-scenario-practice-end-to-end",
+        "title": "Lesson 69: CTA Design Scenario Practice: A Real Scenario End to End",
+        "series": "salesforce-architect",
+        "lesson": 69,
+        "excerpt": "Taking the whole architect toolkit and pointing it at one messy client scenario: how to read a requirement, fix the system of record, design the data, integration, identity, and security models as one coherent whole, write measurable targets, record the tradeoffs you accepted, and turn it all into a board-grade presentation you can defend.",
+        "date": "October 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "CTA",
+          "Certifications"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "reliability-engineering-slis-slos-error-budgets-runbooks",
+        "title": "Lesson 70: Reliability Engineering: SLIs, SLOs, Error Budgets, and Runbooks for Agent Operations",
+        "series": "salesforce-architect",
+        "lesson": 70,
+        "excerpt": "Reliability is not a feeling and it is not a vague high uptime goal. It is a numbers game: an SLI that measures what your users actually experience, an SLO that turns that measurement into a contract, an error budget that decides when a bad week should stop all releases, and a runbook that tells a calm stranger what to do at 3 AM. This lesson defines each term, applies them to a system that runs autonomous agents, and walks the arithmetic that turns 'reliable enough' from a phrase into a number your team can defend or spend.",
+        "date": "October 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Reliability",
+          "SLO",
+          "Site Reliability Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "event-streaming-at-scale-kafka-cdc-real-time-pipelines",
+        "title": "Lesson 71: Event Streaming at Scale: Kafka, Change Data Capture, and Real-Time Pipelines",
+        "series": "salesforce-architect",
+        "lesson": 71,
+        "excerpt": "This is the infrastructure lesson. Lesson 28 taught you to move a trickle of events inside Salesforce's own bus; this one is about the distributed stream that sits behind a modern real-time integration: an append-only log like Kafka where order is guaranteed per partition, change data capture that turns every row change into an event, and the pipeline that lets a fast consumer and a slow consumer read the same committed log without slowing each other down. The Salesforce system architect needs this because real-time replication, streaming analytics, and event-driven integrations are built on it, and scaling them correctly means reasoning about partitions, keys, replay, and delivery guarantees.",
+        "date": "October 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Kafka",
+          "Event Streaming",
+          "Change Data Capture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "api-management-gateway-throttling-versioning-observability",
+        "title": "Lesson 72: API Management: Gateway, Throttling, Versioning, and Observability",
+        "series": "salesforce-architect",
+        "lesson": 72,
+        "excerpt": "The operational layer under every integration: how an API gateway becomes the single controlled entry point for consumers, how throttling keeps bursts from collapsing your org, how versioning turns a breaking change into a controlled release, and how observability turns an API you hope works into one you can prove works. A worked example walks an inventory API through all four, and a try-it prompt gets you planning the API management story for a service you own.",
+        "date": "October 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "API Management",
+          "Gateway",
+          "Rate Limiting",
+          "Versioning",
+          "Observability",
+          "Salesforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "integration-patterns-routers-translators-aggregators-eip",
+        "title": "Lesson 73: Enterprise Integration Patterns: Routers, Translators, Aggregators, and EIP",
+        "series": "salesforce-architect",
+        "lesson": 73,
+        "excerpt": "The shared vocabulary of enterprise integration: what the Enterprise Integration Patterns (EIP) catalog is, how a Message Router decides where a message goes without changing it, how a Message Translator adapts one format or contract to another, and how an Aggregator combines several related messages into one result. A worked example routes, translates, and aggregates an order across ERP, billing, and shipping, and a try-it prompt gets you sketching the same three shapes for an integration you own.",
+        "date": "October 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "EIP"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "monolith-vs-microservices-vs-platform-salesforce-integration-hub",
+        "title": "Lesson 74: Monolith vs Microservices vs Platform: When Salesforce Is the Integration Hub",
+        "series": "salesforce-architect",
+        "lesson": 74,
+        "excerpt": "How to choose the shape of an integration: a single monolith, many microservices, or a platform that mediates them all. It defines the three terms, shows how even the Salesforce platform itself evolved from a monolith into a core plus independent services, and gives a decision frame for when Salesforce should be the integration hub rather than one system at the edge of the web, with governor and API limits as the real cost of centralizing there.",
+        "date": "October 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Integration",
+          "Platform Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "agent-architecture-patterns-orchestration-planning-tool-use",
+        "title": "Lesson 75: Agent Architecture Patterns: Orchestration, Planning, and Tool Use",
+        "series": "salesforce-architect",
+        "lesson": 75,
+        "excerpt": "How to give an AI agent structure: the three capabilities that turn a language model into something that acts. It defines the difference between a workflow and an agent, then walks through the three building blocks of agent architecture, orchestration, planning, and tool use, and shows how they combine in a worked example. It is the general-system entry point to the course's agent thread.",
+        "date": "October 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Architecture",
+          "AI",
+          "Agents",
+          "Orchestration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "cost-architecture-licensing-api-consumption-storage-optimization",
+        "title": "Lesson 76: Cost Architecture: Licensing, API Consumption, Storage, and Optimization",
+        "series": "salesforce-architect",
+        "lesson": 76,
+        "excerpt": "Every Salesforce design carries a price, and the price is set by four separate meters: seats, API calls, storage, and AI credits. This lesson defines each meter, shows how each one is calculated, and works through an org whose integration design quietly overspends on all four.",
+        "date": "October 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Cost",
+          "Licensing",
+          "FinOps"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "capacity-planning-performance-at-scale-headroom-forecasting",
+        "title": "Lesson 77: Capacity Planning and Performance at Scale: Headroom, Forecasting, and the Load You Cannot See",
+        "series": "salesforce-architect",
+        "lesson": 77,
+        "excerpt": "Capacity is not a server size. It is the amount of work your org can absorb before one specific constraint breaks, and how many months of growth you have left before it does. This lesson covers headroom targets, growth forecasting from real telemetry, and how to tell whether you need more capacity or a better design.",
+        "date": "October 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "Performance",
+          "Capacity",
+          "Scalability"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 62,
+    "totalLessons": 77,
     "curriculumLessons": 90
   },
   {
@@ -2925,9 +4255,343 @@ export const learnSeries: LearningSeries[] = [
           "Certification"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-28-gv-2b-governance-implementation-scenarios-data-dictionar",
+        "title": "Data Architect GV-2b: Governance Implementation Scenarios: Data Dictionary, Ownership, Quality Metrics, Tools",
+        "series": "salesforce-data-architect",
+        "lesson": 28,
+        "excerpt": "Compare and contrast various approaches and considerations for designing and implementing an enterprise data governance program, applied through the data dictionary, data ownership, quality metrics, and supporting tooling. Covers why the data dictionary or business glossary is the operational artifact that makes governance real and why it must be maintained rather than written once, the ownership models that assign accountability (the business owner accountable for meaning and use, the technical custodian who operates the systems, and the steward who maintains quality day to day) and why a field without an owner is ungoverned, the six data quality dimensions of accuracy, completeness, consistency, timeliness, uniqueness, and validity and how to report and trend them, why quality metrics without an issue-management workflow fix nothing, the metadata catalog and quality tooling ecosystem (Collibra, Informatica, Ataccama) and the on-platform tools (Object Manager descriptions, Field Usage, Setup Audit Trail, reports) and why tooling supports but never replaces the framework, the governance scenario applications of a single customer view program and a GDPR program, and how to report governance to leadership through a scorecard. Includes worked scenarios, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 9, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "25 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Governance",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective",
+        "title": "Data Architect LV-1A: LDV Fundamentals: Skinny Tables, Indexing, Selective SOQL, Record Types, Picklists",
+        "series": "salesforce-data-architect",
+        "lesson": 29,
+        "excerpt": "Given a customer scenario, design a data model that scales considering large data volume and solution performance, applying skinny tables, custom indexes, selective queries, and caution with record types and picklist proliferation. Covers what large data volume (LDV) actually means and why an object grows past the low millions of records, what makes a query selective and why a non-selective query fails or times out in reports and bulk operations, the selectivity thresholds the query optimizer applies to standard versus custom indexes, which fields the platform indexes by default, how to request a custom index from Salesforce Support, what a skinny table is and why it must be support-enabled and refreshed, why record type proliferation fragments data and adds overhead, picklist proliferation and the reason multi-select picklists cannot be efficiently indexed, and the other LDV levers of wide objects, formula fields, roll-up summaries, and ownership skew. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.\\",
+        "date": "October 10, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "22 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Large Data Volume",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-lv-1b-ldv-data-model-and-query-design-scenarios",
+        "title": "Data Architect LV-1B: LDV Data-Model and Query Design Scenarios",
+        "series": "salesforce-data-architect",
+        "lesson": 30,
+        "excerpt": "Given a customer scenario, design a data model that scales considering large data volume and solution performance, applying selective query design, indexing, denormalization, and data-distribution strategies to real scenarios. Covers designing for the query rather than the entity, the query patterns that force full scans (unindexed text filters, OR conditions across unindexed fields, negative filters, leading-wildcard LIKE), denormalizing frequently reported values onto the queried object so reporting becomes single-object, distributing ownership and parents to avoid skew and hot spots, bounding the working set through archiving and pagination, keeping objects narrow, governing record types and picklist sprawl, why SOQL in Apex and Flows must be selective too, and why LDV performance must be validated at representative volume in a full sandbox. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 11, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "23 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Large Data Volume",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-lv-2a-archiving-and-purging-fundamentals-strategies-big",
+        "title": "Data Architect LV-2A: Archiving and Purging Fundamentals",
+        "series": "salesforce-data-architect",
+        "lesson": 31,
+        "excerpt": "Given a customer scenario, recommend a data archiving and purging plan that is optimal for the customer's data storage management needs, covering archiving strategies, using Big Objects as an archive target, and retention policies. Explains the difference between archiving and purging, the three archive targets (Big Object on-platform, off-platform store, custom archive object), how a retention policy drives per-category keep-duration and end-of-life actions under storage-limitation rules, the age and status based selection patterns, why deleting from the hot object after archiving is essential, how to preserve a query path for archived data, and how to run archive jobs safely with Bulk API, idempotency, testing, and a rollback plan. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 12, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Archiving",
+          "Purging",
+          "Big Objects",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh",
+        "title": "Data Architect LV-2B: Archiving and Purging Scenarios: What to Archive, When, Compliance",
+        "series": "salesforce-data-architect",
+        "lesson": 32,
+        "excerpt": "Given a customer scenario, recommend an archiving and purging plan that is optimal for the customer's data storage management needs, deciding what to archive, when, and how to satisfy compliance requirements. Builds on lesson 31's archiving and purging fundamentals by turning the decision into a method. Covers how to classify what to archive by value and access (closed, inactive, rarely queried records go cold), when to archive (age and status triggers, statutory minimum retention, and a defined maximum), the compliance constraints that override deletion (legal hold, GDPR storage limitation, sector rules), the three purge outcomes (delete, anonymize-and-retain, archive-then-delete), the on-platform Big Object versus off-platform storage trade-off, referential integrity across parents and children, and the audit trail that evidences what was archived, when, by which job, and under which rule. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 13, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Archiving",
+          "Purging",
+          "Compliance",
+          "GDPR",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-lv-3a-virtualized-data-fundamentals-external-objects-sal",
+        "title": "Data Architect LV-3A: Virtualized Data Fundamentals: External Objects, Salesforce Connect, Data Connect",
+        "series": "salesforce-data-architect",
+        "lesson": 33,
+        "excerpt": "Given a customer scenario, decide when to use virtualized data and describe virtualized data options, including External Objects, Salesforce Connect adapters (OData, cross-org, etc.), and Data Connect for data sharing without copying. This lesson opens the virtualization part of the Large Data Volume (LDV) considerations domain. Covers what virtualization is and the problem it solves (seeing and acting on external data in Salesforce without copying it), how Salesforce Connect exposes external data through External Objects and adapters (OData 2.0/4.0, cross-org, custom Apex), the cross-org adapter for reaching another Salesforce org, the hard constraints of External Objects (required External ID, no roll-up summaries, limited relationship types, no master-detail child with standard objects, external-performance and latency dependence), how to decide between virtualizing and copying (volatile, remote, residency-bound data virtualizes; stable data that needs native speed, validation, automation and reporting gets copied), and Data Connect's zero-copy analytics sharing as a complement for analytical, large-scale sharing without duplication. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+        "date": "October 14, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Virtualization",
+          "External Objects",
+          "Salesforce Connect",
+          "OData",
+          "Data Connect",
+          "LDV",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext",
+        "title": "Data Architect LV-3B: Virtualization Scenarios: Connect vs Copy, OData, External Data Sources",
+        "series": "salesforce-data-architect",
+        "lesson": 34,
+        "excerpt": "Given a customer scenario, decide when to use virtualized data and describe virtualized data options, choosing between Salesforce Connect (OData, cross-org, and custom adapters) and copying data into Salesforce for specific scenarios. This lesson is the scenario half of the virtualization pair. Where lesson 33 taught you the mechanics of External Objects, Salesforce Connect adapters, and Data Connect, lesson 34 turns virtualization into a decision method: a four-question scenario lens that tells you whether a given dataset should be connected live or copied, then a walk through the three main adapters (cross-org, OData, and custom) applied to real customer scenarios, a copy-first scenario, and the hybrid design that copies one subset and virtualizes the rest. Every decision is grounded in the same four variables: does the data have to stay put, how volatile is it, how much of it does the platform actually need, and does the platform need to validate, automate, and report on it at native speed. Covers the read-only reality of most adapters, external latency and rate limits, and Data Connect as the analytical-scale complement. Includes worked scenarios mirroring the three in-lesson quiz questions, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.\\",
+        "date": "October 15, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Virtualization",
+          "Salesforce Connect",
+          "External Objects",
+          "OData",
+          "Cross-Org",
+          "Custom Adapter",
+          "Connect vs Copy",
+          "LDV",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-mg-1a-data-quality-at-load-validation-dedup-transformati",
+        "title": "Data Architect MG-1A: Data Quality at Load: Validation, Dedup, Transformation, Stewardship, Testing",
+        "series": "salesforce-data-architect",
+        "lesson": 35,
+        "excerpt": "Given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, including validation, deduplication, transformation, stewardship, and testing before and during migration. This lesson is the first of the Data Migration domain's three objectives, and it treats load-time data quality as a designed outcome, not a result you discover after go-live. You will learn the six-step core sequence that quality migrations follow: profile the source, cleanse and normalize, deduplicate before load, transform to the target model, load through validation gates, and reconcile. You will see profiling establish the source's true state, cleansing fix formats and encoding, deduplication stop the same entity from landing twice, and a versioned source-to-target mapping document act as the migration contract. You will learn the validation gates that reject bad rows before they touch the org, the rejects/error file and count reconciliation that surface mismatch before users see it, and the stewardship that makes line managers decide survivorship and sign off on quality. You will run a numbered configuration walkthrough, work a customer scenario that mirrors the three in-lesson quiz questions, and close with a manual dry-run exercise. Covers the three exam traps the cert rewards knowing: loading before deduplicating, migrating without a versioned mapping document, and skipping validation gates and reconciliation.\",",
+        "date": "October 16, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Migration",
+          "Data Quality",
+          "Validation",
+          "Deduplication",
+          "Transformation",
+          "Stewardship",
+          "Testing",
+          "External ID",
+          "Data Loader",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-mg-1b-high-data-quality-at-load-scenarios",
+        "title": "Data Architect MG-1B: High Data Quality at Load: Scenario-Driven Techniques for Migrations",
+        "series": "salesforce-data-architect",
+        "lesson": 36,
+        "excerpt": "Given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, applying profiling, cleansing, deduplication, transformation, mapping, and reconciliation to a specific migration situation. This lesson, the second of the Data Migration domain's three objectives, turns the load-time quality method you built in lesson mg-1a into scenario judgment. You will learn to start from post-migration business truths, the things that must be true after go-live such as no duplicate customers, every account with a valid owner, and historical cases intact, then derive the quality controls that guarantee them. You will work the multi-source consolidation scenario where each source must be harmonized to a canonical model, identity resolved across sources with a shared key or external ID, survivorship applied for conflicts, and one golden record loaded, because otherwise the migration itself creates duplicates. You will map picklist values that do not exist in the target and resolve lookups via external ID with parents loaded first, implement reject-to-error-file handling with every source row accounted for as loaded, merged, or rejected with a reason, and reconcile counts by object and by source-system id plus key business aggregates. You will route conflicts that survivorship cannot decide to a steward through a pre-load review queue, dry-run at volume, run user acceptance with real business scenarios, and validate downstream consumers of the migrated keys. You will run the five-step configuration walkthrough and close with the three exam traps, including the costliest one, loading cross-source data without identity resolution and recreating duplicates inside Salesforce.\",",
+        "date": "October 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Migration",
+          "Data Quality",
+          "Profiling",
+          "Cleansing",
+          "Deduplication",
+          "Transformation",
+          "Mapping",
+          "Reconciliation",
+          "External ID",
+          "Survivorship",
+          "Stewardship",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par",
+        "title": "Data Architect MG-2A: LDV Migration Performance: Data Loader, Bulk API, Parallel Jobs, and Batching",
+        "series": "salesforce-data-architect",
+        "lesson": 37,
+        "excerpt": "Compare and contrast techniques for improving performance when migrating large data volumes into Salesforce, including Data Loader, Bulk API (serial vs parallel), batch sizing, ETL tools, and API limits. This lesson, the first of the Data Migration domain's Volume objectives (mg-2a), is where a migration stops being a correctness problem and becomes a speed problem. You will learn why the synchronous SOAP and REST APIs are the wrong choice for millions of records, and why the asynchronous, job-based Bulk API exists. You will contrast parallel and serial concurrency modes, tuning batch size against the twin risks of overhead and failure blast radius, choosing the right load client, and watching bulk and governor limits so a fast load does not exhaust the org or slow it for the users who are trying to work. You will work the locked-parent failure, the twelve-million-row load that dies on 'unable to obtain row lock' because Contacts and their Accounts ran concurrently, and you will fix it by loading parents first, grouping children by parent, and falling back to serial mode. You will defer sharing calculation during the load, schedule off-peak, and make every job re-runnable by keying it on external IDs. You will run the five-step configuration walkthrough and close with the three exam traps, including the costliest one, maximizing concurrency without watching the limits you are about to exhaust.\",",
+        "date": "October 18, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Migration",
+          "LDV",
+          "Bulk API",
+          "Data Loader",
+          "Batching",
+          "Serial Mode",
+          "Parallel Mode",
+          "API Limits",
+          "ETL",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu",
+        "title": "Data Architect MG-2B: LDV Migration Scenarios: Incremental vs Big Bang, Cutover, Continuous Sync",
+        "series": "salesforce-data-architect",
+        "lesson": 38,
+        "excerpt": "Compare and contrast techniques for migrating large data volumes into Salesforce by scenario, applying incremental versus big-bang approaches, cutover planning, and continuous synchronization to real engagements. This is the scenario lesson of the Data Migration domain's Volume objectives (mg-2b), the one that takes the performance levers from lesson 37 and asks how to sequence them when a business is actually going live. You will learn why a migration that works in isolation can fail as a go-live event, why the modern default for large, business-critical data is an initial full load followed by continuous delta sync until a short cutover, and why a single freeze window big-bang is reserved for small, simple datasets with a low tolerance for parallel-run cost. You will define the cutover plan: the freeze window, the rehearsed final delta sync, the go/no-go checks, the user communications, and the timed rollback. You will work the forty-million-record business-critical case that cannot tolerate a long freeze, and you will learn to keep the legacy system read-only after cutover for a defined rollback window rather than decommissioning it on day one.",
+        "date": "October 19, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "22 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Migration",
+          "LDV",
+          "Big Bang",
+          "Incremental Migration",
+          "Cutover",
+          "Continuous Sync",
+          "Change Data Capture",
+          "Delta Sync",
+          "Rollback",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-39-mg-3a-exporting-from-salesforce-data-export-data-loader",
+        "title": "Data Architect MG-3A: Exporting from Salesforce: Data Export, Data Loader export, API, reports",
+        "series": "salesforce-data-architect",
+        "lesson": 39,
+        "excerpt": "Compare and contrast the techniques and considerations for exporting data out of Salesforce, and match each one to the volume and purpose it actually serves. This is the Exporting lesson (mg-3a) in the Data Migration domain, the one that turns the migration story around: lesson 37 showed you how to get data in at large volume, and this lesson shows you how to get it back out. You will learn why the Data Export service is a scheduled backup rather than a tactical tool, why Data Loader is the go-to for a defined SOQL-scoped pull, why Bulk API query jobs are the pattern for recurring feeds to a warehouse, and why reports and list views are analysis tools with row limits, not LDV extractors. You will learn the export consideration that trips most people on the exam: every export is filtered by the running user's access, both field-level security and row-level sharing, so the same export run by two users returns different data. You will learn why large-dataset exports must be selective on indexed fields or they time out, why scheduled Data Export is a coarse backup rather than a full point-in-time restore, and how incremental extraction by SystemModstamp keeps a warehouse feed pulling only what changed. You will work the recurring nightly feed case that is the objective's signature question, and you will map controls for encryption, access, and retention onto the exported copies before any personal data leaves the org.\\",
+        "date": "October 20, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Migration",
+          "Export",
+          "Data Export Service",
+          "Data Loader",
+          "Bulk API",
+          "Reports",
+          "SOQL",
+          "SystemModstamp",
+          "Field-Level Security",
+          "GDPR",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large",
+        "title": "Data Architect MG-3B: Export scenarios: full vs incremental, archival extraction, large-volume planning",
+        "series": "salesforce-data-architect",
+        "lesson": 40,
+        "excerpt": "Plan a real export: full versus incremental, archive before purge, and large-volume extraction that stays inside API limits. This is the Export scenarios lesson (mg-3b) in the Data Migration domain, where lesson 39 taught the tools and this lesson makes you design the run. You will learn why a full export is the right first seed and the wrong habit, how an incremental feed by SystemModstamp stays cheap, why that feed silently misses deletes, how to close the gap with Change Data Capture or id-set reconciliation, what it means to treat an export as the archive before you delete the source, and how to chunk a large-volume job so it finishes instead of timing out.",
+        "date": "October 21, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Migration",
+          "Export",
+          "Incremental Export",
+          "Full Export",
+          "SystemModstamp",
+          "Change Data Capture",
+          "Archiving",
+          "Bulk API",
+          "PK Chunking",
+          "GDPR",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa",
+        "title": "Data Architect DM-5C: Data Skew: Extreme Cases and Advanced Mitigation Patterns",
+        "series": "salesforce-data-architect",
+        "lesson": 41,
+        "excerpt": "Lesson 9 explained how skew breaks a data model and lesson 10 gave you the design-shape fixes. This lesson takes the same problem to the extreme, which is where the dm-5c objective lives. You will learn what separates ordinary skew from extreme skew and why Salesforce's own guidance puts a warning line at 10,000 records per owner and 10,000 children per parent, while real orgs run at ten million. You will work the extreme ownership case, one integration user holding tens of millions of records, and see why the fix is distributing owners rather than adding sharing rules. You will work the extreme lookup case, millions of children rolling up to one parent, and see why a live roll-up on a skewed master-detail relationship is a per-write parent lock, and how to replace it with a scheduled aggregation onto a denormalized field. You will learn three sharding shapes, intermediate parents, a split hot parent, and moving the detail to a Big Object, plus polymorphic and junction patterns for fanning references laterally. You will finish with the operational levers that buy you room while the model gets fixed: Bulk API serial mode, parent-grouped batches, deferred sharing calculation, fewer sharing rules, a flatter role hierarchy, and a hard rule against mass reparenting at volume.",
+        "date": "October 22, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "24 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Skew",
+          "LDV",
+          "Sharing",
+          "Record Locking",
+          "Bulk API",
+          "Certification"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-42-mg-3c-data-migration-governance-cutover-planning-rollbac",
+        "title": "Data Architect MG-3C: Data Migration Governance: Cutover Planning, Rollback, and Post-Go-Live Validation",
+        "series": "salesforce-data-architect",
+        "lesson": 42,
+        "excerpt": "The final lesson of the Data Architect series covers the governance that turns a data migration from a technical exercise into a controlled program event. You will learn what migration governance contains (a migration plan, a RACI with business owners and data stewards, quality thresholds, and formal go/no-go decision rights), what a cutover plan must specify (the freeze window, an ordered runbook with measured durations, the final delta and depletion sync, environment readiness checks, user communications, and named decision-makers), and why the final delta sync has to be timed in rehearsal rather than estimated. You will work a 14 million record cutover end to end with real durations, define rollback triggers, method, viability window, and authority, and see why the legacy system stays read-only after go-live. You will then run post-go-live validation across four families of checks (counts and aggregates, critical business scenarios, integration keys, access and sharing), operate hypercare to a documented exit, hand data quality to the steady-state governance program, and assemble the audit evidence that makes the migration defensible.",
+        "date": "October 23, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "23 min read",
+        "tags": [
+          "Salesforce",
+          "Data Architecture",
+          "Data Migration",
+          "Cutover",
+          "Rollback",
+          "Post-Go-Live Validation",
+          "Hypercare",
+          "Reconciliation",
+          "Governance",
+          "Certification"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 27,
+    "totalLessons": 42,
     "curriculumLessons": 42
   },
   {
@@ -3330,273 +4994,277 @@ export const learnSeries: LearningSeries[] = [
           "data-protection"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-27-r-9a-record-access-overrides-stamp-vs-rollup-record-typ",
+        "title": "Record Access Overrides: Stamp vs Rollup (Record Type, Field Update, Formula)",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 27,
+        "excerpt": "How to override a record's access by stamping a security-relevant value onto it (record type, custom field, picklist) or computing it (formula, rollup), then driving a criteria-based sharing rule from that value.",
+        "date": "2026-10-09",
+        "author": "Jimmy Olsen",
+        "readTime": "14 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "access-overrides",
+          "sharing-rules",
+          "record-types",
+          "formula-fields",
+          "rollup-summary",
+          "stamp"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust",
+        "title": "Override Scenarios: Manual Sharing vs Stamp vs Custom Logic",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 28,
+        "excerpt": "How to pick the right record access override for a given scenario: manual sharing for one-off human grants, a stamp plus criteria rule for repeatable value-based access, and Apex Managed Sharing when the access depends on runtime computation a field cannot represent.",
+        "date": "2026-10-10",
+        "author": "Jimmy Olsen",
+        "readTime": "14 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "manual-sharing",
+          "sharing-rules",
+          "apex-managed-sharing",
+          "rowcause",
+          "stamp",
+          "override"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-o-1a-reports-and-dashboards-folder-sharing-run-in-conte",
+        "title": "Reports and Dashboards: Folder Sharing, Run-in-Context, Aggregate-Data Exposure",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 29,
+        "excerpt": "How reports and dashboards expose data that is not stored in standard or custom objects: folder sharing that controls who can view and edit each artifact, run-in-context which filters every report and dashboard to the viewing user's own record access, and the aggregate-data exposure risk that exists before a single record is opened.",
+        "date": "2026-10-11",
+        "author": "Jimmy Olsen",
+        "readTime": "15 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "reports",
+          "dashboards",
+          "folders",
+          "running-user",
+          "run-as",
+          "field-level-security",
+          "aggregate",
+          "exposure"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur",
+        "title": "Files, Knowledge, and Custom Metadata/Settings Security",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 30,
+        "excerpt": "How to control access to the artifacts that are not standard or custom records: files whose visibility is decided by sharing and libraries rather than by the record they attach to, Knowledge articles whose visibility combines permissions with internal and customer visibility and data categories, and custom metadata types and custom settings whose access runs on object permissions and the Protected flag instead of OWD and sharing rules.",
+        "date": "2026-10-12",
+        "author": "Jimmy Olsen",
+        "readTime": "15 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "files",
+          "libraries",
+          "knowledge",
+          "articles",
+          "data-categories",
+          "custom-metadata",
+          "custom-settings",
+          "protected",
+          "object-permissions"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-o-1c-big-objects-external-objects-security-event-monito",
+        "title": "Big Objects, External Object Security, Event Monitoring, and Run-As Exposure",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 31,
+        "excerpt": "How to govern the data that sits outside the standard sharing model: big objects whose access runs on object permissions because they do not honor OWD, sharing rules, or role hierarchy; external objects whose record-level enforcement is delegated to the external data source rather than to internal sharing; event monitoring logs and security health check results that are themselves sensitive and must be confined to designated admins and analysts; and every run-as context that executes with a broader view than the user who calls it.",
+        "date": "2026-10-13",
+        "author": "Jimmy Olsen",
+        "readTime": "16 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "big-objects",
+          "external-objects",
+          "odata",
+          "event-monitoring",
+          "event-log-file",
+          "security-health-check",
+          "run-as",
+          "without-sharing",
+          "least-privilege"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-i-1a-scalability-fundamentals-sharing-table-growth-reca",
+        "title": "Scalability Fundamentals: Sharing Table Growth, Recalculation Cost, and When Sharing Cannot Scale",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 32,
+        "excerpt": "Why the Sharing table grows the way it does, what sharing recalculation actually costs at scale, and how to recognize the design where the sharing model stops scaling. Covers the record-times-grantee math behind share-row volume, the hidden cost of readiness to rebuild many rows, and the point at which per-record access over a huge population forces a redesign.",
+        "date": "2026-10-14",
+        "author": "Jimmy Olsen",
+        "readTime": "17 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "scalability",
+          "large-data-volume",
+          "ldv",
+          "sharing-table",
+          "recalculation",
+          "sharing-rules",
+          "role-hierarchy",
+          "apex-sharing",
+          "performance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-i-1b-scalability-scenarios-ldv-and-sharing-design-index",
+        "title": "Scalability Scenarios: LDV and Sharing Design, Indexing, and Recalc Avoidance",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 33,
+        "excerpt": "How to design a sharing solution that holds up on large data volumes: a restrictive OWD with a few broad criteria rules to groups instead of per-record grants, keeping criteria rules on stable fields and batching recalculation so the share table is rarely rebuilt, understanding how indexing protects query performance only while the table stays lean, and knowing when to escalate a requirement that cannot scale declaratively.",
+        "date": "2026-10-15",
+        "author": "Jimmy Olsen",
+        "readTime": "17 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "scalability",
+          "large-data-volume",
+          "ldv",
+          "indexing",
+          "sharing-table",
+          "recalculation",
+          "criteria-rules",
+          "sharing-rules",
+          "performance",
+          "data-partitioning"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-i-2a-license-limitations-platform-license-types-permiss",
+        "title": "License Limitations: Platform License Types, Permission-Set Licensing, and Feature Gating",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 34,
+        "excerpt": "How licenses decide which sharing features an org and its users can actually use: platform license types set the org's ceiling of objects and features, permission-set licensing ties certain features to a user holding a specific license before a permission set can grant them, and Experience, Shield, Field Audit Trail, and premium objects are gated by license tier. An architect validates licenses before designing, because a missing sharing option is often a license limitation, not a misconfiguration, and no permission set can out-grant the user's single license.",
+        "date": "2026-10-16",
+        "author": "Jimmy Olsen",
+        "readTime": "17 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "licensing",
+          "platform-license",
+          "permission-set-license",
+          "feature-gating",
+          "shield",
+          "platform-encryption",
+          "field-audit-trail",
+          "experience-cloud",
+          "premium-objects",
+          "user-license",
+          "entitlements"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-i-2b-license-driven-design-scenarios-which-sharing-feat",
+        "title": "License-Driven Design Scenarios: Which Sharing Features Require Which Licenses",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 35,
+        "excerpt": "How an architect turn a sharing requirement into a license-compatible mechanism: the design frame is to inventory the org's user licenses and add-on entitlements first, then map each sharing requirement to the mechanism that satisfies it and to the license that mechanism needs. External-user portal access and sharing sets are Experience Cloud features that require community licenses, encryption and extended audit retention are Shield features that require compliance licenses, and standard sharing runs on full CRM licenses. A permission set working with your sharing setup is not enough when the underlying user license does not support the feature, so the architect validates the solution under the actual license mix before calling it done.",
+        "date": "2026-10-17",
+        "author": "Jimmy Olsen",
+        "readTime": "16 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "licensing",
+          "license-driven-design",
+          "experience-cloud",
+          "sharing-sets",
+          "sharing-groups",
+          "guest-user",
+          "shield-platform-encryption",
+          "field-audit-trail",
+          "crm-license",
+          "platform-license",
+          "permission-set-license",
+          "partner-community",
+          "customer-community",
+          "compliance-license"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-i-3-testing-the-security-model-validation-sharing-grap",
+        "title": "Testing the Security Model: Validation, Sharing Graphs, Test Matrix, Audit",
+        "series": "salesforce-sharing-visibility-architect",
+        "lesson": 36,
+        "excerpt": "How an architect proves a sharing model works before rollout: the reliable signal is a per-user-class test matrix that logs in as every access class and asserts exactly which records each one can view and edit, not the admin's summary or an admin-only session. The architect inspects each record's Sharing detail and share graph to confirm the composition of grants and their RowCause sources, exercises recalculations so criteria changes, ownership transfers, and rule edits do not leave stale or missing shares, then audits the org with sharing reports, Health Check, and Event Monitoring to confirm only intended broad permissions exist and that field-level and programmatic enforcement strip hidden fields in every run-as context.",
+        "date": "2026-10-18",
+        "author": "Jimmy Olsen",
+        "readTime": "16 min read",
+        "tags": [
+          "salesforce",
+          "sharing",
+          "visibility",
+          "architect",
+          "security-testing",
+          "system-runas",
+          "test-matrix",
+          "sharing-graph",
+          "sharing-detail",
+          "sharing-recalculation",
+          "sharing-summary",
+          "health-check",
+          "event-monitoring",
+          "field-level-security",
+          "fls",
+          "stripinaccessible",
+          "with-security-enforced",
+          "rowcause",
+          "implicit-sharing"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 26,
+    "totalLessons": 36,
     "curriculumLessons": 36
-  },
-  {
-    "slug": "ai-power-user",
-    "name": "AI Power User",
-    "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
-    "gradient": "from-cyan-500 to-purple-600",
-    "lessons": [
-      {
-        "slug": "from-user-to-power-user-owning-your-workflow",
-        "title": "Lesson 1: From User to Power User: What Owning Your Workflow Means",
-        "series": "ai-power-user",
-        "lesson": 1,
-        "excerpt": "You already use AI every day. This lesson is about the step between using a tool and owning a workflow: what separates a user from a power user, what it actually means to own the way you work, and why the payoff lives in a small slice of your recurring tasks. It defines the terms, walks through one person making the shift, and ends with a try-it prompt that starts the audit you will run in Lesson 2.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "auditing-how-you-actually-work-finding-the-repetitive-20-percent",
-        "title": "Lesson 2: Auditing How You Actually Work: Finding the Repetitive 20 Percent",
-        "series": "ai-power-user",
-        "lesson": 2,
-        "excerpt": "Lesson 1 told you the payoff lives in the repetitive slice of your work. This lesson gives you the method to find that slice honestly: a time audit that measures where your week actually goes, a way to separate the tasks worth automating from the ones that are not, and a concrete worked example of one person running the audit. It ends with a try-it prompt that produces your own list of the repetitive 20 percent, ready for Lesson 3.",
-        "date": "September 21, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "decomposing-a-task-into-a-repeatable-flow-input-tool-output-review",
-        "title": "Lesson 3: Decomposing a Task into a Repeatable Flow: Input, Tool, Output, Review",
-        "series": "ai-power-user",
-        "lesson": 3,
-        "excerpt": "Lesson 2 gave you a named task, the frequent, same-shaped, low-risk one. This lesson turns that task into a flow by decomposing it into the four parts every workflow needs: input, tool, output, and review. It defines each part, walks through one person decomposing their weekly status email, and ends with a try-it prompt that produces your own four-part design, ready for Lesson 4.",
-        "date": "September 22, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "building-a-custom-tool-tailored-instructions-saved-context-your-own-project",
-        "title": "Lesson 4: Building a Custom Tool: Tailored Instructions, Saved Context, Your Own Project",
-        "series": "ai-power-user",
-        "lesson": 4,
-        "excerpt": "Lesson 3 decomposed your task into input, tool, output, and review, and you named the tool part. This lesson builds that tool properly. It defines what a custom tool is, why one prompt and a bit of setup beats re-explaining yourself every time, and how the three pieces, tailored instructions, saved context, and a project of your own, come together to give you something you control. A worked example follows one person building theirs, and a try-it prompt walks you through your own.",
-        "date": "September 23, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Custom Tools"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "connected-tools-stitching-the-apps-you-already-use",
-        "title": "Lesson 5: Connected Tools: Stitching the Apps You Already Use",
-        "series": "ai-power-user",
-        "lesson": 5,
-        "excerpt": "Lesson 4 gave you a custom tool built to your task. This lesson turns outward. It stitches the apps you already use into one connected flow, so one app's output feeds the next app's input instead of stopping at the chat window. It defines connected workflows, explains the handoff that makes them work, walks through the pattern tool-agnostically, and ends with a try-it prompt that maps a two-step chain of your own.",
-        "date": "September 24, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Connected Tools"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "structured-output-getting-data-back-in-a-format-downstream-tools-can-consume",
-        "title": "Lesson 6: Structured Output: Getting Data Back in a Format Downstream Tools Can Consume",
-        "series": "ai-power-user",
-        "lesson": 6,
-        "excerpt": "A connected workflow hands one step's output to the next, and that only works when the output arrives in a shape the next step can read. This lesson defines structured output, plain words for the JSON format at its center, and why a table or list beats a paragraph when a downstream tool is doing the consuming. A worked example follows one person turning meeting notes into actions a tracker can read, and a try-it prompt walks you through getting your own output into a shape that carries.",
-        "date": "September 25, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Structured Output"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "parameterized-prompts-templates-that-scale",
-        "title": "Lesson 7: Templates That Scale: Parameterized Prompts You Reuse With Different Inputs",
-        "series": "ai-power-user",
-        "lesson": 7,
-        "excerpt": "Lesson 6 fixed the shape of your answer. This lesson fixes the shape of your question: a template prompt you write once and reuse run after run with only a few variable slots filled fresh. It defines a parameterized prompt in plain words, shows why a stable frame beats re-deciding everything each time, and walks a worked example of someone turning a recurring weekly task into one reusable prompt. A try-it prompt gets you building your own template, and the close points at the real skill behind it: knowing when a task earns a template at all.",
-        "date": "September 28, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Prompt Templates"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "choosing-what-to-own-when-a-one-off-is-better-than-a-workflow",
-        "title": "Lesson 8: Choosing What to Own: When a One-Off Is Better Than a Workflow",
-        "series": "ai-power-user",
-        "lesson": 8,
-        "excerpt": "Lessons 3 through 7 taught you how to build workflows. This lesson is the discipline of choosing what to own, and it is the judgment that decides where all that building effort goes. It defines a one-off against a workflow, names the real cost of ownership (build cost plus the maintenance you carry forever), and gives you a three-question test for whether a task deserves a workflow at all. A worked example shows someone deciding one task earns a workflow while another stays a one-off, and a try-it prompt gets you running the test on your own work.",
-        "date": "September 29, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "10 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Ownership"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "versioning-your-tools-and-instructions-knowing-what-changed-and-why",
-        "title": "Lesson 9: Versioning Your Tools and Instructions: Knowing What Changed and Why",
-        "series": "ai-power-user",
-        "lesson": 9,
-        "excerpt": "A workflow that worked last month stops working this month, and you cannot say what changed. That is a version problem, not an AI problem. This lesson defines a version, a baseline, a changelog, and a rollback in plain words, shows why a running record of changes is the only reliable way to know what broke (and how to get the good version back), and walks a worked example of someone tracing a broken report back to a single tweak. A try-it prompt gets you building a one-line-per-change log for your own tools and instructions, and the close points at the underlying habit: treating every change as something you can name, date, and undo.",
-        "date": "September 30, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "8 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Versioning"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "testing-a-workflow-dry-runs-edge-cases-catching-bad-output",
-        "title": "Lesson 10: Testing a Workflow: Dry Runs, Edge Cases, and Spotting Bad Output Before It Ships",
-        "series": "ai-power-user",
-        "lesson": 10,
-        "excerpt": "The workflow you trust produced wrong output, and you only found out after it shipped. That is a testing problem, not a bad-luck problem. This lesson defines a dry run, an edge case, and bad output in plain words, shows why checking a workflow before it acts for real is the difference between catching a mistake and living with it, and walks a worked example of someone dry-running a report, probing awkward inputs, and catching a confident-looking error before anyone saw it. A try-it prompt gets you wrapping your own tool in a check-before-you-trust routine, and the close points at the underlying habit: treat whatever the tool produces as unverified until you run it somewhere safe first.",
-        "date": "October 1, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Testing"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "handling-failure-silent-errors-hallucinations-tools-that-break-mid-flow",
-        "title": "Lesson 11: Handling Failure: Silent Errors, Hallucinations, and Tools That Break Mid-Flow",
-        "series": "ai-power-user",
-        "lesson": 11,
-        "excerpt": "Testing reduces the chance a bad output ships, but it cannot make failure impossible. This lesson is the plan for when something goes wrong anyway. It defines a silent error, where a step fails and nothing tells you, a hallucination, where the output is confidently wrong and your check may still miss it, and a mid-flow break, where the automation stops partway and you have to pick it up. A worked example shows Priya catching each of the three in her own workflow, and a try-it prompt gets you writing a failure plan for one of yours. The close points at the next lesson on scheduling and triggers, the cadence that decides how often your workflow runs and what happens when a run does not finish.",
-        "date": "October 2, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Failure"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "scheduling-and-triggers-cadence-batching-queues-event-hooks",
-        "title": "Lesson 12: Scheduling and Triggers: Cadence, Batching, Queues, and Event Hooks",
-        "series": "ai-power-user",
-        "lesson": 12,
-        "excerpt": "A workflow that only runs when you remember to start it is not yet owned. This lesson is the rhythm that makes a workflow run on its own. It defines cadence, the schedule that decides how often your automation runs, draws the line between a scheduled run and a triggered run, and walks the four choices that control the rhythm: how often it runs, whether it processes work one item at a time or in a batch, how it handles work that arrives faster than it can keep up, and whether it starts on a clock or on an event. A worked example shows Priya taking her monthly vendor summary and turning it into a cadence she sets once and stops thinking about. A try-it prompt gets you defining the cadence for one of your own workflows, and the close points at the next lesson on review gates, the human checkpoints that make a workflow you can trust.",
-        "date": "October 3, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Scheduling"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "review-gates-human-checkpoints-built-in-not-bolted-on-after",
-        "title": "Lesson 13: Review Gates: Human Checkpoints Built In, Not Bolted On After",
-        "series": "ai-power-user",
-        "lesson": 13,
-        "excerpt": "A review gate is a deliberate pause in a workflow where a person checks the output before the tool acts on it. This lesson shows why the gate has to be built into the design, placed at the step where it earns its interruption, and never added on at the end as an afterthought. It defines human-in-the-loop oversight, separates a mandatory gate from a monitoring glance, and names the failure that undoes both: automation complacency. A worked example walks Priya through placing three gates in her vendor summary so it can run unattended without eroding her judgment. A try-it prompt maps a workflow of yours, step by step, to the moments that deserve a human in the path. The close points at the next lesson on treating prompts like code.",
-        "date": "October 4, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "Learn",
-          "AI",
-          "AI Power User",
-          "Workflow",
-          "Review Gates"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "treating-prompts-like-code-structure-maintainability-comments",
-        "title": "Lesson 14: Treating Your Prompts Like Code: Structure, Maintainability, Comments",
-        "series": "ai-power-user",
-        "lesson": 14,
-        "excerpt": "A prompt that works once is not the same as a prompt you can live with. This lesson is about treating your prompts like code, the way a developer treats a file they will have to read again. It defines structure, the clear sections and delimiters that let a future reader, human or model, parse what a prompt is asking, maintainability, the quality that lets you change one rule without breaking the rest, and comments, the notes that record why a rule exists and not just what it does. A worked example shows Dev recovering from a prompt that drifted into a fragile blob, and a try-it prompt gets you refactoring one of your own. The close points at the next lesson on assembling a multi-step pipeline from the pieces.",
-        "date": "October 6, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Prompt Structure"
-        ],
-        "status": "published"
-      },
-      {
-        "slug": "assembling-a-multi-step-pipeline-from-the-pieces",
-        "title": "Lesson 15: Assembling a Multi-Step Pipeline from the Pieces",
-        "series": "ai-power-user",
-        "lesson": 15,
-        "excerpt": "The pieces are built. Now they become a machine. This lesson is about assembling the components from earlier lessons into a single multi-step pipeline, one where data flows from an input step through a series of tool and review steps to a finished output. It defines a pipeline, a step, and a handoff, shows why the interface between steps is where pipelines break, and walks a worked example of someone wiring four components into one running flow. A try-it prompt gets you assembling your own pieces end to end, and the close points at the next lesson, the first full worked example of an ops and reporting workflow.",
-        "date": "October 7, 2026",
-        "author": "Adroit Consulting",
-        "readTime": "9 min read",
-        "tags": [
-          "LLMs",
-          "AI Power User",
-          "Workflow",
-          "Pipeline"
-        ],
-        "status": "published"
-      }
-    ],
-    "totalLessons": 15,
-    "curriculumLessons": 30
   },
   {
     "slug": "sf-omni-consultant",
@@ -7072,6 +8740,1657 @@ export const learnSeries: LearningSeries[] = [
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
   {
+    "slug": "workflow-engines-vs-agents-deterministic-orchestration",
+    "title": "Lesson 78: Workflow Engines vs Agents: When to Use Deterministic Orchestration",
+    "series": "agentic-ai",
+    "lesson": 78,
+    "excerpt": "Lesson 77 gave you two agents that can find each other and finish a task. This lesson asks whether the task needed an agent. You learn what a workflow engine actually guarantees (durable state, replay, retries, exactly-once execution), what an agent buys in exchange for variance, a five-question test that separates the two, and how to put an agentic step inside a deterministic skeleton without poisoning either one.",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Workflow Engines",
+      "Durable Execution",
+      "Deterministic Orchestration",
+      "Temporal",
+      "Step Functions",
+      "Agents"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "access-and-licensing-rollout-at-scale",
+    "title": "Lesson 32: Access and licensing rollout at scale",
+    "series": "ai-adoption",
+    "lesson": 32,
+    "excerpt": "A rollout is two systems wearing one name. Access decides who can open the tool, what they can reach inside it, and when that access ends. Licensing decides what you are committed to pay for, how seats move between people, and how you get them back. This lesson defines the vocabulary, compares per-seat and consumption licensing and what each one does to your ability to shrink, walks the provisioning chain from identity provider to platform seat, and shows the seat funnel that turns purchased licenses into habitual use. A worked example takes a 1,650-person insurer from a 1,000-seat annual commitment to a 820-seat renewal without losing anyone who actually uses the tool.",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "17 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Operations"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "capstone-d-ship-document-and-reflect-on-the-full-stack",
+    "title": "Lesson 30: Capstone D: Ship, Document, and Reflect on the Full Stack",
+    "series": "ai-power-user",
+    "lesson": 30,
+    "excerpt": "Capstone C left you with a workflow that has been tested, gated, and instrumented. This final lesson closes the capstone by making it something other than your private knowledge: a runbook entry another person can operate from, a decision record that explains why it is built the way it is, a retro built from measured numbers rather than memory, and a handover test that proves the documentation works before you rely on it. A worked example follows Priya shipping her vendor risk digest and running the retro that changes her next build. It ends with a try-it prompt, one pass back over the whole course, and the series restarting at Lesson 1.",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Capstone"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "capacity-planning-performance-at-scale-headroom-forecasting",
+    "title": "Lesson 77: Capacity Planning and Performance at Scale: Headroom, Forecasting, and the Load You Cannot See",
+    "series": "salesforce-architect",
+    "lesson": 77,
+    "excerpt": "Capacity is not a server size. It is the amount of work your org can absorb before one specific constraint breaks, and how many months of growth you have left before it does. This lesson covers headroom targets, growth forecasting from real telemetry, and how to tell whether you need more capacity or a better design.",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Performance",
+      "Capacity",
+      "Scalability"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-42-mg-3c-data-migration-governance-cutover-planning-rollbac",
+    "title": "Data Architect MG-3C: Data Migration Governance: Cutover Planning, Rollback, and Post-Go-Live Validation",
+    "series": "salesforce-data-architect",
+    "lesson": 42,
+    "excerpt": "The final lesson of the Data Architect series covers the governance that turns a data migration from a technical exercise into a controlled program event. You will learn what migration governance contains (a migration plan, a RACI with business owners and data stewards, quality thresholds, and formal go/no-go decision rights), what a cutover plan must specify (the freeze window, an ordered runbook with measured durations, the final delta and depletion sync, environment readiness checks, user communications, and named decision-makers), and why the final delta sync has to be timed in rehearsal rather than estimated. You will work a 14 million record cutover end to end with real durations, define rollback triggers, method, viability window, and authority, and see why the legacy system stays read-only after go-live. You will then run post-go-live validation across four families of checks (counts and aggregates, critical business scenarios, integration keys, access and sharing), operate hypercare to a documented exit, hand data quality to the steady-state governance program, and assemble the audit evidence that makes the migration defensible.",
+    "date": "October 23, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "23 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Migration",
+      "Cutover",
+      "Rollback",
+      "Post-Go-Live Validation",
+      "Hypercare",
+      "Reconciliation",
+      "Governance",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "agent-to-agent-communication-protocols-contracts-discovery",
+    "title": "Lesson 77: Agent-to-Agent Communication: Protocols, Contracts, and Discovery",
+    "series": "agentic-ai",
+    "lesson": 77,
+    "excerpt": "Lesson 76 gave you the record an agent leaves behind. This lesson is about the boundary where two agents meet and neither can read the other's memory, prompts, or tools. You learn how agent discovery works through the Agent Card, why the task lifecycle is the real contract between peers, how transport and version negotiation prevent silent breakage, and which parts of the agreement the protocol leaves for you to write.",
+    "date": "October 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "16 min read",
+    "tags": [
+      "A2A",
+      "Agent Interoperability",
+      "Agent Discovery",
+      "Protocol Design",
+      "Trust"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "standardizing-tools-and-avoiding-pile-up",
+    "title": "Lesson 31: Standardizing tools and avoiding pile-up",
+    "series": "ai-adoption",
+    "lesson": 31,
+    "excerpt": "Tool pile-up is what happens when buying is easy, approving is slow, and nobody owns the list of what the company runs. This lesson gives you the standard stack: a short, owned list of primary tools mapped to the jobs people actually do, plus a written path for the exceptions. You will learn how to inventory what is really in use (including the subscriptions on company cards and the AI tiers hidden inside existing software), how to classify tools by job instead of by feature, how to consolidate at renewal rather than someday, and how to keep the stack from refilling. A worked example takes an organization from twenty AI tools down to seven without losing a single workflow.",
+    "date": "October 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "capstone-c-harden-it-test-review-gates-reliability",
+    "title": "Lesson 29: Capstone C: Harden It (Test, Review Gates, Reliability)",
+    "series": "ai-power-user",
+    "lesson": 29,
+    "excerpt": "Capstone B left you with a workflow that passed one dry run. This lesson makes it durable. It covers three layers of hardening: a regression set of past inputs you can re-run after every change, review gates that stop a bad output instead of merely noticing it, and failure handling that makes a broken run loud, early, and cheap. A worked example follows Priya hardening her vendor risk digest and finding three real breaks before the first real month. It ends with a try-it prompt and a hardening checklist you can run against your own capstone.",
+    "date": "October 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Capstone"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "cost-architecture-licensing-api-consumption-storage-optimization",
+    "title": "Lesson 76: Cost Architecture: Licensing, API Consumption, Storage, and Optimization",
+    "series": "salesforce-architect",
+    "lesson": 76,
+    "excerpt": "Every Salesforce design carries a price, and the price is set by four separate meters: seats, API calls, storage, and AI credits. This lesson defines each meter, shows how each one is calculated, and works through an org whose integration design quietly overspends on all four.",
+    "date": "October 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Cost",
+      "Licensing",
+      "FinOps"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-41-dm-5c-data-skew-extreme-cases-and-advanced-mitigation-pa",
+    "title": "Data Architect DM-5C: Data Skew: Extreme Cases and Advanced Mitigation Patterns",
+    "series": "salesforce-data-architect",
+    "lesson": 41,
+    "excerpt": "Lesson 9 explained how skew breaks a data model and lesson 10 gave you the design-shape fixes. This lesson takes the same problem to the extreme, which is where the dm-5c objective lives. You will learn what separates ordinary skew from extreme skew and why Salesforce's own guidance puts a warning line at 10,000 records per owner and 10,000 children per parent, while real orgs run at ten million. You will work the extreme ownership case, one integration user holding tens of millions of records, and see why the fix is distributing owners rather than adding sharing rules. You will work the extreme lookup case, millions of children rolling up to one parent, and see why a live roll-up on a skewed master-detail relationship is a per-write parent lock, and how to replace it with a scheduled aggregation onto a denormalized field. You will learn three sharding shapes, intermediate parents, a split hot parent, and moving the detail to a Big Object, plus polymorphic and junction patterns for fanning references laterally. You will finish with the operational levers that buy you room while the model gets fixed: Bulk API serial mode, parent-grouped batches, deferred sharing calculation, fewer sharing rules, a flatter role hierarchy, and a hard rule against mass reparenting at volume.",
+    "date": "October 22, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "24 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Skew",
+      "LDV",
+      "Sharing",
+      "Record Locking",
+      "Bulk API",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "auditing-agents-logs-replay-forensics-compliance-evidence",
+    "title": "Lesson 76: Auditing Agents: Logs, Replay, Forensics, and Compliance Evidence",
+    "series": "agentic-ai",
+    "lesson": 76,
+    "excerpt": "Lesson 75 taught you to freeze the trace during an incident. This lesson is about the standing record you build so every investigation and every regulator has something to read. An agent is not a service you can restart and hope: it is a system that looped, branched, called tools, and acted, and the only way to answer what it did and why is to audit the record. This lesson covers what the audit record must capture, the trace structure that names every step, how replay turns that record into a reproducible witness, how digital forensics makes it admissible as evidence, and how the same logs satisfy GDPR accountability and the EU AI Act's record-keeping duty.",
+    "date": "October 21, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Agent Observability",
+      "Audit Logging",
+      "Replay",
+      "Digital Forensics",
+      "Compliance",
+      "Evidence"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "building-a-cross-functional-ai-council-or-governance-group",
+    "title": "Lesson 30: Building a Cross-Functional AI Council or Governance Group",
+    "series": "ai-adoption",
+    "lesson": 30,
+    "excerpt": "A scaling discipline run by one person, however good, is still a personal system, and personal systems do not survive contact with the rest of the company. This lesson turns the program into the organization's: it defines what an AI council is and what it is not, shows why advisory bodies without decision rights become governance theater, walks through the cross-functional membership, decision rights, and escalation lines a council actually needs, and builds a worked example of a council that owns approving, pausing, and stopping AI use. It ends with the next lesson on standardizing tools and avoiding pile-up.",
+    "date": "October 21, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "capstone-b-build-it-design-and-assemble",
+    "title": "Lesson 28: Capstone B: Build It (Design and Assemble)",
+    "series": "ai-power-user",
+    "lesson": 28,
+    "excerpt": "Capstone A gave you a scope and a definition of done. This lesson takes that page and turns it into a workflow that actually runs. It covers how to design the pipeline from the scope, reusing the pieces you already built instead of writing fresh ones, and how to assemble the whole thing in the right order so you find wiring mistakes early. A worked example follows Priya building her vendor risk digest against the scope and definition of done she wrote in Capstone A. It ends with a try-it prompt that assembles your capstone and runs its first dry test.",
+    "date": "October 21, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Capstone"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "agent-architecture-patterns-orchestration-planning-tool-use",
+    "title": "Lesson 75: Agent Architecture Patterns: Orchestration, Planning, and Tool Use",
+    "series": "salesforce-architect",
+    "lesson": 75,
+    "excerpt": "How to give an AI agent structure: the three capabilities that turn a language model into something that acts. It defines the difference between a workflow and an agent, then walks through the three building blocks of agent architecture, orchestration, planning, and tool use, and shows how they combine in a worked example. It is the general-system entry point to the course's agent thread.",
+    "date": "October 21, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Architecture",
+      "AI",
+      "Agents",
+      "Orchestration"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large",
+    "title": "Data Architect MG-3B: Export scenarios: full vs incremental, archival extraction, large-volume planning",
+    "series": "salesforce-data-architect",
+    "lesson": 40,
+    "excerpt": "Plan a real export: full versus incremental, archive before purge, and large-volume extraction that stays inside API limits. This is the Export scenarios lesson (mg-3b) in the Data Migration domain, where lesson 39 taught the tools and this lesson makes you design the run. You will learn why a full export is the right first seed and the wrong habit, how an incremental feed by SystemModstamp stays cheap, why that feed silently misses deletes, how to close the gap with Change Data Capture or id-set reconciliation, what it means to treat an export as the archive before you delete the source, and how to chunk a large-volume job so it finishes instead of timing out.",
+    "date": "October 21, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Migration",
+      "Export",
+      "Incremental Export",
+      "Full Export",
+      "SystemModstamp",
+      "Change Data Capture",
+      "Archiving",
+      "Bulk API",
+      "PK Chunking",
+      "GDPR",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "incident-response-hallucinations-data-leaks-rollback-postmortems",
+    "title": "Lesson 75: Incident Response for Agents: Hallucinations, Data Leaks, Rollback, and Postmortems",
+    "series": "agentic-ai",
+    "lesson": 75,
+    "excerpt": "Lesson 74 mapped what can go wrong and how to audit against it. This lesson covers what you do when the controls break anyway and an agent takes an action you did not authorize. An agent incident is not a service outage: the actor is an autonomous system that acted while nobody watched, the evidence is volatile, and part of the harm cannot be undone, only compensated. This lesson gives the full responder arc: detecting the incident with tripwires, triaging it into the failure class that decides the first move, freezing the trace before any rollback, containing with a kill switch, rolling back or compensating by action class, and running a blameless postmortem that ships a fix. It walks one complete incident on an order-support agent and lays out the runbook you should have written before the page landed.",
+    "date": "October 20, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Incident Response",
+      "Hallucination",
+      "Data Leak",
+      "Rollback",
+      "Postmortem",
+      "SRE"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "scaling-from-pilot-to-org-wide",
+    "title": "Lesson 29: Scaling from Pilot to Org-Wide",
+    "series": "ai-adoption",
+    "lesson": 29,
+    "excerpt": "A pilot that proves value and a program that runs at scale are two different things, and most organizations are stuck between them. This lesson defines the terms, shows why scaling breaks what the pilot proved, walks you through the four phases and decision gates that get a use case from pilot to business as usual, and ends with a try-it exercise that builds a scale decision gate for one of your own pilots. It is the lesson where one credible use case becomes a portfolio.",
+    "date": "October 20, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Strategy"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "capstone-a-choose-and-scope-your-own-end-to-end-workflow",
+    "title": "Lesson 27: Capstone A: Choose and Scope Your Own End-to-End Workflow",
+    "series": "ai-power-user",
+    "lesson": 27,
+    "excerpt": "The capstone is where the course stops being a set of lessons and becomes one workflow you actually own. This first capstone lesson covers the two decisions that decide whether your build succeeds before you build anything: which workflow to take on, and how to write a scope precise enough to build from. It gives you five selection tests, a seven-part scoping template, and a worked example of Priya choosing her fifth workflow and writing the scope that Capstone B will assemble. It ends with a try-it prompt that walks you through choosing and scoping your own capstone.",
+    "date": "October 20, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Capstone"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "monolith-vs-microservices-vs-platform-salesforce-integration-hub",
+    "title": "Lesson 74: Monolith vs Microservices vs Platform: When Salesforce Is the Integration Hub",
+    "series": "salesforce-architect",
+    "lesson": 74,
+    "excerpt": "How to choose the shape of an integration: a single monolith, many microservices, or a platform that mediates them all. It defines the three terms, shows how even the Salesforce platform itself evolved from a monolith into a core plus independent services, and gives a decision frame for when Salesforce should be the integration hub rather than one system at the edge of the web, with governor and API limits as the real cost of centralizing there.",
+    "date": "October 20, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Integration",
+      "Platform Engineering"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-39-mg-3a-exporting-from-salesforce-data-export-data-loader",
+    "title": "Data Architect MG-3A: Exporting from Salesforce: Data Export, Data Loader export, API, reports",
+    "series": "salesforce-data-architect",
+    "lesson": 39,
+    "excerpt": "Compare and contrast the techniques and considerations for exporting data out of Salesforce, and match each one to the volume and purpose it actually serves. This is the Exporting lesson (mg-3a) in the Data Migration domain, the one that turns the migration story around: lesson 37 showed you how to get data in at large volume, and this lesson shows you how to get it back out. You will learn why the Data Export service is a scheduled backup rather than a tactical tool, why Data Loader is the go-to for a defined SOQL-scoped pull, why Bulk API query jobs are the pattern for recurring feeds to a warehouse, and why reports and list views are analysis tools with row limits, not LDV extractors. You will learn the export consideration that trips most people on the exam: every export is filtered by the running user's access, both field-level security and row-level sharing, so the same export run by two users returns different data. You will learn why large-dataset exports must be selective on indexed fields or they time out, why scheduled Data Export is a coarse backup rather than a full point-in-time restore, and how incremental extraction by SystemModstamp keeps a warehouse feed pulling only what changed. You will work the recurring nightly feed case that is the objective's signature question, and you will map controls for encryption, access, and retention onto the exported copies before any personal data leaves the org.\\",
+    "date": "October 20, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Migration",
+      "Export",
+      "Data Export Service",
+      "Data Loader",
+      "Bulk API",
+      "Reports",
+      "SOQL",
+      "SystemModstamp",
+      "Field-Level Security",
+      "GDPR",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "security-review-full-threat-model-agent-system",
+    "title": "Lesson 74: The Security Review: A Full Threat Model for an Agent System",
+    "series": "agentic-ai",
+    "lesson": 74,
+    "excerpt": "A security review for an agent is not the same checklist you run on a web service. Legacy threat modeling assumed a deterministic process with predictable inputs, outputs, and failure modes; an agent is a chain where the user prompt, retrieved documents, tool results, and memory all merge into one context window that decides the next action. That changes what you are protecting and how an attacker reaches it. This lesson builds a full threat model for an agent, one that starts by naming the assets and trust boundaries, then runs the threat set: prompt injection, tool misuse, excessive agency, and data exfiltration. It re-reads STRIDE as threats to an agent rather than threats to a process, walks a complete attack chain on a refund agent, and turns the whole thing into a written security review you can audit and re-run when the system changes.",
+    "date": "October 19, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Security",
+      "Threat Modeling",
+      "Prompt Injection",
+      "Excessive Agency",
+      "Data Exfiltration",
+      "MITRE ATLAS",
+      "STRIDE"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "proving-the-ai-programs-roi-to-the-business",
+    "title": "Lesson 28: Proving the AI program's ROI to the business",
+    "series": "ai-adoption",
+    "lesson": 28,
+    "excerpt": "Adoption is everywhere in most organizations and the financial proof is not. This lesson closes that gap. It defines ROI, baseline, and total cost of ownership for AI, lays the evidence out in four layers so a CFO can read it, and stress tests the headline number so you never hand finance a claim that collapses. A worked example turns a support automation pilot into a realized return, and a try-it prompt builds one case you can defend before the next budget conversation. It ends with the next lesson on scaling from pilot to org-wide.",
+    "date": "October 19, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Finance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "building-a-personal-automation-library-that-compounds",
+    "title": "Lesson 26: Building a Personal Automation Library That Compounds",
+    "series": "ai-power-user",
+    "lesson": 26,
+    "excerpt": "Every workflow you have built so far has been a single, finished thing. This lesson is the turn where you stop collecting finished workflows and start building a library of reusable pieces, the kind that makes each new automation cheaper than the last. It defines an automation library, compounding, a reusable building block, and the DRY principle in plain words, then follows Priya as she takes four workflows she already built and extracts the parts that transfer, so her next workflow costs half the time of her first. It shows what belongs in a library, how to structure it so you can actually find the pieces, and how a compound stack is the difference between working in AI and owning your workflow. The close points at the capstone, where you stop building pieces and build a full workflow of your own, end to end.",
+    "date": "October 19, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Sustaining",
+      "Library"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "integration-patterns-routers-translators-aggregators-eip",
+    "title": "Lesson 73: Enterprise Integration Patterns: Routers, Translators, Aggregators, and EIP",
+    "series": "salesforce-architect",
+    "lesson": 73,
+    "excerpt": "The shared vocabulary of enterprise integration: what the Enterprise Integration Patterns (EIP) catalog is, how a Message Router decides where a message goes without changing it, how a Message Translator adapts one format or contract to another, and how an Aggregator combines several related messages into one result. A worked example routes, translates, and aggregates an order across ERP, billing, and shipping, and a try-it prompt gets you sketching the same three shapes for an integration you own.",
+    "date": "October 19, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Integration",
+      "EIP"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-38-mg-2b-ldv-migration-scenarios-incremental-vs-big-bang-cu",
+    "title": "Data Architect MG-2B: LDV Migration Scenarios: Incremental vs Big Bang, Cutover, Continuous Sync",
+    "series": "salesforce-data-architect",
+    "lesson": 38,
+    "excerpt": "Compare and contrast techniques for migrating large data volumes into Salesforce by scenario, applying incremental versus big-bang approaches, cutover planning, and continuous synchronization to real engagements. This is the scenario lesson of the Data Migration domain's Volume objectives (mg-2b), the one that takes the performance levers from lesson 37 and asks how to sequence them when a business is actually going live. You will learn why a migration that works in isolation can fail as a go-live event, why the modern default for large, business-critical data is an initial full load followed by continuous delta sync until a short cutover, and why a single freeze window big-bang is reserved for small, simple datasets with a low tolerance for parallel-run cost. You will define the cutover plan: the freeze window, the rehearsed final delta sync, the go/no-go checks, the user communications, and the timed rollback. You will work the forty-million-record business-critical case that cannot tolerate a long freeze, and you will learn to keep the legacy system read-only after cutover for a defined rollback window rather than decommissioning it on day one.",
+    "date": "October 19, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "22 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Migration",
+      "LDV",
+      "Big Bang",
+      "Incremental Migration",
+      "Cutover",
+      "Continuous Sync",
+      "Change Data Capture",
+      "Delta Sync",
+      "Rollback",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "cost-architecture-token-budgets-infrastructure-finops",
+    "title": "Lesson 73: Cost Architecture for Enterprise AI: Token Budgets, Infrastructure, and FinOps",
+    "series": "agentic-ai",
+    "lesson": 73,
+    "excerpt": "Lesson 72 showed you how to build the platform that enforces policy. This lesson is about what that platform costs to run, because an agent bills the moment it thinks and never stops until a budget stops it. A single agent task can fan out into dozens of model calls, tool invocations, and retries, and the token bill compounds in ways a normal API call never does. You will learn the three-lever cost identity that frames every optimization, why cost per completed task beats cost per token as your operating metric, how token budgets and throughput planning keep a runaway loop from emptying the account, the crossover where self-hosted infrastructure beats a managed API, and how FinOps turns the whole thing into a number a finance team can argue with.",
+    "date": "October 18, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Cost Architecture",
+      "Token Budgets",
+      "FinOps",
+      "Prompt Caching",
+      "Model Routing",
+      "Unit Economics",
+      "Enterprise AI"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "budgeting-ai-spend-across-teams",
+    "title": "Lesson 27: Budgeting AI spend across teams",
+    "series": "ai-adoption",
+    "lesson": 27,
+    "excerpt": "AI spend does not act like the software budgets you already run. It is partly fixed and partly usage-driven, it scales to match adoption, and it spikes exactly when a workflow succeeds. This lesson gives you a way to budget for that: split the spend into a central foundation, seats sized to the people who actually use the tools, and a capped, attributed pool for the usage that grows. You will learn why per-seat and usage-based pricing behave differently, how showback and chargeback turn visibility into ownership, and how to run a monthly review with unit economics instead of a guess. A worked example shows a mid-size company building a whole-year AI budget and putting controls on the volatile part.",
+    "date": "October 18, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Finance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "judging-a-tools-reliability",
+    "title": "Lesson 25: The Power User's Mental Model: Judging a Tool's Reliability",
+    "series": "ai-power-user",
+    "lesson": 25,
+    "excerpt": "Before you trust a tool, a model, or a platform with a workflow, you need an honest estimate of how reliable it is. This lesson builds the mental model that separates a dependable tool from a fragile one, weighs a vendor's track record against its promises, and matches a tool's reliability to what your workflow actually needs.",
+    "date": "October 18, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Reliability",
+      "Judgment"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "api-management-gateway-throttling-versioning-observability",
+    "title": "Lesson 72: API Management: Gateway, Throttling, Versioning, and Observability",
+    "series": "salesforce-architect",
+    "lesson": 72,
+    "excerpt": "The operational layer under every integration: how an API gateway becomes the single controlled entry point for consumers, how throttling keeps bursts from collapsing your org, how versioning turns a breaking change into a controlled release, and how observability turns an API you hope works into one you can prove works. A worked example walks an inventory API through all four, and a try-it prompt gets you planning the API management story for a service you own.",
+    "date": "October 18, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "API Management",
+      "Gateway",
+      "Rate Limiting",
+      "Versioning",
+      "Observability",
+      "Salesforce"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-37-mg-2a-ldv-migration-performance-data-loader-bulk-api-par",
+    "title": "Data Architect MG-2A: LDV Migration Performance: Data Loader, Bulk API, Parallel Jobs, and Batching",
+    "series": "salesforce-data-architect",
+    "lesson": 37,
+    "excerpt": "Compare and contrast techniques for improving performance when migrating large data volumes into Salesforce, including Data Loader, Bulk API (serial vs parallel), batch sizing, ETL tools, and API limits. This lesson, the first of the Data Migration domain's Volume objectives (mg-2a), is where a migration stops being a correctness problem and becomes a speed problem. You will learn why the synchronous SOAP and REST APIs are the wrong choice for millions of records, and why the asynchronous, job-based Bulk API exists. You will contrast parallel and serial concurrency modes, tuning batch size against the twin risks of overhead and failure blast radius, choosing the right load client, and watching bulk and governor limits so a fast load does not exhaust the org or slow it for the users who are trying to work. You will work the locked-parent failure, the twelve-million-row load that dies on 'unable to obtain row lock' because Contacts and their Accounts ran concurrently, and you will fix it by loading parents first, grouping children by parent, and falling back to serial mode. You will defer sharing calculation during the load, schedule off-peak, and make every job re-runnable by keying it on external IDs. You will run the five-step configuration walkthrough and close with the three exam traps, including the costliest one, maximizing concurrency without watching the limits you are about to exhaust.\",",
+    "date": "October 18, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Migration",
+      "LDV",
+      "Bulk API",
+      "Data Loader",
+      "Batching",
+      "Serial Mode",
+      "Parallel Mode",
+      "API Limits",
+      "ETL",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-36-i-3-testing-the-security-model-validation-sharing-grap",
+    "title": "Testing the Security Model: Validation, Sharing Graphs, Test Matrix, Audit",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 36,
+    "excerpt": "How an architect proves a sharing model works before rollout: the reliable signal is a per-user-class test matrix that logs in as every access class and asserts exactly which records each one can view and edit, not the admin's summary or an admin-only session. The architect inspects each record's Sharing detail and share graph to confirm the composition of grants and their RowCause sources, exercises recalculations so criteria changes, ownership transfers, and rule edits do not leave stale or missing shares, then audits the org with sharing reports, Health Check, and Event Monitoring to confirm only intended broad permissions exist and that field-level and programmatic enforcement strip hidden fields in every run-as context.",
+    "date": "2026-10-18",
+    "author": "Jimmy Olsen",
+    "readTime": "16 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "security-testing",
+      "system-runas",
+      "test-matrix",
+      "sharing-graph",
+      "sharing-detail",
+      "sharing-recalculation",
+      "sharing-summary",
+      "health-check",
+      "event-monitoring",
+      "field-level-security",
+      "fls",
+      "stripinaccessible",
+      "with-security-enforced",
+      "rowcause",
+      "implicit-sharing"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "building-the-platform-control-plane-data-plane-gateway-policy-layer",
+    "title": "Lesson 72: Building the Platform: Control Plane, Data Plane, Gateway, and Policy Layer",
+    "series": "agentic-ai",
+    "lesson": 72,
+    "excerpt": "Lesson 71 taught you how to read a platform through its three planes. Building one is a different job. This lesson is about constructing the four concrete pieces: the gateway that sits in the traffic path, the policy layer that makes the decisions, the control plane that governs identity and lifecycle, and the data plane that carries the agent's work. The load-bearing seam between them is the gateway, because it is the one place where policy can actually meet traffic and stop an action before it happens. You will learn the policy decision point versus policy enforcement point split, how policy as code with a default-deny rule turns governance into something you can review and roll back in git, and how token budgets and a single structured log turn the whole thing into a system you can operate.",
+    "date": "October 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Agent Platform",
+      "API Gateway",
+      "Policy as Code",
+      "Control Plane",
+      "Data Plane",
+      "OPA",
+      "Rego",
+      "Enterprise AI"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "auditing-ai-use-on-a-regular-cadence",
+    "title": "Lesson 26: Auditing AI Use on a Regular Cadence",
+    "series": "ai-adoption",
+    "lesson": 26,
+    "excerpt": "Setting up an AI policy is a start. Knowing it is still true is a separate, repeated job. This lesson is about auditing: the scheduled, evidence-based check that your AI inventory, your policy, your controls, and your real usage still match. You will learn the difference between an audit and continuous monitoring, why a calendar cadence is what keeps a governance program honest, how to define a concrete scope and pull evidence instead of opinions, and how to turn each audit into a short list of fixes you can actually schedule. A worked example walks through a quarterly audit that catches a license mismatch, a drift in tool usage, and a stale policy before any of them became an incident. The lesson ends with a try-it that runs your own first audit and a teaser for the next lesson on budgeting AI spend across teams.",
+    "date": "October 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "failure-post-mortem-when-a-workflow-died-what-you-do-next",
+    "title": "Lesson 24: Failure Post-Mortem: When a Workflow Died, What You Do Next",
+    "series": "ai-power-user",
+    "lesson": 24,
+    "excerpt": "A workflow that dies is not a dead end. It is a source of information. This lesson shows how to run a blameless post-mortem: separate the symptom from the root cause, trace the chain with five whys, and turn the failure into fixes that keep the same mistake from taking down the next workflow.",
+    "date": "October 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Reliability",
+      "Post-Mortem"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "event-streaming-at-scale-kafka-cdc-real-time-pipelines",
+    "title": "Lesson 71: Event Streaming at Scale: Kafka, Change Data Capture, and Real-Time Pipelines",
+    "series": "salesforce-architect",
+    "lesson": 71,
+    "excerpt": "This is the infrastructure lesson. Lesson 28 taught you to move a trickle of events inside Salesforce's own bus; this one is about the distributed stream that sits behind a modern real-time integration: an append-only log like Kafka where order is guaranteed per partition, change data capture that turns every row change into an event, and the pipeline that lets a fast consumer and a slow consumer read the same committed log without slowing each other down. The Salesforce system architect needs this because real-time replication, streaming analytics, and event-driven integrations are built on it, and scaling them correctly means reasoning about partitions, keys, replay, and delivery guarantees.",
+    "date": "October 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Kafka",
+      "Event Streaming",
+      "Change Data Capture"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-36-mg-1b-high-data-quality-at-load-scenarios",
+    "title": "Data Architect MG-1B: High Data Quality at Load: Scenario-Driven Techniques for Migrations",
+    "series": "salesforce-data-architect",
+    "lesson": 36,
+    "excerpt": "Given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, applying profiling, cleansing, deduplication, transformation, mapping, and reconciliation to a specific migration situation. This lesson, the second of the Data Migration domain's three objectives, turns the load-time quality method you built in lesson mg-1a into scenario judgment. You will learn to start from post-migration business truths, the things that must be true after go-live such as no duplicate customers, every account with a valid owner, and historical cases intact, then derive the quality controls that guarantee them. You will work the multi-source consolidation scenario where each source must be harmonized to a canonical model, identity resolved across sources with a shared key or external ID, survivorship applied for conflicts, and one golden record loaded, because otherwise the migration itself creates duplicates. You will map picklist values that do not exist in the target and resolve lookups via external ID with parents loaded first, implement reject-to-error-file handling with every source row accounted for as loaded, merged, or rejected with a reason, and reconcile counts by object and by source-system id plus key business aggregates. You will route conflicts that survivorship cannot decide to a steward through a pre-load review queue, dry-run at volume, run user acceptance with real business scenarios, and validate downstream consumers of the migrated keys. You will run the five-step configuration walkthrough and close with the three exam traps, including the costliest one, loading cross-source data without identity resolution and recreating duplicates inside Salesforce.\",",
+    "date": "October 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Migration",
+      "Data Quality",
+      "Profiling",
+      "Cleansing",
+      "Deduplication",
+      "Transformation",
+      "Mapping",
+      "Reconciliation",
+      "External ID",
+      "Survivorship",
+      "Stewardship",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-35-i-2b-license-driven-design-scenarios-which-sharing-feat",
+    "title": "License-Driven Design Scenarios: Which Sharing Features Require Which Licenses",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 35,
+    "excerpt": "How an architect turn a sharing requirement into a license-compatible mechanism: the design frame is to inventory the org's user licenses and add-on entitlements first, then map each sharing requirement to the mechanism that satisfies it and to the license that mechanism needs. External-user portal access and sharing sets are Experience Cloud features that require community licenses, encryption and extended audit retention are Shield features that require compliance licenses, and standard sharing runs on full CRM licenses. A permission set working with your sharing setup is not enough when the underlying user license does not support the feature, so the architect validates the solution under the actual license mix before calling it done.",
+    "date": "2026-10-17",
+    "author": "Jimmy Olsen",
+    "readTime": "16 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "licensing",
+      "license-driven-design",
+      "experience-cloud",
+      "sharing-sets",
+      "sharing-groups",
+      "guest-user",
+      "shield-platform-encryption",
+      "field-audit-trail",
+      "crm-license",
+      "platform-license",
+      "permission-set-license",
+      "partner-community",
+      "customer-community",
+      "compliance-license"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "enterprise-agent-platforms-serving-control-plane-data-plane",
+    "title": "Lesson 71: Enterprise Agent Platforms: Serving, Control Plane, and Data Plane",
+    "series": "agentic-ai",
+    "lesson": 71,
+    "excerpt": "A single agent is a program you can run on a laptop. An enterprise agent platform is the infrastructure that lets hundreds of them run safely, governed, and at scale. This lesson breaks a platform into the three planes the industry has converged on: the serving plane that hosts your model and runs inference, the control plane that governs identity, policy, and lifecycle, and the data plane where agents actually reason, call tools, and move context. You will learn what each plane owns, why the separation between them is the load-bearing idea, and how to read any vendor's platform through this lens.",
+    "date": "October 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Agent Platform",
+      "Serving Plane",
+      "Control Plane",
+      "Data Plane",
+      "Inference",
+      "Governance",
+      "Enterprise AI"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "guardrails-for-agentic-and-automated-ai",
+    "title": "Lesson 25: Guardrails for Agentic and Automated AI",
+    "series": "ai-adoption",
+    "lesson": 25,
+    "excerpt": "The moment AI stops waiting for you and starts acting on its own, the rules of oversight change. This lesson is about guardrails: the boundaries and controls that keep an automated or agentic AI system inside its lane even when the model is wrong, stubborn, or tricked. You will learn what agentic AI is and how it differs from the tools you have already governed, why guardrails must be deterministic when the model is probabilistic, and how to build five families of guardrails: scope, permission, reversibility, observability, and containment. A worked example shows a leader letting an automation run while keeping the failures cheap and reversible.",
+    "date": "October 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "keeping-current-adapting-to-tool-and-model-updates",
+    "title": "Lesson 23: Keeping Current: Adapting to Tool and Model Updates",
+    "series": "ai-power-user",
+    "lesson": 23,
+    "excerpt": "Tools and models change under you, often invisibly. This lesson shows how to notice an update before it breaks a workflow, and when to ride it out versus adapt.",
+    "date": "October 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "9 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Maintenance",
+      "Updates"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "reliability-engineering-slis-slos-error-budgets-runbooks",
+    "title": "Lesson 70: Reliability Engineering: SLIs, SLOs, Error Budgets, and Runbooks for Agent Operations",
+    "series": "salesforce-architect",
+    "lesson": 70,
+    "excerpt": "Reliability is not a feeling and it is not a vague high uptime goal. It is a numbers game: an SLI that measures what your users actually experience, an SLO that turns that measurement into a contract, an error budget that decides when a bad week should stop all releases, and a runbook that tells a calm stranger what to do at 3 AM. This lesson defines each term, applies them to a system that runs autonomous agents, and walks the arithmetic that turns 'reliable enough' from a phrase into a number your team can defend or spend.",
+    "date": "October 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Reliability",
+      "SLO",
+      "Site Reliability Engineering"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-35-mg-1a-data-quality-at-load-validation-dedup-transformati",
+    "title": "Data Architect MG-1A: Data Quality at Load: Validation, Dedup, Transformation, Stewardship, Testing",
+    "series": "salesforce-data-architect",
+    "lesson": 35,
+    "excerpt": "Given a customer scenario, recommend appropriate techniques and methods for ensuring high data quality at load time, including validation, deduplication, transformation, stewardship, and testing before and during migration. This lesson is the first of the Data Migration domain's three objectives, and it treats load-time data quality as a designed outcome, not a result you discover after go-live. You will learn the six-step core sequence that quality migrations follow: profile the source, cleanse and normalize, deduplicate before load, transform to the target model, load through validation gates, and reconcile. You will see profiling establish the source's true state, cleansing fix formats and encoding, deduplication stop the same entity from landing twice, and a versioned source-to-target mapping document act as the migration contract. You will learn the validation gates that reject bad rows before they touch the org, the rejects/error file and count reconciliation that surface mismatch before users see it, and the stewardship that makes line managers decide survivorship and sign off on quality. You will run a numbered configuration walkthrough, work a customer scenario that mirrors the three in-lesson quiz questions, and close with a manual dry-run exercise. Covers the three exam traps the cert rewards knowing: loading before deduplicating, migrating without a versioned mapping document, and skipping validation gates and reconciliation.\",",
+    "date": "October 16, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Migration",
+      "Data Quality",
+      "Validation",
+      "Deduplication",
+      "Transformation",
+      "Stewardship",
+      "Testing",
+      "External ID",
+      "Data Loader",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-34-i-2a-license-limitations-platform-license-types-permiss",
+    "title": "License Limitations: Platform License Types, Permission-Set Licensing, and Feature Gating",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 34,
+    "excerpt": "How licenses decide which sharing features an org and its users can actually use: platform license types set the org's ceiling of objects and features, permission-set licensing ties certain features to a user holding a specific license before a permission set can grant them, and Experience, Shield, Field Audit Trail, and premium objects are gated by license tier. An architect validates licenses before designing, because a missing sharing option is often a license limitation, not a misconfiguration, and no permission set can out-grant the user's single license.",
+    "date": "2026-10-16",
+    "author": "Jimmy Olsen",
+    "readTime": "17 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "licensing",
+      "platform-license",
+      "permission-set-license",
+      "feature-gating",
+      "shield",
+      "platform-encryption",
+      "field-audit-trail",
+      "experience-cloud",
+      "premium-objects",
+      "user-license",
+      "entitlements"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "architecture-spectrum-orchestration-vs-autonomy",
+    "title": "Lesson 70: The Architecture Spectrum: Orchestration vs Autonomy",
+    "series": "agentic-ai",
+    "lesson": 70,
+    "excerpt": "Every agentic system you will build sits somewhere on a spectrum between full orchestration and full autonomy. At one end the code decides the path: LLM calls and tools wired into predefined steps, which gives you predictability and a fixed cost. At the other the model decides the path: an agent given a goal and a set of tools chooses its own steps, which gives you flexibility at the price of trust. This lesson gives you a decision framework: how to read a task and place it correctly on that line, when an orchestrating workflow is the right call, when a single autonomous agent is, and how to hybridize the two so the deterministic parts stay deterministic and only the genuinely open-ended parts get agency.",
+    "date": "October 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Orchestration",
+      "Autonomy",
+      "Workflow",
+      "Agent Design",
+      "Architecture Spectrum",
+      "Decision Framework"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "intellectual-property-your-data-your-outputs",
+    "title": "Lesson 24: Intellectual Property: Your Data, Your Outputs",
+    "series": "ai-adoption",
+    "lesson": 24,
+    "excerpt": "When your team uses AI, two things leave your control: the data you put in and the outputs you get out. Both raise ownership questions that most organizations never answer until a dispute, a registration, or an audit forces them. This lesson teaches a non-technical owner where the intellectual property risk in AI actually lives. You will learn that copyright only protects what a human wrote, that a contract saying you own an output cannot manufacture a copyright the law does not recognize, that the vendor's right to train on your data is the single most important clause to check, and how to protect the outputs your business actually depends on.",
+    "date": "October 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "sharing-advanced-workflows-team-multiplier",
+    "title": "Lesson 22: From Power User to Team Multiplier: Sharing Advanced Workflows",
+    "series": "ai-power-user",
+    "lesson": 22,
+    "excerpt": "You mastered a workflow and wrote it down in a runbook. That makes you a power user. This lesson is about the next step: turning that individual skill into capability your whole team can use. It defines a team multiplier, a shared workflow, a community of practice, and shadow AI in plain words, then follows one person turning the runbook entry from Lesson 21 into a workflow four teammates actually run, keeping the review gate, the version discipline, and the data rules intact as it spreads. A try-it prompt gets you packaging one of your own workflows for a teammate, and the close points at the next lesson, keeping current as tools and models update.",
+    "date": "October 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Team",
+      "Collaboration"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "cta-design-scenario-practice-end-to-end",
+    "title": "Lesson 69: CTA Design Scenario Practice: A Real Scenario End to End",
+    "series": "salesforce-architect",
+    "lesson": 69,
+    "excerpt": "Taking the whole architect toolkit and pointing it at one messy client scenario: how to read a requirement, fix the system of record, design the data, integration, identity, and security models as one coherent whole, write measurable targets, record the tradeoffs you accepted, and turn it all into a board-grade presentation you can defend.",
+    "date": "October 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "CTA",
+      "Certifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-34-lv-3b-virtualization-scenarios-connect-vs-copy-odata-ext",
+    "title": "Data Architect LV-3B: Virtualization Scenarios: Connect vs Copy, OData, External Data Sources",
+    "series": "salesforce-data-architect",
+    "lesson": 34,
+    "excerpt": "Given a customer scenario, decide when to use virtualized data and describe virtualized data options, choosing between Salesforce Connect (OData, cross-org, and custom adapters) and copying data into Salesforce for specific scenarios. This lesson is the scenario half of the virtualization pair. Where lesson 33 taught you the mechanics of External Objects, Salesforce Connect adapters, and Data Connect, lesson 34 turns virtualization into a decision method: a four-question scenario lens that tells you whether a given dataset should be connected live or copied, then a walk through the three main adapters (cross-org, OData, and custom) applied to real customer scenarios, a copy-first scenario, and the hybrid design that copies one subset and virtualizes the rest. Every decision is grounded in the same four variables: does the data have to stay put, how volatile is it, how much of it does the platform actually need, and does the platform need to validate, automate, and report on it at native speed. Covers the read-only reality of most adapters, external latency and rate limits, and Data Connect as the analytical-scale complement. Includes worked scenarios mirroring the three in-lesson quiz questions, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.\\",
+    "date": "October 15, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Virtualization",
+      "Salesforce Connect",
+      "External Objects",
+      "OData",
+      "Cross-Org",
+      "Custom Adapter",
+      "Connect vs Copy",
+      "LDV",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-33-i-1b-scalability-scenarios-ldv-and-sharing-design-index",
+    "title": "Scalability Scenarios: LDV and Sharing Design, Indexing, and Recalc Avoidance",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 33,
+    "excerpt": "How to design a sharing solution that holds up on large data volumes: a restrictive OWD with a few broad criteria rules to groups instead of per-record grants, keeping criteria rules on stable fields and batching recalculation so the share table is rarely rebuilt, understanding how indexing protects query performance only while the table stays lean, and knowing when to escalate a requirement that cannot scale declaratively.",
+    "date": "2026-10-15",
+    "author": "Jimmy Olsen",
+    "readTime": "17 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "scalability",
+      "large-data-volume",
+      "ldv",
+      "indexing",
+      "sharing-table",
+      "recalculation",
+      "criteria-rules",
+      "sharing-rules",
+      "performance",
+      "data-partitioning"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "agent-frameworks-build-buy-lock-in-escape-hatches",
+    "title": "Lesson 69: Agent Frameworks: Build vs Buy, Lock-In, and Escape Hatches",
+    "series": "agentic-ai",
+    "lesson": 69,
+    "excerpt": "You can build an agent from primitives, adopt an open-source framework, or rent a whole platform. This lesson defines the three paths, the orchestration layer at the center of the decision, the lock-in each one quietly costs you, and the escape hatches, MCP first among them, that let you leave. Its worked example is an invoice-triaging agent Adroit weighed across all three routes before shipping.",
+    "date": "October 14, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Agent Frameworks",
+      "Build vs Buy",
+      "LangGraph",
+      "MCP",
+      "Vendor Lock-In",
+      "Orchestration"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "model-and-provider-risk-dependency-and-lock-in",
+    "title": "Lesson 23: Model and Provider Risk: Dependency and Lock-In",
+    "series": "ai-adoption",
+    "lesson": 23,
+    "excerpt": "Most of the AI in your organization runs on models and services someone else built and controls. That dependency is a risk, and it is easy to underestimate. This lesson teaches a non-technical owner where model and provider risk lives, what lock-in actually costs, and how to build resilience into an AI program so a vendor's model change, outage, price increase, or shutdown does not become your incident. It defines the terms, works a concrete example where a provider retires the exact model a team built around, and ends with a try-it exercise that turns your top AI tool into a one-page dependency and exit plan.",
+    "date": "October 14, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "documenting-your-automation-stack-a-personal-runbook",
+    "title": "Lesson 21: Documenting Your Automation Stack: A Personal Runbook",
+    "series": "ai-power-user",
+    "lesson": 21,
+    "excerpt": "An automation you cannot explain six months from now is an automation you will eventually lose. This lesson defines a runbook, a personal runbook, and the automation stack in plain words, shows why the written record matters more than the workflow itself, and walks a worked example of someone who documents their own five automations before the details slip. A try-it prompt gets you writing one runbook entry for a workflow you already run, and the close points at the habit underneath: your automations are not finished when they first work, they are finished when someone (including your future self) can run and repair them from a written page alone.",
+    "date": "October 14, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "9 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Documentation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "disaster-recovery-backup-restore-rto-rpo-drills",
+    "title": "Lesson 68: Disaster Recovery: Backup, Restore, RTO, RPO, and Drills",
+    "series": "salesforce-architect",
+    "lesson": 68,
+    "excerpt": "What recovery actually means for a Salesforce org. The difference between backup and restore, how Recovery Time Objective and Recovery Point Objective turn fuzzy promises into measurable targets, which native tools get you there, and why a backup you have never restored is a backup you do not have.",
+    "date": "October 14, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Reliability",
+      "Disaster Recovery"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-33-lv-3a-virtualized-data-fundamentals-external-objects-sal",
+    "title": "Data Architect LV-3A: Virtualized Data Fundamentals: External Objects, Salesforce Connect, Data Connect",
+    "series": "salesforce-data-architect",
+    "lesson": 33,
+    "excerpt": "Given a customer scenario, decide when to use virtualized data and describe virtualized data options, including External Objects, Salesforce Connect adapters (OData, cross-org, etc.), and Data Connect for data sharing without copying. This lesson opens the virtualization part of the Large Data Volume (LDV) considerations domain. Covers what virtualization is and the problem it solves (seeing and acting on external data in Salesforce without copying it), how Salesforce Connect exposes external data through External Objects and adapters (OData 2.0/4.0, cross-org, custom Apex), the cross-org adapter for reaching another Salesforce org, the hard constraints of External Objects (required External ID, no roll-up summaries, limited relationship types, no master-detail child with standard objects, external-performance and latency dependence), how to decide between virtualizing and copying (volatile, remote, residency-bound data virtualizes; stable data that needs native speed, validation, automation and reporting gets copied), and Data Connect's zero-copy analytics sharing as a complement for analytical, large-scale sharing without duplication. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+    "date": "October 14, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Virtualization",
+      "External Objects",
+      "Salesforce Connect",
+      "OData",
+      "Data Connect",
+      "LDV",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-32-i-1a-scalability-fundamentals-sharing-table-growth-reca",
+    "title": "Scalability Fundamentals: Sharing Table Growth, Recalculation Cost, and When Sharing Cannot Scale",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 32,
+    "excerpt": "Why the Sharing table grows the way it does, what sharing recalculation actually costs at scale, and how to recognize the design where the sharing model stops scaling. Covers the record-times-grantee math behind share-row volume, the hidden cost of readiness to rebuild many rows, and the point at which per-record access over a huge population forces a redesign.",
+    "date": "2026-10-14",
+    "author": "Jimmy Olsen",
+    "readTime": "17 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "scalability",
+      "large-data-volume",
+      "ldv",
+      "sharing-table",
+      "recalculation",
+      "sharing-rules",
+      "role-hierarchy",
+      "apex-sharing",
+      "performance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "computer-use-agents-browser-automation-safety-guardrails",
+    "title": "Lesson 68: Computer-Use Agents: Browser Automation, Safety, and Guardrails",
+    "series": "agentic-ai",
+    "lesson": 68,
+    "excerpt": "A computer-use agent operates software the way a person does: it reads a screen and returns clicks, keystrokes, and scrolls instead of calling an API. This lesson explains the perceive-think-act loop behind browser agents, the three ways an agent sees a page, why prompt injection is the defining risk of the category, and the guardrails, allowlists, approval gates, and in-context instruction sets that keep it from doing damage while it clicks.",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Computer-Use Agents",
+      "Browser Automation",
+      "Prompt Injection",
+      "Safety",
+      "Guardrails",
+      "Accessibility Tree"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "incident-response-when-an-ai-tool-goes-wrong",
+    "title": "Lesson 22: Incident Response: When an AI Tool Goes Wrong",
+    "series": "ai-adoption",
+    "lesson": 22,
+    "excerpt": "Every AI program eventually hits the moment a tool fails, and the difference between a bad outcome and a disaster is whether you had a plan before it happened. This lesson teaches a non-technical owner how to respond when an AI tool goes wrong. It defines what an AI incident actually is, separates an incident from a near miss, walks you through a concrete response sequence, and ends with a try-it exercise that builds your own incident response plan before you need it.",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "when-automation-is-wrong-what-stays-manual-and-sunsetting-honestly",
+    "title": "Lesson 20: When Automation Is Wrong: What Stays Manual, and Sunsetting Honestly",
+    "series": "ai-power-user",
+    "lesson": 20,
+    "excerpt": "Everything before this lesson made the case for automation. This one is the honest counterweight: when automation is the wrong answer, what you should keep doing by hand, and how to retire a workflow that has stopped earning its keep. It defines automation bias, the cognitive pull that makes you over-trust a tool, and total cost of ownership, the reason every workflow quietly costs more than the hours it saves. A worked example shows Priya spotting both problems in her own stack and retiring a workflow honestly, and a try-it prompt gets you running an honest review of one of yours. The close points at the next lesson on documenting your automation stack, which is what makes every future decision about retire or keep a fast one.",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Sustaining"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "identity-at-enterprise-scale-sso-scim-jit-provisioning-federation",
+    "title": "Lesson 67: Identity at Enterprise Scale: SSO, SCIM, JIT Provisioning, and Federation",
+    "series": "salesforce-architect",
+    "lesson": 67,
+    "excerpt": "How enterprise teams manage who their users are across many systems. Single sign-on and federated identity let one set of credentials work everywhere, while SCIM and just-in-time provisioning keep user records in sync without manual administration.",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Identity",
+      "Security"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-32-lv-2b-archiving-and-purging-scenarios-what-to-archive-wh",
+    "title": "Data Architect LV-2B: Archiving and Purging Scenarios: What to Archive, When, Compliance",
+    "series": "salesforce-data-architect",
+    "lesson": 32,
+    "excerpt": "Given a customer scenario, recommend an archiving and purging plan that is optimal for the customer's data storage management needs, deciding what to archive, when, and how to satisfy compliance requirements. Builds on lesson 31's archiving and purging fundamentals by turning the decision into a method. Covers how to classify what to archive by value and access (closed, inactive, rarely queried records go cold), when to archive (age and status triggers, statutory minimum retention, and a defined maximum), the compliance constraints that override deletion (legal hold, GDPR storage limitation, sector rules), the three purge outcomes (delete, anonymize-and-retain, archive-then-delete), the on-platform Big Object versus off-platform storage trade-off, referential integrity across parents and children, and the audit trail that evidences what was archived, when, by which job, and under which rule. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+    "date": "October 13, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Archiving",
+      "Purging",
+      "Compliance",
+      "GDPR",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-31-o-1c-big-objects-external-objects-security-event-monito",
+    "title": "Big Objects, External Object Security, Event Monitoring, and Run-As Exposure",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 31,
+    "excerpt": "How to govern the data that sits outside the standard sharing model: big objects whose access runs on object permissions because they do not honor OWD, sharing rules, or role hierarchy; external objects whose record-level enforcement is delegated to the external data source rather than to internal sharing; event monitoring logs and security health check results that are themselves sensitive and must be confined to designated admins and analysts; and every run-as context that executes with a broader view than the user who calls it.",
+    "date": "2026-10-13",
+    "author": "Jimmy Olsen",
+    "readTime": "16 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "big-objects",
+      "external-objects",
+      "odata",
+      "event-monitoring",
+      "event-log-file",
+      "security-health-check",
+      "run-as",
+      "without-sharing",
+      "least-privilege"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "voice-agents-stt-tts-latency-interruptions-barge-in",
+    "title": "Lesson 67: Voice Agents: STT, TTS, Latency, Interruptions, and Barge-In",
+    "series": "agentic-ai",
+    "lesson": 67,
+    "excerpt": "A voice agent is an LLM agent with a voice I/O layer bolted on the front and back. This lesson shows how that layer works: how speech-to-text and text-to-speech turn audio into tokens and back, why the latency budget is the whole game, how turn detection decides when the agent should speak, and how barge-in lets a caller interrupt without the conversation falling apart.",
+    "date": "October 12, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Voice Agents",
+      "Speech-to-Text",
+      "Text-to-Speech",
+      "Latency",
+      "Barge-In"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "privacy-compliance-gdpr-ccpa-and-your-ai-use",
+    "title": "Lesson 21: Privacy Compliance: GDPR, CCPA, and Your AI Use",
+    "series": "ai-adoption",
+    "lesson": 21,
+    "excerpt": "AI training and inference run on personal data, which means your AI use is anchored to privacy law whether you planned for it or not. This lesson walks a non-technical owner through the two frameworks you are most likely to meet: the EU General Data Protection Regulation (GDPR) and California's Consumer Privacy Act (CCPA). It defines personal data and automated decision-making, explains what each law actually requires of an organization that runs AI, separates the real obligations from the myths, and gives you a plain checklist for figuring out which rules apply to your own AI use cases before a regulator does.",
+    "date": "October 12, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Privacy"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "development-lifecycle-deployment-architecture-devops-enterprise-scale",
+    "title": "Lesson 66: Development Lifecycle and Deployment Architecture: DevOps at Enterprise Scale",
+    "series": "salesforce-architect",
+    "lesson": 66,
+    "excerpt": "How enterprise teams take a build from a developer's machine to a monitored, released production system. Source control and branching strategy, continuous integration and continuous delivery, environment promotion through the sandbox chain, and the observability that tells you a release is actually working.",
+    "date": "October 12, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "Delivery",
+      "DevOps"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-31-lv-2a-archiving-and-purging-fundamentals-strategies-big",
+    "title": "Data Architect LV-2A: Archiving and Purging Fundamentals",
+    "series": "salesforce-data-architect",
+    "lesson": 31,
+    "excerpt": "Given a customer scenario, recommend a data archiving and purging plan that is optimal for the customer's data storage management needs, covering archiving strategies, using Big Objects as an archive target, and retention policies. Explains the difference between archiving and purging, the three archive targets (Big Object on-platform, off-platform store, custom archive object), how a retention policy drives per-category keep-duration and end-of-life actions under storage-limitation rules, the age and status based selection patterns, why deleting from the hot object after archiving is essential, how to preserve a query path for archived data, and how to run archive jobs safely with Bulk API, idempotency, testing, and a rollback plan. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+    "date": "October 12, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Archiving",
+      "Purging",
+      "Big Objects",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-30-o-1b-files-knowledge-and-custom-metadata-settings-secur",
+    "title": "Files, Knowledge, and Custom Metadata/Settings Security",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 30,
+    "excerpt": "How to control access to the artifacts that are not standard or custom records: files whose visibility is decided by sharing and libraries rather than by the record they attach to, Knowledge articles whose visibility combines permissions with internal and customer visibility and data categories, and custom metadata types and custom settings whose access runs on object permissions and the Protected flag instead of OWD and sharing rules.",
+    "date": "2026-10-12",
+    "author": "Jimmy Olsen",
+    "readTime": "15 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "files",
+      "libraries",
+      "knowledge",
+      "articles",
+      "data-categories",
+      "custom-metadata",
+      "custom-settings",
+      "protected",
+      "object-permissions"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "multimodal-agents-vision-audio-documents-structured-data",
+    "title": "Lesson 66: Multimodal Agents: Vision, Audio, Documents, and Structured Data",
+    "series": "agentic-ai",
+    "lesson": 66,
+    "excerpt": "An agent that only reads text is blind to most of the real world. This lesson shows how multimodal models give agents eyes and ears: how a model turns images, audio, and documents into tokens it can reason over, how vision maps to token cost, how documents get their structure back instead of being flattened into text, and how to decide when a general multimodal model beats a specialized extraction pipeline.",
+    "date": "October 11, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Multimodal",
+      "Vision",
+      "OCR",
+      "Document Understanding",
+      "Structured Data"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "shadow-it-discovering-and-governing-unsanctioned-ai",
+    "title": "Lesson 20: Shadow IT: Discovering and Governing Unsanctioned AI",
+    "series": "ai-adoption",
+    "lesson": 20,
+    "excerpt": "Your people are already using AI tools you never approved, and banning them makes it worse. This lesson is about shadow IT in its newest form: the unsanctioned AI that has already arrived before you know it exists. It defines the terms, shows why prohibition fails, walks you through a concrete discovery and triage of a real inventory, and ends with a try-it exercise that finds and governs the shadow AI in your own organization. The goal is not detection theater. It is a repeatable loop that turns invisible usage into a governed, usable inventory.",
+    "date": "October 11, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "cost-and-limits-token-budgets-rate-limits-and-your-tools-constraints",
+    "title": "Lesson 19: Cost and Limits: Token Budgets, Rate Limits, and Your Tool's Constraints",
+    "series": "ai-power-user",
+    "lesson": 19,
+    "excerpt": "The cost and limits lesson turns from judging a workflow to affording it. It defines a token, the unit of text a model processes, a context window, the amount a model can consider at once, a token budget, the amount a workflow can afford to spend, and a rate limit, the cap on how fast a tool will respond. It explains why bigger context windows cost more to run, why providers cap how often you can call a tool, and how a spend cap protects you from a runaway run. A worked example follows Priya as her weekly report grows until it stops fitting, then hits a rate limit, then quietly runs up her bill, and it shows the small habits that fix all three. A try-it prompt gets you auditing your own workflows for the same three constraints, and the close points at the next lesson on when automation is wrong.",
+    "date": "October 11, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "9 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Cost",
+      "Limits"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "enterprise-ai-reference-architectures-rag-agent-platforms-llm-gateways",
+    "title": "Lesson 65: Enterprise AI Reference Architectures: RAG, Agent Platforms, and LLM Gateways",
+    "series": "salesforce-architect",
+    "lesson": 65,
+    "excerpt": "The reference architecture an enterprise uses to wire AI systems to its data at scale: how retrieval-augmented generation grounds answers in enterprise data, how an agent platform orchestrates multi-step work, and how an LLM gateway becomes the single control point for model access, cost, and governance.",
+    "date": "October 11, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Architecture",
+      "AI",
+      "Enterprise",
+      "RAG",
+      "Agents"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-30-lv-1b-ldv-data-model-and-query-design-scenarios",
+    "title": "Data Architect LV-1B: LDV Data-Model and Query Design Scenarios",
+    "series": "salesforce-data-architect",
+    "lesson": 30,
+    "excerpt": "Given a customer scenario, design a data model that scales considering large data volume and solution performance, applying selective query design, indexing, denormalization, and data-distribution strategies to real scenarios. Covers designing for the query rather than the entity, the query patterns that force full scans (unindexed text filters, OR conditions across unindexed fields, negative filters, leading-wildcard LIKE), denormalizing frequently reported values onto the queried object so reporting becomes single-object, distributing ownership and parents to avoid skew and hot spots, bounding the working set through archiving and pagination, keeping objects narrow, governing record types and picklist sprawl, why SOQL in Apex and Flows must be selective too, and why LDV performance must be validated at representative volume in a full sandbox. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+    "date": "October 11, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "23 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Large Data Volume",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-29-o-1a-reports-and-dashboards-folder-sharing-run-in-conte",
+    "title": "Reports and Dashboards: Folder Sharing, Run-in-Context, Aggregate-Data Exposure",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 29,
+    "excerpt": "How reports and dashboards expose data that is not stored in standard or custom objects: folder sharing that controls who can view and edit each artifact, run-in-context which filters every report and dashboard to the viewing user's own record access, and the aggregate-data exposure risk that exists before a single record is opened.",
+    "date": "2026-10-11",
+    "author": "Jimmy Olsen",
+    "readTime": "15 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "reports",
+      "dashboards",
+      "folders",
+      "running-user",
+      "run-as",
+      "field-level-security",
+      "aggregate",
+      "exposure"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "fine-tuning-in-practice-datasets-lora-evaluation-pitfalls",
+    "title": "Lesson 65: Fine-tuning in Practice: Datasets, LoRA, Evaluation, and Pitfalls",
+    "series": "agentic-ai",
+    "lesson": 65,
+    "excerpt": "Deciding you need to fine-tune is only the first move. This lesson is the manual for doing it well: how to shape a dataset that actually teaches a model, how Low-Rank Adaptation (LoRA) makes training affordable on a single GPU by freezing the model and updating a few million parameters instead of billions, how to evaluate a tuned model against a held-out set before you trust it, and the pitfalls that sink fine-tuning projects in practice.",
+    "date": "October 10, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "LLMs",
+      "Fine-tuning",
+      "LoRA",
+      "Evaluation",
+      "Machine Learning"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "security-ownership-threat-model-for-your-ai-stack",
+    "title": "Lesson 19: Security Ownership: Threat Model for Your AI Stack",
+    "series": "ai-adoption",
+    "lesson": 19,
+    "excerpt": "You procured the tool in Lesson 18 and read the contract, but the contract names the vendor's liabilities, not anyone inside your company who answers when the tool is running. This lesson is about deciding, plainly and before an incident, what could actually go wrong with your AI stack and whose job it is to catch and answer each failure. It defines a threat model in plain language, adapts it to the specific ways AI breaks security assumptions, walks a worked example that builds a threat map for one real AI use case and scores each risk, then gives you a procedure for assigning a named owner to every risk so security is a set of accountable jobs rather than a vague wish that IT handles it.",
+    "date": "October 10, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Security"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "the-quality-bar-measuring-accuracy-and-catching-regressions",
+    "title": "Lesson 18: The Quality Bar: Measuring Accuracy and Catching Regressions",
+    "series": "ai-power-user",
+    "lesson": 18,
+    "excerpt": "The quality bar lesson turns from building and running workflows to judging them. It defines a quality bar, accuracy, and a regression in plain words, explains why a working workflow can quietly stop working, and gives you a small, repeatable way to measure whether a workflow is actually good: a golden set of known-good cases you re-run after every change. It defines the it-runs versus it-works-correctly gap that makes AI output hard to judge, follows one person's weekly report through building a ten-case bar and watching it catch a regression, and points out where the bar is cheap and where it is overkill. A try-it prompt gets you building your first bar on a workflow you already trust, and the close points at the next lesson, cost and limits.",
+    "date": "October 10, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "9 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Quality",
+      "Reliability"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "cta-data-data-strategy-governance-quality-lineage",
+    "title": "Lesson 64: CTA Data: Data Strategy, Governance, Quality, and Lineage",
+    "series": "salesforce-architect",
+    "lesson": 64,
+    "excerpt": "The CTA data domain as a design discipline: deciding what data the enterprise actually needs, who owns and governs it, how it stays trustworthy under constant change, and how lineage makes every transformation traceable from raw source to the harmonized single source of truth.",
+    "date": "October 10, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "CTA",
+      "Data",
+      "Certifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-29-lv-1a-ldv-fundamentals-skinny-tables-indexing-selective",
+    "title": "Data Architect LV-1A: LDV Fundamentals: Skinny Tables, Indexing, Selective SOQL, Record Types, Picklists",
+    "series": "salesforce-data-architect",
+    "lesson": 29,
+    "excerpt": "Given a customer scenario, design a data model that scales considering large data volume and solution performance, applying skinny tables, custom indexes, selective queries, and caution with record types and picklist proliferation. Covers what large data volume (LDV) actually means and why an object grows past the low millions of records, what makes a query selective and why a non-selective query fails or times out in reports and bulk operations, the selectivity thresholds the query optimizer applies to standard versus custom indexes, which fields the platform indexes by default, how to request a custom index from Salesforce Support, what a skinny table is and why it must be support-enabled and refreshed, why record type proliferation fragments data and adds overhead, picklist proliferation and the reason multi-select picklists cannot be efficiently indexed, and the other LDV levers of wide objects, formula fields, roll-up summaries, and ownership skew. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.\\",
+    "date": "October 10, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "22 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Large Data Volume",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-28-r-9b-override-scenarios-manual-sharing-vs-stamp-vs-cust",
+    "title": "Override Scenarios: Manual Sharing vs Stamp vs Custom Logic",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 28,
+    "excerpt": "How to pick the right record access override for a given scenario: manual sharing for one-off human grants, a stamp plus criteria rule for repeatable value-based access, and Apex Managed Sharing when the access depends on runtime computation a field cannot represent.",
+    "date": "2026-10-10",
+    "author": "Jimmy Olsen",
+    "readTime": "14 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "manual-sharing",
+      "sharing-rules",
+      "apex-managed-sharing",
+      "rowcause",
+      "stamp",
+      "override"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "fine-tuning-vs-rag-decision-framework",
+    "title": "Lesson 64: Fine-tuning vs RAG: The Decision Framework",
+    "series": "agentic-ai",
+    "lesson": 64,
+    "excerpt": "The two ways to make a model fit your data live at opposite ends of a spectrum. RAG hands the model new knowledge at answer time without touching a weight. Fine-tuning changes the weights so the model behaves how you need it to. This lesson gives you the decision framework for choosing between them, the costs each one hides, and the hybrid pattern that pairs behavioral skill from fine-tuning with current facts from retrieval.",
+    "date": "October 9, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "LLMs",
+      "AI Agents",
+      "Fine-tuning",
+      "RAG",
+      "Retrieval Augmented Generation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "licensing-and-procurement-what-you-are-actually-buying",
+    "title": "Lesson 18: Licensing and Procurement: What You Are Actually Buying",
+    "series": "ai-adoption",
+    "lesson": 18,
+    "excerpt": "The demo ended and the contract arrived. This lesson is about what you are actually buying when you sign for an AI tool: a bundle of rights, costs, and risks that no sales call will show you. It defines the licensing models you will be quoted (per seat, per token, per activity, per outcome, and the hybrid most vendors actually sell), walks a worked example that prices the same assistant three different ways and shows how wildly the annual bill and its predictability can differ, then takes you clause by clause through the contract language that hides the real deal: who owns the outputs, whether your data trains the model, who pays when the output is wrong, and what happens when the vendor changes the model or silently renews the term. It ends with a try-it exercise that reads the AI agreement your organization is actually considering and decides, before you sign, what you are really buying.",
+    "date": "October 9, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Learn",
+      "AI",
+      "Leadership",
+      "Procurement"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "worked-example-b-a-marketing-and-content-workflow-end-to-end",
+    "title": "Lesson 17: Worked Example B: A Marketing and Content Workflow, End to End",
+    "series": "ai-power-user",
+    "lesson": 17,
+    "excerpt": "The second full worked example of the course, and this time the job is marketing and content. It defines a marketing workflow, a content workflow, a content calendar, and a brand voice in plain words, then follows one person's weekly content production from its first trigger through the data pull, the draft, the repurpose step, the review gate, and the finished output. It shows where the pieces from earlier lessons earn their keep, where a simpler flow would have been better, and how a review gate catches a fabricated statistic before it ships. A try-it prompt gets you auditing your own recurring content against the same moves, and the close points at the next lesson, the quality bar.",
+    "date": "October 9, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Marketing",
+      "Content"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "cta-security-enterprise-grade-security-model-across-systems",
+    "title": "Lesson 63: CTA Security: Designing an Enterprise-Grade Security Model Across Systems",
+    "series": "salesforce-architect",
+    "lesson": 63,
+    "excerpt": "The CTA security domain as a design discipline: drawing the shared responsibility line, making one identity provider the single source of truth, applying the four-layer access model, choosing an encryption strategy, and layering controls so a hub that aggregates five systems is not only as safe as its weakest credential.",
+    "date": "October 09, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "CTA",
+      "Security",
+      "Certifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-28-gv-2b-governance-implementation-scenarios-data-dictionar",
+    "title": "Data Architect GV-2b: Governance Implementation Scenarios: Data Dictionary, Ownership, Quality Metrics, Tools",
+    "series": "salesforce-data-architect",
+    "lesson": 28,
+    "excerpt": "Compare and contrast various approaches and considerations for designing and implementing an enterprise data governance program, applied through the data dictionary, data ownership, quality metrics, and supporting tooling. Covers why the data dictionary or business glossary is the operational artifact that makes governance real and why it must be maintained rather than written once, the ownership models that assign accountability (the business owner accountable for meaning and use, the technical custodian who operates the systems, and the steward who maintains quality day to day) and why a field without an owner is ungoverned, the six data quality dimensions of accuracy, completeness, consistency, timeliness, uniqueness, and validity and how to report and trend them, why quality metrics without an issue-management workflow fix nothing, the metadata catalog and quality tooling ecosystem (Collibra, Informatica, Ataccama) and the on-platform tools (Object Manager descriptions, Field Usage, Setup Audit Trail, reports) and why tooling supports but never replaces the framework, the governance scenario applications of a single customer view program and a GDPR program, and how to report governance to leadership through a scorecard. Includes worked scenarios, a numbered configuration walkthrough, the three exam traps, and a try-it exercise.",
+    "date": "October 9, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "25 min read",
+    "tags": [
+      "Salesforce",
+      "Data Architecture",
+      "Data Governance",
+      "Certification"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-27-r-9a-record-access-overrides-stamp-vs-rollup-record-typ",
+    "title": "Record Access Overrides: Stamp vs Rollup (Record Type, Field Update, Formula)",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 27,
+    "excerpt": "How to override a record's access by stamping a security-relevant value onto it (record type, custom field, picklist) or computing it (formula, rollup), then driving a criteria-based sharing rule from that value.",
+    "date": "2026-10-09",
+    "author": "Jimmy Olsen",
+    "readTime": "14 min read",
+    "tags": [
+      "salesforce",
+      "sharing",
+      "visibility",
+      "architect",
+      "access-overrides",
+      "sharing-rules",
+      "record-types",
+      "formula-fields",
+      "rollup-summary",
+      "stamp"
+    ],
+    "status": "published"
+  },
+  {
     "slug": "prompt-management-versioning-testing-prompt-libraries-prompt-ops",
     "title": "Lesson 63: Prompt Management: Versioning, Testing, Prompt Libraries, and Prompt Ops",
     "series": "agentic-ai",
@@ -7104,6 +10423,23 @@ export const learnLessons: LearnLesson[] = [
       "AI",
       "Leadership",
       "Procurement"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "worked-example-a-an-ops-and-reporting-workflow-end-to-end",
+    "title": "Lesson 16: Worked Example A: An Ops and Reporting Workflow, End to End",
+    "series": "ai-power-user",
+    "lesson": 16,
+    "excerpt": "The pattern is built. Now watch it run. This lesson is the first full worked example of the course: a real operational and reporting job, taken from its first trigger through every step and handoff to its finished output, with the reasoning at each join made visible. It defines a worked example, an ops workflow, and a reporting workflow in plain words, then walks one person's weekly operations report end to end, showing where the pieces from earlier lessons earn their keep and where a simpler flow would have been better. A try-it prompt gets you auditing your own recurring report against the same moves, and the close points at the second worked example, a marketing and content workflow.",
+    "date": "October 8, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "LLMs",
+      "AI Power User",
+      "Workflow",
+      "Reporting"
     ],
     "status": "published"
   },

@@ -1,0 +1,90 @@
+---
+title: "Schema as Code: Supabase Declarative Schemas 2.0"
+slug: supabase-declarative-schemas-pg-delta-2026
+excerpt: "Supabase's database schema now lives in your repo as SQL files, and pg-delta writes the migration. Here is what the engine captures and how to adopt it safely."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "October 15, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "11 min read"
+tags: [Web Development, Supabase, PostgreSQL, SQL, Declarative Schemas, Migrations, Tooling]
+bannerImage: "/banners/supabase-declarative-schemas-pg-delta-2026.webp"
+ogImage: "/banners/supabase-declarative-schemas-pg-delta-2026-og.jpg"
+---
+
+Your database schema is the one thing you cannot un-run. Deploy the wrong frontend and you revert. Run the wrong migration and the data is gone. That is why so many teams still write migrations by hand even when they automate everything else. Supabase is trying to take the hand-written part away. On October 2, 2026, at Supabase Select, the company shipped Declarative Schemas 2.0, its biggest change to how you define a database since the CLI's first prototype in 2021.[^1] The schema you keep as SQL files in your repo is now the source of truth, and a new diff engine called `pg-delta` generates the migrations for you. This post is about what that engine actually captures, how you adopt it on a project that already has migrations, and the corners it still leaves to a human.[^2]
+
+## What the engine change is really about
+
+Supabase's first declarative workflow appeared in April 2025.[^2] Put your schema in SQL files under `supabase/schemas/`, edit the files, and the CLI writes the migration. The workflow itself is not new. What changed in 2.0 is the engine underneath. For years `supabase db diff` shelled out to `migra`, an open source Python library that diffs two Postgres databases and emits the SQL between them.[^2] Supabase had used it since the first CLI prototype in 2021, and it had a problem that grew worse the longer it ran.
+
+`migra` did not understand domains, publications, or comments. Changes to them never appeared in the diff, so you had to read every generated migration line by line and write the missing pieces by hand.[^2] RLS was worse than missing: `migra` could handle creating and dropping a policy, but it had no `alter policy`, so a small change to an existing policy produced no migration at all.[^2] And it could only filter at the schema level. Supabase manages part of every project's schema, and that ownership is uneven. The `auth` schema belongs to the Auth service and should never show up in your diff, but a trigger on `auth.users` that calls a function in `public` to create a profile row is yours and has to appear. `migra` had no way to keep `auth` out while keeping that trigger in, because it could only decide at the level of a whole schema, not per object.[^2]
+
+![How migra missed changes and how pg-delta catches them: migra silently omitted domains, comments, roles, publication membership, and alter-policy on RLS, and filtered only at the schema level, while pg-delta reads the Postgres catalog, diffs each owned object, and warns on anything it cannot track.](</diagrams/supabase-declarative-schemas-pg-delta-2026/1-engine-difference.png>)
+
+Supabase wrote its own engine and open sourced it. The key design decision is visible in how it works. `pg-delta` does not parse SQL to understand your schema. It loads each state into a real Postgres instance and reads the result from the system catalog, on the theory that Postgres is the only thing that fully understands Postgres.[^5] To build a migration, the CLI starts two throwaway Postgres databases, loads your schema files into one, replays your migration history into the other, and lets `pg-delta` compare them by reading the catalog.[^2] Because it reads what a real Postgres actually built, it stops silently dropping things and starts reporting objects it cannot track as warnings, with a `--strict-coverage` flag that turns those warnings into errors so CI fails rather than shipping a partial migration.[^2]
+
+This per-object approach also solved the ownership split. `pg-delta` filters ownership per object rather than at schema level. A Supabase-managed object such as the contents of the `auth` schema can stay out of the diff while a developer-owned trigger attached to `auth.users` is included. The same split runs through roles, grants, and extension-owned objects.[^2]
+
+## What pg-delta now catches that migra missed
+
+The practical headline is coverage. The table in Supabase's announcement is the clearest way to see the jump.[^2]
+
+RLS policies went from create-and-drop only to full create, drop, and alter, so changing a policy's `USING` clause now produces a real migration. The `security_invoker` setting on views used to be silently dropped from a view definition whenever the view was recreated; `pg-delta` preserves it, and that setting is load-bearing because it makes the view run with the caller's permissions so RLS still applies to anyone who queries it.[^2] View owners and grants, column privileges, comments, roles, and domains are all now diffed, where before they were not touched at all. Indexes on materialized views used to be lost when the view was recreated; they are now restored. Publication membership is diffed. The engine also covers partitions, subscriptions, and foreign tables.[^2]
+
+The extension handling is where it gets clever. When an object belongs to an extension, `pg-delta` never emits `create table` or `drop table` for it. A `pgmq` queue is a pair of tables that `pgmq.create` builds for you, plus a row in `pgmq.meta`. For those, `pg-delta` emits calls like `select pgmq.drop_queue('q');` and the CLI flags them as destructive, because the engine prioritizes coverage and correctness over producing the least destructive migration.[^2] A `pg_cron` job is a row in `cron.job`, and a removed job comes out as `cron.unschedule`.[^2]
+
+![Migra versus pg-delta coverage by object type: tables, columns, constraints, indexes, functions, and triggers are handled by both; RLS alter policy, security_invoker on views, view grants, column privileges, materialized-view indexes, comments, roles, domains, and publication membership are new in pg-delta.](</diagrams/supabase-declarative-schemas-pg-delta-2026/2-coverage-comparison.png>)
+
+That coverage jump is the reason to care even if you never touch a generated migration. If your project manages RLS, roles, or grants, you have been carrying a hidden cost: hand-written patches on top of every generated migration, or silent drift where a change never made it into version control. `pg-delta` moves those objects into the declarative workflow where they belong.
+
+## The four-step workflow
+
+The daily loop is short and worth spelling out exactly because the command names changed. The old tools generated migrations from a live database with `supabase db diff`. On `pg-delta`, you generate them from your declarative files with a new command, `supabase db schema declarative sync`.[^2][^4]
+
+1. **Declare.** Create a SQL file under `supabase/schemas/`, one per table or per schema, your choice. This is the file you edit and review in pull requests. A `profiles` table with an RLS policy is a few lines, table plus `enable row level security` plus one `create policy`.[^2]
+2. **Generate.** Run `supabase db schema declarative sync -f create_profiles --no-apply`. The CLI diffs your schema files against your migration history and writes the result to a timestamped migration file under `supabase/migrations/`, including the table, the foreign key to `auth.users`, the policy, and the default grants Supabase applies to new public tables.[^2]
+3. **Review and apply.** Read the generated migration like any other, then `supabase start`, `supabase migration up`, and `supabase db push` to deploy it.[^2]
+4. **Change and sync again.** Edit the same schema file, add a column, tighten a policy, add a view. Run sync again and it writes just the delta: the column, the `alter policy`, and the view.[^2]
+
+Two details matter. First, sync compares your schema files against your migration history, not against the live database. A change you make in the dashboard or the SQL editor never appears in the migration until it is in the files, so the files stay the single source of truth.[^2][^4] Bring a live change back with `supabase db pull --declarative`, which refreshes the files without creating a migration, or edit the files directly and sync again.[^4] Second, because the engine reads real Postgres, it orders the output by the dependency graph it builds from the catalog. You no longer hand-order files in `schema_paths`, and if a dependency cycle exists, the command fails with a diagnostic instead of producing a broken migration.[^2][^4]
+
+![The four-step declarative workflow: declare the schema in supabase/schemas, generate the migration with db schema declarative sync writing to supabase/migrations, review and apply locally then push to production, and change the file and sync again to produce the next delta.](</diagrams/supabase-declarative-schemas-pg-delta-2026/3-workflow.png>)
+
+## The migration trap that still needs a human
+
+The engine's coverage-first philosophy has one sharp edge. `pg-delta` prioritizes correctness over producing the least destructive migration, and the clearest example is a renamed column. A rename comes out as a drop followed by an add, and running that migration unchanged would wipe the column's data. The CLI flags the drop, but it cannot know you meant a rename, because a drop and an add look identical to it and to Postgres.[^2] Rewrite those flagged statements by hand before you apply. Less destructive migrations are on the roadmap; until they land, the review step is not optional.
+
+The same principle explains which extension objects get flagged. Removing a `pgmq` queue or a `pg_cron` job is destructive, and the CLI says so. That is a feature: you see the drop in the diff and decide, rather than having the engine quietly emit it.
+
+## Starting from an existing database
+
+If you have a database and no schema files, you do not write the first file by hand. `supabase db schema declarative generate --linked` exports your production schema into one SQL file per object under `supabase/schemas/`, grouped by database schema, and from there the loop is the same: edit, sync, review, apply.[^2] If your project has no migration history, run `supabase db pull` once first so `sync` has a baseline to diff against; without a baseline, the first `sync` regenerates the entire schema as one migration that applies cleanly to an empty database but fails on `db push`, because the remote already has those objects.[^4]
+
+Switching an existing project is a one-time config change plus a catch-up migration, and Supabase's docs recommend doing it on a branch so you can review everything before it reaches the team.[^5] Add `[experimental.pgdelta]` with `enabled = true` to `config.toml`, remove `schema_paths` because ordering is now automatic, and pull once against your linked project. Because your history was built from legacy diffs, that first pull captures the objects the old engine never tracked, such as comments, domains, roles, and publication membership, in a single migration. You accept the prompt to record it as applied, review it, and then replace `supabase db diff` with `supabase db schema declarative sync` in every script, CI job, and AI prompt file that generates migrations.[^5] Your environment variable flag is `SUPABASE_EXPERIMENTAL_PG_DELTA=1` for a per-run switch without editing config.[^5]
+
+![Adopt a graded expansion: new projects get pg-delta by default from a recent supabase init; existing projects add the experimental section to config.toml, run a catch-up db pull, switch db diff commands to db schema declarative sync, and optionally enable strict-coverage in CI so untracked objects fail the job.](</diagrams/supabase-declarative-schemas-pg-delta-2026/4-adoption.png>)
+
+You need Supabase CLI 2.119 or later, and `pg-delta` still carries a pre-1.0 label, so breaking changes can land between releases.[^2] New projects created with a recent `supabase init` get it by default, and the next major CLI version will make it the default everywhere, with `enabled = false` preserving legacy `migra` for the projects that need it.[^2]
+
+## What stays out of scope
+
+`pg-delta` generates schema changes, not data changes. It creates tables, policies, and functions. It never writes an `insert`, `update`, or `delete` for the rows in your tables, with one partial exception: some extensions keep their configuration as rows, and those it treats as part of the schema, changing them through the extension's own functions.[^2]
+
+Storage buckets are the notable gap. A bucket is a row in `storage.buckets`, and `pg-delta` does not diff its rows, so a bucket you create in the dashboard will not show up in your schema files. Create buckets in a seed file or a hand-written migration instead. The RLS policies on `storage.objects` are a different story, because they are schema, and those are diffed.[^2]
+
+The release is also explicit about what it is not. It is not a zero-downtime rollout orchestrator, so running a generated migration safely against production is still your job. It is not an ORM plugin or a TypeScript schema DSL, because the schema files are SQL and nothing else. And it does not support Postgres 13 or older, which matters if you are self-hosting or running an old local image.[^2] `pg-delta` itself runs outside Supabase under the PostgreSQL License, shipped as `@supabase/pg-delta`, so point it at any two Postgres 14 through 18 databases and the `plan` and `render` commands give you the same migration logic anywhere.[^2]
+
+## Why this is the pattern teams should standardize on
+
+The release is part of a larger shift Supabase announced on the same day: the backend moves into the repository. Configuration can live in code too, with `supabase config pull` bringing a dashboard setting change back into the project file, and `supabase pull` pulling config, schema, and Edge Functions in a single command so a fresh checkout reproduces the whole backend.[^1][^3] Local development no longer needs Docker, running as native processes that start in sandboxes and CI runners, and you can run multiple local instances, one per directory, so two worktrees of the same repo can each have their own stack.[^1][^3]
+
+There is a reason the timing matters. Supabase's own framing is that coding agents are good at editing SQL files and bad at writing migrations. With the schema as the source of truth, an agent edits a file and `pg-delta` works out the migration, and the human reviews a diff that shows only the lines that changed.[^3] That is the same discipline we push on every consulting engagement: make the thing you cannot un-run the artifact that lives in version control, under review, with a machine doing the mechanical transformation and a person owning the risky step. The same applies when a schema change has to survive a rolling deploy, which we cover in [expand-and-contract schema migrations](/blog/expand-contract-migrations-2026). Declarative Schemas 2.0 does not remove the human from schema work; it removes the hand-written, error-prone drift that used to sneak past them.
+
+[^1]: Supabase, "Supabase Select 2026 Recap," October 2, 2026. Covers the code-first backend release: schema and config living in code, Declarative Schemas 2.0, local development without Docker, and the wider "backend moves into the repo" direction. [supabase.com](https://supabase.com/blog/supabase-select-2026-recap)
+[^2]: Supabase Engineering, "Declarative Schemas 2.0 with pg-delta," October 13, 2026. The primary source for the engine change: why migra was replaced, the coverage table, the two-database catalog diff, the four-step workflow, extension handling, starting from an existing database, and what stays out of scope. [supabase.com](https://supabase.com/blog/declarative-schemas-2-0-pg-delta)
+[^3]: Supabase, "Build anything: Supabase from code, and an MCP server for your app," October 2, 2026. Covers config-in-code, `supabase config pull`, `supabase pull`, native local development, and the agent-edits-files-and-pg-delta-generates framing. [supabase.com](https://supabase.com/blog/select-2026-build-anything)
+[^4]: Supabase Docs, "Declarative database schemas." The workflow reference: sync compares files against migration history not the live database, the baseline requirement before the first sync, dependency ordering, and rolling back. [supabase.com](https://supabase.com/docs/guides/local-development/declarative-database-schemas)
+[^5]: Supabase Docs, "Diff engines: pg-delta and migra." The engine comparison and the switch-an-existing-project walkthrough: config section, catch-up pull, command replacement, and the environment variable. [supabase.com](https://supabase.com/docs/guides/local-development/diff-engines)

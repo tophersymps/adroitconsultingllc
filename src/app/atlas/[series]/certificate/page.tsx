@@ -31,7 +31,9 @@ import {
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
 import { buildMetadata } from "@/lib/seo";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import {
   buildCertificateEligibility,
   certificateCompletionDate,
@@ -45,7 +47,10 @@ import {
   getAccessUserId,
   getCourseRowBySlug,
 } from "@/lib/access";
-import { buildPaywallView } from "@/lib/paywall";
+import {
+  buildDegradedPaywallView,
+  buildPaywallView,
+} from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
 import { getLessonsForSeries } from "@/lib/learn";
 import { appendCompletionEvent } from "@/lib/completion";
@@ -68,6 +73,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series } = await params;
   const s = getSeriesBySlug(series);
   if (!s) return {};
+  // LOW (t_91a3e30b, CWE-200): generateMetadata runs BEFORE notFound(), so a
+  // stealth series used to name itself in the 404 document head.
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Completion Record | Adroit Learn",
+      description: "Course completion records for Adroit Learn courses.",
+      path: `/atlas/${series}/certificate`,
+      noindex: true,
+    });
+  }
   const hasExam = getCertExam(series) !== null;
   return buildMetadata({
     title: hasExam
@@ -93,20 +108,39 @@ export default async function CertificatePage({ params }: Props) {
   // Access seam gate (ADR-201): DB-backed status + entitlements. not-launched →
   // 404; paywall → locked-content page (never the cert, never 404).
   const userId = await getAccessUserId();
-  const decision = await accessSeam.decideCourseAccess(userId, series);
-  if (decision.kind === "not-launched") notFound();
-  if (decision.kind === "paywall") {
-    const courseRow = await getCourseRowBySlug(series);
-    if (!courseRow) notFound();
+  let decision: Awaited<ReturnType<typeof accessSeam.decideCourseAccess>> | null =
+    null;
+  let degraded = false;
+  try {
+    decision = await accessSeam.decideCourseAccess(userId, series);
+  } catch (err) {
+    // R2-5: a token-route failure is a classified degrade, never a 404/500.
+    if (!isDbTokenUnavailable(err)) throw err;
+    degraded = true;
+  }
+  if (decision?.kind === "not-launched") notFound();
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the series
+  // is publicly launched, so fail CLOSED on EXISTENCE — an unpublished series
+  // 404s under an outage exactly as the healthy seam does (R2-5 availability
+  // for the seeded live series is unchanged).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
+  if (degraded || decision?.kind === "paywall") {
     const lessons = getLessonsForSeries(series);
+    const courseRow = degraded ? null : await getCourseRowBySlug(series);
+    if (!degraded && !courseRow) notFound();
     return (
       <LockedContentPage
         seriesSlug={series}
-        view={buildPaywallView({
-          course: courseRow,
-          series: s,
-          peekLessonSlug: lessons[0]?.slug ?? null,
-        })}
+        degraded={degraded}
+        view={
+          courseRow
+            ? buildPaywallView({
+                course: courseRow,
+                series: s,
+                peekLessonSlug: lessons[0]?.slug ?? null,
+              })
+            : buildDegradedPaywallView(s, lessons[0]?.slug ?? null)
+        }
       />
     );
   }

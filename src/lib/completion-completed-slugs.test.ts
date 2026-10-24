@@ -24,7 +24,7 @@ const { mocks } = vi.hoisted(() => {
   return { mocks: { select, eq } };
 });
 
-vi.mock("@/lib/supabase/server", () => ({
+vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: async () => ({
     from: (table: string) => {
       if (table !== "lesson_completion") {

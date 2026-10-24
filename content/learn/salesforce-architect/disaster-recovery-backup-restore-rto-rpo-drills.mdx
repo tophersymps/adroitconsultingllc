@@ -1,0 +1,135 @@
+---
+title: "Lesson 68: Disaster Recovery: Backup, Restore, RTO, RPO, and Drills"
+slug: disaster-recovery-backup-restore-rto-rpo-drills
+series: "salesforce-architect"
+lesson: 68
+excerpt: "What recovery actually means for a Salesforce org. The difference between backup and restore, how Recovery Time Objective and Recovery Point Objective turn fuzzy promises into measurable targets, which native tools get you there, and why a backup you have never restored is a backup you do not have."
+date: "October 14, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Reliability, Disaster Recovery]
+---
+
+# Lesson 68: Disaster Recovery: Backup, Restore, RTO, RPO, and Drills
+
+A backup you have never restored is not a backup, it is a hope. That is the sentence this lesson hangs on. Most orgs have some copy of their data taking up space somewhere, and most have no idea whether that copy can bring the business back if the data is gone. This lesson is about closing that gap. It defines disaster recovery, separates backup from restore, introduces the two metrics that turn recovery from a feeling into a contract, walks the native Salesforce tooling, and explains why drills are the part most orgs skip and the part that matters most.
+
+The Salesforce system architect exam tests recovery thinking directly. A scenario will describe a business, name the critical data and the acceptable downtime, and expect you to pick the design that meets those targets. That is not a memorization question. It is a question about whether you can translate a business need into an RTO and an RPO, then wire the right backup and restore mechanisms to them. This lesson hands you that translation.
+
+![Disaster recovery as a loop: a measurable RTO and RPO drive the backup and restore strategy, and a drill validates both, feeding lessons learned back into the strategy](</diagrams/disaster-recovery-backup-restore-rto-rpo-drills/1-dr-loop.png>)
+
+## Define the terms
+
+- **Disaster recovery (DR)**: the organized set of procedures and infrastructure that restore a system to normal operation after a disruptive event. [^1]
+- **Recovery time objective (RTO)**: the acceptable time between a disruption and the restoration of a business process to its operating level. [^3] Salesforce's Well-Architected framework describes it as how quickly recovery must happen for a given capability. [^1]
+- **Recovery point objective (RPO)**: the acceptable amount of data loss, measured in time, that a business will tolerate. [^3] It answers: how far back can the recovered data go and still be good enough?
+- **Backup**: a copy of data and metadata taken to a separate store so it can be restored later. [^6]
+- **Restore**: writing backed-up data and metadata back into an environment. Backup and restore are different disciplines; strong at one and weak at the other means no recovery.
+- **Drill**: a scheduled, executed test of the restore procedures, run to prove the backup is usable and to time the recovery. [^1]
+- **Runbook**: the documented, step-by-step recovery procedure that a drill exercises and keeps current. [^1]
+
+The two objectives anchor everything. RTO is about time to recover. RPO is about how much data you are willing to lose in the process. An org that sets neither has no way to know whether a backup is good enough, whether a restore is fast enough, or whether money is being wasted on protection it does not need. The Well-Architected framework flags the undefined case as an anti-pattern: a system described as "reliable" with no measurable RTO or RPO gives the team nothing to build against and the business nothing to hold them to. [^1]
+
+## Backup versus restore, and why the distinction decides recovery
+
+Backup is the storage side. Restore is the retrieval side. They feel like halves of one thing, and every org does the first half. The second half is where recovery lives or dies.
+
+Consider the common failure. An org runs weekly exports, keeps them in a shared drive, considers itself backed up. Then a destructive refresh or a bad integration overwrites a year of records. The sequence that follows is the real story: someone finds the export, discovers it is from before the weekend of heavy edits, tries to load it through data loader, fights with lookup re-matching, and realizes the file has been overwritten by newer data. Weeks later, and the "backup" never became a recovery. The Well-Architected framework names this exact anti-pattern: backups configured but never restored to a test environment, so the first restore attempt happens during a real disaster and reveals incomplete scope or corrupted archives. [^1] It also names the corollary: manual data loader exports used as backups, which are inconsistent, incomplete, and unaudited. [^1]
+
+The test of a backup strategy is not whether the files exist. It is whether you can bring the business back from them, within the agreed time, losing no more than the agreed amount of data. That is why the next two metrics matter: they give the restore a finish line.
+
+## RTO and RPO: the contract recovery is built on
+
+Recall the definitions. RTO is the maximum acceptable time from disruption to restored operation. RPO is the maximum acceptable data loss in time. Salesforce's Well-Architected framework is explicit that these must be set per business capability rather than uniformly across the whole org, and that they require business stakeholder approval. [^1] A uniform "everything must recover in an hour" target is itself an anti-pattern, over-investing in non-critical systems and under-investing in critical ones. [^1]
+
+Here is the guidance the framework gives for setting targets per capability: [^1]
+
+- **Revenue-critical operations**: minutes to one hour RTO.
+- **Customer-facing services**: one to four hours RTO.
+- **Internal tools**: four to twenty-four hours RTO.
+- **Historical reporting**: days RTO.
+
+The RPO buckets line up with how the data is produced: [^1]
+
+- **Financial transactions**: near-zero RPO, on the order of seconds, which demands asynchronous event-driven replication.
+- **Customer records**: near-zero, on the order of minutes, which Change Data Capture can deliver.
+- **Analytics data**: hours, a scheduled sync is enough.
+- **Temporary workflow state**: days; no replication needed.
+
+The crucial discipline is that RTO and RPO are commitments, not aspirations. The framework warns against setting an aggressive target with no architecture to back it, like a fifteen minute RTO with manual recovery procedures that take four hours to execute, or a zero RPO with only daily backups. [^1] Every target must have a mechanism that can actually hit it. When you set a target, ask: what infrastructure and procedure gets me there, and have I ever timed it?
+
+There is also a platform baseline to respect. The framework notes that a solution can only provide an RTO better than the platform baseline if you add multi-org architecture. [^1] For realistic targets laid on top of the Salesforce platform, you build on what the platform already gives you rather than pretending a single org turns into something it is not.
+
+![RTO versus RPO mapped to capability: revenue-critical gets minutes to an hour RTO and near-zero RPO, while historical reporting tolerates days of both. Each target points to a backing mechanism, from event streaming down to scheduled exports](</diagrams/disaster-recovery-backup-restore-rto-rpo-drills/2-rto-rpo-buckets.png>)
+
+## What the Salesforce platform already does for you
+
+Before designing customer-side recovery, understand what the platform provides underneath. Salesforce runs each instance from multiple geographically diverse data centers, so no single site is a point of failure. [^4] On first party infrastructure, an org is actively served from one data center with transactions replicated asynchronously to a paired ready instance in a separate location, and Salesforce regularly conducts site switches between the active and ready locations for maintenance, compliance, and disaster recovery. [^4] On Hyperforce, the model is active across multiple availability zones, with database replication keeping data consistent, and Salesforce runs proactive game days and chaos engineering exercises, including simulated availability zone failures, to validate resilience. [^4] [^5]
+
+What this means for an architect: the platform handles the infrastructure-level disaster, the kind where a single machine, facility, or region fails. That resilience is not a substitute for your own backup and restore discipline. It protects against platform failure, not against the failures that actually destroy customer data: destructive changes, bad integrations, accidental deletion, corruption from a broken migration. You still own the data-level recovery, and that is what this lesson is really about.
+
+## Native recovery tooling: Data Export Service
+
+The built-in, zero cost option is the Data Export Service. Your org can generate backup files of its data on a weekly or monthly basis depending on your edition. [^6] The files come as comma separated value exports, essentially the same shape a data loader uses. Two constraints matter for planning.
+
+The first is cadence. Weekly exports are available in Enterprise, Performance, and Unlimited editions, and monthly in all editions except Database.com. [^6] You can generate backup files manually once every seven days for weekly exports, or once every twenty nine days for monthly exports. [^6] That cadence sets a hard floor on your RPO unless you add other tooling. A weekly export means the worst case data loss is about a week, which is fine for analytics and archival data and hopeless for customer records. This is the RPO constraint made concrete.
+
+The second is the download window and what is inside. Export files are available to download for 48 hours after the job completes, after which they are removed. [^7] There is no going back for them once they are gone. The export also excludes the Recycle Bin, so deleted records do not come back through a data export. [^7] Any plan that relies on data export to recover accidental deletion has to capture deletions through another channel or accept that they are gone.
+
+The mechanical role of Data Export Service is a baseline, not a recovery solution for critical data. Use it for what it fits: an off-platform copy with a coarse RPO, for data where losing up to a week is acceptable. For customer records and transactions you will pair it with something faster.
+
+## Backup and Recover: the point in time restore layer
+
+When the RPO requires more than a weekly or monthly export, the platform's answer is Backup and Recover (backed by Own), which you add as a service. [^2] The direction of travel is the important part. It creates daily backups, independently stored, and it can back up data, attached files, metadata, managed packages, and sandboxes. [^2] That upends the RPO floor: instead of a week, you get daily, and the independent storage means the backup survives even the failure of the org it protects.
+
+The second capability is restore precision. Rather than loading CSVs and re-matching lookups by hand, the restore tooling compares backups, identifies changes between two points, and restores selected records and metadata. [^2] This is what closes the loop on the biggest operational risk. A backup with point in time restore can answer "what was this record before that destructive change ran," which is the question that actually comes up in production, far more often than a whole org wipe. The Well-Architected framework marks a third party backup service with point in time restore as a distinct good pattern, with a service level agreement that defines RPO and RTO, daily automated verification of backup completion, and backups stored in multiple regions. [^1] That checklist is the bar a production backup service should meet.
+
+Here is the honest framing rather than a product pitch. No matter the tool, the restore question is the one you must answer yourself. Backup and Recover gives you the mechanism. Whether a restore of the critical objects completes within your RTO, and loses no more than your RPO, is something only a drill proves. That brings us to the part of disaster recovery most orgs decline to do.
+
+![Choosing the backup mechanism from the RPO: near zero data loss needs a replication layer, hours tolerates a scheduled sync and daily backup, days accepts a data export, and a whole org point in time restore calls for a backup service. Never back an aggressive target with a coarse mechanism](</diagrams/disaster-recovery-backup-restore-rto-rpo-drills/4-mechanism-choice.png>)
+
+## Drills: the part everybody skips
+
+A backup is only as real as the restore you have actually performed. The Well-Architected framework is unambiguous: backup validation means quarterly restore drills to a Full Sandbox or Developer environment, with restore procedures documented in runbooks, precisely so that test restoration validates backup integrity and completeness before a disaster happens, not after. [^1] It also recommends quarterly partial restore tests for metadata, specific objects, and file subsets, and an annual full recovery drill that restores a complete environment. [^1] After every test, the lessons learned get documented and the runbooks get updated. [^1]
+
+The framework names the failure mode plainly as an anti-pattern: a business continuity plan that is never tested through drills, on the assumption that documented procedures will work under stress without validation. [^1] And it gives the reason drills earn their cost. A plan that looks complete on paper collapses under the questions a drill surfaces: is the backup actually accessible, in the shape you expected, with the relationships intact, within the time you promised? You find out where the gap is between the target RTO and the achieved RTO by timing an actual recovery, not by reading the runbook. [^1]
+
+A drill should also validate the RPO. The framework advises that you measure data loss during recovery tests and compare the actual against the target. [^1] If you promised near zero RPO but your drill reveals that Change Data Capture covered only three of twelve critical objects, or that replication lag went undetected for weeks, that is exactly what a drill is for. You learned the gap while the stakes were a sandbox, not before a board report.
+
+Finally, the knowledge needs a home beyond one person. The framework flags disaster recovery knowledge concentrated in a single architect who documented nothing as an anti-pattern, and warns that recovery procedures tested by a single expert who has since left the company fail the moment they are needed. [^1] Runbooks and drills close that hole: the procedure is written, tested by backup personnel rather than only the expert, and updated after every drill.
+
+![The drill loop: schedule a restore drill to a sandbox, execute it under timed conditions, measure the achieved RTO against target, validate data loss against the RPO, then update the runbook with lessons learned](</diagrams/disaster-recovery-backup-restore-rto-rpo-drills/3-drill-loop.png>)
+
+## Worked example: recovery targets for a payments org
+
+A payments company processes merchant onboarding, runs a customer ledger, and keeps a support CRM on Salesforce. The architect must decide what to protect and how hard.
+
+Start by putting every capability in an RTO and RPO bucket. The customer ledger is top of the list. A payment record that is lost is a compliance and trust emergency, so the architect sets a near zero RPO and a one hour RTO, evidenced by a mechanism that can actually hit it. The support CRM sits in the customer-facing bucket: one to four hours RTO, and near zero RPO measured in minutes, because tickets filed today have to survive. Merchant onboarding reference data is a scheduled sync: hours RPO, and a four to twenty four hour RTO, because a workday delay is tolerable. Historical reporting needs neither urgency nor freshness: days RPO and days RTO, so a basic export is enough. [^1]
+
+Then wire each target to a mechanism. The merchant ledger gets a Backup and Recover service with daily backups so the RPO is a day at worst, overlaid with Change Data Capture to shrink it toward minutes for the live ledger, because customer and financial records are exactly the near-zero RPO cases. [^1] The support CRM uses the same daily backup service and Change Data Capture to hold the minute-level target. [^1] Onboarding reference data and reporting ride the Data Export Service, accepting a weekly RPO because losing up to a week there is acceptable. [^6]
+
+Now the part that makes the design real. The architect schedules a quarterly restore drill: refresh a Full Sandbox, restore the ledger and support objects from the daily backup into it, time the whole recovery under a stopwatch, and compare the achieved time against the one hour target. [^1] The first drill shows the restore finishes in three hours and that Change Data Capture only covered the two expected objects rather than all ledger fields. Two honest findings, both worth more than a year of unexamined backups. The runbook is updated and the replication scope fixed, before any of it matters for real. [^1]
+
+## The pitfall to avoid
+
+**Protecting the platform while never testing the data.** The whole lesson distills to this. An org can have everything on paper: exports scheduled, a backup service purchased, a diagram of replication flows. None of it is recovery until a drill proves the backups restore within the target RTO and lose no more than the RPO. [^1] The anti-patterns that bite are all the same shape: commitments with no mechanism, mechanisms with no testing, and knowledge held by one person who documented nothing. [^1] Set measurable targets per capability, back each target with a mechanism, then run drills that time the recovery and validate the data loss. Update the runbook after every drill, do the whole thing again next quarter, and the plan stays honest. That is the difference between architecture that protects the business and a folder of files that resembles one.
+
+## Try it
+
+1. A business says "we need the CRM back as fast as possible if something goes wrong." What is missing from this requirement, and what two numbers should you ask for? *(Answer: measurable RTO and RPO per capability. Ask how fast recovery must happen, RTO, and how much data loss is acceptable, RPO, and note these must be set per capability and cleared with business stakeholders.)* [^1]
+2. An org relies on monthly Data Export Service exports as its only backup. What RPO does that imply, and what limits should worry you? *(Answer: roughly a month of worst case data loss, set by the 29 day manual export window. Also the 48 hour download window after a job completes, the Recycle Bin exclusion, and the manual data loader anti-pattern.)* [^6] [^7]
+3. A client wants a near-zero RPO on financial records with backups they already take daily. Is the daily backup sufficient by itself, and what must be added? *(Answer: no. Daily backups cap the RPO at a day. Near-zero RPO needs a replication mechanism such as asynchronous event streaming or Change Data Capture, not just a more frequent backup.)* [^1]
+4. Your runbook claims a two hour RTO, but no one has ever timed a restore. What does the Well-Architected framework say you should do? *(Answer: run a drill. Validate the RTO under timed conditions, measure the achieved time against the target, and compare actual data loss to the RPO. A claim no drill has proven is an untested target.)* [^1]
+5. A destructive change corrupts a set of records, and the team discovers a backup exists but the only person who understood the restore procedure left the company. What failed, beyond the backup? *(Answer: knowledge transfer. Recovery knowledge concentrated in one person who documented nothing, and no drill performed by other backup personnel, so the procedure was never validated and is not usable under stress.)* [^1]
+
+## What's next
+
+You can now set measurable recovery targets, choose the backup tooling that meets them, and prove both with drills. The lesson ahead is the capstone for this architect's toolkit in question form: CTA design scenario practice, which walks a real scenario end to end, from requirements to a defended architecture. It turns every principle in this course into the applied skill the certification actually tests.
+
+[^1]: Salesforce Well-Architected Framework. [Reliability: Disaster Recovery Patterns](https://architect.salesforce.com/docs/architect/well-architected/guide/reliability-disaster-recovery-patterns)
+[^2]: Salesforce Help. [Backup and Recover for Salesforce](https://help.salesforce.com/s/articleView?id=platform.backup_recover.htm&language=en_US&type=5)
+[^3]: Salesforce Help. [Order Management Plus Disaster Recovery: RTO and RPO](https://help.salesforce.com/s/articleView?id=ind.comms_t_order_management_plus_disaster_recovery_241711.htm&language=en&type=5)
+[^4]: Salesforce Help. [Where is my Salesforce instance located?](https://help.salesforce.com/s/articleView?id=000396845&language=en_US&type=1)
+[^5]: Salesforce Help. [Salesforce Hyperforce: General Information, FAQ, Migration Guide, and Security Overview](https://help.salesforce.com/s/articleView?id=000388902&language=en_US&type=1)
+[^6]: Salesforce Help. [Export Backup Data from Salesforce](https://help.salesforce.com/s/articleView?id=sf.admin_exportdata.htm&language=en_US&type=5)
+[^7]: Salesforce Help. [Salesforce Data Export FAQ](https://help.salesforce.com/s/articleView?id=000383962&language=en_US&type=1)

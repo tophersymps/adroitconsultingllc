@@ -18,7 +18,7 @@ import {
   formatCertDate,
   getSeriesLessonSlugs,
 } from "@/lib/certificate";
-import type { SupabaseServerClient } from "@/lib/supabase/server";
+import type { SupabaseServerClient } from "@/lib/db/server";
 
 interface CertificateSectionProps {
   supabase: SupabaseServerClient;

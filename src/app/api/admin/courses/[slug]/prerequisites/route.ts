@@ -7,7 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, writeAuditLog, notFoundJson } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getSupabaseServerClient } from "@/lib/db/server";
 import { checkOrigin, checkRateLimit, getClientIp } from "@/lib/api-security";
 
 type Params = { params: Promise<{ slug: string }> };
@@ -17,7 +17,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const gate = await requireAdminApi();
   if (!gate.ok) return gate.response;
   const { slug } = await params;
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
   try {
     const { data: courseRow } = await service
       .from("courses")
@@ -70,7 +70,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   const { slug } = await params;
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
 
   try {
     const { data: courseRow } = await service

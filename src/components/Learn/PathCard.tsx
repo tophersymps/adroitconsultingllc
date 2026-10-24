@@ -74,7 +74,16 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
       {/* Body */}
       <div className="p-[22px] pb-6">
         <h3 className="text-xl font-bold text-[var(--ink-primary)] tracking-tight mb-1.5 leading-snug transition-colors duration-200 group-hover:text-[var(--accent)]">
-          {series.name}
+          {isGuest ? (
+            series.name
+          ) : (
+            <Link
+              href={`/atlas/${series.slug}`}
+              className="no-underline text-inherit after:content-[''] after:absolute after:inset-0 after:z-20"
+            >
+              {series.name}
+            </Link>
+          )}
         </h3>
         <p className="text-[13.5px] text-[var(--ink-muted)] leading-relaxed mb-[18px] line-clamp-2">
           {series.description}
@@ -127,7 +136,7 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
             {isSignedInLocked && (
               <Link
                 href={`/atlas/${series.slug}/preview`}
-                className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold no-underline hover:underline min-h-[44px] px-3"
+                className="relative z-30 mt-3 inline-flex items-center gap-1.5 text-[12px] font-semibold no-underline hover:underline min-h-[44px] px-3"
                 style={{ color: "var(--accent, #C8102E)" }}
               >
                 Preview first lesson <span aria-hidden>&rarr;</span>
@@ -148,11 +157,8 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
   }
 
   return (
-    <Link
-      href={`/atlas/${series.slug}`}
-      className="group block rounded-2xl overflow-hidden border border-[var(--border-default)] bg-[var(--surface-card)] hover:shadow-xl hover:border-[var(--border-strong)] hover:-translate-y-[3px] transition-all duration-300 no-underline"
-    >
+    <div className="group relative block rounded-2xl overflow-hidden border border-[var(--border-default)] bg-[var(--surface-card)] hover:shadow-xl hover:border-[var(--border-strong)] hover:-translate-y-[3px] transition-all duration-300">
       {band}
-    </Link>
+    </div>
   );
 }

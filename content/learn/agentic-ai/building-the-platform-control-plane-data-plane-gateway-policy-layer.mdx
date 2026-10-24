@@ -1,0 +1,117 @@
+---
+title: "Lesson 72: Building the Platform: Control Plane, Data Plane, Gateway, and Policy Layer"
+slug: building-the-platform-control-plane-data-plane-gateway-policy-layer
+series: "agentic-ai"
+lesson: 72
+excerpt: "Lesson 71 taught you how to read a platform through its three planes. Building one is a different job. This lesson is about constructing the four concrete pieces: the gateway that sits in the traffic path, the policy layer that makes the decisions, the control plane that governs identity and lifecycle, and the data plane that carries the agent's work. The load-bearing seam between them is the gateway, because it is the one place where policy can actually meet traffic and stop an action before it happens. You will learn the policy decision point versus policy enforcement point split, how policy as code with a default-deny rule turns governance into something you can review and roll back in git, and how token budgets and a single structured log turn the whole thing into a system you can operate."
+date: "October 17, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Agent Platform, API Gateway, Policy as Code, Control Plane, Data Plane, OPA, Rego, Enterprise AI]
+---
+
+Lesson 71 gave you the lens for reading a platform: a serving plane that hosts the model, a control plane that governs identity and policy, and a data plane where the agent does its work. Reading a platform and building one are different jobs. Reading means you can name what a vendor's marketing actually gives you. Building means you can put the pieces together so that policy is enforced at runtime, not just written down.
+
+This lesson walks you through constructing the four concrete pieces. The gateway sits in the traffic path and is the single enforcement point. The policy layer sits next to it and makes the decisions. The control plane reaches across both to govern identity and lifecycle. The data plane carries the work and enforces access where the data actually lives. The gateway is the seam that holds them together, so it is where the lesson spends most of its attention.
+
+## The gateway is the enforcement point
+
+A policy that lives only in a design document does not stop anything. It has to be enforced somewhere in the path that a request actually travels. For an agent platform, that somewhere is the gateway.
+
+An AI gateway is a centralized proxy and control plane that intercepts traffic before it reaches any model provider. Every agent sends its requests through this single layer, which authenticates the caller, routes the request, applies rate limits and token budgets, and writes a usage log. [^3] The gateway sits between the application layer and the model providers. A request arrives, gets authenticated against internal policy, passes through token budget and rate limit checks, and is routed to the right model. The response flows back through the same path, where the gateway records token counts, latency, and caller identity before returning it. [^3]
+
+![The AI gateway sits between agent applications and model providers. Every request passes through the same gateway, which authenticates the caller, asks the policy engine for an allow or deny decision, checks the token budget and rate limit, and routes to the right provider. The response returns through the same path, where token counts, latency, and caller identity are written to one log.](</diagrams/building-the-platform-control-plane-data-plane-gateway-policy-layer/1-gateway-request-flow.png>)
+
+Centralizing this has a concrete payoff beyond neat architecture. It ends secret sprawl. In a system without a gateway, every application pod holds its own copy of the model provider's API key, and you have no way to audit which caller spent what. The gateway holds the real provider credentials and issues virtual keys to applications, scoped to their namespace or service account. No application pod ever holds a live provider key, and auditing one place tells you which service made which call. [^3]
+
+Open-source gateways give you the pattern without building it from scratch. LiteLLM Proxy exposes an OpenAI-compatible API and proxies to many model providers, with per-key rate limiting, spend tracking, and model fallback. Envoy AI Gateway formalizes a two-tier shape: tier one handles centralized authentication and routing across external providers, and tier two controls fine-grained access to self-hosted models. [^3] Whatever you pick, the shape is the same. The gateway owns authentication, routing, quotas, and logging once, and every caller benefits without duplicating retry and timeout logic.
+
+## The policy layer: decisions, not customs
+
+The gateway is where enforcement happens. It is not where the decision is made. Those are two different functions, and keeping them separate is the core of a well-built policy layer.
+
+The industry gives these two roles names that came out of authorization architecture. The policy enforcement point (PEP) is the component in the request path that stops or allows an action. The policy decision point (PDP) is the component that evaluates the policy and returns an allow or deny decision. The gateway acts as the PEP. It collects the facts about the request, asks the PDP whether the action is allowed, and enforces whatever the PDP returns. The two are split so that the enforcement code stays simple and stable while the policy changes without touching it. [^2]
+
+The PDP should be a real policy engine, not a pile of if statements scattered through your code. Open Policy Agent (OPA) is the most widely used open-source option. OPA lets you write policies in Rego, a declarative language, and it returns structured decisions over JSON. The policy is a separate artifact that updates independently of the application. The application calls OPA's API, receives an allow or deny decision, and acts on it; the application code has no knowledge of the policy logic. [^2] AWS's own prescriptive guidance recommends OPA as a pre-built PDP because it decouples authorization logic from application code, exposes a RESTful API that PEPs are easy to integrate with, and ships with built-in support for validating JWTs. [^2]
+
+Amazon built a competing language, Cedar, and open-sourced it as an Apache-2.0 project. Cedar is a declarative access control language meant for fine-grained permissions, and it supports both role-based and attribute-based access control. It is notable for how it is verified: AWS formally models the authorization engine and proves safety and correctness properties about it with automated reasoning, then tests that the Rust implementation matches the model. [^4] Both OPA and Cedar make policy a reviewable artifact instead of a set of implied rules, which is the entire point.
+
+![The gateway acts as the policy enforcement point: it stays in the traffic path, collects facts about the call, and posts a JSON input to the policy decision point. The policy engine, such as OPA with Rego, evaluates the policy and returns an allow or deny decision that the gateway enforces. The policy updates independently and the application code never reads the policy logic.](</diagrams/building-the-platform-control-plane-data-plane-gateway-policy-layer/2-pep-pdp-split.png>)
+
+The one rule every policy layer needs is default deny. AWS's agent gateway product, AgentCore, makes this part of the engine rather than a convention: Cedar policies there are evaluated for every tool invocation, and the engine enforces default-deny and forbid-wins semantics automatically. [^5] Default deny means an action is forbidden unless a policy explicitly allows it. Forbid-wins means if any policy forbids an action, it is denied even if another policy allows it. Together they make the safe path the default, which is exactly what you want when the actor is an agent you did not fully predict.
+
+## The worked example: a refund agent behind a gateway and a policy engine
+
+Put the pieces together with a concrete system. A customer support agent can draft refund recommendations, but a refund must not be issued without human approval, and no agent may call the external payment API directly.
+
+The gateway fronts the model providers and the tools. Every request from the agent passes through it. When the agent tries to call the refund tool, the gateway authenticates the caller, then stops and asks the policy engine for a decision before anything reaches the tool.
+
+The policy layer is a Rego rule that expresses the default-deny contract. The shape of this policy, an `allow` rule with a default of false, is the exact pattern the OPA documentation uses for HTTP API authorization. [^1] In that documented example the path is a salary lookup, and the rule only allows a user to see their own salary or the salary of their subordinate. The same structure carries over to a tool call:
+
+```
+package agenttools
+
+default allow := false
+
+# An agent may draft a refund, but never issue one.
+allow if {
+    input.actor.type == "agent"
+    input.tool.id == "tool.refund.draft"
+}
+
+# No agent may invoke the external payment tool.
+allow if {
+    input.actor.type == "human"
+    input.tool.id == "tool.payment.external"
+}
+```
+
+Every time the gateway needs a decision, it posts a small JSON input describing the call and asks OPA for the value of `allow`. The documented integration does exactly this: it builds an `input` object, POSTs it to a decision endpoint, and reads the boolean back. [^1] When the response comes back false, the gateway denies the action and logs it. No separate enforcement code is scattered through the agent runtime, because the policy is the artifact that decides.
+
+![The default-deny Rego policy decides each actor and tool combination. An agent may draft a refund but never issue one, so agent plus refund.draft is allowed. No agent may call the external payment tool, so agent plus payment.external is denied. A human actor may call payment.external. Every other call falls to default deny, which forbids an action unless a policy explicitly allows it.](</diagrams/building-the-platform-control-plane-data-plane-gateway-policy-layer/3-refund-policy-matrix.png>)
+
+Two details in this example are worth naming because they are easy to get wrong. First, the token budget check runs in the gateway before the request reaches the provider. Quota enforcement operates in windows, per team, per application, or per namespace, and when a caller hits its limit the gateway returns a 429 before the request is forwarded. [^3] This is what stops a runaway agent loop from generating an unexpected bill. Second, every request produces one structured log record that captures caller identity, model name, prompt tokens, completion tokens, latency, and an estimated cost. [^3] That single record is what makes the system auditable and the cost attributable, and it is only possible because every request crosses the same gateway.
+
+## How to build it, step by step
+
+If you are building this from scratch rather than adopting a managed platform, the assembly order matters. Build the gateway first, because it is the seam everything else hangs on.
+
+1. Put every model and tool call behind one gateway. Give the gateway a stable endpoint, hold the real provider credentials there, and issue virtual keys to applications. Kill secret sprawl now, before the pod count makes it unmanageable. [^3]
+
+2. Stand up a policy engine next to it as the PDP. OPA is the low-friction default: run it, write a Rego bundle, and let the gateway act as the PEP that queries it. Start with `default allow := false` and add only the allows you actually need. [^1][^2]
+
+3. Enforce at every plane, not just the model call. The gateway governs the model request. The data plane governs what rows and fields an agent may touch where the data lives. A refund agent may read case history but not payment data, and that boundary belongs in the data plane, not in a prompt. [^5]
+
+4. Set token budgets before you have real traffic. Per team, per application, on daily or monthly windows, with the gateway returning a 429 at the limit. Add soft alerts a few days of usage early, not at the last minute. [^3]
+
+5. Ship one structured log record per request. Caller, model, prompt and completion tokens, latency, estimated cost. If you cannot query who spent what last Tuesday, the platform is not yet built. [^3]
+
+6. Manage policy as code. Put the Rego or Cedar files in git, review them in pull requests, and deploy them through CI/CD. The AWS prescriptive guidance is explicit that OPA does not give you a control plane for managing policies by itself, so you own versioning and rollback. [^2]
+
+## The pattern to take away
+
+1. The gateway is the enforcement point. It sits in the traffic path, forwards everything, holds the real credentials, and issues virtual keys so no application holds a live provider key. [^3]
+2. Separate the PEP from the PDP. The gateway enforces; the policy engine decides. Keep the enforcement code simple and let the policy change without touching it. [^2]
+3. Default to deny. Policy is a reviewable artifact in git, and the safe path is the default. Cedar engines apply default-deny and forbid-wins automatically. [^4][^5]
+4. Enforce cost in the gateway. Token budgets with a 429-before-provider response stop runaway loops before they bill you. [^3]
+5. Log once, per request, with cost. A single structured record makes the whole system auditable and the spend attributable. [^3]
+
+If you walk away with one skill from this lesson, it is this: policy does not work until it lives at the point where traffic moves, and the gateway is that point.
+
+## Try it
+
+Write a default-deny policy for a tool an agent might try to call. Use the OPA Playground or the Cedar policy evaluator, or just a Rego file and the OPA binary. Start with `default allow := false`. Allow an agent to call a `draft` tool but not a `send` tool, and allow a human to call either. Feed a few JSON inputs through the decision endpoint: one where the actor is an agent calling build, one where an agent calls draft, one where a human calls send. Confirm the decision is true exactly where you intended and false everywhere else. Then add the detail that is easy to forget: a deny path when the input is missing the actor field entirely, because a policy that silently allows an incomplete request is a policy with a hole in it.
+
+## What's next
+
+You now know how to assemble the platform's mechanics: the gateway that enforces, the policy engine that decides, and the planes that carry the work. The next lesson turns from building the system to understanding what it costs to run. Lesson 73 covers cost architecture for enterprise AI, including token budgets, infrastructure, and FinOps. Where this lesson treated token budgets as one more gateway control, the next one treats cost as a first-class architecture discipline.
+
+## Summary
+
+Building a platform is different from reading one, and the difference is where policy meets traffic. The gateway is the centralized proxy and control plane that fronts every model and tool call, holds the real provider credentials, issues virtual keys, and enforces rate limits and token budgets. [^3] Policy is enforced at the gateway as a policy enforcement point and decided outside it by a policy decision point, typically Open Policy Agent with Rego or AWS's Cedar, so that the policy is a reviewable artifact in git that changes without touching application code. [^2] Default deny is the load-bearing rule, and Cedar engines apply default-deny and forbid-wins automatically. [^4][^5] Token budgets return a 429 before a runaway agent reaches the provider, and one structured log record per request makes the system auditable and cost attributable. [^3] The pattern to take away is that enforcement belongs at the single point in the traffic path, and the policy that flows through it is code you review and roll back like any other.
+
+[^1]: Open Policy Agent, "HTTP API Authorization" (official docs). https://www.openpolicyagent.org/docs/http-api-authorization
+[^2]: AWS Prescriptive Guidance, "Implementing a PDP by using OPA." https://docs.aws.amazon.com/prescriptive-guidance/latest/saas-multitenant-api-access-authorization/opa.html
+[^3]: MLflow, "AI Gateway Architecture: A Guide for Technical Teams." https://mlflow.org/articles/ai-gateway-architecture-a-guide-for-technical-teams/
+[^4]: AWS, "Introducing Cedar, an open-source language for access control" (May 2023). https://aws.amazon.com/about-aws/whats-new/2023/05/cedar-open-source-language-access-control/
+[^5]: AWS AgentCore (Bedrock Agent Core), "Policy core concepts" (developerguide). https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/policy-core-concepts

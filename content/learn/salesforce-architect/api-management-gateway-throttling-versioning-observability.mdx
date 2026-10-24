@@ -1,0 +1,105 @@
+---
+title: "Lesson 72: API Management: Gateway, Throttling, Versioning, and Observability"
+slug: api-management-gateway-throttling-versioning-observability
+series: "salesforce-architect"
+lesson: 72
+excerpt: "The operational layer under every integration: how an API gateway becomes the single controlled entry point for consumers, how throttling keeps bursts from collapsing your org, how versioning turns a breaking change into a controlled release, and how observability turns an API you hope works into one you can prove works. A worked example walks an inventory API through all four, and a try-it prompt gets you planning the API management story for a service you own."
+date: "October 18, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [API Management, Gateway, Rate Limiting, Versioning, Observability, Salesforce]
+---
+
+## Lesson 72: API Management: Gateway, Throttling, Versioning, and Observability
+
+Lesson 26 showed you how to design a single REST integration: which version to pin, how to page, when to go bulk. Lesson 71 covered moving event streams at scale. This lesson steps back from the individual request and asks a different question: how do you run a whole population of APIs so that their consumers behave, their versions survive releases, and their failures are visible while they happen?
+
+That is API management. It is the operational layer that sits between "I built an endpoint" and "my org runs a portfolio of integrations without surprise." Four ideas carry most of the weight, and this lesson is built around them: the gateway that controls who reaches your APIs and how, throttling that protects the platform from any single consumer, versioning that lets an API change without breaking its tenants, and observability that tells you what is actually happening.
+
+## What API management actually governs
+
+API management is the discipline of controlling who calls an API, how many times, with which version, and whether anyone notices when it misbehaves. It is not one product or one setting. It is a set of decisions made consistently, the way an architect runs a network of roads rather than builds a single lane.
+
+Think about what an API without management looks like. Any consumer can hit any endpoint as hard as it wants. A partner that forgot a retry loop can hammer the org into its API request allocation by noon. A consumer stuck on an old version is either broken by the next release or silently kept running forever with no one tracking it. When an endpoint starts failing, nobody knows for hours because nobody was watching. Each of those is a management gap, not a coding bug.
+
+Salesforce does not hand you a single switch called "API management." It gives you the pieces: a gateway (the platform itself is the entry point to your data), limits you can control and observe, versioning rules you choose to follow, and event logs you can stream and query. The architect's job is to assemble these into a policy that makes sense for one org. A small org with two integrations does not need the machinery a large org with hundreds of consumers needs, but the categories are the same.
+
+## The gateway: a single controlled entry point
+
+An API gateway is the component that sits in front of one or more APIs and handles the concerns every consumer faces the same way: authentication, authorization, rate limiting, routing, and logging. Instead of each endpoint reinventing who is allowed in and how much they can send, the gateway applies one policy at the front door. It is the difference between each store having its own bouncer and one bouncer who checks everyone at the door and then points them to the right counter.
+
+In a Salesforce context, the gateway is usually the platform itself. When a partner calls your org through the REST API, the request travels through a named connected app, hits the REST endpoints under `/services/data/vXX.X/`, and is governed by the platform's security and limits. You do not write a gateway; you configure one. Your connected app is the consumer's identity, your profile and permission sets decide what they can read and write, and your org's limits decide how much they can send. The gateway work is configuration and policy, not new server code.
+
+Where an external gateway earns its keep is when the platform's built-in controls are not enough. Salesforce enforces total allocations and concurrency, but it does not let you set a per-consumer cap like "this partner gets 2,000 calls an hour and that one gets 200." If you have consumers with very different budgets, you put a gateway such as MuleSoft, Kong, or Apigee in front of the org. That gateway holds the per-consumer rate limits, rejects the over-budget caller before it ever reaches Salesforce with a `429 Too Many Requests`, and protects the shared allocation by never forwarding calls it has already decided to refuse. The org's allocation is then spent only on traffic you actually want.
+
+The governing rule is to put policy at the boundary. Authentication and rate limiting go as far out as you can push them, so that a misbehaving consumer burns your gateway's budget, not your org's. The Salesforce API request allocation is shared, finite, and not cheap to overspend, so an architecture that lets a noisy tenant eat it while your gateway shrugs is an architecture with the bouncer standing on the wrong side of the door.
+
+![A gateway sits between consumers and the Salesforce org: per-consumer caps (2,000 and 200 requests an hour) live in the gateway, and a noisy tenant is refused with a 429 at the boundary so the org's shared allocation is spent only on accepted traffic.](</diagrams/api-management-gateway-throttling-versioning-observability/1-gateway-single-entry-point.png>)
+
+## Throttling and rate limiting: protecting the shared resource
+
+Throttling is the act of limiting how much traffic moves through a system to protect it from overload. Rate limiting is the specific mechanism: a rule that caps requests per unit of time, per consumer. An architect throttles so that one tenant cannot degrade the service for everyone else, and so that a burst does not push the org past a limit it cannot buy its way out of.
+
+Salesforce protects its platform (and, importantly, your org) with three kinds of API limits, and any Salesforce architect has to know them by name. The concurrent API request limit caps how many inbound requests lasting twenty seconds or longer can run at once; a production org and a sandbox allow twenty five, a Developer Edition or trial org allows five, and exceeding it returns `REQUEST_LIMIT_EXCEEDED`. The API timeout limit caps how long a call may run: ten minutes for REST and SOAP calls, with query calls governed separately. The total API request allocation caps the aggregate calls in a rolling twenty-four hour period, and it is the one people usually mean when they say "we ran out of APIs." [^1]
+
+That total allocation is enforced on the sum of all calls to the org, not per user. Every call to the Lightning Platform REST, SOAP, Bulk, Bulk 2.0, and most Connect REST APIs counts against it, so a heavy integration does not just consume its own budget, it consumes budget that other integrations and user-facing features draw from. [^1] This is the core reason an architect cares about per-consumer throttling: the aggregate allocation is a shared jar, and one noisy integration can empty it for everyone.
+
+![A table of the three Salesforce platform API limits: the concurrent request limit (25 in production and sandbox, 5 in Developer and trial, tripping REQUEST_LIMIT_EXCEEDED), the API timeout limit (10 minutes for REST and SOAP), and the total API request allocation shared across all calls over a rolling 24-hour period.](</diagrams/api-management-gateway-throttling-versioning-observability/2-three-api-limits.png>)
+
+The number that matters when you are planning is not the total, because it scales with licenses and purchased add-ons. Two numbers you can check are the daily figure shown in Setup and the remaining amount in the `Sforce-Limit-Info` response header that comes back on REST calls. [^1] That header turns "mysterious 403s at 2 PM" into a number you can graph before you collide with the ceiling. The picture to hold in your head is a bucket with a fill line: every integration pours in, the line is shared, and a gateway in front of the org is your only cheap way to stop a single faucet from overflowing the whole bucket.
+
+## Versioning: change without breaking your tenants
+
+Lesson 26 taught the mechanics: the API version lives in the request path, pins behavior, and old versions expire on a published schedule. This lesson looks at versioning as policy, because the decisions around when to add, change, and retire a version are management decisions, not coding decisions.
+
+The contract to keep is that a version is a promise. Consumers wrote their code against version N, so version N has to keep behaving the way it did when it shipped. You keep that promise by never changing the behavior of an existing version, only adding new versions that differ. That is the rule that makes coexistence possible: two consumers can sit on different versions of the same endpoint and each get the semantics they coded against. Salesforce itself runs on this principle, and your own Apex REST or external API should too.
+
+The modern habit is to borrow from semantic versioning: a major bump signals a breaking change, a minor bump adds backward compatible features, and a patch fixes bugs without changing contracts. If you are changing field names, response shapes, or drop conditions, that is a major version. If you are adding an optional field or a new endpoint, that is a minor version and existing consumers are untouched.
+
+The part people skip is retirement. An API that can only ever add versions eventually drags around a pile of old ones, each needing maintenance and each holding back the code behind it. So a version strategy that does not include an end-of-life step is a strategy for accumulating debt. The healthy pattern is a deprecation window: announce that version N will stop being served on a specific date, keep it working through that window, then remove it. Salesforce does exactly this with its API versions on a published retirement schedule, and the discipline transfers directly to APIs you own. [^2]
+
+Two mistakes are common and worth naming. The first is pretending breaking changes are not breaking by keeping the same version number and quietly altering responses. That betrays the promise and breaks tenants who trusted the version contract; it is how "the integration worked yesterday" incidents start. The second is never retiring anything, which looks safe until you are holding ten hypervisors of behavior that a security fix cannot reach. Versioning done well is boring and explicit: pin deliberately, bump loudly on breaking changes, deprecate on a date, and let the old version die on schedule.
+
+![Versioning as policy: a major bump covers breaking changes like field names and response shapes, a minor bump adds backward compatible features, a patch fixes bugs, and old versions move through a deprecation window before being retired on a date, so two consumers on different versions each keep the semantics they coded against.](</diagrams/api-management-gateway-throttling-versioning-observability/3-versioning-retirement.png>)
+
+## Observability: proving an API works, not hoping it does
+
+Observability is the ability to answer the question "what is happening with my APIs right now" from data, rather than from guesswork or from a consumer calling to complain. It is the layer that converts an API you suspect works into one you can show working, and the layer that finds a slow consumer before the allocation is gone.
+
+Salesforce gives you two main paths to this. The first is the limits telemetry you already met: the `Sforce-Limit-Info` header on REST calls and the Limits resource at `/services/data/vXX.X/limits/`, which returns the maximum and remaining allocation for the limits in your org, accurate to within about five minutes. [^3] That is your constant signal for capacity. The second, deeper path is Event Monitoring, which surfaces the platform's event logs through the `EventLogFile` object and related objects. Event Monitoring requires Enterprise, Unlimited, or Developer Edition with a Shield or Event Monitoring add-on, and its data can be queried via the API, pulled into dashboards, or shipped to tools you already run such as Splunk, New Relic, or CRM Analytics. [^4]
+
+What you get from Event Monitoring is the answer to different questions than the limits header answers. The header tells you how much budget is left. Event logs tell you who is calling, from what source, at what rate, and whether their requests are failing. Specific events exist for the exact failure modes an API architect cares about: an event for API calls, one for anomalies in how users make API calls, one for exceeding the concurrent long-running Apex limit, and one that tracks when a user downloads the results of a Bulk job. [^5] When an API dies at 2 AM, the event log is the record that tells you whether it was throttling, a permission change, or a burst, based on evidence rather than a guess.
+
+The architect's discipline is to decide what you will watch before you need to watch it. Name the handful of signals that matter for each API: allocation remaining, error rate, top consumer by call count, and longest-running request. Give each a threshold and an owner. A dashboard that shows your three most important endpoints against their remaining allocation, rebuilt on the limits resource and the event logs, is the difference between catching a problem when it is a trend and catching it when it is an outage.
+
+## Worked example: an inventory sync API under management
+
+Here is the picture pulled together. Suppose you run a public inventory API that lets retailers read stock levels and submit daily replenishment feeds through a custom Apex REST endpoint. Your org runs several other integrations, and all of them draw from the same shared API allocation.
+
+You decide that inventory reads, which are cheap and high frequency, should be protected from the replenishment feeds, which are heavier. You put an API gateway in front of the org and set per-consumer limits: each retailer can read at 1,000 requests an hour, and replenishment submissions are capped at 50 an hour with a burst allowance of 5 in a minute. A runaway retailer that forgets a retry loop now gets rejected at the gateway with a `429`, and none of those rejected calls ever reaches Salesforce, so your shared allocation is spent only on traffic you chose to accept.
+
+For versioning, you pin the inventory API to a version path that names the contract. When a new field is added to a stock response, it goes into the next minor version and the old one is untouched. When you later change the replenishment feed from one format to another, that is a major version, you communicate the change, keep both versions alive for a deprecation window, then retire the old one on the announced date. A retailer sitting on the old version stays working through the window, and nothing silently breaks.
+
+For observability, you build a dashboard against the limits resource and the event logs. It shows remaining daily allocation for the org, requests per hour per retailer, and the error rate on the inventory endpoint plotted against the last event log late delivery. One morning the line climbs well past your retry threshold and errors follow. The event log shows a single retailer spiking; the limits header shows allocation draining fast. Because your gateway has that retailer capped, the surge is absorbed at the boundary, your allocation holds, and the incident becomes a conversation with one partner about their misbehaving client, not a page to the whole org.
+
+Each piece depends on the others. The gateway needs the version paths to route on. Throttling needs the observability to tell you the cap is being hit. Versioning needs the observability to prove the old version is aging out on schedule. Run all four and you have an API you own, rather than an endpoint you hope stays quiet.
+
+## Try it for yourself
+
+Pick one API that your org actually exposes: a custom Apex REST endpoint, a Connect REST resource, or a third-party API you consume. Write a one-page API management plan for it with four sections, each driven by a concrete choice.
+
+1. Gateway. Who is allowed to call, through which connected app or gateway, and where do you reject requests before they reach Salesforce?
+2. Throttling. What is your per-consumer cap, and which limit (concurrent, timeout, total allocation) does each consumer risk hitting? How will you know when a limit is near?
+3. Versioning. What is your current version path, when would you bump major versus minor, and what is the deprecation window before you retire an old version?
+4. Observability. Which three signals will you watch, which tool holds them, and what number triggers a call to the consumer's team?
+
+If you cannot fill in any section with a specific answer, that gap is exactly what this lesson is pushing you to close. The value is in having the policy written down before the 2 AM incident forces you to invent it.
+
+## What's next
+
+This lesson treated the API as the thing you manage: its gateway, its limits, its versions, its logs. The next lesson turns from the shape of a single integration to the shape of a message as it moves between systems. Lesson 73 covers enterprise integration patterns, the named building blocks of integration design: routers that decide where a message goes, translators that convert a message from one format or contract to another, aggregators that combine several messages into one result, and how these pieces compose into a whole integration architecture.
+[^1]: developer.salesforce.com. [API Request Limits and Allocations](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-api.html). The three types of platform API limits (concurrent, timeout, total allocation), the production concurrent limit of 25 for requests of 20 seconds or longer, the ten-minute REST/SOAP timeout, and the fact that limits are enforced on the aggregate of all calls to the org.
+[^2]: developer.salesforce.com. [REST API Versions resource](https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/resources_versions.htm) and the platform API versioning model, where a version path pins behavior and old versions are retired on a published end-of-life schedule.
+[^3]: developer.salesforce.com. [Limits, REST API Developer Guide](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-limits.html). The `/services/data/vXX.X/limits/` resource returns the maximum and remaining allocation for an org's limits.
+[^4]: Salesforce Help. [Event Monitoring overview](https://help.salesforce.com/s/articleView?id=xcloud.real_time_event_monitoring_overview.htm&language=en&type=5). Event Monitoring surfaces platform event logs, requires Enterprise, Unlimited, or Developer Edition with a Shield or Event Monitoring add-on, and can send data to tools such as Splunk, New Relic, or CRM Analytics.
+[^5]: Salesforce Help. [Real-Time Event Monitoring data streaming](https://help.salesforce.com/s/articleView?id=xcloud.real_time_event_monitoring_streaming.htm&language=en_US&type=5). Streaming events include ApiEventStream (API calls), ApiAnomalyEvent (anomalies in API calls), ConcurLongRunApexErrEvent (org exceeding the concurrent long-running Apex limit), and BulkApiResultEvent (downloading Bulk job results).

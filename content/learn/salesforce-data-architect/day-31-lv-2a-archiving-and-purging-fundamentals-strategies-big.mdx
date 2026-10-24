@@ -1,0 +1,152 @@
+---
+title: "Data Architect LV-2A: Archiving and Purging Fundamentals"
+slug: day-31-lv-2a-archiving-and-purging-fundamentals-strategies-big
+series: salesforce-data-architect
+lesson: 31
+excerpt: "Given a customer scenario, recommend a data archiving and purging plan that is optimal for the customer's data storage management needs, covering archiving strategies, using Big Objects as an archive target, and retention policies. Explains the difference between archiving and purging, the three archive targets (Big Object on-platform, off-platform store, custom archive object), how a retention policy drives per-category keep-duration and end-of-life actions under storage-limitation rules, the age and status based selection patterns, why deleting from the hot object after archiving is essential, how to preserve a query path for archived data, and how to run archive jobs safely with Bulk API, idempotency, testing, and a rollback plan. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 12, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [Salesforce, Data Architecture, Archiving, Purging, Big Objects, Certification]
+---
+
+Lesson 30 gave you the full LDV design method: profile the queries, bind the working set, keep objects narrow, and validate at real volume. This lesson is requirement lv-2a of the Large Data Volume (LDV) Considerations domain, and it makes bounding the working set the subject itself. [^1] Where lesson 30 treated archiving as one lever among many, this lesson teaches you how to actually move data off a growing object, where to put it, how long to keep it, and when to delete it for good.
+
+The exam frames lv-2a as a scenario problem. You are handed a customer whose Case object has grown to fifteen million rows, whose storage bill is climbing, and whose compliance team insists certain records be kept for a fixed number of years, and you must recommend an archiving and purging plan that is optimal for their storage management needs. The requirement text is precise about what it tests: recommend a data archiving and purging plan that is optimal for the customer's data storage management needs, covering archiving strategies, using Big Objects as an archive target, and retention policies. [^1]
+
+The idea that organizes this whole lesson is that archiving and purging are two different operations that must be sequenced. Archiving moves a record somewhere else so it stays available for reference. Purging removes it entirely because nothing requires keeping it. Get the order right, archive first and only then delete from the hot object, and you shrink the working set while honoring retention. Get it wrong, delete before you have a copy or keep everything forever, and you either lose records you are legally obligated to retain or you pay to store data you will never touch again.
+
+## Archiving versus purging
+
+Start with the two terms because the exam wants you to keep them distinct. Archiving moves older, less-frequently-accessed records off the primary object, which this lesson calls the hot object, and into a secondary store where they are retained for compliance, audit, or reference. [^2] The record is no longer part of the daily working set, but it still exists somewhere and can be retrieved when needed. Purging deletes records that no longer need to be kept at all, permanently and irrecoverably (aside from the brief Recycle Bin grace window).
+
+Both operations reduce volume on the hot object, and volume is the enemy you have been fighting since lesson 29. A Case object that accumulates fifteen million records and never sheds any will keep getting slower no matter how well it is indexed, because the working set itself is too large to scan cheaply. Archiving and purging are the two tools that shrink that working set, which is why the LDV best-practices guidance frames a policy of archiving or discarding data at the same rate it arrives as the way to prevent the degradation that comes with unbounded growth. [^2]
+
+The distinction matters for a reason that touches the law, not just performance. Purging destroys data, so you can only purge what your retention policy says you no longer need. Archiving preserves data, so you use it for the records that must survive but no longer need to be in the hot path. A plan that purges the wrong records is a compliance failure. A plan that archives everything is a storage failure. The architect's job is to classify each category of data and choose which operation applies at the end of its useful life.
+
+![Archive then purge sequence: copy cold records to an archive target, then delete them from the hot object to shrink the working set, while purging permanently removes records no longer needed](</diagrams/day-31-lv-2a-archiving-and-purging-fundamentals-strategies-big/1-archive-vs-purge-sequence.png>)
+
+## The three archive targets
+
+Once you decide to archive, the next decision is where the archived data lives. The exam gives you three target options, and each has a distinct cost and access profile. The choice hangs on one question: does the platform itself need to serve the archived data, or is it enough that the data exists somewhere retrievable?
+
+The first target is a Big Object on-platform. A Big Object is Salesforce's big-data storage technology, built to store and manage massive amounts of data on the platform with consistent performance whether you hold one million records or one billion. [^2][^3] The records stay inside Salesforce, they are queryable through Async SOQL, and importantly for the exam, Big Objects do not support the standard reporting and relationship machinery. You cannot build a standard report on a Big Object in the normal way, and you cannot define the kind of lookup relationship you get on a regular object. [^3] What you gain is the ability to keep the data inside the platform and pull it back out on demand, which makes a Big Object the right archive when users, auditors, or integrations periodically need the historical records and you want to avoid a second system.
+
+The second target is an off-platform store, a data warehouse, an object store like S3, or a customer-managed database. This is the cheapest long-term retention option, because it frees Salesforce storage entirely. [^3] The archived data leaves the platform, so the storage it occupied on Salesforce is reclaimed, which is the option you reach for when cost is the dominant driver and the archived data does not need to be served back through Salesforce day to day. The trade-off is that off-platform data is not immediately editable in Salesforce, and queries against it run outside the platform through an External Object or through the external system's own tooling. [^3]
+
+The third target is a separate archive custom object, a second regular custom object that holds the archived records in their original shape. This is rarely optimal at true scale. [^2] A custom object does not give you the Big Object's scale or consistency, it still consumes Salesforce storage, and it does not solve the fundamental problem, because the archive object will eventually grow to be as large as the object it drained. It works for small or medium archives where near-identical structure matters, but for the fifteen-million-row scenario the exam presents, a Big Object or an off-platform store is the instructor's answer.
+
+Lesson 7, Big Objects versus standard and custom objects, covered the structural differences in depth. What this lesson adds is the archiving lens: Big Objects are not just a data type, they are a deliberate archive target that trades reporting and relationships for scale and on-platform retention.
+
+![Comparison of the three archive targets: a Big Object on-platform, an off-platform store, and a custom archive object, across where the data lives, storage cost, query path, and scale verdict](</diagrams/day-31-lv-2a-archiving-and-purging-fundamentals-strategies-big/2-three-archive-targets.png>)
+
+## Retention policies define how long you keep what
+
+The retention policy is the contract that decides both how long each category of data is kept and what happens to it at the end of its life. The policy is driven by two inputs that pull in opposite directions: legal and regulatory requirements, which set a floor on how long certain records must be kept, and business need, which sets how long anyone actually uses the data. [^1]
+
+The end-of-life action is the second half of the policy. For each data category, you specify what happens when its retention period expires: archive then delete, or delete outright. Archive then delete means you move the record to an archive target and remove it from the hot object at the end of a first period, then purge it from the archive after a second, longer period when even the archived copy is no longer required. Delete outright means the record is not worth archiving at all, so you purge it as soon as its retention period ends.
+
+The critical judgment here is that keep everything forever is rarely a defensible position, and the exam wants you to say so. It is costly, because you pay to store records nobody will ever read. It is often non-compliant, because data protection regimes like the GDPR carry an explicit storage-limitation principle: you may only keep personal data for as long as you actually need it, and holding it indefinitely without a purpose can itself be a violation. [^4] The same reasoning applies well beyond GDPR to any sector where retention is defined by regulation, because holding data longer than the law permits is a legal exposure, not a safety cushion.
+
+Lesson 25 introduced this territory, classifying data under GDPR and thinking about what you are allowed to keep. That was governance. This is operations: converting the classification into a concrete, per-category definition of how long to keep, what to archive, and when to purge.
+
+## The selection patterns: age, status, access
+
+To know which records to archive on a given run, you need a selection criterion that identifies the genuinely cold records. The exam gives you three patterns.
+
+Age-based selection archives records older than a threshold, for example closed cases older than five years, measured usually on a date field like CreatedDate, ClosedDate, or a custom activity date. Status-based selection archives records in a terminal state, such as a Case with Status equal to Closed or a flag, custom or otherwise, marking the record as no longer active. Access-based selection archives records that have not been accessed in a number of periods, which tracks actual usage rather than an age threshold. [^2]
+
+The most common and most auditable combination is age plus status. [^2] It is the most common because it is easy to reason about and easy to explain to an auditor: you archive records that are both in a finished state and older than a defined window. The status guard keeps you from touching records that are still being worked, and the age guard keeps you from archiving anything too recent. The combination is auditable because both criteria are deterministic, they map directly to the retention policy, and a reviewer can verify that every archived record genuinely met the rule.
+
+That simplicity is why the exam's Q3 lands where it does. Age plus status is not the only supported pattern, access-based selection exists and has its place. It does not avoid the need to delete, in fact a good archive plan always deletes from the hot object afterward, and it absolutely requires testing before it runs against production data. It is the default because it is auditable, maps to retention, and hits the records that are genuinely cold.
+
+![Retention policy driven by legal and business inputs, the end-of-life actions archive then delete or delete outright, and the age, status, and access selection patterns with age plus status as the default](</diagrams/day-31-lv-2a-archiving-and-purging-fundamentals-strategies-big/3-retention-policy-selection.png>)
+
+## Delete after you archive, or none of it counts
+
+Here is the trap that defeats most archive plans: archiving without deleting wins nothing. If you copy old records to a Big Object but never remove them from Case, the hot object stays exactly as large as it was, and you realize no performance benefit and no storage relief. [^2] The copy is pure cost, extra storage for data you still carry in two places, with none of the benefit archiving is supposed to deliver.
+
+So the archive operation has two halves that must both run: copy the selected records to the archive target, then delete them from the hot object. The delete is what actually shrinks the working set. The exam tip for this lesson is blunt about it: archive and delete, because archiving alone wins nothing, and always define retention per data category first. [^1][^2]
+
+The deletion step is where referential integrity becomes your problem. When a record you are deleting is referenced by other records, you must decide what happens to those references before you delete. Salesforce gives you cascade and reparent options on lookup fields, and your archive job must respect them so you do not strand child records pointing at a parent that no longer exists. You also need to think about the Recycle Bin. Deleted records sit in the Recycle Bin for a limited retention window before permanent deletion, so if your retention policy demands the data be gone immediately, the purge step needs to account for that window rather than assuming a delete is instant and final.
+
+## Preserve a query path for archived data
+
+The second trap is archiving to a store with no query path when people still occasionally need the data. Archiving is only useful if the archived data is retrievable when a user, auditor, or integration asks for it. If you move historical cases to a target nobody knows how to query, you have effectively made the data unreachable, which defeats the retention purpose.
+
+The solution is to provide an explicit retrieval path for each archive target. For a Big Object, that path is Async SOQL, which lets the platform query the archived data on demand. [^3] Salesforce has signaled that Async SOQL is being retired, and Batch Apex is the supported alternative for automated processing on Big Objects, so the architect should plan the query path with that transition in mind. [^5] For an off-platform store, the retrieval path is an External Object, which virtualizes the external data inside Salesforce so users can query it as if it lived on the platform, without moving the data back. [^3]
+
+The point for the exam is that a query path is not optional. You either keep the data reachable through a Big Object and Async SOQL, or you leave it outside the platform and reach it through an External Object over the archive store, but you never move data to a target with no way to get it back. Each target choice in the previous section comes bundled with a retrieval mechanism, and forgetting that mechanism is what creates unreachable archives.
+
+## Storage cost and job operations
+
+Archiving changes where storage is consumed, and the exam wants you to read that correctly. Salesforce data storage is a shared org resource, so every record you keep costs against the same pool. A Big Object is a real storage consumer on the platform. Archiving to a Big Object keeps the data in Salesforce, which means it still consumes Salesforce storage, it just moves the consumption from the hot object to the Big Object. An off-platform store frees that storage entirely, because the data leaves the org. [^3]
+
+That is why the target choice is a three-way balance across cost, accessibility, and compliance. Off-platform is cheapest but least immediately accessible inside Salesforce. Big Object is on-platform and accessible but still costs org storage. The right answer depends on whether the platform must serve the archived data and how much you are willing to pay to keep it there.
+
+The operations side of archiving is where the exam's practical traps hide. Schedule archive and purge jobs off-peak, because a fifteen-million-row archive run is heavy and should not compete with the workday. Use Bulk API for the heavy copying and deleting, because bulk processing handles large volumes far better than per-record DML. Make the jobs idempotent, so a failed run can restart safely without double-copying or double-deleting, which means the job must be able to recognize records it already processed and skip them. [^2] And have a rollback plan before you delete from production, because once archived records are deleted, a mistake is expensive to reverse. Test the whole pipeline on a representative volume in a sandbox first, exactly as lesson 30 taught you, so the delete step runs against known data with a tested recovery path.
+
+## Worked example: the fifteen-million-row Case object
+
+Put it together with the scenario the exam's Q1 uses. A service org has a Case object with fifteen million rows. The object is slow, and the org's compliance team requires closed cases to be kept for ten years.
+
+Start with the retention policy. The business works cases for an active window, call it two years, and the compliance requirement pins closed cases at ten years. So you define two categories. Cases newer than the active window stay on the hot object where the agents live. Closed cases older than the active window move to archive and stay there to the ten-year mark.
+
+Then the archive target. The compliance team needs closed cases retrievable for those ten years, and the org does not want a second system, so you choose a Big Object. The records stay on-platform, they are queryable via Async SOQL when an auditor needs them, and you accept the trade-offs, no standard reports on the archive, no lookup relationships, in exchange for scale.
+
+Then the selection and the job. You run a Bulk API job that selects closed cases older than the two-year active window, copies them to the Big Object, and deletes them from Case. The selection is age plus status, closed and older than the window, which is auditable and maps to the retention policy. You schedule it off-peak, make it idempotent, monitor it, and keep a rollback plan for the delete.
+
+The result: the hot Case object shrinks toward the active window instead of growing without bound, performance improves, and the archived cases survive for the ten years the law requires. That is the answer to Q1, and it is the shape of every archiving plan the exam will hand you.
+
+## Config walkthrough: building an archiving and purging plan
+
+Here is the numbered walkthrough the exam expects you to be able to reason through when handed a scenario.
+
+1. Define retention per data category. For each type of record, write down how long it must be kept, driven by compliance and business need, and the end-of-life action, archive then delete or delete outright. This step comes first, because every later decision implements the retention policy you just defined.
+
+2. Choose the archive target. Decide whether the platform must serve the archived data. If it must, choose a Big Object on-platform. If cost dominates and reachability outside the platform is fine, choose an off-platform store. Reserve a separate archive custom object for cases where a Big Object or off-platform store is genuinely not appropriate.
+
+3. Implement an age or status based archive job using Bulk API. Write a job that selects the cold records, closed and older than the active window, copies them to the archive, and then deletes them from the hot object. The copy and the delete both run, because archiving without deleting wins nothing.
+
+4. Provide a query path for the archived data. For a Big Object, expose retrieval through Async SOQL or Batch Apex. For an off-platform store, expose an External Object so users can query the archive without the data coming back into org storage.
+
+5. Schedule the jobs off-peak, make them idempotent, monitor them, and keep a rollback plan for the deletion step. Test the whole pipeline at representative volume in a sandbox before it touches production, so the delete runs against known data with a proven recovery path.
+
+## The three exam traps
+
+Trap one, archiving without deleting. Copying old records to an archive while leaving the hot object untouched realizes no performance benefit and no storage relief; you pay twice for data you still carry in both places. The fix is to both copy and delete, which is exactly the exam's Q1 and the lesson's exam tip.
+
+Trap two, keeping everything forever. It is costly, because you pay to store records nobody reads, and it can violate storage-limitation requirements, because retaining personal data without a defined purpose is a compliance exposure. The fix is a per-category retention policy with a defined end-of-life action, which is how the retention section frames it.
+
+Trap three, archiving to a store with no query path. Moving data somewhere it cannot be retrieved makes it effectively unreachable, which defeats the retention purpose. The fix is to bundle every archive target with a retrieval mechanism, Async SOQL or Batch Apex for a Big Object, an External Object for off-platform, which is the three-target analysis from the exam's Q2.
+
+![The three exam traps: archiving without deleting, keeping everything forever, and archiving to a store with no query path, each with its fix](</diagrams/day-31-lv-2a-archiving-and-purging-fundamentals-strategies-big/4-three-exam-traps.png>)
+
+## Try it for yourself
+
+In a Developer Edition org that has Big Objects available, create a Big Object with a small set of fields and an index, then load a few thousand rows into it. Define a tiny retention story for yourself: a status flag and a CreatedDate, a pretend one-year active window, and a pretend archive target. Write a short Batch Apex class, mirroring the pattern in the Big Objects documentation, that selects records older than your window, copies them to the Big Object, and deletes them from the source custom object. [^3] Query the Big Object back, either through Async SOQL or through a Batch Apex pass, and confirm the archived records are reachable after the source records are gone. Then change the selection to add the status guard and observe how the archived set narrows. The point is to feel, in miniature, the archive and purge sequence, the retention decision, the Big Object target, and the query path, on data small enough to inspect, because the identical sequence on a fifteen-million-row object is the entire lesson.
+
+## What's next
+
+You can now recommend an archiving and purging plan. You know the difference between archiving, moving cold records to a secondary store for retention and reference, and purging, deleting records you no longer need to keep. You know the three archive targets, a Big Object on-platform with Async SOQL access, an off-platform store that frees Salesforce storage, and a separate archive custom object that rarely holds up at scale, and you know to pair each with a query path. You understand retention policies, how they define per-category keep-duration and end-of-life action under the storage-limitation principle, why keep everything forever is costly and often non-compliant, and the age, status, and access selection patterns with age plus status as the default because it is auditable and maps to the policy. You know that deleting from the hot object after archiving is the half of the job that actually shrinks the working set, that the delete must respect referential integrity and the Recycle Bin, and that archive jobs should run off-peak, idempotent, on Bulk API, tested at representative volume, and backed by a rollback plan.
+
+Lesson 32 of 42 is up next: archiving and purging scenarios, covering what to archive, when, and compliance. Where this lesson taught you the fundamentals, the strategies, the Big Object target, and the retention policy, lesson 32 turns them into a decision method, walking real scenarios to decide which records to archive, at what point in their life, and how to keep the whole plan compliant while you do it.
+
+## Related Requirements
+
+- Lesson 32 of 42 (lv-2b): Archiving and purging scenarios: what to archive, when, compliance
+- Lesson 07 of 42: Big Objects versus standard and custom objects
+- Lesson 29 of 42 (lv-1a): LDV fundamentals: skinny tables, indexing, selective SOQL
+- Lesson 30 of 42 (lv-1b): LDV data-model and query design scenarios
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Large Data Volume Considerations (20%) domain and the objective to recommend a data archiving and purging plan covering archiving strategies, using Big Objects as an archive target, and retention policies. [trailhead.salesforce.com](https://trailhead.salesforce.com/credentials/platformdataarchitect)
+
+[^2]: Best Practices for Deployments with Large Data Volumes, Salesforce Developers. Frames the main approach as reducing the number of records the system must process, advocates a policy of archiving or discarding data at the same rate it arrives, recommends moving data into Big Objects with Bulk API or Batch Apex, and covers the archival selection and retrieval patterns. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-best-practices.html)
+
+[^3]: Big Objects Implementation Guide, Salesforce Developers. Documents Big Objects as big-data storage that delivers consistent performance from 1 million to 1 billion records, queryable via Async SOQL, and defines the Big Object feature set that does not include standard relationship and reporting machinery. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/big-object-impl-guide/guide/big-object.html)
+
+[^4]: Data protection principles under the GDPR, European Commission. Sets out the storage limitation principle, that personal data must be kept for no longer than is necessary for the purposes for which it is processed. [commission.europa.eu](https://commission.europa.eu/law/law-topic/data-protection/reform/rules-business-and-organisations/principles-gdpr_en)
+
+[^5]: Salesforce Big Objects Async SOQL retirement, Salesforce Help. Notes that Async SOQL is scheduled for retirement and documents Batch Apex as the alternative for automated query and processing on a Big Object. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000394892&language=en_US&type=1)

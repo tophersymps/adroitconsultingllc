@@ -1,0 +1,116 @@
+---
+title: "Lesson 70: The Architecture Spectrum: Orchestration vs Autonomy"
+slug: architecture-spectrum-orchestration-vs-autonomy
+series: "agentic-ai"
+lesson: 70
+excerpt: "Every agentic system you will build sits somewhere on a spectrum between full orchestration and full autonomy. At one end the code decides the path: LLM calls and tools wired into predefined steps, which gives you predictability and a fixed cost. At the other the model decides the path: an agent given a goal and a set of tools chooses its own steps, which gives you flexibility at the price of trust. This lesson gives you a decision framework: how to read a task and place it correctly on that line, when an orchestrating workflow is the right call, when a single autonomous agent is, and how to hybridize the two so the deterministic parts stay deterministic and only the genuinely open-ended parts get agency."
+date: "October 15, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Orchestration, Autonomy, Workflow, Agent Design, Architecture Spectrum, Decision Framework]
+---
+
+Every agentic system you will build sits somewhere on one line. At one end, your code decides what happens next: LLM calls and tools wired into predefined steps, with the order, the branches, and the exit conditions written down in advance. At the other end, the model decides: an agent given a goal and a set of tools that plans its own route to that goal and adapts when the route changes. The line between them is the single most consequential decision you will make on any agent project, because it decides how much the system can do, how much you can trust it, and how much it costs to run.
+
+This lesson gives you the vocabulary and the decision rule for placing a task on that line. You will learn what orchestration and autonomy actually mean as architectures, why Anthropic draws its line where it does, and a practical framework for choosing: deterministic steps where the task is predictable, autonomy only where the task is genuinely open-ended, and a hybrid design that keeps each part in the place it fits best. By the end you should be able to look at any incoming task and answer, in one sentence, whether it is a workflow, an agent, or a mix of both.
+
+## Two poles, one spectrum
+
+Start with the definition that the industry has converged on. Anthropic, in its widely cited engineering post, groups everything under the term "agentic systems" but draws an architectural line through the middle:
+
+- **Workflows** are systems where LLMs and tools are orchestrated through predefined code paths.
+- **Agents** are systems where LLMs dynamically direct their own processes and tool usage, maintaining control over how they accomplish tasks. [^1]
+
+That distinction is not about how smart the model is. Both use the same model under the hood. It is about who owns the decision of what happens next. In a workflow, your code owns it: step two runs after step one, and if step two fails you handle the failure in code. In an agent, the model owns it: it looks at the goal and the current state, picks a tool, calls it, looks at the result, and picks the next tool, possibly in a long loop you could not have enumerated in advance. [^1]
+
+OpenAI's practical guide for building agents makes the same split. It defines a workflow as a sequence of steps that must be executed to meet the user's goal, then notes that an agent is the thing that leverages an LLM to manage that workflow's execution and make decisions: recognizing when it is complete and proactively correcting its actions if needed, always operating within clearly defined guardrails. [^2] The two definitions are consistent, and both land on the same question: is the path fixed by code, or does the model steer it?
+
+Treating these as a spectrum rather than a binary is the useful move. Between the fully orchestrated workflow and the fully autonomous agent there is a continuous range of how often the model gets to choose. A workflow that routes between a few known specialist models gives the model very little latitude. An agent that runs until a step cap stops it gives the model a great deal. OpenAI's own SDK documentation frames orchestration as exactly this choice: "there are two main ways to orchestrate agents," it says, "allowing the LLM to make decisions" or "orchestrating via code," and you can mix and match. [^3] That mixing is the whole art of the architecture.
+
+![The architecture spectrum: a horizontal line from fully orchestrated on the left (code decides the path, predefined steps, predictable cost) to fully autonomous on the right (model decides the path, open-ended loops, flexibility at the price of trust), with a graduated region between them.](</diagrams/architecture-spectrum-orchestration-vs-autonomy/1-architecture-spectrum.png>)
+
+## Why the position of the line matters
+
+The reason this single axis deserves a whole lesson is that the choice trades off against things you cannot get all at once. Move toward orchestration and you buy predictability: the same input takes the same path, produces similar output, costs a similar number of tokens, and finishes in a bounded time. Move toward autonomy and you buy capability: the system can handle inputs you did not foresee, recover from failures you did not code for, and complete work that has no fixed shape. The cost of that capability is uncertainty about what it will do, how long it will take, and how much it will spend. [^1]
+
+Anthropic states the tradeoff plainly: agentic systems trade latency and cost for better task performance, and you should consider when that tradeoff makes sense. Their strong advice is to find the simplest solution possible and only increase complexity when needed, which sometimes means not building an agent at all. [^1] There is pressure to make every agentic system an autonomous agent because that is the impressive demo, but the people who build production systems are explicit that the opposite bias is right: add autonomy only when the task demands it, and lean on deterministic orchestration whenever the task has a shape you can write down.
+
+This is not theory. In Adroit's own ten-agent content pipeline, the delivery chain is mostly a fixed sequence: a scheduler picks a topic, an agent drafts, an editor reviews, a verification gate checks the output, and a publish step ships it. Each agent is genuinely agentic inside its own steps, using tools to research and draft. But the handoff from one agent to the next is orchestrated, predefined code, because the overall pipeline must be deterministic, debuggable, and safe to run unattended. That is the pattern in miniature: autonomy for the open-ended reasoning inside a step, orchestration for the steps themselves. The lesson you can take from it is that production systems nearly always land somewhere in the middle.
+
+## Reading a task: when to choose orchestration
+
+The decision rule everyone reaches, in slightly different words, is about the shape of the task space. Anthropic's guidance is that workflows offer predictability and consistency for well-defined tasks, while agents become the better option when flexibility and model-driven decision-making are needed at scale. [^1] A well-defined task is one where you can write the steps or the branches down. Pick orchestration when either of these holds:
+
+**The steps are known in advance.** You can list the stages the task must pass through, even if each stage does real reasoning. Generating a summary, translating it, and checking the translation against a rubric is a known sequence; there is no reason for a model to design that sequence at runtime. Defining it as a chained workflow lets each model call focus on an easier subtask, which measurably improves accuracy. [^1]
+
+**The branching is enumerable.** You can list the distinct categories an input could fall into and write a handler for each. A support request is either a refund, a status question, a technical issue, or something else, and you can route each bucket to a specialist. When the categories are enumerable, a routing workflow is more reliable, cheaper, and easier to evaluate than letting a supervisor figure the route out on every call. [^4]
+
+The payoff of orchestration is concrete. Deterministic orchestration is predictable in speed, cost, and performance, because the code does not depend on what the model happens to decide. It fails predictably, debugs cleanly, and gives you a per-step latency budget. [^3][^4] For regulated or transactional work, where a process must be traceable to a control point, a deterministic path is nearly always the right choice. [^5]
+
+## Reading a task: when to choose autonomy
+
+Autonomy earns its place only where orchestration cannot, and the dividing line is whether you can predict the number and nature of the steps. Anthropic's rule for agents is precise: use them for open-ended problems where it is difficult or impossible to predict the required number of steps and where you cannot hardcode a fixed path, because the LLM will potentially operate for many turns and you must have some level of trust in its decision-making. [^1] Pick autonomy when either of these holds:
+
+**The path is unknowable in advance.** A coding agent that must read files, run tests, search the web, edit, and re-run cannot be hardcoded into a graph. The set of transitions it may need is far too large. A supervisor model with a small tool palette is the only design that fits. [^4]
+
+**The goal is the contract, not the steps.** When the success condition is well defined but the route to it is not, give the model the goal and the tools and let it make decisions along the way. Research that must gather from many sources, an investigation that changes direction as it learns, an open-ended question that has no single right answer: these are tasks where the value of flexibility outweighs the cost of uncertainty.
+
+The tradeoff that must be explicit is trust. Autonomy is ideal for scaling tasks in trusted environments, where a human or a system has verified the model can be trusted with the tools and the decisions it will make. [^1] You do not hand an unconstrained agent destructive tools and leave it running overnight. You hand a constrained agent, with a bounded step budget, a well-scoped tool palette, and guardrails, a goal, and then you evaluate whether it met it. The trust you need is not that the model will always be right; it is that when it is wrong it cannot do irreversible damage, which is a property of the environment you build, not of the model.
+
+## A decision framework
+
+Put the two together and you get a small set of questions that, answered in order, place any task on the spectrum. This is a framework to hold in your head, not a rigid checklist.
+
+1. **Can I write the steps or the branches down?** If yes, the deterministic part is orchestrated. If the whole task is enumerable, build a workflow and stop.
+2. **Is there a part that cannot be enumerated?** If yes, isolate that part and give only it a bounded amount of autonomy.
+3. **How much trust have I earned?** Only the parts where you can constrain the environment, bound the loop, and verify the outcome should get agency. [^1]
+4. **What is the failure cost?** If a mistake costs money or compliance, prefer orchestration and a human gate. If a mistake is cheap and recoverable, autonomy is safe.
+5. **Can I verify success in code?** Autonomy is only as trustworthy as the verification you can run against its output. If you cannot check whether it worked, reduce its autonomy.
+
+The through-line is to maximize determinism wherever the task allows it and spend autonomy only on the genuinely open-ended residue. This matches how mature teams describe production systems. One widely read framing of enterprise architecture recommends a hybrid where the bulk of work runs deterministically, with agentic reasoning reserved for the steps that genuinely require it. [^5] You are not choosing between orchestration and autonomy as a monolith. You are deciding, step by step, which parts of the task are fixed and which are free.
+
+![The five-question placement framework: steps one through five each either steer a fully enumerable task to a workflow or isolate a bounded slot for autonomy, ending on the through-line to maximize determinism and spend autonomy only on the open-ended residue.](</diagrams/architecture-spectrum-orchestration-vs-autonomy/2-decision-framework.png>)
+
+## Worked example: a claims-intake system
+
+Walk a real case through the framework to make the spectrum concrete. An insurance team wants an agentic system to handle first-notice-of-loss claims: a customer reports a fender bender, the system must collect the incident details, assess it against the policy, decide whether it is a valid claim, and generate a draft response.
+
+Start with step 1, can you write the steps down. The intake is highly enumerable. Collecting policy number, date, location, and a description is a fixed form. Normalizing it and validating it against the policy ledger is deterministic logic. Routing the claim into a small set of known categories is textbook routing. All of this should be orchestrated, predefined code, because it is predictable and must be traceable to support an audit. [^1]
+
+Now step 2, find the part that cannot be enumerated. The genuinely open-ended residue is the description. A customer writes "got hit from behind at the light, driver was looking at his phone." Parsing the free text, extracting the relevant facts, and deciding whether the narrative matches the claim type cannot be hardcoded in advance; the language is too varied. That single step gets autonomy: a claims-analysis agent reads the description, tags the facts, and flags any inconsistency, using tools to check against the policy. [^1] It is a bounded agent with a dead-simple tool palette, a step cap, and output that a downstream validator checks.
+
+Finally, step 5, verify success in code. The agent's output is structured risk tags and an extracted-facts object, which the orchestration validates against a schema before a human approves the draft. The expensive decision, whether to pay, stays behind a human gate because its failure cost is money and compliance, and that part of the process is deliberately not autonomous. [^5]
+
+The result is a hybrid that sits in the middle of the spectrum. Almost all of it is a workflow: intake, normalize, route, validate, human-approve. One narrow slot in the middle is an agent, and it is the only slot where the model gets to choose its own path. Nothing about the system overall is fully autonomous. That is the design, and it is the right one. It uses autonomy exactly where flexibility is worth the cost and orchestration everywhere else.
+
+![The claims-intake hybrid: the orchestrated steps (intake, normalize and validate, route, validate against schema, human approves) run as predefined code, with a single bounded claims-analysis agent slot in the middle where the model chooses.](</diagrams/architecture-spectrum-orchestration-vs-autonomy/3-claims-intake-hybrid.png>)
+
+## The pattern to take away
+
+The architecture spectrum is a placement decision, and the pattern for making it well is consistent across every system you will build:
+
+1. Assign the decision of "what happens next" deliberately. If your code can own it, your code should own it. If the task forces the model to own it, contain that ownership so the agent cannot reach everything at once. [^1]
+2. Enumerate first. Before you reach for an agent, write the steps and the branches down. Most of every production system turns out to be enumerable. [^4]
+3. Give autonomy only to the residue. Isolate the open-ended part, bound it with a step cap and a small tool palette, and hand it the goal rather than the steps. [^1]
+4. Match trust to environment. An agent is only as safe as the guardrails around it, so build the environment before you turn the loop loose. [^1]
+5. Prefer hybrid over either extreme. Keep the deterministic parts deterministic and let the open-ended parts be agentic. Production systems almost never live at a pole. [^5]
+
+If you walk away with one skill from this lesson, it is placing a task correctly on the line: recognizing the fixed part that belongs to orchestration and the open-ended part that needs a bounded agent, and putting each where it works. Good architects do not choose orchestration or autonomy. They route each part of the task to whichever side of the line it needs.
+
+## Try it
+
+Take a task you know well and place it on the spectrum. Pick something with structure, say an onboarding flow, an invoice-approval process, or a content-publishing pipeline like Adroit's. Write down the full task, then run the five-question framework against it. Which steps can you enumerate? Which part, if any, is genuinely open-ended and cannot be hardcoded? Now design the hybrid: draw the orchestrated steps as a fixed sequence, and mark the single step that deserves autonomy. Write the guardrails for that one agent: its tool palette, its step cap, and the schema you would use to verify its output in code. Last, state why each part landed where it did. You should end with a one-sentence answer: "This is a workflow with a bounded agent in the middle," or whatever your analysis showed. Training the judgment to route each part correctly is the whole value of the lesson, and it is a skill only practice builds.
+
+## What's next
+
+This lesson gave you the axis and the decision rule for placing any task on it. The next lesson steps up from deciding where a single agent sits to the machinery an enterprise runs them on. Lesson 71 covers enterprise agent platforms: what a platform actually includes, the serving layer that hosts your model and agent, the control plane that governs and routes them, and the data plane that carries the context and actions. If this lesson was about choosing the right level of autonomy, the next one is about buying the infrastructure that sustains it at scale.
+
+## Summary
+
+The architecture spectrum runs from full orchestration, where your code decides what happens next through predefined paths, to full autonomy, where the model decides by directing its own tools and process. [^1] The position on the line is the most consequential design decision in any agent project because it trades off predictability, cost, and trust against flexibility and capability. [^1] Use orchestration when the steps are known or the branches are enumerable, because deterministic orchestration is predictable in speed, cost, and performance and debugs cleanly. [^3][^4] Use autonomy only for open-ended tasks where you cannot predict the number of steps, and only within an environment where trust is earned by bounded tools, step caps, and code-level verification. [^1] Mature production systems are hybrids: the bulk of the work runs deterministically, and agentic reasoning is reserved for the steps that genuinely require it. [^5] Place each part of a task deliberately on the line, containing autonomy so a flexible model cannot reach everything at once.
+
+[^1]: Anthropic, "Building effective agents" (Dec 19, 2024). https://www.anthropic.com/research/building-effective-agents
+[^2]: OpenAI, "A practical guide to building agents." https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf
+[^3]: OpenAI Agents SDK, "Agent Orchestration" (openai-agents-js). https://openai.github.io/openai-agents-js/guides/multi-agent/
+[^4]: Anthropic, "Building effective agents," section "Workflow: Orchestrator-workers" and "When (and when not) to use Agents." https://www.anthropic.com/research/building-effective-agents
+[^5]: "Three Agentic Orchestration Design Patterns for Enterprise AI," Put It Forward. https://www.putitforward.com/agentic-ai/agentic-orchestration-design-patterns

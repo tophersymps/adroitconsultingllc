@@ -1,0 +1,92 @@
+---
+title: "Who Gets In: Choosing the Experience Cloud Access Model"
+slug: experience-cloud-access-model-2026
+excerpt: "Guest user, External Identity, or a community license. Each door changes what an external visitor can see and what it costs. Here is how to choose."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 11, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "10 min read"
+tags: [Salesforce, "Experience Cloud", Security, Licensing, Identity]
+bannerImage: "/banners/experience-cloud-access-model-2026.webp"
+ogImage: "/banners/experience-cloud-access-model-2026-og.jpg"
+---
+
+Every external-facing Salesforce build opens with the same decision, and almost nobody formalizes it. Before you lay out a single page, you have to answer: how do people get in? The platform offers three doors, a guest user, an External Identity license, and a full community license, and each one changes what a visitor can see, how their access is governed, and what it bills. Pick wrong and you get one of two failures: a leak, because the free door turned out to grant access you never intended, or a wasted license bill, because you paid for a full door on an audience that only ever needed login.
+
+The trick is that the access model IS the security model. An authenticated visitor is a named person who inherits the sharing rules, field-level security, and object permissions of their profile. A guest is a single shared bucket every anonymous visitor runs in, so anything you expose to the guest is exposed to everyone equally. That one distinction drives every design choice that follows. This article is the decision guide: the three doors, what each one assumes, the security baseline every door carries, and a worked example of a build that uses all three at once.
+
+## The three doors, and why the free one is the dangerous one
+
+Salesforce draws the line between authenticated and unauthenticated access. Unauthenticated visitors are guest users, and they run as a single shared identity called the Guest User profile for the whole site. Authenticated users log in and are governed by the standard record-access model, the same OWD, sharing rules, and field-level security that an internal user inherits, which is the sharing verdict our [record-sharing guide](/field-notes/salesforce-record-sharing-model-2026) walks through in detail. [^1]
+
+Three access tiers sit on that line:
+
+**The guest user,** for unauthenticated visitors. It needs no external license and does not consume one. Salesforce is explicit that guest users are not counted against your external user licenses, which is why a public knowledge base or an anonymous intake page always starts as a guest build. [^1]
+
+**The External Identity license,** for authenticated consumers who mainly need identity: self-registration, login, profile updates, and access to a bounded set of records and apps. It bills in blocks of active users. [^2]
+
+**The community license,** for authenticated members who transact: they read and update Cases, Orders, Contracts, and Notes, run reports, and use the standard sharing model. [^1]
+
+![The three access tiers compared: a guest user is unauthenticated with a shared identity and no external license, External Identity is an authenticated high volume identity-only tier billed in blocks of active users, and a community license is an authenticated member tier for users who read and update Cases, Orders, and reports with standard sharing](</diagrams/experience-cloud-access-model-2026/1-three-doors.png>)
+
+The trap is the word "free" on the first door. A guest build costs nothing in licenses but everything in discipline, because the guest profile sits on the public internet behind no login. The past year made that concrete.
+
+## Door one: the guest user, free and deceptively shared
+
+A guest build is right when an unauthenticated visitor genuinely should see the content. The classic cases: a public knowledge base where anyone reads knowledge articles, a one-page warranty or intake form that posts a record, an error or login landing page. For those, you need no community licenses at all. Salesforce lets Enterprise, Performance, and Unlimited orgs stand up to 100 Experience Cloud sites without buying a single community license, and even a site with zero external licenses still serves guest access to its login and error pages. [^1]
+
+The risk is that guest and "public" get conflated. The guest user is one identity shared by every anonymous visitor, so any object or field you grant it is readable by literally anyone, authenticated or not, who finds the right endpoint. And it turns out the endpoint is findable. In a campaign Salesforce Security has been tracking, threat actors abused overly permissive guest configurations to pull data out of public Experience Cloud sites. They used a modified version of the open-source tool Aura Inspector, originally built by Mandiant to probe the Aura API endpoints these sites expose, and upgraded it to actually extract records by exploiting excessive guest permissions, no login required. [^3]
+
+Salesforce frames the exposure in four layers, each evaluated in sequence: object access, which determines the objects a user can see at all; record access, which determines which records within those objects; field-level security, which restricts specific fields; and field value masking, which obscures sensitive values even on a visible record. An overly broad guest configuration widens one of these layers and the data walks out. [^3]
+
+![The Experience Cloud four layer access model drawn as sequential filters: object access gates the objects a user sees, record access gates the records within those objects, field level security gates the fields, and field value masking obscures sensitive values even on a visible record, with every visitor passing through all four in order](</diagrams/experience-cloud-access-model-2026/2-four-layer-access.png>)
+
+The guest lockdown is mechanical, and it is non-negotiable before anything public goes live. The highest-impact single change is to uncheck "Allow guest users to access public APIs" on the site and remove the API Enabled permission from the guest profile. That one setting closes the Aura endpoint that the campaign actually used, and Salesforce calls it out as the exact vector being exploited. [^3] Beyond that, the baseline is:
+
+- **Org-wide defaults Private for external access.** In Sharing Settings, confirm every object's Default External Access is Private and that Secure guest user record access is on. When that setting is enabled, guest users cannot access any record unless you explicitly create a guest user sharing rule for it. [^3][^4]
+- **Secure guest user record access on, and understand what it forces.** It is on by default and cannot be disabled. It locks every object to Private for guest users, prevents guest users from being added to queues or public groups, blocks manual and Apex managed sharing, and limits guest access to read-only via guest user sharing rules. Those rules are a special type of criteria-based sharing rule and they count against the 50-per-object criteria-based sharing rule limit. Critically, a guest user sharing rule grants access without login credentials, so it effectively makes every matching record public to anyone. Write one carefully. [^4]
+- **Least-privilege on the guest profile.** Start from zero access and restore only what tested functionality needs. Never grant the guest View All Records, Modify All Records, Update, or Delete. For records the guest creates, enable the setting that assigns them to the default owner instead of the visitor. [^4]
+- **Close the enumeration holes.** Disable Portal User Visibility and Site User Visibility so a guest cannot enumerate internal org members. Disable self-registration unless the site genuinely needs it, because a guest-tier exposure can escalate into a self-registered authenticated account with broader reach. Add sensitive User fields, like last login date and last password change, to the Enhanced Personal Information Masking field set, and enable profile filtering so guests cannot read profiles they have no business reading. [^3]
+- **Restrict the code surface.** Review every Visualforce page and Apex class the guest can reach, remove what it does not need, and for any `@AuraEnabled` Apex controller the site uses, require `with sharing`. [^4]
+
+That checklist is a lot, which is the honest cost of the free door. If the visitor logs in, the calculus changes.
+
+![The guest user lockdown baseline: org-wide defaults set to Private for external access, Secure guest record access on by default with guest access read-only via sharing rules only, public APIs and the API Enabled permission disabled to close the Aura endpoint, portal and site user visibility restricted, self-registration off unless required, and sensitive user fields masked through Enhanced Personal Information Masking](</diagrams/experience-cloud-access-model-2026/3-guest-lockdown.png>)
+
+## Door two: External Identity, identity without a portal
+
+The least understood door is the External Identity license, because its name sounds like a footnote when it is actually an entire product: Salesforce Customer Identity. With it, outside users self-register, log in, update their profile, and reach web and mobile apps through one shared identity, all built from the same access model the org already enforces. [^2]
+
+The licensing facts matter more than the marketing. You buy External Identity in blocks of active users, and it is available in Enterprise, Performance, Unlimited, and Developer editions. If you already carry any paid Community user licenses, External Identity is included with them at no extra cost, which is the fact most organizations miss. It is also upgradeable: you can move an External Identity license up to a community license at any time if a user later needs Cases, Orders, Contracts, or Tasks. [^1][^2]
+
+Two limits shape how far it reaches. Salesforce recommends an External Identity site not exceed about 10 million unique logins per month, beyond which you should talk to an account representative; exceeding it risks an extra charge and reduced functionality. And the license is intentionally scoped: it unlocks access to the standard objects plus 10 custom objects per profile, with a default External Identity profile deliberately limited to prevent unintended data leaks. On that default profile, a user can read accounts; with the fuller license you can grant read and update. You widen access by cloning the default profile and raising object permissions deliberately, which is least privilege built into the model. [^2]
+
+So when does External Identity win over a full community license? When the audience is large, authenticates, but does not transact deeply in the CRM. A partner single-sign-on out of your identity store into a lightweight order-status app, a consumer login that gates a handful of self-service actions, a patient portal where the user mostly reads their own records. If the requirement is "logged in, identified, bounded data" and not "create and manage Cases and Orders," External Identity is the door that gives the identity without the member-seat commitment. It is also the answer to the classic pricing question our [Experience Cloud cost model](/field-notes/salesforce-stack-cost-modeling-2026) frames, where paying for member seats for users who log in rarely is how portals overpay. [^2]
+
+## Door three: the community license, full external users who transact
+
+When an external user needs to actually work inside the platform, read and update a Case, submit and track an Order, run a report, the right door is a community license. These are member-based licenses, which work the way an internal license does: a named user with the license can access a community as many times as they want, governed by the standard sharing model, but never gets the internal org itself. [^1]
+
+Salesforce offers a family of them, and the name is the use case. Customer Community is for business-to-consumer experiences with large numbers of external users who need Cases or knowledge, and it works with person accounts. Customer Community Plus adds reports and dashboards plus standard sharing for a self-service tier that needs visibility across records. Partner Community is the partner-grade tier for relationship management, and External Apps suits custom digital experiences like brand engagement and loyalty where CRM object access stays limited. [^1]
+
+Two structural facts are easy to get wrong. First, community licenses are assigned to users, not to sites, so a user can move between sites and you can reassign an unused license to any site in the org. Second, guest users never consume these licenses, which is the pressure valve: an anonymous public face can sit on top of a member base without deflating the login pool. The licensing budget is about who logs in and transacts, not who clicks. [^1]
+
+There is also an explicitly wrong door. Salesforce strongly discourages using an internal license for external use cases, because internal licenses were never designed to expose data to people outside the org safely. External-facing access belongs on an external license, guest, External Identity, or community, whichever tier the audience actually earns. Reusing an internal seat for a portal member is how a portal quietly inherits the wrong permissions. [^1]
+
+## The decision, not the license page
+
+The reason this is a decision rather than a lookup is that real builds mix doors. The four-layer access model, object, record, field, and masking, applies to every tier, and each visitor inherits it through whatever door they came in. The disciplined default is minimal: start most audiences at the door that matches what they must do, then audit outward.
+
+![The Experience Cloud access decision: anonymous public content starts at the guest user, a logged in high-volume identity-only audience moves to External Identity, and a member who reads or updates Cases, Orders, reports, or knowledge with ownership moves to a community license, with External Identity upgradeable to a community license and every door passing through the same four layer access model](</diagrams/experience-cloud-access-model-2026/4-access-decision.png>)
+
+A manufacturer's build shows all three doors in one org. A consumer hits a public warranty lookup by serial number; that is guest access, a read-only page on a narrow slice, locked down with default OWD Private for external and public APIs disabled so nobody can query past the page. The same consumer, after registering, logs in to see their own service history; that is External Identity, identity carried in, a bounded set of records read through their profile. A distributor, meanwhile, gets a Partner Community login to open and update support Cases and run their account's dashboards; that is the community tier, full member access under standard sharing. One org, three doors, one exposure decision per audience. [^1][^3]
+
+Build outward from that map. Put each audience on the door that matches what it must do, lock the guest floor to the minimum, give identity to the logged in but bounded audiences, and pay for the full member tier only where someone genuinely transacts. The license page is read last, not first, because by then the access decision has already told you which doors you need. That ordering is exactly the discipline our [Salesforce build order](/field-notes/salesforce-build-order-feb-2027) prescribes for the whole stack: settle who gets in and how before you build the surface they see.
+
+[^1]: Salesforce Help, "Experience Cloud User Licenses." The authenticated-versus-guest split, guest users not counting against external licenses, up to 100 sites without community licenses, the community license family and use cases, the External Identity-to-community upgrade path, and the guidance to never use internal licenses for external access. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.users_license_types_communities.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "External Identity License Details." Blocks of active users, Salesforce Customer Identity, one shared identity, included free with paid Community user licenses, the upgrade path, the roughly 10 million unique logins per month recommendation, the default profile limit, and the standard objects plus 10 custom objects scope. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.users_license_types_external_identity.htm&type=5)
+[^3]: Salesforce Blog, "Protecting Your Data: Essential Actions to Secure Experience Cloud Guest User Access," updated March 11, 2026. The threat-actor campaign against overly permissive guest configurations, the modified Aura Inspector tool and the Aura endpoint it exploits, the four-layer Experience Cloud access model, and the recommended guest lockdown actions. [salesforce.com](https://www.salesforce.com/blog/protecting-your-data-essential-actions-to-secure-experience-cloud-guest-user-access/)
+[^4]: Salesforce Help, "Best Practices and Considerations When Configuring the Guest User Profile." Secure guest user record access on by default and unchangeable, Private OWD for all objects, no queues or public groups, read-only guest sharing rules that count against the 50 criteria-based rules per object, and the least-privilege object, field, and Apex guidance. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.networks_guest_profile_best_practices.htm&type=5)

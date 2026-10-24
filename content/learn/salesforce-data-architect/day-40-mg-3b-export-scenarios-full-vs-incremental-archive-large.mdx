@@ -1,0 +1,225 @@
+---
+title: "Data Architect MG-3B: Export scenarios: full vs incremental, archival extraction, large-volume planning"
+slug: day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large
+series: salesforce-data-architect
+lesson: 40
+excerpt: "Plan a real export: full versus incremental, archive before purge, and large-volume extraction that stays inside API limits. This is the Export scenarios lesson (mg-3b) in the Data Migration domain, where lesson 39 taught the tools and this lesson makes you design the run. You will learn why a full export is the right first seed and the wrong habit, how an incremental feed by SystemModstamp stays cheap, why that feed silently misses deletes, how to close the gap with Change Data Capture or id-set reconciliation, what it means to treat an export as the archive before you delete the source, and how to chunk a large-volume job so it finishes instead of timing out."
+date: "October 21, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Salesforce, Data Architecture, Data Migration, Export, Incremental Export, Full Export, SystemModstamp, Change Data Capture, Archiving, Bulk API, PK Chunking, GDPR, Certification]
+---
+
+Lesson 39 taught you to match export tools to jobs: Data Export service for scheduled backup, Data Loader for tactical pulls, the Bulk API for recurring feeds, reports for analysis. [^1] This lesson, mg-3b, keeps the tools and raises the stakes. The exam now hands you a scenario and asks you to plan the export itself: full or incremental, what happens when the data is about to be deleted, and how a large-volume extraction survives contact with API limits. [^1]
+
+Read the objective closely, because the shape of it tells you how to study. It names three scenarios that recur on the exam: applying full versus incremental exports, extracting for archival, and planning a large-volume export. [^1] Each one is a decision, and each decision has a trap. The decision logic is what you need, not a memorized list of buttons.
+
+Three ideas carry the whole lesson, and every section below hangs off one of them. A recurring feed should extract only what changed since the last run, and it must handle deletes explicitly or it quietly rots. An export that precedes deletion is the archive, and it is only finished when you have proven it complete. A large export must be chunked and scoped or it will time out, regardless of how fast you expect it to be. [^1]
+
+## Full export: the whole org, and when that is the right call
+
+A full export extracts the entire dataset. Every record of every selected object, no window, no filter. Salesforce's own Data Export service describes itself exactly this way: your org can generate backup files of your data on a weekly or monthly basis, and you export all your org's data into a set of CSV files. [^2]
+
+Why would you ever run one, when incremental extraction is cheaper? Three legitimate reasons.
+
+The first is the initial seed. When a warehouse or a new external system starts holding a copy of Salesforce data, it needs a baseline. You cannot apply deltas to an empty table. The first load is a full extract by definition, and that is fine, because it happens once. [^3]
+
+The second is a one-off backup or audit snapshot. A point-in-time picture of the org for compliance, a baseline before a big data project, a delivery of the full population to a partner. These are discrete events, not a cadence. [^1]
+
+The third is the gap case. Change tracking is not always available. If the object you need does not support the mechanism you would use for incremental extraction, or the integration is so simple that an occasional full pull costs less than building a delta pipeline, a full export can be the pragmatic answer. [^1]
+
+The trap is scheduling one. "We'll just export everything every night" sounds simple, and it is the exact design Salesforce tells you to avoid. Full reloads use an unnecessarily high amount of server resources, which can degrade organization-wide performance and drag down Bulk API jobs, dashboard and report performance, and Apex execution for everyone else in the org. [^3] That is the cost of a scheduled full export that an incremental would serve: other people's work slowing down because your integration chose the lazy path.
+
+So the rule is a flat one. Never run a full large-data-volume export on a schedule if an incremental will do. [^1][^3] If the same answer serves both, the architect who schedules the full version is designing the org's next performance incident.
+
+## Incremental export: the default for recurring feeds
+
+Incremental export extracts only the records changed since the last run. The usual key is SystemModstamp, Salesforce's system timestamp for the last modification to a record. A query restricts the extract to records whose SystemModstamp falls after the watermark of the previous successful run, and the feed pulls a fraction of the object instead of the whole thing. [^1][^3]
+
+The Salesforce guidance for heavy integration operations is to prefer this by default. Incremental processing involves working with just the data that changed, and updating or retrieving only that changed data, because full-reload integrations can use an unnecessarily high amount of Salesforce server resources. [^3] For an outbound feed, "retrieving only the changed data" is exactly an incremental export. [^3]
+
+Three design details make the pattern work, and the exam expects you to know them.
+
+The first is the watermark. The incremental export needs a reliable "last run" timestamp, and it has to be stored and updated by the pipeline, not guessed. You record the maximum SystemModstamp (or the job's own timestamp) from the run that just succeeded, and the next run queries on it. If the watermark is lost or rolled back, the next run either re-exports everything or skips a window, and both are silent corruption. [^1]
+
+The second is how you define "changed." SystemModstamp covers inserts and updates, because both write a new timestamp. That is also the reason the pattern misses deletes, and that gap gets its own section below, because it is the exam's favorite follow-up question. [^1]
+
+The third is the object's support for time-based filtering at volume. A delta query is only as cheap as its selectivity. Filtering on SystemModstamp, which is indexed, keeps the query selective, which is exactly the discipline you learned for large data volumes: reduce query scope and filter on indexed fields so Salesforce does not have to scan the whole object. [^11]
+
+The result is the objective's default answer: a recurring feed to a warehouse uses incremental extraction by SystemModstamp (or CDC, covered next), not a full pull. [^1][^3]
+
+![Full exports are for initial seeds, one-off snapshots, and the gap case where change tracking is unavailable, while incremental exports by SystemModstamp are the default for recurring feeds, and a scheduled full large-data-volume export is the design to avoid because it degrades org-wide performance](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/1-full-vs-incremental.png>)
+
+## The delete gap: what last-modified queries cannot see
+
+Here is the hole in the incremental pattern, and it is the single most tested point in this lesson.
+
+A deleted record is gone. It does not get a new SystemModstamp, because it no longer exists to carry one, and it does not appear in a last-modified query at all. [^1] Your feed keeps running, keeps returning updates, keeps looking healthy, and the external copy keeps holding records that Salesforce deleted weeks ago. Row counts drift. Reconciliation reports start disagreeing with the source. Nobody notices for a while, because nothing errored. [^1]
+
+That is why the exam frames the fix as a design decision rather than a tool choice. [^1] Two options close the gap, and you should be able to say when to use each.
+
+Option one is event-driven detection with Change Data Capture. CDC publishes change events for record creation, updates, deletion, and undeletion, so your integration subscribes to delete events the moment they happen. [^6] A delete event identifies the deleted record and carries no field values in its body, which is exactly what a warehouse needs to issue its own delete for that ID. [^6] The tradeoff is operational: CDC requires a subscriber that consumes events, and events are retained for a limited window, so a subscriber that is down for a long stretch can miss the deletes that happened while it slept. [^6]
+
+Option two is periodic reconciliation. On a defined cadence, you compare the ID set in the destination against the ID set in Salesforce. The SOAP replication API supports this directly: getUpdated() and getDeleted() give you the IDs that changed or were deleted within a time window, so a reconciliation run can ask "what got deleted since the last check" instead of scanning everything. [^8] Bulk API queryAll gives you the same material in the other direction: it returns records that were deleted because of a merge or delete, along with archived Task and Event records, so a full id-set comparison against a previous extract will surface the holes. [^7] The tradeoff here is volume: comparing ID sets is cheap at the ID level, but a true full reconciliation means retrieving the authoritative list, and at LDV that is work in itself. [^1]
+
+The exam's split here is clean: CDC for near-real-time feeds that need deletes promptly, reconciliation for batch cadences and for catching what CDC missed. [^1][^6] Many production warehouse feeds run both: CDC for the day-to-day flow, a weekly reconciliation as the safety net. [^1]
+
+![A deleted record gets no new SystemModstamp, so a last-modified query never sees it and the external copy keeps a stale record; the two fixes are Change Data Capture delete events for near-real-time feeds and periodic id-set reconciliation for batch cadences, and many feeds run both](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/2-delete-gap.png>)
+
+## Does SystemModstamp tell you about undeletes?
+
+One detail rewards a second read of the CDC definition. Change events include undeletion, and the replication API can return undeleted IDs as well. [^6][^8] If a user restores a record from the Recycle Bin, an incremental feed that only queries current records sees it come back, because the restored record has a fresh SystemModstamp. In the CDC world, the undelete event tells you it is back. [^6] The practical point for a feed design is that "changed" includes "came back," and a delete-handling design that only processes delete events should also process undelete events, or the warehouse treats the restored record as new. [^1]
+
+## Archival extraction: export before you purge
+
+The scenario that ties this lesson to the archiving domain: records need to leave Salesforce, and they need to land somewhere they can still be used.
+
+The archiving lessons (day 31 and day 32) covered when to archive and what to choose, and this objective adds the extraction half. [^1] When you purge data from Salesforce, you extract the affected records to an off-platform store before deleting them, and you keep a restorable, queryable copy. [^1] In this scenario the export is the archive. The destination file or table does not just hold a backup; it is the record of the data's existence, and it has to answer queries after the source is gone. [^1]
+
+That framing changes what "done" means. A normal export is done when the file is written. An archival export is done when you can prove the copy is complete and usable, and only then does the deletion step become safe. [^1] The verification section below is the companion to this one, because the two belong together: completeness before destruction is a sequence, not a slogan. [^1]
+
+Two technical choices shape an archival extract. The first is the tool. A one-off archival pull fits Data Loader or a Bulk API query job scoped to the records being retired, followed by moving the files to the archive store. [^1][^4] The second is the format. An archive you expect to query for years should land in a queryable store with its schema intact, not as twenty CSV files in a folder with no index. Extraction is the easy half; making the copy useful for the decade after is the architect's half. [^1]
+
+## Large-volume export planning: chunk, scope, schedule
+
+The third scenario, and the one where the exam gets concrete about failure modes.
+
+A large-volume export has four planning levers, and the exam tests all four.
+
+First, scope by indexed filters. A bulk export is a SOQL query at heart, and a query over a huge object that cannot reduce its scan is the query that times out. The Bulk API documents the consequence plainly: when a bulk query is processed, if the query does not execute within the standard two-minute timeout limit, the job fails with a QUERY_TIMEOUT error, and the guidance is to rewrite a simpler query and resubmit. [^4] Scoping by indexed filters and date windows is how you avoid needing the rewrite. [^11]
+
+Second, use Bulk API query jobs. Bulk query exists to query large data sets efficiently and to reduce the number of API requests, and Bulk API 2.0 query jobs are designed for queries that return 2,000 records or more. [^4][^5] A bulk query can retrieve up to 15 GB of data, delivered as 15 files of 1 GB each. [^4] That ceiling is the planning number for your extraction: an export that exceeds 15 GB is not a single job problem, it is a chunking problem. [^4]
+
+Third, chunk the extraction. Bound each job so it finishes inside the limits. Two chunking strategies cover most cases: date windows (export January, then February, then March) and ID ranges. [^1] For ID-range chunking at scale, the Bulk API's PK chunking exists for exactly this: it splits bulk queries on large tables into chunks based on the record IDs, or primary keys, of the queried records, so you get the benefit of many smaller jobs without hand-rolling the ranges. [^4] The exam's reason for chunking is the one the quiz states directly: chunking bounds job size, avoids timeouts, and stays within API limits. [^1] It does not improve data quality, and it does not remove the need for indexed filters. [^11]
+
+Fourth, schedule and provision for the run. Off-peak scheduling keeps an LDV export from competing with business users for the same server resources, which is the same reasoning that protects a recurring full reload from degrading org performance. [^3] On the destination side, plan storage for the full expected size before you start, because a 15 GB extraction into a store sized for 2 GB fails at the end, not at the beginning. [^1][^4] Include the intermediate space: CSV files, the staging copy, the loaded table, and headroom. [^1]
+
+![Large-volume export planning has four levers: scope by indexed filters to avoid the two-minute QUERY_TIMEOUT, use Bulk API query jobs for 2,000-plus records up to 15 GB in 15 files of 1 GB each, chunk by date window or ID range with PK chunking at scale, and schedule off-peak with destination storage sized for the full expected volume](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/3-large-volume-planning.png>)
+
+## Verification: prove the export before you trust it
+
+Every export scenario in this objective ends at the same gate: did the extract actually deliver what the source says exists?
+
+Two verification practices make that concrete, and the exam treats them as required steps, not nice-to-have checks. [^1]
+
+Count reconciliation. Compare the exported row count per object against Salesforce, and compare key aggregates (record count by a meaningful dimension, totals for numeric fields you care about) against the source. [^1] A count that matches proves the volume; aggregates prove the rows are the right rows and the fields came across. [^1]
+
+Sample restore or read. Read a sample of the exported records back out of the destination, or restore a small test set into a scratch org or table, and prove the copy answers the queries the archive exists for. [^1] This is the point where "we exported 12 million records" meets "we can read a record back." The second is the one that matters. [^1]
+
+An archive you cannot read is not an archive. It is a disk full of data. [^1] That sentence is worth holding for the exam, because it converts the whole verification section into a decision rule: before deletion, completeness must be proven and the copy must be demonstrably usable. [^1]
+
+## Compliance: exported personal data owes its own controls
+
+The last consideration applies the moment the export contains personal data, which in a data-driven org most archives do.
+
+Data protection and privacy regulations, GDPR among them, require the organization to keep personal data secure and private, and Salesforce documents data deletion guidance for complying with them. [^9] The architect's job is to carry that compliance through the export, not to assume it follows the file out of the org. [^1] Four controls are the ones this objective names.
+
+Classification first. Know what is in the export before you write it, because you cannot govern data you have not identified. [^1][^9]
+
+Encryption. Protect the data in transit to the destination and at rest once it lands. [^1]
+
+Access control. The destination store restricts who can read the exported copies, to the people with a legitimate need. [^1]
+
+Retention and erasure. The exported copies carry retention rules, so you define how long they live and how they are disposed of. [^1] And erasure obligations reach the destination: when a data subject asks to be forgotten, the request applies to the personal data you hold everywhere you hold it, including the archive and the warehouse, not just to the Salesforce org. [^9] An export that fails to delete on erasure request is the same violation as never having archived at all, just slower.
+
+The GDPR control work happened earlier in this course, in lesson 25 on the compliant data model. [^1] This lesson's contribution is the movement half: classification, encryption, access, retention, and erasure all apply to the copies you ship out of Salesforce, and the export design has to record what was exported, where it went, who can reach it, and how long it is kept. [^1]
+
+## Choosing the tool by scenario
+
+The tool selection question from this objective maps cleanly onto the scenarios, and it is worth writing down as a matching table before the exam. [^1]
+
+Data Export service for scheduled full backups. The org's native weekly or monthly export of all org data to CSV. [^2] It is the right instrument when the job is "keep a coarse, whole-org snapshot on a cadence," and the wrong instrument for tactical pulls and recurring feed deltas. [^1][^2]
+
+Bulk API query jobs and Data Loader for tactical and incremental extraction. Bulk API for jobs that return 2,000 records or more, chunked and scoped, and Data Loader for defined SOQL-scoped pulls you run by hand or script. [^4][^5][^10] When the export is a slice or a delta, this is the family. [^1]
+
+ETL and data pipelines for ongoing warehouse feeds with transformation. When the destination needs joins, cleaning, and schema shaping, a pipeline that drives the Bulk API and owns the watermark, the delete handling, and the reconciliation is the durable answer. [^1]
+
+The exam pattern: the scenario names the purpose, and you match the family. Scheduled backup points at Data Export. A defined slice points at Data Loader or Bulk API. An ongoing feed with transformation points at a pipeline. [^1]
+
+![The tool selection maps scenario to family: a scheduled full backup points at the Data Export service, a defined slice or delta points at Bulk API query jobs and Data Loader, and an ongoing warehouse feed with transformation points at an ETL data pipeline that owns the watermark, delete handling, and reconciliation](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/5-tool-selection.png>)
+
+## Configuration walkthrough: five decisions in order
+
+Work the scenario logic in this order, and each step resolves the one before it. [^1]
+
+1. Decide full versus incremental for the scenario. Use incremental (SystemModstamp or CDC) for recurring feeds, and reserve full exports for initial seeds, one-off snapshots, and cases where change tracking is unavailable. [^1][^3] If the feed recurs, you are designing an incremental, and if you are designing a full-org export on a schedule, stop and find the incremental path unless the data genuinely has no change signal. [^1][^3]
+
+2. Handle deletes explicitly. Pick CDC delete events for near-real-time feeds, periodic id-set reconciliation for batch cadences, or both. [^1][^6][^8] A design that does not name its delete strategy has a hole in it by definition. [^1]
+
+3. For archival: export, verify completeness, then delete. Run the scoped extract, reconcile counts and aggregates, validate a sample read or restore, and only then purge from Salesforce to free the hot object. [^1] The deletion step is the reward for the verification step, not a separate decision made later. [^1]
+
+4. Chunk large exports and plan the run. Scope by indexed filters and date windows, use Bulk API query jobs, split by date range or ID range (PK chunking where it fits), schedule off-peak, and size the destination storage for the full expected volume. [^1][^4][^5][^11]
+
+5. Reconcile after export and apply compliance controls. Verify row counts and key aggregates against Salesforce, validate a sample restore, and put classification, encryption, access control, retention, and erasure on the exported copies. [^1][^9]
+
+## Worked example: archive before purge at LDV
+
+Put the whole set of decisions on one concrete case, the kind the exam likes to build a question around.
+
+Compliance timelines require a 7-year retention for completed service records. The oldest records are 40 million rows across three objects, they are eligible for retirement now, and they live in the same org that serves a live sales team. [^1]
+
+Step one: scope the candidate population. Filter on an indexed field that marks eligibility, such as Status of Closed and an End_Date before the cutoff, so the extract is selective from the start. [^11] Count the population in Salesforce first, and record that count as the verification baseline. [^1]
+
+Step two: design the extraction. A one-off, multi-object, 40-million-row pull is a Bulk API job per object, and each object job is chunked by date window (three years at a time, say) so no single job approaches the size that times out. [^1][^4] The destination is a warehouse schema, not a folder of CSVs, because a 7-year archive must be queryable. [^1]
+
+Step three: extract and verify. Each chunk lands, row counts are summed per object and compared against the baseline, and a sample of records is read back from the destination and spot-checked against the source. [^1] Only when every object's count reconciles and the sample reads clean is completeness declared. [^1]
+
+Step four: delete from Salesforce. The eligible records are deleted in a batched, controlled pass, off-peak, so the hot object shrinks without a performance event for the live team. [^1][^3] The archive keeps serving compliance queries, and the org keeps the headroom on the object's storage and query performance. [^1]
+
+Step five: prove the archive still works, on a cadence, not just on day one. A yearly sample read from the archive confirms it is still queryable, which is the standing requirement for a store that is now the only copy of these records. [^1]
+
+![The archive-before-purge sequence at LDV runs five steps: scope the candidate population on an indexed eligibility field and record the count baseline, design a Bulk API job per object chunked by date window into a queryable warehouse schema, extract and verify by reconciling row counts and reading back a sample, delete from Salesforce in a batched off-peak pass, then prove the archive still works with a yearly sample read](</diagrams/day-40-mg-3b-export-scenarios-full-vs-incremental-archive-large/4-archive-before-purge.png>)
+
+Every failure this scenario could suffer is an exam trap, which is exactly why the traps section is next. [^1]
+
+## Exam traps
+
+Three traps cover this objective, and each one is a real wrong choice in the field.
+
+The first is relying on incremental exports alone and missing deletes. [^1] Deleted rows do not appear in last-modified queries, so the feed that only queries SystemModstamp never learns a record vanished, and the external copy grows stale in silence. [^1] The fix is deliberate: CDC delete events, or periodic id-set reconciliation, and the exam expects you to name the fix, not just the problem. [^1][^6][^8]
+
+The second is deleting from Salesforce after an unverified archive export. [^1] Completeness must be proven before the source data is destroyed, because deletion is irreversible, and an incomplete archive is a permanent data loss you will defend to an auditor. [^1] Count reconciliation and a sample restore are the proof, and they are required steps, not best-effort extras. [^1]
+
+The third is running un-chunked full LDV exports that time out or exhaust limits. [^1] A single unbounded job over a huge object is the query that hits the timeout and fails with QUERY_TIMEOUT, or that drags org performance for everyone else. [^3][^4] Chunk by date or ID range, keep jobs inside the limits, and schedule off-peak. [^1][^4]
+
+## The export scenario decision, in one line
+
+Full for seeds and snapshots, incremental for every recurring feed with an explicit delete strategy, archive before purge only after verification, and large exports chunked, scoped, and scheduled or they do not finish. [^1]
+
+## Try it for yourself
+
+Take a fresh scenario and write the plan in five bullets. A warehouse needs a nightly feed of the Case object, and cases are frequently deleted by the support team: your tool, your watermark key, and your delete-handling choice, and why CDC versus reconciliation is the right call at that volume. Then a compliance project retires 30 million orders: your extraction design (tool, chunking, schedule, destination storage), your two proof steps before deletion, and the four compliance controls on the exported copy. Finally, reverse the exercise: name the scenario where a scheduled full Data Export is the right answer, and state why the answer to "can a last-modified query see a deleted record" is no, plus the two mechanisms that can. [^1][^3][^6][^8]
+
+## What's next
+
+Lesson 41 of 42 is up next: Data skew, extreme cases and advanced mitigation patterns (dm-5c). Where this lesson handled the export side of moving data out, lesson 41 moves to the data shapes that break well-meaning designs: records that cluster on a single owner or lookup, skew in sharing rules and record types, and the extreme distributions that push past normal mitigation. You will work the advanced patterns for detecting and managing skew before it becomes a performance problem.
+
+## Related lessons
+
+- Lesson 41 of 42 (dm-5c): Data skew: extreme cases and advanced mitigation patterns
+- Lesson 39 of 42 (mg-3a): Exporting from Salesforce: Data Export, Data Loader export, API, reports
+- Lesson 31 of 42 (lv-2a): Archiving and purging fundamentals: strategies, big data, and legal holds
+
+## References
+
+[^1]: Salesforce Certified Platform Data Architect Exam Guide, Salesforce. Defines the Data Migration (15%) domain and the objective mg-3b: compare and contrast various techniques and considerations for exporting data from Salesforce, applying full versus incremental exports, archival extraction, and large-volume export planning to specific scenarios. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005298972&type=1)
+
+[^2]: Export Backup Data from Salesforce, Salesforce Help. Documents the native Data Export service: weekly or monthly backups depending on edition, export of all org data into a set of CSV files, and a manual-export frequency limit of once every 7 days (weekly) or 29 days (monthly). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.admin_exportdata.htm&language=en_US&type=5)
+
+[^3]: Incremental Processing for Heavy Bulk API and DML Use Cases, Salesforce Help. Warns that full-reload integration operations can use an unnecessarily high amount of Salesforce server resources and degrade organization-wide performance, and defines incremental processing as working with only the data that changed and updating or retrieving only that changed data. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000382007&language=en_US&type=1)
+
+[^4]: Bulk API Query, Bulk API 2.0 and Bulk API Developer Guide, Salesforce Developers. Documents that bulk query retrieves large data sets efficiently, with up to 15 GB of data in 15 files of 1 GB each, that a query that fails the standard 2-minute timeout returns QUERY_TIMEOUT, and that PK chunking splits queries on large tables into chunks based on record IDs. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-bulk-query-intro.html)
+
+[^5]: Bulk API 2.0 Query, Bulk API 2.0 and Bulk API Developer Guide, Salesforce Developers. Documents that Bulk API 2.0 query jobs are designed to handle queries returning 2,000 records or more, and that the standard fix for timeout errors is to apply additional filter criteria. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/query-bulk-api-2-0.html)
+
+[^6]: Change Data Capture, Change Data Capture Developer Guide, Salesforce Developers. Documents that Change Data Capture publishes change events that include record creation, updates, deletion, and undeletion, and that a delete event's body carries no field values for the deleted record. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/change-data-capture/guide/cdc-intro.html)
+
+[^7]: Use Bulk Query, Bulk API 2.0 and Bulk API Developer Guide, Salesforce Developers. Documents that the queryAll operation returns records that have been deleted because of a merge or delete, and returns information about archived Task and Event records, the material for id-set reconciliation against a previous extract. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-using-bulk-query.html)
+
+[^8]: Data Replication Steps, SOAP API Developer Guide, Salesforce Developers. Documents the replication API pattern: getUpdated() and getDeleted() retrieve the IDs of data changed or deleted within a time window, subject to the running user's access, the mechanism for periodic delete detection. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api/guide/data-replication-steps.html)
+
+[^9]: Data Protection and Privacy, Salesforce Help. Documents data protection and privacy regulations including GDPR, guidance for deleting personal data to comply with them, and the erasure and data-deletion obligations that govern personal data wherever it is processed. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.data_protection_and_privacy.htm&language=en_US&type=5)
+
+[^10]: Export Data from Salesforce, Salesforce Help. Documents Data Loader's export flow: choose an object, build a SOQL query, select fields and optional conditions, and export to CSV, with the note that with no conditions the export returns all data to which the user has read access. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.exporting_data.htm&language=en_US)
+
+[^11]: Make Salesforce Platform SOQL Query Selective, Salesforce Help. Explains that a query is selective when a filter is on an indexed field and reduces the result below the selectivity threshold, and that non-selective queries require a full scan, the rule that governs large export performance. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385218&language=en_US&type=1)

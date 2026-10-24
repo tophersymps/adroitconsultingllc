@@ -1,0 +1,124 @@
+---
+title: "Expand and Contract: Zero-Downtime Database Changes"
+slug: expand-contract-migrations-2026
+excerpt: "A rename, type change, or NOT NULL constraint cannot ship in one deploy. Expand and contract splits it into steps old and new code both survive."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 12, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [Database, Migrations, Zero-Downtime, DevOps, PostgreSQL, MySQL, Reliability, Infrastructure]
+bannerImage: "/banners/expand-contract-migrations-2026.webp"
+ogImage: "/banners/expand-contract-migrations-2026-og.jpg"
+---
+
+A backend team deploys a migration on a Friday afternoon. The change adds a required column to the `users` table:
+
+```sql
+ALTER TABLE users ADD COLUMN phone_verified BOOLEAN NOT NULL;
+```
+
+The migration succeeds in staging, which has almost no rows. The deploy proceeds against production, and fails immediately. The error is `column "phone_verified" of relation "users" contains null values`. The table holds 2.3 million rows, none of which have the new value, because the column did not exist until a second ago. The database refuses to add a NOT NULL column it cannot populate, and the failed migration still grabs a table lock and drains the application's connection pool on the way down.[^8]
+
+The team rewrites it with a default:
+
+```sql
+ALTER TABLE users ADD COLUMN phone_verified BOOLEAN NOT NULL DEFAULT FALSE;
+```
+
+That one runs. But on the older PostgreSQL in production, adding a column with a default rewrites every row and takes an ACCESS EXCLUSIVE lock, which blocks every other query on the table. Login endpoints return errors for 38 minutes, the connection pool saturates, and support tickets pile up.[^8]
+
+That story is not about bad luck. It is the direct result of a single destructive step deployed at the same moment as the code that depended on it. The fix is a discipline that predates modern databases: change the schema in several backward-compatible steps, keep the old and new structures alive in parallel, and only remove the old one once nothing reads it anymore. That discipline has a name. It is the expand and contract pattern.
+
+## The schema is the one thing that cannot roll back
+
+In a rolling deployment, two versions of your application coexist. Some pods run the new build while others still run the previous one. That is fine when the change is inside the application, because the database stays the same. It stops being fine the second you treat the schema like application code.
+
+The engineering team at Braintree Payments, which runs PostgreSQL as its primary datastore, states the principle plainly: live code and schemas must be forward-compatible with the code you are about to deploy, and new code and schemas must be backward-compatible with what is already live. Forward compatibility is what makes a gradual [rollout](/field-notes/kubernetes-rollout-strategies-2026) across a fleet possible. Backward compatibility lets you roll a change back without touching the database.[^7]
+
+Most teams honor the first half and ignore the second, then pay for it. Consider what a destructive migration does to the compatibility window. You rename `full_name` into `first_name` and `last_name` in a single step. The instant it applies, every instance still running the old code breaks, because it keeps issuing `SELECT full_name`. Then you deploy the new code, and the errors clear. The outage was never your new code's fault. It was the reminder that the database moves at a different cadence than the pods in front of it.[^2]
+
+The point is sharper when you think about why. PlanetScale, the Vitess-based MySQL platform, lists the reasons: deploying to two critical systems at once doubles the risk; application code and schema cannot deploy atomically, so whichever lands first leaves the other erroring until the rest catches up; migrations grow with your data, stretching from thirty seconds to a few hours to more than a day as tables grow; a coupled failure blocks the whole delivery pipeline; and coupling forces the database to skip the safe-change discipline that everything else depends on. Never couple the two.[^2]
+
+There is a second, mechanical reason the database cannot be treated like code. Braintree's rule captures it: rollback strategies for the database do not include reverting the schema. Dropping a freshly added column can lose data. Re-adding a unique index you just dropped can fail because new rows now violate it. PostgreSQL does not even let you remove an enum value that rows reference. When a deploy goes sideways, the database team rolls forward, writing another migration, never back.[^7]
+
+![The compatibility window a single-step migration creates: the old code keeps reading the old shape after a column rename, so the window between the schema change and the read switch breaks every in-flight old instance](</diagrams/expand-contract-migrations-2026/1-compatibility-window.png>)
+
+## The pattern: add it, run both, then remove
+
+Expand and contract was formalized as a named pattern at EuroPLoP in 2018 by Tim Wellhausen, who calls it Parallel Change and notes it applies to any interface, from REST APIs to database schemas. His statement of the core idea is the whole article in one line: first expand the interface by introducing a new structure without breaking the old one, keep the old structure in parallel as long as any client reads it, and remove it only when nothing needs it anymore.[^1]
+
+For a database, the pattern decomposes into a sequence that Wellhausen renders as up to five separate deployments, each small enough to run alone and each reversible enough to abandon:
+
+1. Expand the schema. Add the new column or table, nullable or with a default, alongside the old structure. Nothing reads it yet, so existing code is untouched.
+2. Expand the application. New writes go to both the old and the new structure, while reads stay on the old structure. If writing to the new shape errors, the application still reads and writes the old one, so users see nothing.
+3. Migrate the data. Backfill the new structure from the old, transforming rows as needed, run in the background so it does not stall production writes.
+4. Switch reads. Application code starts reading from the new structure while writes still hit both.
+5. Contract. Stop writing to the old structure, then finally drop it.[^1]
+
+The safety comes from the ordering, not from any one step. Steps one through three are cheap to reverse: delete the new structure, redeploy the old application, and you are back where you started with no data loss. Step four, switching reads, is the last moment you can confirm the new shape is accurate before real users depend on it. Steps five and six are where rollback stops being free, which is why they come last, after you have watched the new shape serve real traffic.[^1]
+
+That same sequence is how PlanetScale walks its own example. They move a popularity count so that it lives on the `repo` table instead of the `star` table. First they add a `star_count` column to `repo`. Then the application writes both places. Then a backfill fills `repo.star_count` from the stars already recorded, with the page showing 637 for `vtprotobuf`, 1837 for `beam`, and 854 for `database-js`. Then reads switch to the new shape. Then the old `star` table finally goes away. The users never observed a query fail during the whole switch.[^2]
+
+![The expand migrate contract sequence in six boxes: add the column, dual write, backfill the data, switch reads, stop writing the old column, then drop it, with the old and new structures coexisting through the middle steps](</diagrams/expand-contract-migrations-2026/2-expand-migrate-contract.png>)
+
+The same logic covers the hard cases, like splitting one column into two. Prisma's data team uses it to walk through breaking a single `name` column into `first_name` and `last_name`: add the two new columns, write both during a transition, migrate the existing data, then drop the old one. The wrinkle is the data step. Splitting "John Smith" is easy. A migration script that handles "John Smith" will not handle "Juan Carlos Ferdinand Garcia", and a bad split is data corruption you only notice weeks later. When the mapping from old to new is not arithmetic, write the transform by hand and reconcile it against the old value before you trust it.[^3]
+
+## The NOT NULL trap, and how the pattern disarms it
+
+The Friday incident in the opening is a perfect expand-contract case, because the fix is not to add the column with a default and hope. It is to add the column as nullable, backfill the rows, and only then apply the NOT NULL constraint in a separate step. The corrected sequence is:[^8]
+
+1. Add the column nullable, or nullable with a default for new rows. On modern PostgreSQL this step is largely metadata and does not rewrite the table.
+2. Backfill existing rows in controlled chunks, bounding the work so it does not contend with production traffic for minutes at a time.
+3. Add the NOT NULL constraint as its own statement, now that no nulls remain.
+
+The 38 minutes disappeared because the destructive assumption, that every row will carry this value the instant it is declared, was replaced by a sequence that only enforces the constraint once the data is actually there. This is the expand and contract pattern applied to a single constraint, and it is the difference between a migration you run on a Thursday afternoon and one you schedule for a weekend window.
+
+![The not null migration that fails: adding a NOT NULL column to a table of 2.3 million rows errors with contains null values, and retrying with a default takes an access exclusive lock that blocks logins for 38 minutes](</diagrams/expand-contract-migrations-2026/3-not-null-incident.png>)
+
+The same reasoning extends to the tools that run online schema changes. GitHub faced this at scale: it changes MySQL tables multiple times per day and needed those changes to stop disturbing traffic. Its answer is `gh-ost`, an open-source online schema migration tool that operates without the triggers older tools used. The older trigger-based tools, like the Percona Toolkit's `pt-online-schema-change`, build a shadow copy of the table, migrate it while empty, copy rows over, and use triggers to replay ongoing writes onto the copy. GitHub's team documents the price: triggers share the transaction space of every query, compete for locks on a second table, cannot be paused under load, and, on very busy servers, their overhead has dragged the database down even while the copy operation throttled. That trade is what the triggerless design removes.[^4]
+
+`gh-ost` avoids triggers by tailing the binary log instead. It creates a ghost table in the likeness of the original, copies data into it incrementally, and replays the master's binary log events onto it, so the master observes a single sequential connection writing to the ghost table, almost like an ETL. Because all its writes are under its own control, it can throttle and pause without losing data, which the trigger tools cannot do. GitHub releases it as triggerless, lightweight, pauseable, and auditable, and the project has gathered over 13,000 stars on GitHub.[^5]
+
+PostgreSQL has a different toolbox. Because it runs transactional DDL and holds an ACCESS EXCLUSIVE lock only for the length of a statement, a sequence of small, carefully ordered statements can stay live without a maintenance window. Braintree holds any exclusive lock on a table or index to about two seconds, never combines multiple DDL statements in one transaction (to avoid deadlocking across several locks), and uses `CREATE INDEX CONCURRENTLY` for index builds that would otherwise take the table out of service.[^7]
+
+The newer tooling makes the pattern explicit. `pgroll`, an open-source project from the database platform Xata, wraps expand and contract for PostgreSQL: it uses views to present two versions of the same schema at once, so an old application and a new application can run against the same database while the change is in flight, and it completes the migration by dropping the old version once no client uses it. You do not hand-roll the dual-write; the tool serves it from two views over one set of tables.[^6]
+
+## When the pattern earns its keep
+
+Not every migration needs the full treatment, and the distinction matters, because the pattern is not free. It costs you dual-write code, a data backfill, and a read switch that each ship and each get observed. You should know when it earns that price.
+
+The rule of thumb, again from PlanetScale: purely additive changes, adding a table, a column, or a view that the existing schema does not depend on, are low risk and do not need the pattern, as long as the schema lands before the code that uses it. The pattern starts to pay for itself the moment a change touches data your production application already reads: renaming a column or table, changing a data type, splitting a value, adding a NOT NULL constraint to a populated column, or introducing a surrogate that replaces a natural key.[^2]
+
+![Decision rule: an additive change that old code never touches ships directly after the schema lands, while a rename, type change, split, or not null on populated data runs through the expand migrate contract sequence](</diagrams/expand-contract-migrations-2026/4-decision-rule.png>)
+
+The compatibility test gives you the same answer from the other direction. Ask what happens if you run the migration while the previous application version is still up. If the old code breaks, or its reads or writes stop being valid, you are in expand-contract territory. If the answer is that the old code does not touch the new shape, ship it as an additive change.
+
+There is one more layer worth naming for teams shipping data-heavy features under continuous deployment. When projections and aggregates sit on a read path, shadow reads are the empirical bridge that lets you trust a switch. A shadow read issues the equivalent query against the new structure, does not return it to the user, and compares the two asynchronously, logging any difference. It is how you measure correctness and performance before you promote the new structure to primary, instead of testing it with real traffic on the day you cut over.
+
+The discipline has one casualty worth accepting up front: it makes your migrations boring. A rename becomes a sequence of five commits, each unremarkable, none of which can take the site down on its own. That is the entire point. Boring migrations are the ones you can ship at noon on a Tuesday. At Adroit, we apply this exact sequence to the data layer of the delivery systems we build for clients, for the same reason we apply it to our own: a single destructive step is the one failure mode we refuse to reintroduce, and the schema is the part of the stack that will not un-run itself. The pattern does not add ceremony for its own sake. It turns the scariest deploy you own into a routine one.
+
+## What still bites after you get the order right
+
+Expand and contract removes the coupling problem, and it does not remove every failure mode. The remaining ones are worth naming so they do not ambush you.
+
+The backfill must be correct under live writes. Between the moment you start dual-writing and the moment the backfill scan reaches a given row, new rows arrive in both structures. A backfill that blindly copies from old to new duplicates or skips those rows. Wellhausen flags the exact hazard: the migration code must produce the same result as the application code that is already writing, and needs optimistic or pessimistic locking for the overlap when both touch the same records.[^1]
+
+Bounded backfills are a habit, not a feature. Copying two million rows in one statement holds resources for the duration and competes with production. Chunking the work, by primary-key range or by date, keeps each batch small enough to run between the normal query mix. This is the same chunked thinking that keeps a Postgres index build off the critical path when it runs as `CREATE INDEX CONCURRENTLY` instead of a blocking `CREATE INDEX`.[^7]
+
+The connection pool becomes a second point of failure. The opening incident did not just take a lock, it exhausted the application's pool, which then blocked healthy queries that never touched `users`. A migration that holds a lock longer than a few seconds will starve a shared pool even when only a handful of pods depend on the table. Instrument the pool, and treat saturation during a migration as a signal you are holding a lock too long rather than a mystery.[^7][^8]
+
+Finally, never roll the schema back. It is tempting to define an undo migration that drops what you just added, especially in development. It fails in production the way reverting a unique index fails, leaving data that violates the constraint you removed. Braintree does not define undo operations in its tooling at all. When a change goes wrong, the team writes a new migration that rolls forward. Build your recovery around forward migrations, and the expand contract sequence becomes genuinely self-healing, a ladder you can reorder rather than a cliff you fall off.[^7]
+
+A schema change is not a code deploy with different syntax. It is a contract with every running version of your application, every row that exists today, and every connection in your pool. Treat it as code and you get the Friday incident. Treat it as a sequence of expandable, observable, contractible steps and you get the same feature shipped with no outage, and a path forward that never depends on the database un-writing itself.
+
+[^1]: tim-wellhausen.de. [Expand and Contract: A Pattern to Apply Breaking Changes to Persistent Data with Zero Downtime, EuroPLoP 2018](https://www.tim-wellhausen.de/papers/ExpandAndContract/ExpandAndContract.html)
+[^2]: planetscale.com. [Backward compatible database changes](https://planetscale.com/blog/backward-compatible-databases-changes)
+[^3]: prisma.io. [Using the expand and contract pattern for schema changes](https://www.prisma.io/dataguide/types/relational/expand-and-contract-pattern)
+[^4]: github.blog. [gh-ost: GitHub's online schema migration tool for MySQL](https://github.blog/news-insights/company-news/gh-ost-github-s-online-migration-tool-for-mysql/)
+[^5]: github.com. [gh-ost: GitHub's Online Schema-migration Tool for MySQL](https://github.com/github/gh-ost)
+[^6]: github.com. [pgroll: PostgreSQL zero-downtime migrations made easy](https://github.com/xataio/pgroll)
+[^7]: paypal.medium.com. [PostgreSQL at Scale: Database Schema Changes Without Downtime](https://medium.com/paypal-tech/postgresql-at-scale-database-schema-changes-without-downtime-20d3749ed680)
+[^8]: towardsdev.medium.com. [Why Your NOT NULL Migration Needs a Default First, Then a Constraint](https://medium.com/towardsdev/why-your-not-null-migration-needs-a-default-first-then-a-constraint-34f3512f2307)

@@ -1,0 +1,180 @@
+---
+title: "Data Architect LV-1B: LDV Data-Model and Query Design Scenarios"
+slug: day-30-lv-1b-ldv-data-model-and-query-design-scenarios
+series: salesforce-data-architect
+lesson: 30
+excerpt: "Given a customer scenario, design a data model that scales considering large data volume and solution performance, applying selective query design, indexing, denormalization, and data-distribution strategies to real scenarios. Covers designing for the query rather than the entity, the query patterns that force full scans (unindexed text filters, OR conditions across unindexed fields, negative filters, leading-wildcard LIKE), denormalizing frequently reported values onto the queried object so reporting becomes single-object, distributing ownership and parents to avoid skew and hot spots, bounding the working set through archiving and pagination, keeping objects narrow, governing record types and picklist sprawl, why SOQL in Apex and Flows must be selective too, and why LDV performance must be validated at representative volume in a full sandbox. Includes a worked example, a numbered configuration walkthrough, the three exam traps, and a try-it exercise."
+date: "October 11, 2026"
+author: "Adroit Consulting"
+readTime: "23 min read"
+tags: [Salesforce, Data Architecture, Large Data Volume, Certification]
+---
+
+Lesson 29 gave you the LDV fundamentals: what large data volume means, what makes a query selective, the index thresholds, skinny tables, and the proliferation traps. This lesson is requirement lv-1b of the Large Data Volume (LDV) Considerations domain, and it turns those fundamentals into a design method. [^1] Where lesson 29 taught you the levers, this lesson teaches you how to pull them when a customer hands you a slow data model and asks why it is slow and how to fix it.
+
+The exam frames lv-1b as a scenario problem. You are given a customer with a ten-million-row Case object, a list view that crawls, a report that times out, a nightly batch job that fails with a non-selective query error, and you are asked to design a data model that scales. The requirement text is precise about what it tests: design a data model that scales considering large data volume and solution performance, applying selective query design, indexing, denormalization, and data-distribution strategies to real scenarios. [^1]
+
+The single idea that organizes this whole lesson is that you design for the query, not for the entity. A data model is not good because it mirrors the business nouns cleanly. It is good because the queries people actually run against it are fast. That reframing, from entity-first to query-first, is the difference between a data architect who passes this domain and one who memorizes feature names.
+
+## Design for the query, not the entity
+
+The most common mistake in data modeling is to design the object structure first and worry about queries later. The exam wants you to invert that. You start from the shapes of the top queries and reports, and you let those shapes dictate the model.
+
+Concretely, for each heavy query or report you identify three things. The filter fields, the fields in the WHERE clause that narrow the result. The sort fields, the fields in the ORDER BY that determine the order. And the expected result size, how many records the query should return in the common case. [^2]
+
+Then you ask a design question about each. Does every filter field map to an indexed or custom-indexed field? Does the query return a bounded set, or could it return millions of rows? Is the entry point, the object the query starts from, the right one, or is the query forced to traverse relationships to get to the data it needs?
+
+The entry point matters more than most architects realize. A report that starts from Account and filters through a multi-level lookup chain to reach a child object's field is doing a different amount of work than a report that starts from the child object and filters on a denormalized copy of that field. The query optimizer can only use an index on the object it starts from. If the filter field lives two lookups away, the optimizer cannot index it directly, and the query degrades.
+
+So the design reflex is: for every top query, write down the entry object, the filter fields, the sort fields, and the expected result size, and then check each against the selectivity rules from lesson 29. A filter on an indexed field that returns a bounded set is a good query. A filter on an unindexed field, or a filter that can return millions of rows, is a query that needs a design change, not a query you ship.
+
+![The query-first design method: for each top query or report, capture the entry object, filter fields, sort fields, and expected result size, then check each against the selectivity rules, so a filter on an indexed field that returns a bounded set ships while one on an unindexed field or that can return millions of rows needs a design change](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/1-design-for-the-query.png>)
+
+## Query patterns that force full scans
+
+The exam tests your ability to recognize the query shapes that force a full table scan, because those are the shapes that take down a large object. Lesson 29 covered the unindexed-field filter. This lesson adds the rest of the family, and each one is a distinct exam trap.
+
+The first is a filter on an unindexed text field. A WHERE clause like `WHERE TextField__c = 'value'` on a free-form custom text field that has no index is a full scan, no matter how few records match. The optimizer has nothing to walk, so it reads through the object. On a ten-million-row object that is a timeout. [^3]
+
+The second is an OR condition across unindexed fields. An OR in a WHERE clause is a problem because the optimizer must consider each branch, and if any branch is non-selective, the whole query can be pushed toward a scan. An OR across two unindexed fields is doubly bad, because neither branch can use an index. The guidance is to avoid OR conditions that span unindexed fields, and to rewrite them, often by splitting into separate queries or by restructuring the filter onto a single indexed field. [^4]
+
+The third is a negative filter on an indexed field. A filter like `WHERE Status != 'Closed'` runs on an indexed field, so it looks safe, but negative filters can be non-selective. The reason is that the optimizer has to consider the complement of the set, and on a large object the complement can be huge. If 90 percent of your records are Closed, then `Status != 'Closed'` matches 10 percent, which is selective. But if only 5 percent are Closed, then `Status != 'Closed'` matches 95 percent of a ten-million-row object, which is a scan. The selectivity of a negative filter depends entirely on the data distribution, and the exam expects you to know that a negative filter is not automatically selective just because the field is indexed. [^4]
+
+The fourth is a leading-wildcard LIKE query. A filter like `WHERE Name LIKE '%smith%'` cannot use an index, because the wildcard at the front means the optimizer cannot know where the match starts. A trailing wildcard, `LIKE 'smith%'`, can use an index, because the optimizer knows the value starts with smith. The leading wildcard is the anti-pattern, and on a large object it forces a scan. [^4]
+
+Here is the pattern that ties these together. A query is selective when it filters on an indexed field and returns a bounded set. Anything that breaks that, an unindexed field, an OR across unindexed fields, a negative filter whose complement is huge, or a leading wildcard, pushes the query toward a scan. When you review a customer's slow queries, you are looking for exactly these four shapes.
+
+![The query shapes that force a full scan: a selective filter on an indexed field with a bounded set, versus an unindexed text filter, an OR across unindexed fields, a negative filter whose complement is huge, and a leading-wildcard LIKE, each with why it scans and the fix](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/2-query-patterns-that-force-full-scans.png>)
+
+## Denormalize for read performance
+
+The next lever is denormalization, and it is the one that most directly changes the data model. The idea is to copy frequently filtered or reported values onto the object the query starts from, so the query does not have to traverse relationships to get them.
+
+Why does this matter? A report that filters on a field two lookups away, or that must join across several objects to show a value, is doing multi-hop work. Every hop is a join, and joins on large objects are expensive. If you copy the reported value onto the entry object, the report becomes single-object, a filter on a field that lives on the object the report starts from, and the query optimizer can index it directly. [^2]
+
+The classic example is a Case report that needs to show the Account's industry. Without denormalization, the report starts from Case, joins to Account, and filters or groups on Account.Industry. With denormalization, you copy Industry onto Case, either as a formula field that reads the parent's value or as a stored field you maintain, and the report filters on Case.Industry directly. The report becomes single-object, and the filter field can be indexed.
+
+The trade-off is the one the exam wants you to weigh. A formula field is evaluated on read, so it costs nothing to store but recomputes every time the record renders or is queried. A stored field is written once and read cheaply, but you must maintain it, through a flow, a trigger, or a batch job, and it can drift out of sync with the source. The architect's judgment is to denormalize the values that are reported and filtered most often, and to choose the maintenance mechanism that matches the data's change rate. A value that changes rarely, like an account's industry, is a good stored denormalization candidate. A value that changes constantly is better as a formula, or not denormalized at all.
+
+The exam's Q2 tests this directly. Denormalizing frequently reported values onto the queried object is one of the two practices that improve LDV query performance. The other is indexing filter fields via a custom index or skinny table. The two anti-patterns in that question, filtering on unindexed text fields and using leading-wildcard LIKE queries, are the full-scan shapes from the previous section. [^2][^3]
+
+![Denormalizing for read performance: a Case report that joins to Account to filter on Account.Industry is a multi-hop join, while copying Industry onto Case makes the report single-object, with the trade-off between a formula field and a stored field](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/3-denormalize-for-read-performance.png>)
+
+## Distribute data to avoid skew and hot spots
+
+Data distribution is the lever that affects writes as much as reads, and it is where the LDV domain connects to the data skew lessons from day 9 and day 10. The idea is that where records live, which owner holds them and which parent they hang under, determines how writes serialize.
+
+Ownership skew is the case where one owner, one integration user, or one queue holds a disproportionate share of records. Every shared record update serializes on that owner's lock, so a single hot owner becomes a bottleneck. The fix is to distribute ownership so no single owner holds a huge share, which spreads the lock contention across many owners. [^5]
+
+Lookup skew is the parent-side version. When one parent has millions of children, any operation that touches that parent, a roll-up summary, a delete, a sharing recalculation, serializes on the parent's lock. The fix is to shard the parent, to split the single hot parent into multiple parents so no one parent carries the whole load. [^5]
+
+The exam frames this as a data-distribution strategy. When you design a data model for LDV, you do not just think about which fields to index. You think about how the records are distributed across owners and parents, because distribution affects both locking and sharing recalculation at scale. A model that is perfectly indexed but has one owner holding five million records will still collapse on writes.
+
+## Bound the working set
+
+The next lever is bounding the working set, keeping the object that the hot queries and reports actually touch small. This is the archiving and pagination side of LDV design, and it is where the exam's Q1 lives.
+
+The core idea is that you do not need every record active forever. Old records, closed cases, historical orders, completed tasks, these accumulate and bloat the object that the active queries run against. The best practices guidance is explicit: reduce the amount of data kept active, and archive or discard data at the same rate it arrives, to prevent the degradation that comes with unbounded growth. [^2]
+
+Archiving moves old records off the primary object, either to a Big Object, an External Object, or an archive store, so the working object holds only the active set. Lesson 31 covers archiving and purging in depth, but the design reflex belongs here: a large object that never archives grows without bound, and no amount of indexing saves a query that must scan a working set that has grown to tens of millions of rows.
+
+Pagination is the read-side complement. Design list views and UIs to page rather than to select all. A list view that returns the first page of a bounded, sorted set is fast. A list view that tries to return every matching record is a scan. The guidance is to use scrollable, pagination-friendly list views, and to design the UI so a user never asks the platform to materialize the entire result set at once. [^2]
+
+The exam's Q1 is exactly this. A list view filters Cases by `Status != 'Closed'` on a ten-million-row object and is slow. The best redesign is to filter on an indexed positive field, an indexed status or open flag, and to archive old closed cases. The negative filter is the problem, because `Status != 'Closed'` can be non-selective when the complement is huge, and the working set is the problem, because ten million rows is too many to scan. Adding more columns to the list view does nothing about selectivity. Sorting by a formula field does nothing about selectivity. Converting Case to a Big Object would break interactive use, because Big Objects are not designed for the low-latency interactive access a list view needs. The redesign that works is a positive indexed filter plus archiving to bound the set. [^2][^4]
+
+## Keep objects narrow
+
+Wide objects are a quiet LDV problem. An object with hundreds of fields slows record rendering and page layout, inflates storage, and makes every full-table operation touch more bytes. The same discipline that applies to the candidate set applies to fields: fewer fields is a faster object. [^2]
+
+The design rule is to split rarely used fields into a child object where the relationship is truly one-to-many, or where the fields are genuinely optional or rarer. A Case object that carries 200 fields, most of which are populated on a small fraction of records, is a candidate for a Case Detail child object holding the rarely used fields. The main object stays narrow, and the child holds the long tail.
+
+The judgment the exam wants is about which fields belong on the main object. Fields that are frequently filtered, reported, or displayed belong on the main object, because they are part of the hot path. Fields that are rarely touched belong on a child, because they add width without adding query value. The trap is keeping every field on the main object out of convenience, which makes the object wide and slow.
+
+## Govern record types and picklist sprawl
+
+Lesson 29 covered record type and picklist proliferation in depth, and this lesson adds the design angle. Each record type and each picklist value adds overhead per record at scale, so the data architect governs them as part of the LDV design, not as an afterthought.
+
+Record types should exist only where there is a genuine process difference worth modeling. Each record type carries its own page layout, picklist value set, and often its own sharing and validation behavior, and on a huge object that overhead multiplies. The architect consolidates record types down to the ones that represent real process boundaries. [^6]
+
+Picklists should be kept lean. Large picklist value sets slow page load and consume storage, and multi-select picklists are stored as strings and cannot be efficiently indexed, which makes them non-selective filter and report fields at LDV. The design rule is to keep multi-select picklists out of the filter and report path, and to restructure them to a related child object or a skinny table when they must appear in a report. [^3][^6]
+
+## SOQL in Apex and Flows must be selective too
+
+A common blind spot is that LDV design is not only about reports and list views. SOQL in Apex and Flows must be selective too, because a non-selective query in a trigger, a batch class, or a Flow can fail or time out outright. [^4]
+
+The exam wants you to understand that the selectivity rules apply everywhere the platform runs a query, not just in the reporting UI. A batch class that queries a large object without a selective filter hits a non-selective query error. A Flow that queries a large object on an unindexed field runs a scan. The architect reviews the SOQL in the org's Apex and Flows the same way they review the reports, checking each query's filter fields against the index and selectivity rules.
+
+The practical consequence is that a data model that scales must make it easy for every query, in every context, to be selective. That means indexing the fields that filters actually use, denormalizing the values that queries need, and keeping the working set bounded, so that a developer writing a query against the object has a reasonable chance of writing a selective one.
+
+## Test at representative volume
+
+The final lever is validation, and it is the one the exam's Q3 tests. LDV problems rarely show in a sandbox with thousands of rows. A query that is perfectly selective at ten thousand rows can be a full scan at ten million, because the optimizer's index decisions and the data distribution change with volume.
+
+The rule is to load-test at production-representative volume in a full sandbox before go-live. A full sandbox, one that copies production data, gives you a realistic volume and a realistic data distribution, so the queries you test behave the way they will in production. A developer sandbox with a few thousand rows hides the problems, because the optimizer never has to make the hard index decisions that a large object forces. [^2]
+
+The exam's Q3 asks why LDV performance must be validated in a full sandbox at representative volume. The answer is that LDV behavior is volume-dependent, and small datasets hide the problems. It is not because sandbox data is encrypted, not because production cannot be tested, and not because record types differ in production. It is because the whole discipline only matters at scale, and a small sandbox cannot show you scale. [^2]
+
+## Worked example: the ten-million-row Case object
+
+Put the levers together with a full scenario, because that is how the exam presents lv-1b. A customer has a Case object with ten million records. Their list views crawl, their reports time out, and their nightly batch job fails with a non-selective query error. You are asked to design a data model that scales.
+
+Start by profiling the queries. You collect the top list views, reports, and SOQL, and you write down the filter fields, the sort fields, and the expected result sizes. You find that the most-used list view filters on `Status != 'Closed'`, that the top report joins Case to Account to show Industry, and that the batch job queries Cases by an unindexed custom text field.
+
+Then you apply the levers. The list view's negative filter is non-selective, so you redesign it onto an indexed positive field, an indexed open flag, and you archive closed cases older than a retention window to bound the working set. The report's multi-hop join is slow, so you denormalize Account.Industry onto Case, as a stored field maintained by a flow, and the report becomes single-object. The batch job's unindexed text filter is a scan, so you either index the field via a custom index or redesign the query onto an indexed field. You review ownership and find one integration user holds two million cases, so you distribute ownership across several users. You review the object and find it carries 180 fields, so you split the rarely used ones into a Case Detail child object. And you validate the whole design in a full sandbox at ten million rows before go-live.
+
+Each of those moves maps to one of the levers in this lesson, and together they turn a slow, unscalable model into one that handles the volume.
+
+![The worked example on a ten-million-row Case object: each symptom maps to a lever, a crawling list view to a positive filter plus archiving, a timing-out report to denormalization, a failing batch job to indexing, a write bottleneck to distributing ownership, and a wide object to a Case Detail child, then validate at ten million rows](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/4-worked-example-ten-million-row-case.png>)
+
+## Config walkthrough: designing a scaling data model
+
+Here is the numbered walkthrough the exam expects you to be able to reason through when handed a scenario.
+
+1. Profile the top queries and reports. Collect the SOQL, reports, and list views that run against the large object, and for each, document the filter fields, the sort fields, and the expected result sizes. The goal is a complete map of which fields actually drive selectivity and which queries are the hot path.
+
+2. Index the filter fields and remove non-selective patterns. For each filter field, confirm it is natively indexed, or mark it for a custom index or a skinny table. Rewrite the query shapes that force scans: replace negative filters with positive indexed filters, remove OR conditions across unindexed fields, and eliminate leading-wildcard LIKE queries.
+
+3. Denormalize frequently reported values onto the entry object. For each report that traverses multiple lookups, copy the reported value onto the object the report starts from, as a formula or a stored field, so the report becomes single-object and the filter field can be indexed.
+
+4. Distribute ownership and parents to prevent skew, and archive old data to bound the working set. Review ownership distribution and shard any hot parent. Establish an archive cadence that moves old records off the primary object, and design list views and UIs to page rather than select all.
+
+5. Load-test at production-representative volume in a full sandbox before go-live. Validate the queries, reports, and batch jobs at realistic volume and data distribution, and fix any that degrade, before the model reaches production.
+
+## The three exam traps
+
+Trap one, designing and testing at small volume. LDV problems only appear at scale, so a small sandbox hides them. A query that is selective at ten thousand rows can be a full scan at ten million. The fix is to validate at production-representative volume in a full sandbox, which is exactly the exam's Q3.
+
+Trap two, using negative or leading-wildcard filters on indexed fields. A negative filter like `Status != 'Closed'` runs on an indexed field but can be non-selective when the complement is huge, and a leading-wildcard LIKE cannot use an index at all. The fix is a positive indexed filter, which is exactly the exam's Q1.
+
+Trap three, building reports that traverse multiple lookups on huge objects instead of denormalizing the reported value. A multi-hop report is a join storm on a large object. The fix is to denormalize the reported value onto the entry object so the report is single-object, which is exactly the exam's Q2.
+
+![The three exam traps: designing and testing at small volume fixed by validating at representative volume, negative or leading-wildcard filters on indexed fields fixed by a positive indexed filter, and multi-lookup reports fixed by denormalizing the reported value](</diagrams/day-30-lv-1b-ldv-data-model-and-query-design-scenarios/5-three-exam-traps.png>)
+
+## Try it for yourself
+
+In a Developer Edition org or sandbox, build a small demonstration of the design method. Create a custom object and add a page of reference data, then open the Developer Console and run a few SOQL queries with the Query Plan view enabled. Run a filter on an indexed field like CreatedDate and confirm the plan is selective. Run a negative filter, `WHERE Status != 'Closed'` on a field where most records are Closed, and observe whether the plan degrades. Run a leading-wildcard LIKE, `WHERE Name LIKE '%smith%'`, and confirm it scans. Then create a second object, denormalize a value from the first onto it, and compare the query plans for a filter on the denormalized field versus a join to the parent. The point is to see, in miniature, the query shapes that this lesson teaches you to recognize and fix, because those same shapes, reproduced on a ten-million-row object, are the entire reason the design method exists.
+
+## What's next
+
+You can now design a data model that scales under large data volume. You know to design for the query rather than the entity, to identify the filter fields, sort fields, and expected result sizes of the top queries, and to check each against the selectivity rules. You can recognize the query shapes that force full scans, unindexed text filters, OR conditions across unindexed fields, negative filters, and leading-wildcard LIKE queries, and you know how to fix each. You understand denormalization, copying frequently reported values onto the queried object so reporting becomes single-object, and the trade-off between formula and stored fields. You know to distribute ownership and parents to avoid skew and hot spots, to bound the working set through archiving and pagination, to keep objects narrow, and to govern record types and picklist sprawl. And you know that SOQL in Apex and Flows must be selective too, and that LDV performance must be validated at representative volume in a full sandbox. Lesson 31 of 42 is up next: archiving and purging fundamentals, covering strategies, Big Objects as an archive, and retention. Where this lesson taught you to bound the working set as one lever among many, lesson 31 makes archiving the subject itself, walking the strategies for moving old data off the primary object, using Big Objects as an archive target, and setting retention policies that keep the working object small.
+
+## Related Requirements
+
+- Lesson 31 of 42 (lv-2a): Archiving and purging fundamentals: strategies, Big Objects as archive, retention
+- Lesson 29 of 42 (lv-1a): LDV fundamentals: skinny tables, indexing, selective SOQL, record types, picklists
+- Lesson 09 of 42 (dm-5a): Data skew fundamentals: ownership skew, lookup skew, record locking
+- Lesson 10 of 42 (dm-5b): Data skew scenarios: avoidance and design patterns
+
+## References
+
+[^1]: Platform Data Architect exam guide, Salesforce. Outlines the Large Data Volume Considerations (20%) domain and the objective to design a data model that scales considering large data volume and solution performance, applying selective query design, indexing, denormalization, and data-distribution strategies to real scenarios. [trailhead.salesforce.com](https://trailhead.salesforce.com/credentials/platformdataarchitect)
+
+[^2]: Best Practices for Deployments with Large Data Volumes, Salesforce Developers. Frames the main approaches as reducing the number of records the system must process, narrowing or selecting queries, and reducing the amount of data kept active through archiving, and covers pagination-friendly list views and keeping objects narrow. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-best-practices.html)
+
+[^3]: Indexes, Salesforce Developers Large Data Volumes guide. Lists the platform-maintained fields and notes custom indexes are created through Support or the Metadata API, and lists what cannot be indexed including multi-select picklists and non-deterministic formulas. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-indexes.html)
+
+[^4]: Make Salesforce Platform SOQL Query Selective, Salesforce Help. Defines a selective query as one with a selective filter on an indexed field, explains that a non-selective query may cause triggers or batch classes to fail, and documents the query patterns that force scans including negative filters and leading-wildcard LIKE queries. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385218&language=en_US&type=1)
+
+[^5]: Data Skew, Salesforce Developers Large Data Volumes guide. Explains ownership skew and lookup skew, how a single owner or parent holding a disproportionate share serializes locking and sharing recalculation, and the distribution strategies to avoid it. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-data-skew.html)
+
+[^6]: Optimize Large Data Set Queries & Searches, Trailhead. Covers using selective list views, reports, and SOQL, the query optimizer's use of index statistics, and the skinny table approach for speeding up read-only operations on large objects. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/large-data-volumes/conduct-data-queries-and-searches)

@@ -5,6 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth, notifyAuthChanged } from "@/lib/hooks/useAuth";
+import { invalidateDbToken } from "@/lib/db/token-cache";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
 import AvatarMenu from "@/components/AvatarMenu";
 import ThemeToggle from "@/components/Theme/ThemeToggle";
 import SearchOverlay from "@/components/SearchOverlay";
@@ -31,6 +33,12 @@ export default function Header() {
       } catch {
         // best-effort — the session may already be gone
       }
+      // Identity changed: drop the cached Data API token so a signed-out
+      // browser cannot keep sending the previous user's JWT (QA F2, t_51f9ebfb).
+      invalidateDbToken();
+      // …and drop the cached progress summary, which is per-session too
+      // (PERF-P1, t_e786efe2): a later sign-in in this tab must not inherit it.
+      invalidateProgressSummary();
       notifyAuthChanged();
       router.refresh();
     });

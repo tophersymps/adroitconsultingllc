@@ -1,0 +1,108 @@
+---
+title: "Lesson 70: Reliability Engineering: SLIs, SLOs, Error Budgets, and Runbooks for Agent Operations"
+slug: reliability-engineering-slis-slos-error-budgets-runbooks
+series: "salesforce-architect"
+lesson: 70
+excerpt: "Reliability is not a feeling and it is not a vague high uptime goal. It is a numbers game: an SLI that measures what your users actually experience, an SLO that turns that measurement into a contract, an error budget that decides when a bad week should stop all releases, and a runbook that tells a calm stranger what to do at 3 AM. This lesson defines each term, applies them to a system that runs autonomous agents, and walks the arithmetic that turns 'reliable enough' from a phrase into a number your team can defend or spend."
+date: "October 16, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, Reliability, SLO, Site Reliability Engineering]
+---
+
+# Lesson 70: Reliability Engineering: SLIs, SLOs, Error Budgets, and Runbooks for Agent Operations
+
+An architect does not get to say "the system should be reliable." Reliability is a number, and the number is what the team agrees to, measures, and defends. This lesson is the machinery of that number. It defines the four tools of reliability engineering: the service level indicator (SLI) that measures what users actually experience, the service level objective (SLO) that turns that measurement into an agreed target, the error budget that converts the target into a spendable allowance of failure, and the runbook that tells someone what to do when the target is missed. Each one is useless without the others, and the whole set is one of the most transferable skills an architect carries from a Salesforce project into the wider systems world.
+
+The Salesforce system architect exam tests this thinking in scenario form. A scenario will describe a business, name the critical user flow, and expect you to pick the design that keeps that flow within its target. It will reward the answer that sets a per-capability SLO below the platform SLA, chooses an SLI that measures real user journeys rather than raw uptime, and wires an alert to an action. This lesson hands you the vocabulary and the arithmetic to answer that class of questions.
+
+![The reliability-engineering loop: an SLI measures user experience, an SLO sets the target for that SLI, the gap between 100% and the SLO is the error budget, and a missed budget triggers a runbook that restores service and feeds a postmortem back into the SLO](</diagrams/reliability-engineering-slis-slos-error-budgets-runbooks/1-reliability-loop.png>)
+
+## What an SLI actually is
+
+Start with the least glamorous term, because it does the most work. A service level indicator (SLI) is a measurement of how well the service is doing from the user's point of view.[^1] The word "user" matters. An SLI is not "our API is up." It is "the proportion of well-formed requests that succeed within the time a user would tolerate."[^3]
+
+Think of an SLI as a fraction: good events over total events, a number between 0% and 100%.[^3] A 100% SLI means nothing is broken. A 0% SLI means nothing works. An availability SLI is the share of successful requests. A latency SLI is the share of requests faster than a defined threshold. A success-rate SLI is the share of operations that complete without a user-visible error. The exact metric depends on what the business cares about, and the discipline is to measure what a human would feel, not what a dashboard conveniently prints.
+
+Salesforce's Well-Architected Framework makes this concrete. It lists SLIs that are objectively measurable from platform instrumentation: platform uptime from trust.salesforce.com, page load time from Experience Cloud analytics, API response time from Event Monitoring, transaction success rate from application logs, and batch job completion from AsyncApexJob monitoring.[^1] Notice what these have in common. Every one is tied to an experience a person can point at, not to an internal counter.
+
+There is a trap hidden in the choice of SLI, and Salesforce calls it out. Count only system-caused errors against a success-rate SLO, not user-caused ones.[^2] An invalid input or a record the user lacks permission to see is not a reliability failure, even though it renders an error to the user. A governor-limit failure, an integration timeout, or an unhandled exception is. If you let user mistakes eat your error budget, your alerts fire constantly and nobody trusts them. Kerckhoffs's law is that strength should live in the key, not the secrecy, and this is the reliability version: the clarity of an SLI lives in what you count as a failure, and sloppy counting buries real signals under noise.
+
+## Turning an SLI into an SLO
+
+A measurement by itself is just a graph. It becomes a contract when someone sets a target. A service level objective (SLO) is a target value or range for an SLI, agreed with stakeholders, over a defined period.[^3][^4]
+
+The Salesforce frame is worth memorizing because the certification leans on it. Set SLOs per business capability, not per technical component.[^1] Do not write "the integration server shall be 99.9% available." Write "the opportunity close flow shall complete for 99.9% of users, with p95 latency under two seconds."[^1] The difference is that the second sentence is about the thing a businessperson can point to, and the first is about a box nobody outside operations cares about.
+
+Second, and this is the one that trips people on the exam: solution SLOs should be less stringent than platform SLAs.[^1] The platform promises, say, 99.9% availability. If your solution also promises 99.9%, then any platform outage consumes your entire budget, leaving nothing for your own application-layer failures, integration hiccups, or planned maintenance within the same measurement window.[^1] The framework's guidance is explicit: if the platform SLA is 99.9%, set your solution SLO at about 99.5%, reserving the difference as error budget for the failure classes that are yours to own.[^1]
+
+![Setting an SLO per business capability, with the solution SLO kept deliberately below the platform SLA so that app-layer, integration, and maintenance failures have their own spendable budget](</diagrams/reliability-engineering-slis-slos-error-budgets-runbooks/2-slo-budget.png>)
+
+The realistic-target ladder is another exam staple. The framework ties target complexity to what it costs to achieve: 99% maps to standard platform capabilities, 99.5% to basic redundancy and active monitoring, 99.9% to multi-region awareness with automated failover, 99.95% to active-active patterns and chaos testing, and 99.99% to multi-org architecture.[^1] Do not promise a 99.99% SLO on a single org and a daily backup. The architecture must be able to back the number, or the number is fiction.
+
+## The error budget: deciding when a bad week stops releases
+
+Here is the trick that makes SRE different from a target-and-pray culture. Reliability and feature work are not in conflict; they are two claims on the same allowance. The error budget is 100% minus the SLO.[^4] A service with a 99.9% SLO has a 0.1% error budget. If it receives a million requests in a month, that budget is a thousand errors.[^4]
+
+What makes the budget powerful is how it governs release decisions. If the service is at or above its SLO, releases proceed normally. If it has blown its budget over the preceding four-week window, the team halts all non-critical changes until the service is back inside its SLO.[^4] A single incident that consumes more than 20% of the budget inside four weeks forces a postmortem with at least one action item on root cause.[^4]
+
+This inverts the usual incentive. Reliability is no longer a goal that competes with shipping; it becomes a measurable account that both reliability work and feature work draw from, and the policy decides who can spend before the account is empty. Google's workbook calls error budgets the tool that balances reliability against the pace of innovation,[^4] named in the Salesforce guidance as well, which says to monitor the burn rate and, when it exceeds the sustainable level, to halt feature work and focus on reliability until the SLOs recover.[^2]
+
+## Runbooks: what a calm stranger does at 3 AM
+
+An SLO tells you when you are failing. Something has to tell you what to do about it. That is the runbook, and the Salesforce architect names it squarely as Operational Excellence: runbooks and escalation paths guide the team during incidents.[^1]
+
+A runbook is a step-by-step recipe for a repeated task or incident, written so someone who did not build the thing can execute it. The difference between a runbook and an architecture doc is the audience and the purpose. A runbook answers one question: this alert is firing, now what? It maps every alert to a specific response, names the owner on call, gives the exact dashboards and commands to check in order, and states when to escalate. If an alert fires and the runbook does not say what to do first, the runbook has a hole in it.
+
+The discipline that makes runbooks trustworthy is the same one that makes backups trustworthy, and the previous lesson made the point for backups: a runbook nobody has rehearsed is a hope, not a plan. Salesforce warns that recovery knowledge concentrated in one person who documented nothing fails the moment that person leaves.[^1] The equivalent for runbooks is a procedure tested only by the expert who wrote it. Run it with a calm newcomer under timed conditions, fix the steps that assumed knowledge they do not have, and update it after every real incident with what actually happened. The runbook is a living object, not a handover artifact to archive.
+
+## Reliability engineering for agent operations
+
+Now the reason this lesson sits in a course that keeps returning to agents. The numbers game above was designed for systems like API backends, but autonomous agents are the most demanding reliability environment an architect will operate, because the failure modes are new and the blast radius of a silent one is large.
+
+Think about what an SLI means for an agent. An agent that completes a task is like a request that succeeded. Availability is the share of requested runs that complete rather than crash, stall, or hand back without a result. Latency is time to completion, and for an agent it is not milliseconds, it is minutes, so the threshold and the p95/p99 discipline matter more, not less. Success rate is the share of runs that produce a correct, usable outcome, and this is where agent SLIs diverge from traditional ones: an agent can finish without error and still be wrong. Hallucination rate, coherence, and tool-call validity are quality SLIs, and they belong in the suite from the first day, not as a dashboard add-on later.
+
+The error budget for an agent pipeline is where the discipline gets teeth. A model run has a cost, and a misbehaving agent that loops, burns tokens, or repeatedly hammers a tool is spending money and operator attention on failure. Authorize a budget, gate new agent capabilities behind it, and halve the release cadence when a bad week exhausts it. That is standard error-budget policy applied to a system whose failures are unusually expensive because they compound. A single agent that degrades into a loop consumes the budget quietly unless the SLIs catch it, which is why measuring the quality signals, not just uptime, is non-negotiable.
+
+And runbooks for agents look different from runbooks for a VM. The recovery actions are still manual: kill the runaway run, revoke or rotate a tool credential, switch the model or the prompt, roll back the latest change, replay the failed batch. But they must be written for the same calm stranger, with the same answer-the-alert shape, because agent incidents are exactly the ones where a person new to the stack will be on call and unprepared. The runbook closes the gap between the expert who built the agent and the operator who has to keep it alive.
+
+## Worked example: an SLO stack for a case-routing agent
+
+Put it together with a numbers exercise. A services company runs an autonomous agent that reads inbound cases, classifies them, and routes each to the right queue with a drafted summary. Leadership wants a reliability target that means something.
+
+Start with the SLI. The natural availability SLI is the share of inbound cases the agent processes to a completed, accepted routing within a business day. But a completion is not proof of correctness, so add a success-rate SLI: of completed routings, the share where a human supervisor accepts the destination and summary without correction. And add a latency SLI: the share of cases routed within 30 minutes of arrival.
+
+Now the SLO. Routing speed and accuracy are customer-facing, so leadership sets them tight but reachable. The platform SLA is 99.9%, and the framework says to hold the solution SLO below it to reserve budget for the agent's own failure classes. So the team commits to 99.5% availability and 99.8% acceptance rate, each measured over a month, and leaves the 0.4% gap between the platform SLA and the solution SLO as the spendable allowance for pipeline hiccups and model misbehavior.
+
+![The worked SLO stack for a case-routing agent: availability, acceptance rate, and latency SLIs, each with its SLO and the monthly error budget the target permits](</diagrams/reliability-engineering-slis-slos-error-budgets-runbooks/3-agent-slo-stack.png>)
+
+Compute the error budget. In a month the agent sees 100,000 cases. A 99.5% availability SLO leaves a 0.5% budget, which is 500 cases the agent may fail to complete; beyond that, it is failing its contract. A 99.8% acceptance SLO leaves a 0.2% budget, which is 200 misrouted or rejected summaries. Those two numbers, not a vibe, drive the release policy. Shipping a new prompt or a new model version is allowed while the agent is inside its budget, and it is halted when the previous four weeks have blown the budget.
+
+Run the case that makes the policy real. A bad prompt lands, and for a week the agent churns on a class of cases it previously handled: acceptance collapses to 90%, which is 10,000 bad routings in the month, far over the 200-case budget. The alerts that fire are the acceptance SLI crossing its threshold, and the burn rate goes red well before the month ends. The runbook says the first action is to roll back the prompt to the last version and re-run the affected batch with the supervisor's review gate restored. That is the error budget policy and the runbook together: the SLI caught the collapse early, the budget told the team this was a release-halting event, and the runbook told the on-call person the exact first move. The postmortem then decides whether the prompt goes back in with a tighter gold set, which is the learning loop returning to the SLO.
+
+## The pitfalls to avoid
+
+**Setting an SLI that measures the wrong thing.** If you measure platform uptime when your users are actually failing on latency, your dashboard is green while your customers are unhappy. Pick the SLI that matches the experience a person would feel, and count only system-caused errors against it.[^2]
+
+**Matching the platform SLA instead of staying below it.** The exam-stealing version of this: when the platform SLA and your solution SLO are both 99.9%, platform downtime eats your entire budget and your own failures have nothing left to spend.[^1] Stay below the platform number.
+
+**Promising a number the architecture cannot back.** A 99.99% SLO on a single-org, single-replica design is fiction. The target must be paired with the architecture that reliably hits it, from the realistic-target ladder down.[^1]
+
+**A runbook that assumes the reader is the expert.** If the on-call person cannot execute it cold, it is not a runbook, it is notes. Rehearse it with someone who did not build the system, and update it after every incident.
+
+## Try it
+
+1. A service promises "we are very reliable, the API has been up all quarter." What is wrong with this as a reliability statement, and what two numbers should replace it? *(Answer: it is a vague self-assessment, not a contract. It needs an SLI that measures user experience, such as request success or latency, and an SLO that turns it into an agreed target percentage over a defined window, per business capability.)* [^1] [^3]
+2. The platform SLA is 99.9% and the team sets its solution SLO to the same 99.9%. What goes wrong, and what should the SLO be instead? *(Answer: any platform downtime consumes the entire error budget, leaving nothing for app-layer failures, integration issues, or maintenance. Set the solution SLO below the platform SLA, such as 99.5%, to reserve budget.)* [^1]
+3. An agent service processes 200,000 runs a month against a 99.8% availability SLO. What is the monthly error budget in failed runs? *(Answer: 99.8% SLO leaves a 0.2% budget. 200,000 times 0.2% equals 400 failed runs allowed per month.)* [^2]
+4. An acceptance SLI drops to 90% for a week and blows the budget. What does the error budget policy say to do, and what is the runbook's role? *(Answer: the policy halts non-critical changes, including new releases, until the service is back inside its SLO, and may force a postmortem with a root-cause action if a single incident consumed more than 20% of budget. The runbook tells the on-call person the specific first recovery action, such as rolling back the offending change and replaying the batch.)* [^4]
+5. You are designing SLIs for an email-drafting agent. Why is an availability SLI alone insufficient, and what additional SLI belongs in the suite? *(Answer: an agent can complete without error and still produce something wrong. Add a quality or correctness SLI, such as acceptance rate or hallucination/coherence measurement, alongside availability and latency.)* [^2]
+
+## What's next
+
+You can now turn "reliable enough" into measured SLIs, agreed SLOs, spendable error budgets, and rehearsed runbooks, and you can apply the machinery to a pipeline that runs autonomous agents. The lesson ahead, event streaming at scale, moves from measuring reliability to moving data: it covers Kafka, change data capture, and the real-time pipelines that carry events between systems. It is where the event-driven patterns you have seen so far meet the throughput and ordering challenges of streaming at volume.
+
+[^1]: Salesforce Well-Architected Framework. [Reliability](https://architect.salesforce.com/docs/architect/well-architected/guide/reliability.html)
+[^2]: Salesforce Well-Architected Framework. [Operational Excellence](https://architect.salesforce.com/docs/architect/well-architected/guide/operational-excellence.html)
+[^3]: Google Site Reliability Engineering. [Workbook: Implementing SLOs](https://sre.google/workbook/implementing-slos/)
+[^4]: Google Site Reliability Engineering. [Workbook: Error Budget Policy](https://sre.google/workbook/error-budget-policy/)

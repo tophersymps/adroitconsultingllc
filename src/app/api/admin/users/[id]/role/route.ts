@@ -5,8 +5,8 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi, notFoundJson, writeAuditLog } from "@/lib/admin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { getAuthUser } from "@/lib/supabase/auth-admin";
+import { getSupabaseServerClient } from "@/lib/db/server";
+import { getAuthUser } from "@/lib/auth/users";
 import {
   checkOrigin,
   checkRateLimit,
@@ -37,10 +37,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const { id } = await params;
-  const service = getSupabaseServiceClient();
+  const service = await getSupabaseServerClient();
 
   try {
-    // Target must exist as an auth user (GoTrue Admin API — the `auth` schema
+    // Target must exist as an auth user (Neon Auth user table — the `auth` schema
     // is not exposed to PostgREST, so the old service.from("auth.users") 500'd).
     const target = await getAuthUser(id);
     if (!target) return notFoundJson();

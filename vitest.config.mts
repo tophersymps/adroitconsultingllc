@@ -27,6 +27,19 @@ export default defineConfig({
        * import to a directory that does not exist.
        */
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      /*
+       * `server-only` is a build-time marker: its package `exports` maps the
+       * `react-server` condition (what Next's bundler sets for the server
+       * graph) to an empty module, and everything else to a thrower. Vitest
+       * runs in jsdom/plain Node with no such condition, so importing a
+       * privileged module (service.ts / auth-admin.ts) would throw before a
+       * single assertion ran. Alias it to the same empty module Next resolves,
+       * which keeps the guard real where it matters (the bundler) and keeps
+       * the unit tests able to exercise these modules directly.
+       */
+      "server-only": fileURLToPath(
+        new URL("./node_modules/server-only/empty.js", import.meta.url),
+      ),
     },
   },
 });

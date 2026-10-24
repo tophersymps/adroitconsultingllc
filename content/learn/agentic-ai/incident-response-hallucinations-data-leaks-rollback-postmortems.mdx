@@ -1,0 +1,200 @@
+---
+title: "Lesson 75: Incident Response for Agents: Hallucinations, Data Leaks, Rollback, and Postmortems"
+slug: incident-response-hallucinations-data-leaks-rollback-postmortems
+series: "agentic-ai"
+lesson: 75
+excerpt: "Lesson 74 mapped what can go wrong and how to audit against it. This lesson covers what you do when the controls break anyway and an agent takes an action you did not authorize. An agent incident is not a service outage: the actor is an autonomous system that acted while nobody watched, the evidence is volatile, and part of the harm cannot be undone, only compensated. This lesson gives the full responder arc: detecting the incident with tripwires, triaging it into the failure class that decides the first move, freezing the trace before any rollback, containing with a kill switch, rolling back or compensating by action class, and running a blameless postmortem that ships a fix. It walks one complete incident on an order-support agent and lays out the runbook you should have written before the page landed."
+date: "October 20, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Incident Response, Hallucination, Data Leak, Rollback, Postmortem, SRE]
+---
+
+Lesson 74 gave you the threat model and the audit that keeps an agent honest. The honest counterpoint is that no control holds forever. A prompt change lands on a Wednesday and the agent starts promising refunds that do not exist. A diagnostic run writes a customer's account data into a shared log. A retrieval pulls a poisoned document and the next action is a payment you never wanted. When that happens, you are not debugging a service, you are running an incident against a system that acted while nobody was watching, and the clock is already running.
+
+This lesson turns the threat model into a playbook. It covers the four things the title promises: how you notice a hallucination or a leak, how you stop the thing that is still happening, how you roll an agent and its state back or compensate for what cannot be undone, and how you run a postmortem that turns one failure into a fix the whole operation reuses. Where Lesson 38 taught you to detect that something degraded and Lesson 39 taught you to debug one broken trace, this lesson is the layer above both: the practiced response you pull off a shelf instead of inventing under pressure.
+
+The one idea to carry out of this lesson: **an agent incident is a chain from the moment the agent acted to the moment a human acknowledged it, and every second in between is unrecovered harm. The runbook freezes evidence first, contains fastest, rolls back what it can, compensates what it cannot, and converts one failure into a recurring fix.** [^2] [^3]
+
+## Why an agent incident is not a service incident
+
+A database outage has a guilty component. The schema was bad, the replica fell behind, the deployment was broken. An agent incident rarely gives you that clarity in hour one. The DZone runbook for AI incidents names the three properties that make the difference. [^4]
+
+Reproducibility is not guaranteed. Run the same prompt again at a temperature above zero and you may get a perfectly correct answer the second time, which means the "reproduce the bug" step that anchors every normal triage can fail you. The guilty component is blurred. Did the base model degrade, did the vector store pull poisoned context, or did a user land a prompt injection that slipped past the guardrails? Nobody knows in the first hour, and guessing wrong wastes the window that matters. And the evidence is volatile. The exact state of the context window, the hidden system prompts, and the chained tool calls all disappear unless you built AI-grade telemetry before the incident. [^4]
+
+To that, the agent runbook adds the structural fact that changes the whole response: the actor is a system that took an action you did not directly authorize, against an external surface, possibly while you slept. [^2] In the standard SRE model the thing that failed is a system you control, a deployment or a database. In agent mode the thing that failed is a system that acted. That shifts the first question from "what broke" to "what did it do, and can I take it back."
+
+## The three incidents that actually hurt
+
+The threat model from Lesson 74 gives you the full attack surface. Collapse it to the three failure classes an operator will actually sit up for, and each one has a real case behind it.
+
+A hallucination that drives a harmful action. The model is confidently wrong, and because the agent acts, the wrongness becomes an action. The reference case is Air Canada's chatbot: it told a passenger, in November 2022, that he could buy a ticket under a bereavement fare and claim a retroactive refund within 90 days. That policy did not exist. When the airline refused to honor it, the passenger sued, and in 2024 the British Columbia Civil Resolution Tribunal (case 2024 BCCRT 149) found the airline liable for negligent misrepresentation and awarded C$812.02. The tribunal's reasoning is the load-bearing lesson: it makes no difference whether the information came from a static page or a chatbot; it is all part of the website, and the operator owns it. [^6] A hallucination is not a neutral wrong answer when a customer relied on it. [^10]
+
+A data leak. Sensitive data crosses out of the boundaries you put around the system. The reference case has nothing to do with a hostile attacker: in March 2023, engineers at Samsung's semiconductor division pasted proprietary source code and internal meeting notes into ChatGPT to help with their work, and within weeks at least three separate leaks of confidential material reached OpenAI's servers, where Samsung had no way to retrieve or delete it. Samsung responded by banning generative AI on company devices and starting internal models. [^7] The uncomfortable part of this class is that the data did not have to be stolen. It was given away, one prompt at a time, and once it is out there is no rollback that brings it back.
+
+Runaway cost, the third class, is the one that turns a loop into a surprise bill. You met it in Lessons 38 and 53 as a session that accumulates tokens until it is ten times the average. Every individual request is within limits; the incident is the pattern. [^4] [^3]
+
+Those three share a property that matters for the rest of the lesson: in none of them does a traditional rollback, reverting the running version, fix the actual harm. The bad answer was already given, the data already left, the spend already burned.
+
+## Detection: the MTTD-for-Agents chain
+
+The first failure in most agent incidents is noticing. The agent runbook reports that across the available case studies, the mean time from the agent's harmful action to operator awareness is closer to fourteen days than to the four-hour window the runbook sets as its target. The reason is structural: an agent acts in single transactions that look identical to authorized activity in the audit log. Nothing fires until a downstream consequence, a cost spike, a customer complaint, a regulatory notice, surfaces it. [^2]
+
+To fix that, the runbook reframes detection as a five-phase chain and measures the gaps. [^2]
+
+1. Action. When did the agent take the harmful action?
+2. Signal. When did the system that should have detected it receive the signal?
+3. Trigger. When did the tripwire fire?
+4. Page. When did a human get paged?
+5. Acknowledgement. When did the human start working the incident?
+
+The mean time to detect is the elapsed time from phase 1 to phase 5. The point of writing it as a chain is that each gap is its own root cause. A fourteen-day delay concentrated between Action and Signal is missing instrumentation. Between Signal and Trigger, it is a tripwire that never fired. Between Page and Acknowledgement, it is alerting hygiene, an alert nobody read or a pager that did not page. The chain forces the postmortem to say which gap to close first instead of producing a vague "detection was too slow." [^2]
+
+![The five-phase detection chain runs Action to Signal to Trigger to Page to Acknowledgement, with each gap between phases mapped to its own root cause, and mean time to detect measured from the first phase to the last](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/1-mttd-detection-chain.png>)
+
+Tripwires are the rules that close the middle gaps. The agent runbook names four that consistently catch agent incidents inside the window. A cost-rate tripwire pages when per-agent spend exceeds twice the rolling seven-day median in any hour. An action-rate tripwire pages when per-agent API calls exceed three times the rolling median, or when a call hits a previously unused endpoint. An outcome tripwire pages when the agent produces a customer-visible artifact, an email sent, a ticket closed, a document published, where the human review step was bypassed or completed too fast. An authorization tripwire pages the security team when the agent invokes a tool or API not in its declared inventory. [^2] Each one is cheap to express and, crucially, each is decided in advance, because an operator deciding whether to page at 2 a.m. is an operator making the decision at the worst possible time.
+
+## Triage: put the failure in the class that decides the first move
+
+Once you are looking at it, the first few minutes decide whether the incident costs a rollback or a much larger bill. The reliable approach is to triage the incident into one of four failure classes before committing to a response, because each class has a different first move and a team that guesses wrong wastes the window. The agent reliability runbook defines them. [^3]
+
+Runaway cost. Spend per minute spikes against baseline. First move is the kill switch and a hard per-session budget. Stop the bleed, investigate after. This is the one class where stopping the spend always outranks understanding it, because every minute an agent runs against an exhausted or spiking budget is unrecovered money regardless of what caused it.
+
+Prompt or behavioral regression. A shift in task success or output distribution with no matching dependency error, usually after a release. First move is pointing traffic back at the last version that worked.
+
+Tool or dependency outage. A rising failure rate on one specific tool, or every call to a dependency timing out. First move is a circuit breaker that switches the agent to a predefined degraded mode for that dependency, so every caller stops piling tired retries onto something that is down for a while.
+
+Security incident. Credentials appearing in a context window, tool calls to scopes the agent has never touched, data leaving through an unexpected channel. This one overrides the other three, because its containment, revoke credentials, disable the agent, preserve traces, takes priority no matter what else is failing. [^3]
+
+![The four failure classes each carry a different first move: runaway cost gets a kill switch and hard budget, a regression points traffic back at the last working version, a tool outage trips a circuit breaker into degraded mode, and a security incident overrides the rest with revoke, disable, and preserve](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/2-failure-class-triage.png>)
+
+The three fast signals the runbook checks to assign a class are spend velocity, the shape of errors and outputs, and whether anything looks compromised. The checks reuse trace and cost telemetry you already collect per run, read against a recent baseline rather than a threshold frozen months earlier. [^3]
+
+## Freeze the trace before anything else
+
+The habit that separates a recoverable incident from an undiagnosable one is small and easy to skip: export or snapshot the trace tree for the incident window before you roll back, restart, or revoke credentials. [^3] The reason is that both recovery actions destroy the evidence a postmortem needs. A rollback swaps the running version, so any trace context tied to the failing version stops accumulating the moment the swap happens. A restart clears in-memory state and can leave the last spans incomplete or unflushed. Do either before you export, and "we have the full record of what the agent did" becomes "we have most of it, and the gap is exactly where the interesting behavior happened." [^3]
+
+The mechanics are small: every LLM call, tool call, and sub-agent hop under the run's trace ID, written to storage independent of the production system, before any recovery action. For a security incident this matters doubly, because a compromised system cannot be trusted to log its own investigation. [^3] If you are using an observability stack, this is the replay data you built in Lesson 20 paying for itself at the exact moment nothing else works. [^4] Freezing first is also the legal hedge: a rollback that deletes the original logs before regulators or a plaintiff can ask what happened starts to look like spoliation of evidence, which is why the DZone runbook puts a full snapshot of the model, system prompts, weights, and pipeline configuration, including sampling parameters, at the top of the first hour. [^4]
+
+## Containment: the kill switch has to exist and has to be reachable
+
+Containment for an agent is binary: either the kill switch fires fast, or it does not. There is no graceful drain, because the thing you are preventing is the next agent invocation, not the completion of a long-running request. The runbook targets thirty seconds from confirmed harm to all agents halted. [^2]
+
+The kill switch must be reachable by more than one role. If only the on-call engineer can fire it, you have a single point of failure during the worst incident class. The agent runbook requires it to be operationally accessible to at least three roles: the on-call engineer, the security on-call, and the business owner of the affected agent. [^2] And the priority order matters.
+
+- All-agents-halt. Use when the affected agent has access to high-blast-radius tools like payment, customer communication, or production writes, and the failure mode is unclear. Default to a full halt and restore selectively.
+- Per-agent-halt. Use when the affected agent is identified and others are demonstrably clean.
+- Per-tool-halt. Use when the failure is one tool the agent is calling wrong. Halt the tool, let the agent keep working with reduced capability.
+- Per-action-quarantine. Use when actions are queued for human approval rather than executed directly. Drain the queue and assess each pending action. [^2]
+
+![The kill switch scales from a full all-agents halt for high-blast-radius tools with an unclear failure, down through per-agent halt, per-tool halt, and per-action quarantine, and it must be reachable by the on-call engineer, the security on-call, and the business owner](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/3-kill-switch-levels.png>)
+
+A kill switch that has never been tested is not a kill switch. You built a circuit breaker in Lesson 53 and an approval gate in Lesson 17; this is the same discipline aimed at the whole agent. A Tier 1 alert nobody has ever tripped in a drill is an alert you cannot trust, and a kill switch the on-call rotation does not know how to reach is a button that does not work.
+
+## Rollback, by action class
+
+Conventional rollback means reverting the deployment. For an agent that took real-world actions, rollback is not one thing. The agent runbook defines seven action classes agents take and, critically, a different rollback profile for each, because some are reversible, some are reversible only with a compensating action, and some cannot be undone at all. [^2]
+
+Database writes. Standard transactional rollback where the database supports it, otherwise compensating writes. You need the specific schema and the operator authorized to run the rollback.
+
+External API calls, like payments, bookings, and transfers. Idempotent reversal where the API supports it, a Stripe refund, a calendar cancellation. Where it does not, one-way payment rails or fire-and-forget webhooks, you need the customer-communication template and a financial reserve to absorb the loss.
+
+Customer communications, the emails and messages already sent. A sent message cannot be unsent. The correct response is a follow-up communication template, a legal review of that follow-up, and the extraction of the impacted-customer list. This is the class that matters most for a hallucination incident, and it comes back in the worked example.
+
+Document creation or publication. Internal documents get deleted or marked superseded. Public documents get unpublished, then you assess the search and link damage and decide between a correction page and a removal.
+
+Code commits or deployments. A plain git revert if the commit has not deployed; if it has, the standard rollback plus an audit of every system that ran against the deployed version during the window.
+
+Identity or access changes. Provisioned access can be deprovisioned, but the audit question is what the agent did with that access during the window.
+
+Knowledge-base or vector-store writes. Embeddings, retrievals, fine-tune dataset additions. You can delete the records, but the audit question is what other agents already retrieved from the corrupted state, which needs days of downstream-effect monitoring. [^2]
+
+![The seven action classes split by reversibility: database writes, code, and access changes are reversible, external API calls, documents, and vector-store writes need a compensating action, and customer communications cannot be undone at all](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/4-rollback-by-action-class.png>)
+
+For each class the runbook captures the rollback procedure, the operator authorized to execute it, a time budget, the substitute action where rollback is impossible, and a verification step confirming the rollback succeeded. [^2]
+
+The hard truth to internalize: for hallucinations and data leaks, rollback is mostly compensation, not reversal. The Air Canada chatbot already told the passenger a false policy; no revert of the prompt fixes that customer. The compensating action is correction plus follow-up plus notification. The Samsung data already left; the response is containing further transfer, not recovering the bytes. [^7] That is why the rollback table's "substitute action" column is not a formality, it is usually the whole story.
+
+## The regulatory clock runs in parallel
+
+While you are freezing and containing, a separate clock is running that most engineering teams do not put in the runbook. The DZone runbook's blunt line is that legal and compliance belong in the war room from hour one, not day three. [^4]
+
+The reason is twofold. First, legal privilege. If engineers hash out the incident on a public channel with messages speculating about fault, those messages become discoverable in litigation. The first legal action during an escalation is establishing a privileged channel and directing people to describe technical symptoms, not diagnose legal fault. That is not about obscuring the truth, it is about not letting a stressed engineer's rushed hypothesis become a binding confession. [^4]
+
+Second, real regulatory deadlines. The EU AI Act's Article 73 requires providers of high-risk AI systems to report serious incidents to market surveillance authorities. The report is due immediately after the provider establishes a causal link, and in any event within 15 days of becoming aware. The time shrinks to 2 days for a widespread infringement, and to 10 days if the incident may have caused a death. [^5] These are short, and they shape the whole response: you need the blast-radius assessment, how many users, what data, what surface, precisely because the notification clock is tied to awareness, not to your investigation being finished. Where the incident involves personal data crossing a boundary, the GDPR breach-notification window compounds the same pressure. [^4] The NIST AI Risk Management Framework, which you met in earlier security lessons, frames the same expectation structurally: its Manage function is where response, recovery, and communication plans for measured risks get documented and monitored. [^9]
+
+The practical consequence: an incident runbook for an agent that touches customers, payments, or personal data is not engineering-only. It names the person who assesses against the reporting criteria and the channel that reaches them in hour one. [^4]
+
+## The postmortem: blameless, and it ships a fix
+
+When the fire is out, the work is not done until the postmortem converts the failure into a change. Google's site reliability practice defines a postmortem as a written record of the incident, its impact, the actions taken to mitigate it, the root causes, and the follow-up actions to prevent recurrence. Two properties carry the weight. [^1]
+
+The triggers are predefined, not improvised. Google's common triggers include user-visible downtime or degradation beyond a threshold, data loss of any kind, on-call intervention such as a release rollback, a resolution time above a threshold, and a monitoring failure that meant manual discovery. You decide these before an incident so nobody negotiates, in the aftermath, whether this one earns a document. [^1] For an agent, Lesson 38's SLO error budget gives you the same trigger: an incident that consumes a meaningful share of the budget demands a postmortem.
+
+Blameless means it looks for contributing causes, not culprits. A blameless postmortem assumes everyone acted reasonably with the information they had and focuses on the chain of causes, because naming a person as the cause makes the next person afraid to escalate. Google's guidance frames it as removing blame so people gain the confidence to escalate issues without fear. [^1] The output is a set of action items with owners and deadlines, not a culprit.
+
+For an agent incident, the postmortem structure gets two additions, both from the runbooks. First, it runs the MTTD-for-Agents chain and treats each gap between action, signal, trigger, page, and acknowledgement as its own root cause to fix. [^2] Second, it has to produce a shippable artifact. A blameless postmortem that only produced a narrative has not closed the loop. The agent reliability runbook insists it end in one of three things: a new eval case covering the specific input or trajectory, appended to the CI suite so a future release fails loudly in evaluation instead of silently in production; a new guardrail rule at the checkpoint, input, output, or action, that would have caught the bad behavior before it executed; or a new alert threshold tuned so the same class surfaces before a user notices. [^3]
+
+That last point is where this course's earlier lessons pay off. The eval suite from Lesson 36, the guardrail checkpoints from Lesson 17, and the alert thresholds from Lesson 38 are the three places a fix can land. A postmortem that ships one of them has made the system genuinely less likely to fail the same way.
+
+## Worked example: the order-support agent on a bad Wednesday
+
+Put the whole runbook on one system we have visited several times. An order-support agent reads incoming customer requests, retrieves a published policy, and drafts replies, and for a subset of high-confidence requests it can send the reply directly without review. On Tuesday evening an engineer ships a prompt change and adds a freshly ingested refund-policy section to the retrieval index. On Wednesday the combination turns sour: the agent starts telling bereavement-fare customers they can claim a retroactive refund within 90 days, a policy the company never offered, and one diagnostic routine writes a customer's account number into a shared debug log.
+
+At 2:14 a.m. Thursday the cost-rate tripwire fires, because the agent has been looping to re-verify the bad policy on dozens of tickets and spend per hour crossed twice the rolling median. The on-call engineer is paged. This is phase 5 of the detection chain, and the postmortem will later map the delay: the agent acted around 11 p.m., the retry pattern spiked the action-rate and cost signals, but the outcome tripwire, which should have caught direct-send refund emails going out, never fired because the config flagged those customers as eligible for auto-send. That gap between Signal and Trigger is the first root cause.
+
+The engineer triages by the fast signals. Spend is spiking, which points at runaway cost, but the output shape is worse: the same false bereavement promise appears in several drafts, which points at a prompt or retrieval regression, and the direct-send refund emails mean a customer-visible action already escaped without review. That is a security-adjacent and customer-facing incident, so the containment priority is a full halt. The kill switch, reachable by the on-call engineer, fires within the 30-second target and stops all agents.
+
+Before anything else, the runbook freezes the traces: every LLM call, tool call, and sub-agent hop under the affected run IDs is exported to storage separate from production, along with the system prompts and the ingestion config from Tuesday. Only then does the team roll back the prompt change and remove the freshly ingested refund section from the retrieval index.
+
+Then the rollback-by-action-class table runs. The database writes from greeting the affected tickets are transactional and get rolled back. The refund tool was never called by design, so there are no payments to reverse, which the runbook notes as a non-event in the communication record. The costly part is action class three, customer communications. Forty emails already went out telling customers they could claim a retroactive refund. They cannot be unsent. The team runs the impacted-customer list, drafts a follow-up under legal review that corrects the false policy without conceding liability in the wording, and dispatches it. In parallel, legal runs the seriousness assessment against Article 73: this is a misleading commercial representation, not a safety-of-life or data-breach event, but the account number that hit the debug log is personal data, so the GDPR clock is running and the notification path is queued. [^4] [^5]
+
+The postmortem runs the detection chain and produces three artifacts. An eval case is added covering the bereavement-retroactive prompt with the maliciously plausible retrieved policy, so CI fails loudly next time. A guardrail rule is added at the output checkpoint that blocks any refund-policy claim from auto-send. And the outcome tripwire is repaired so a direct-send email to a customer always requires review. Three changes, three gap closures, and the same incident class is now much harder to repeat. [^3]
+
+The emblematic move in that whole sequence is the one that costs the least and is easiest to skip: freezing the trace before the rollback. It is what lets the postmortem verify, instead of guess, which prompt change and which retrieval entry produced the lie.
+
+![The order-support agent incident runs from the Tuesday prompt change and refund-policy ingestion, through the Wednesday false bereavement promises and leaked account number, the 2:14 a.m. cost tripwire, the 30-second kill switch, the trace freeze before rollback, the compensating follow-up to forty customers, and the three postmortem artifacts](</diagrams/incident-response-hallucinations-data-leaks-rollback-postmortems/5-worked-example-timeline.png>)
+
+## Build the runbook before you need it
+
+Nothing in this lesson can be improvised well in the moment, so the build order is what you do while things are calm.
+
+1. Write the runbook. Define the trigger criteria for a postmortem, the severity tiers, and the three-plus people who can fire the kill switch. [^1] [^2]
+2. Instrument first. You cannot freeze a trace you never collected, and Lesson 20's replay data is the raw material for every freeze and every postmortem. [^4]
+3. Build and test the kill switch. Containment is only real if it works under load, so rehearse firing it in a drill, not for the first time during the incident. [^2]
+4. Write the rollback table by action class. For each action your agent can take, name the rollback, the operator, the time budget, the substitute when rollback is impossible, and the verification. [^2]
+5. Name the compliance channel. Decide who assesses against Article 73 and GDPR criteria and how they are reached in hour one. [^4] [^5]
+6. Rehearse quarterly. A tabletop drill with the on-call rotation, fed a synthetic incident from a rolling list, confirms the runbook still matches the agent's actual action surface, which changes as you ship capability. [^2]
+
+## The pattern to take away
+
+1. **An agent incident is measured action-to-acknowledgement, and the gaps between signal, trigger, and page are the real root causes.** [^2]
+2. **Freeze the trace before you roll back or restart.** Recovery destroys the evidence a postmortem needs, so export first, recover second. [^3]
+3. **Contain fastest, understand after.** Runaway spend and a security breach both demand stopping the agent before explaining it. [^3]
+4. **Rollback is by action class, and for hallucinations and leaks it is mostly compensation.** Emails cannot be unsent and transferred data cannot be recalled, so the runbook specifies the corrective follow-up and the customer list. [^2] [^7]
+5. **A blameless postmortem ships a fix.** An eval case, a guardrail rule, or an alert threshold, with the detection chain's gaps closed, not a narrative. [^1] [^3]
+
+If you walk away with one skill, it is the ability to respond to a failing agent in the right order: notice it with a tripwire, put it in the failure class that decides the first move, freeze the evidence, stop the bleeding, roll back or compensate by action class, and run a postmortem that lands a change in the eval suite, the guardrail, or the alert. That is the difference between surviving an agent incident and learning from it.
+
+## Try it
+
+Take one agent you have deployed and write its incident runbook before you touch another line of configuration. First, list the harm this agent can actually cause, and the two or three tripwires that would catch each one, with an explicit threshold you can express in a query. Next, name the three people, by role, who can fire the kill switch, and write the one command each of them would run. Then fill a rollback-by-action-class table for every action the agent takes: the rollback, the operator authorized to run it, a time budget, the substitute action where rollback is impossible, and the verification step. Last, decide who assesses whether the incident meets a serious-incident reporting threshold and how they are reached in hour one. When you are done, run a five-minute tabletop: describe an incident out loud, or to a colleague, and see whether the runbook actually tells you what to do, or whether it just describes what happened. A runbook that does not survive a tabletop is a document, and this lesson has told you exactly why that is not enough.
+
+## Summary
+
+An agent incident differs from a service outage because the actor is an autonomous system that acted while nobody watched, the evidence is volatile, and much of the harm cannot be undone, only compensated. [^2] [^4] The response is a disciplined chain: detect with tripwires against cost, action rate, outcomes, and authorization; triage into the failure class, runaway cost, regression, tool outage, or security, that decides the first move; freeze the trace before any rollback or restart so the postmortem has evidence; contain through a kill switch reachable by multiple roles; roll back by action class and compensate where reversal is impossible, especially for hallucinated promises and transferred data; and run the compliance clock in parallel, because Article 73 and privacy notification deadlines run from awareness. [^2] [^3] [^4] [^5] The postmortem is blameless, predefined, and ships a fix: an eval case, a guardrail rule, or an alert threshold, with each gap in the detection chain closed as its own root cause. [^1] [^3] The reference cases are the reason to do all of it before the page lands: an airline held liable for a chatbot that invented a policy, a court sanctioning lawyers who filed fabricated cases, and a chipmaker that gave away source code one prompt at a time. [^6] [^7] [^8]
+
+## What's next
+
+This lesson covered how you respond when an agent acts wrongly: contain, roll back, compensate, and learn. Lesson 76 is the layer underneath that response, because a response is only as good as the record it can reconstruct. It turns to auditing agents through logs, replay, and forensics, and to how that evidence becomes compliance proof. You will learn how to read a full action history to reconstruct exactly what an agent did and why, how replay turns an audit trail into a reproducible witness, how digital forensics treats an agent's traces the way incident responders treat a disk image, and how those same records satisfy compliance and regulatory evidence requirements. Where this lesson froze the trace in the heat of the incident, the next one treats that trace as the standing record that makes every audit and every investigation possible.
+
+[^1]: Google SRE. [Postmortem Culture: Learning from Failure, Site Reliability Engineering book](https://sre.google/sre-book/postmortem-culture/)
+[^2]: AgentMode. [Agent Incident Runbook: 4-phase response template (detect, contain, roll back, post-mortem)](https://agentmodeai.com/resources/agent-incident-runbook/)
+[^3]: ChangeGamer. [How to Build an Incident Response Runbook for AI Agent Failures](https://changegamer.ai/articles/agent-incident-response-runbooks)
+[^4]: DZone. [Building an AI Incident Response Runbook](https://dzone.com/articles/ai-incident-response-runbook)
+[^5]: AI Act Service Desk (European Commission). [Article 73: Reporting of serious incidents](https://ai-act-service-desk.ec.europa.eu/en/ai-act/article-73)
+[^6]: Springer, AI & Society. [Air Canada's chatbot illustrates persistent agency and accountability: Moffatt v. Air Canada, 2024 BCCRT 149](https://link.springer.com/article/10.1007/s00146-024-02096-7)
+[^7]: AI Incident Database. [ChatGPT Implicated in Samsung Data Leak of Source Code and Meeting Notes (incident 768)](https://incidentdatabase.ai/cite/768/)
+[^8]: Spellbook. [The Lawyer Who Used ChatGPT: Mata v. Avianca](https://spellbook.com/learn/lawyer-who-used-chatgpt)
+[^9]: NIST AI Risk Management Framework. [The AI RMF Core: Govern, Map, Measure, Manage](https://airc.nist.gov/airmf-resources/airmf/)
+[^10]: Microsoft Security Blog, "Threat modeling AI applications" (February 2026). https://www.microsoft.com/en-us/security/blog/2026/02/26/threat-modeling-ai-applications/

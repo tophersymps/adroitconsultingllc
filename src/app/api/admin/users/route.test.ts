@@ -22,11 +22,13 @@ vi.mock("@/lib/access", () => ({
   getAccessUserId: mocks.getAccessUserId,
 }));
 
-vi.mock("@/lib/supabase/service", () => ({
-  getSupabaseServiceClient: () => mocks.service,
+// R2-2: the admin surface reads and writes through the Data API client, whose
+// RLS `is_admin()` policies gate it — there is no service-role client any more.
+vi.mock("@/lib/db/server", () => ({
+  getSupabaseServerClient: async () => mocks.service,
 }));
 
-vi.mock("@/lib/supabase/auth-admin", () => ({
+vi.mock("@/lib/auth/users", () => ({
   listAuthUsers: mocks.listAuthUsers,
 }));
 
@@ -113,6 +115,53 @@ describe("GET /api/admin/users — GoTrue auth source (t_48183726)", () => {
     expect(rows.find((r) => r.user_id === "u-no-role")?.role).toBe("member");
     // service client must NOT be asked for auth.users (the PGRST205 path).
     expect(mocks.service.from).not.toHaveBeenCalledWith("auth.users");
+  });
+
+  it("lists imported legacy identities with their admin role (R2-1 identity continuity)", async () => {
+    // Regression for t_33739716: the People list is built from
+    // listAuthUsers() (neon_auth."user") and joins roles/profiles by id. Before
+    // supabase/migrations/neon/005_identity_continuity.sql imported the legacy
+    // rows with their ORIGINAL uuids, none of these ids existed in
+    // neon_auth."user", so they were dropped from this list entirely and the
+    // admins rendered as "member". These are the real ids from the live DB.
+    admin();
+    const importedAdmin = "eeafd509-9093-4117-90a4-b9e5ceed790e";
+    const importedCustomer = "c35bcdce-05da-465f-8d2f-0131037250fe";
+    mocks.listAuthUsers.mockResolvedValue([
+      { id: importedAdmin, email: "chris.sympson@gmail.com" },
+      { id: importedCustomer, email: "sympson3w@hotmail.com" },
+      { id: "a9682ec7-556f-466f-9672-f89a2d73b14f", email: "alpha-r12-probe@adroit.io" },
+    ]);
+    wirePublic(
+      [{ user_id: importedAdmin, role: "admin" }],
+      [{ user_id: importedAdmin, display_name: "chris.sympson" }],
+    );
+
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const rows = (await res.json()).data as {
+      user_id: string;
+      email: string;
+      role: string;
+      display_name: string | null;
+    }[];
+
+    // The legacy customer is in the list (it used to vanish).
+    expect(rows.map((r) => r.user_id)).toEqual(
+      expect.arrayContaining([importedAdmin, importedCustomer]),
+    );
+    // The legacy admin resolves to admin BY ID — not by email.
+    expect(rows.find((r) => r.user_id === importedAdmin)).toMatchObject({
+      email: "chris.sympson@gmail.com",
+      role: "admin",
+      display_name: "chris.sympson",
+    });
+    // No id-keyed lookup ever used the email column as the join key.
+    const roleCall = mocks.service.from.mock.calls.find(([t]) => t === "user_roles");
+    expect(roleCall?.[0]).toBe("user_roles");
+    expect(JSON.stringify(mocks.service.from.mock.calls)).not.toContain(
+      "chris.sympson@gmail.com",
+    );
   });
 
   it("filters by name/email substring via ?q=", async () => {
