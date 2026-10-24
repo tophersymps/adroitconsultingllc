@@ -1,72 +1,38 @@
 import { type MetadataRoute } from "next";
 import { posts } from "@/data/posts";
-import { learnLessons, learnSeries } from "@/data/learn";
+import { learnLessons } from "@/data/learn";
 import { getCertExam, getKnowledgeChecks } from "@/lib/quiz";
 import { getAllTags } from "@/lib/tags";
 import { siteConfig } from "@/lib/seo";
-import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import {
+  getGuestVisibleSeries,
+  getGuestVisibleSeriesSlugs,
+} from "@/lib/learn-visibility";
 
 /**
- * Sitemap — public index. Per AC-5, learn URLs are included ONLY for courses
- * whose `courses` row status is `live` (pending/archived are excluded; a
- * content series with no DB row is treated as not-launched). Blog routes stay
- * fully public and unchanged.
+ * Sitemap — public index. Blog/marketing/tag routes stay fully public;
+ * Learn URLs are emitted ONLY for series a logged-out visitor can actually
+ * resolve.
  *
- * The live set is read via the SERVICE client (a system-level read of public
- * data — never used to resolve a per-user decision). If the DB is unreachable
- * at build time the build must never fail on a DB hiccup (arch §10 risk
- * mitigation) — but it also must never disclose a series it cannot prove is
- * live. The fallback is therefore the STATIC launch mirror
- * (`isPubliclyLaunchedSeries`), the same DB-free predicate the atlas routes use
- * on their `unavailable` path (F-2, CWE-200). Failing open to "every content
- * series" published unpublished/stealth course URLs to crawlers during a
- * token outage (136 URLs measured, t_0194c233 option 1), so it is fail CLOSED.
+ * ADR-217: the visibility question is NOT answered here any more. This route
+ * used to run its own `status='live'` query (which ignored `access_model`, so
+ * 96 stealth `hermes-consultant` URLs were submitted to crawlers, all 404s for
+ * guests — S3) and carried its own fail-closed fallback. Both now live in
+ * `src/lib/learn-visibility.ts`, so the funnel, the search index and this
+ * sitemap share ONE predicate (`isGuestVisibleCourse`) and ONE failure mode:
+ * on a DB/token outage the seam degrades to the static launch mirror
+ * (`PUBLICLY_LAUNCHED_SERIES`, F-2/CWE-200) and every learn URL that cannot be
+ * proven guest-visible is dropped. The build never fails on a DB hiccup.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const blogUrl = `${siteConfig.url}${siteConfig.blogPath}`;
   const learnUrl = `${siteConfig.url}${siteConfig.learnPath}`;
 
-  // Live series slugs from the DB (source of truth for status).
-  let liveSlugs: Set<string> | null = null;
-  try {
-    // Sitemap generation runs outside a request, so there is no session to
-    // forward: read the public catalog as the Data API `anonymous` role (the
-    // "courses_select_live_or_admin" policy still restricts it to live rows).
-    const { getSupabaseAnonymousClient } = await import("@/lib/db/server");
-    const supabase = await getSupabaseAnonymousClient();
-    const { data, error } = await supabase
-      .from("courses")
-      .select("series_slug")
-      .eq("status", "live");
-    if (!error && data) {
-      liveSlugs = new Set(
-        (data as { series_slug: string }[]).map((r) => r.series_slug),
-      );
-    }
-  } catch {
-    liveSlugs = null;
-  }
-  // F-2 / CWE-200 (t_0194c233): FAIL CLOSED. When the courses table cannot be
-  // read we cannot prove ANY series is live, so the learn section falls back to
-  // the static launch mirror — never to every content series, which would
-  // advertise unpublished ("stealth") courses to crawlers from a session-free
-  // surface. Static marketing/blog/tag URLs are unaffected.
-  const liveSet =
-    liveSlugs ??
-    new Set(
-      learnSeries
-        .filter((s) => isPubliclyLaunchedSeries(s.slug))
-        .map((s) => s.slug),
-    );
-  if (!liveSlugs) {
-    console.warn(
-      "[sitemap] courses table unreachable — restricting learn series to the static launched-series mirror",
-    );
-  }
-  const isLive = (slug: string) => liveSet.has(slug);
-  const visibleSeries = learnSeries.filter((s) => isLive(s.slug));
-  const visibleLesson = (lesson: { series: string; slug: string }) =>
-    isLive(lesson.series);
+  // Guest-visible series (seam): DB-authoritative, fail-closed on failure.
+  const guestSlugs = await getGuestVisibleSeriesSlugs();
+  const visibleSeries = await getGuestVisibleSeries();
+  const visibleLesson = (lesson: { series: string }) =>
+    guestSlugs.has(lesson.series);
 
   // Static / hub pages — no natural content date, so lastmod is OMITTED
   // (B-12: omitting lastmod kills per-deploy re-crawl churn; a hub page's
@@ -126,7 +92,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Tag pages — B-15: emit ONLY tags with >=3 posts (176 one-post thin tag
   // pages dilute crawl budget). Tags have no natural publish date, so lastmod
-  // is omitted; /tags remains the full "browse all tags" disclosure.
+  // is omitted; /tags remains the full "browse all" disclosure.
   const tagPages: MetadataRoute.Sitemap = getAllTags()
     .filter((t) => t.count >= 3)
     .map((t) => ({
@@ -135,9 +101,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     }));
 
-  // Learn hub + series pages (daily content cadence → weekly). Live only (AC-5).
-  // Hub has no natural date (lastmod omitted); each series uses its NEWEST
-  // lesson's date as the content-derived lastmod.
+  // Learn hub + series pages (daily content cadence → weekly). Guest-visible
+  // only (ADR-217). Hub has no natural date (lastmod omitted); each series uses
+  // its NEWEST lesson's date as the content-derived lastmod.
   const learnHubPages: MetadataRoute.Sitemap = [
     {
       url: `${learnUrl}`,
@@ -152,7 +118,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
 
-  // Learn lesson pages — live courses only (AC-5). lastmod from lesson date.
+  // Learn lesson pages — guest-visible series only. lastmod from lesson date.
   const learnLessonPages: MetadataRoute.Sitemap = learnLessons
     .filter(visibleLesson)
     .map((lesson) => ({
@@ -163,8 +129,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }));
 
   // Tier quiz pages — knowledge checks + cert exam (legacy series quiz removed,
-  // Decision 8). Only series that ship tier files AND are live contribute.
-  // No natural publish date → lastmod omitted (B-12).
+  // Decision 8). Only series that ship tier files AND are guest-visible
+  // contribute. No natural publish date → lastmod omitted (B-12).
   const checkPages: MetadataRoute.Sitemap = visibleSeries.flatMap((s) =>
     getKnowledgeChecks(s.slug).map((c) => ({
       url: `${learnUrl}/${s.slug}/check/${c.n}`,
