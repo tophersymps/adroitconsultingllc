@@ -176,7 +176,18 @@ export function useAuth(): UseAuthReturn {
       invalidateDbToken();
       invalidateAuthSession();
       invalidateProgressSummary();
-      refresh();
+      /*
+       * Defer the re-read to a microtask so every mounted useAuth listener's
+       * synchronous invalidation lands first. Calling refresh() here per
+       * instance would start a read at each intermediate epoch; the later
+       * listeners bump the epoch again, so all but the last read resolve to
+       * null and only one mounted instance updates after a cross-tab change.
+       * After the dispatch settles, the first refresh starts ONE read at the
+       * final epoch and the remaining listeners join it.
+       */
+      queueMicrotask(() => {
+        if (!cancelled) refresh();
+      });
     };
     window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
     window.addEventListener("focus", onFocus);

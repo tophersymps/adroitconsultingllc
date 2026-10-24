@@ -25,7 +25,11 @@ const { cookiesMock } = vi.hoisted(() => ({ cookiesMock: vi.fn() }));
 
 vi.mock("next/headers", () => ({ cookies: cookiesMock }));
 
-import { getSupabaseAnonymousClient, getSupabaseServerClient } from "./server";
+import {
+  __resetMintCooldown,
+  getSupabaseAnonymousClient,
+  getSupabaseServerClient,
+} from "./server";
 import { resetAnonymousTokenCacheForTests, anonTokenStats } from "./anonymous-token";
 import {
   DbTokenUnavailableError,
@@ -125,6 +129,9 @@ beforeEach(() => {
   // The anonymous-role token is cached across requests (R2-5), so each test
   // starts from an empty cache/suppression window.
   resetAnonymousTokenCacheForTests();
+  // …and from an empty mint negative cache (t_81b09ba8): an 8 s cooldown that
+  // survived between cases would make a "how many mints" assertion meaningless.
+  __resetMintCooldown();
 });
 
 afterEach(() => {

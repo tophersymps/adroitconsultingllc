@@ -9,6 +9,7 @@
 
 import Link from "next/link";
 import { learnSeries } from "@/data/learn";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { getSeriesBySlug } from "@/lib/learn";
 import { getCertExam, getKnowledgeCheck, getKnowledgeChecks, scoreQuizAttemptRows } from "@/lib/quiz";
 import {
@@ -40,8 +41,13 @@ export default async function CertificateSection({
   supabase,
   userId,
 }: CertificateSectionProps) {
-  // Only series with a cert exam can grant certificates.
-  const certSeries = learnSeries.filter((s) => getCertExam(s.slug) !== null);
+  // Only series with a cert exam can grant certificates. Restricted to the
+  // static launch mirror so a stealth series (name/slug/cert link) can never be
+  // serialised into the /profile RSC payload — same disclosure boundary as
+  // KeepLearning (security t_0071d4a0, CWE-200).
+  const certSeries = learnSeries.filter(
+    (s) => isPubliclyLaunchedSeries(s.slug) && getCertExam(s.slug) !== null,
+  );
 
   if (certSeries.length === 0) {
     return (

@@ -25,6 +25,13 @@ import { getCatalogForUserV2, toLearnHubCards } from "@/lib/catalog";
 /** Never cache: the response is per-session. */
 export const dynamic = "force-dynamic";
 
+/**
+ * Every return path is per-user/per-session, so no browser or shared
+ * intermediary may store it (SEC-L2, CWE-525, t_15a53bb8). This matches the
+ * header on `/api/progress/summary`.
+ */
+const NO_STORE_HEADERS = { "Cache-Control": "private, no-store" };
+
 export async function GET(): Promise<Response> {
   let user;
   try {
@@ -34,7 +41,10 @@ export async function GET(): Promise<Response> {
   }
 
   if (!user) {
-    return NextResponse.json({ gate: "guest-locked", series: [] });
+    return NextResponse.json(
+      { gate: "guest-locked", series: [] },
+      { headers: NO_STORE_HEADERS },
+    );
   }
 
   try {
@@ -50,14 +60,26 @@ export async function GET(): Promise<Response> {
           lessonSlugs: c.lessonSlugs,
         })),
       },
-      { headers: { "cache-control": "no-store" } },
+      { headers: NO_STORE_HEADERS },
     );
-  } catch {
+  } catch (err) {
     // Catalogue read failed → 503 so the island keeps the guest baseline
     // instead of upgrading to a half-resolved (all-locked) signed-in state.
+    //
+    // CWE-778 (t_601ef414): the catalogue loaders already fail closed (each one
+    // rethrows a PostgREST `{ error }`), but swallowing it here made a Data API
+    // or RLS outage invisible — the only signal was a 503 nobody correlated.
+    // Log the transport fields only: PostgREST messages/details can echo a
+    // column value and the caller's identity must never be logged.
+    const { status, code } = (err ?? {}) as { status?: unknown; code?: unknown };
+    const context: { status?: number; code?: string } = {};
+    if (typeof status === "number") context.status = status;
+    if (typeof code === "string") context.code = code;
+    console.error("[atlas/cards] catalogue read failed", context);
+
     return NextResponse.json(
       { gate: "guest-locked", series: [] },
-      { status: 503, headers: { "cache-control": "no-store" } },
+      { status: 503, headers: NO_STORE_HEADERS },
     );
   }
 }
