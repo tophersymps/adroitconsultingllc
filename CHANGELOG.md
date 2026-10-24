@@ -2,6 +2,66 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Perf follow-up: the /atlas Continue Learning slot never collapses — the guest/no-progress start strip (PERF-MEDIUM-1 residual, t_bbc735da)
+
+**Decision** — implement kara's Option 2 (t_92956e91): the reserved slot ALWAYS renders one card-shaped row in the same `CARD_FRAME` + `RESERVE` box. With 1+ in-progress series it is the resume card(s); with none (guest, new account, everything finished, in flight, or a failed read) it is a "start here" strip: eyebrow `Continue learning` (no pulse dot), headline `Start with {firstTrackName}`, support `Tracks are read in order. Open lesson 1 to begin.`, CTA `Start track →` to `/atlas/{slug}`, and the shared 4px rail at 0% with no gradient and no red radial glow. The copy deliberately names no visitor state and promises no persistence, because `/atlas` is `○ Static`: a guest and a signed-in reader with an empty shelf both get `items: []` from `/api/continue-learning` and cannot be told apart client-side.
+
+**What** — three source files + two test files:
+(1) `src/components/Learn/ContinueLearning.tsx` — removed the `items === null` skeleton branch, `aria-busy="true"`, the `continue-learning-placeholder*` test ids, `animate-pulse`, and `if (items.length === 0) return null` (that `null` WAS the upward collapse). Both `null` and `[]` (and every degraded read) now render the start strip; the frame/row/pill/rail class strings are hoisted to module constants so the strip and the resume card cannot drift apart. New optional props: `firstTrack` (names the strip) and `browseHref` (Variant A anchor). A 140ms opacity `continue-fade` fires only on the post-read swap — never on the prerendered first paint — and is neutralised by the existing global `prefers-reduced-motion` block.
+(2) `src/app/globals.css` — the `continue-fade` keyframes + class, opacity-only so the swap cannot move layout.
+(3) `src/components/Learn/LearnHub.tsx` — passes `firstTrack` from the UNFILTERED `courses[0]` (so typing in the search box cannot rename the strip) and `browseHref` to the first rendered section; sections gain `id=section-{slug}` + `scroll-mt-24`, and the empty-state wrapper gains `id="atlas-catalogue"`, so the Variant A CTA has a real anchor in both branches.
+(4) `ContinueLearning.test.tsx` — rewritten: the strip is asserted by copy/CTA instead of the removed placeholder ids, for first paint, `[]`, `!res.ok`, a rejected fetch, and the Variant A fallback; the rail at 0%/no gradient, the absence of `aria-busy`/`animate-pulse` in the strip, the presence of the pulse dot only on the resume card, and the shared `RESERVE`/frame on both states are pinned.
+(5) `LearnHub.requests.test.tsx` — the guest case now expects the start strip (and its `/atlas/{first-track}` href) in the reserved slot instead of "section hidden"; the 4 signed-in / 2 guest request budget is unchanged and re-passed.
+
+**Why** — `987d4bf6` (PR #371) reserved one card's height for the pending state, but `items.length === 0 → null` threw that reservation away the moment the read settled, which is the majority path on a public SEO hub: every guest collapsed the catalogue upward by ~148px (desktop) / ~244px (mobile). With the strip, the slot is filled in the prerendered HTML and never changes height in either direction.
+
+**Verified** — real browser (CDP device emulation) against `next dev` on this worktree, with `GET /api/continue-learning` stubbed to either `{items: []}` or one production-shaped item, in a harness that renders `ContinueLearning` with `firstTrack` and a marker block below the section:
+  - 1440px: card 112 → 112, headline block 26 → 26, marker top **257 → 257** ⇒ 0px shift.
+  - 768px: card 112 → 112, marker top **257 → 257** ⇒ 0px shift.
+  - 390px: card 208 → 208, headline block 52 → 52, marker top **353 → 353** ⇒ 0px shift.
+  - 320px: card 208 → 208, marker top **353 → 353** ⇒ 0px shift (with the design's track name, which is what kara measured; see Known Issues for longer names).
+  - No overflow at any width (`scrollHeight − clientHeight = 0` in both states).
+  - Prerendered HTML contains the strip (`grep continue-learning-start .next/server/app/atlas.html` → present, plus the support copy), so the first paint is real copy, not a shell; `npm run build` still emits `○ /atlas 1h 1y`.
+  - Real `/atlas` route (this worktree has no `.env`/DB, so the catalogue is empty): the strip renders with the Variant A copy `Start with any track below` + `Browse tracks → #atlas-catalogue`, 112px at 1440px.
+  - `npx vitest run` **122 files / 1076 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint` clean on the four touched source/test files.
+
+**Known Issues** — (1) At ≤ ~340px viewport a track name long enough to push the strip headline to a THIRD line grows the box past the 208px floor (measured 230px vs the resume card's 208px with a 36-character name ⇒ a 22px shift in the start→resume direction at 320px only). Same class of residual as the long-series-name case `987d4bf6` documented, and it cannot be closed without capping the box height (which would clip copy) or shrinking the type; the design explicitly froze the height budget and the copy classes. (2) N in-progress series still stack past the one-card reservation (unchanged). (3) The 36px pill height is still below the 44px target, shared with "Resume lesson" (fix both or neither). (4) Variant C — a guest with localStorage progress — still renders the generic start strip, because `/api/continue-learning` is session-gated; it needs an API/contract decision (flagged in the design, not smuggled in here). (5) No live Lighthouse/CWV run is possible in this worktree (no DB), so the evidence is CDP layout measurement plus the prerendered HTML, not a field CLS score.
+
+### Perf follow-up: /atlas Continue Learning section reserves its height, and the request budget test tells the truth (PERF-MEDIUM-1 + PERF-LOW-1, t_ea10119b)
+
+**Decision** — reserve the final height (the first of the two options on the card). `ContinueLearning` sits ABOVE the card grid, and the visitor's in-progress set can only be known client-side on a `○ Static` route, so the reserved space has to ship in the prerendered HTML: one card's height is baked in (`min-h-[208px] md:min-h-[112px]`) and the resolved card carries the same floor. Height was measured, not guessed — see Verified.
+
+**What** - Two source files + one new test file:
+(1) `src/components/Learn/ContinueLearning.tsx` — the pending state no longer returns `null`: it renders a placeholder `<section aria-busy="true">` with one skeleton card at the exact reserved height, using the SAME frame as the real card (`CARD_FRAME`: radius/border/shadow + `mb-3 last:mb-0`, plus `flex`/`w-full` so the inner row stretches and its content stays centred inside the taller box). The resolved card carries the same `RESERVE` floor, so content that is shorter than the reservation cannot shrink the section either. `items.length === 0` still renders nothing (unchanged); a failed read (`!res.ok`) now sets `[]` explicitly instead of returning, so the placeholder can never be left pulsing forever.
+(2) `src/components/Learn/LearnHub.requests.test.tsx` — the stale `vi.mock("./ContinueLearning")` is GONE (it was why the published counts were one request optimistic) and the true post-hydration set is asserted: signed-in 9 cards ⇒ exactly `/api/atlas/cards`, `/api/auth/session`, `/api/progress/summary`, `/api/continue-learning` (1 each, 0 `quiz/run`); guest ⇒ exactly 2 (`/api/atlas/cards`, `/api/continue-learning`), with the guest path still asserting no identity and no progress read.
+(3) `src/components/Learn/ContinueLearning.test.tsx` (new) — pins the reserved-height contract: placeholder and card share the reservation and the frame, the placeholder is `aria-hidden` inside an `aria-busy` section, and the empty / failed / rejected reads render nothing.
+
+**Why** - sato's review of PR #371 (t_b5101cc5, PERF-MEDIUM-1) found that the footer fix left the *larger* post-hydration shift on the same route: for a signed-in visitor with an in-progress series the whole `ContinueLearning` section was inserted above the grid after hydration, moving every card row. PERF-LOW-1 was the same blind spot in the test: the component was mocked out, so "≤3 signed-in / exactly 1 guest" understated production by one request.
+
+**Verified** - Real browser (CDP), against `next start` on the build of this commit, guest catalogue, `GET /api/continue-learning` gated and released with one production-shaped item:
+  - 1440px: placeholder 112px → resolved card 112px; section top 410 → 410; the block below the section top 558 → 558 ⇒ **0px shift**.
+  - 390px: placeholder 208px → resolved card 208px; section top 481 → 481; block below 725 → 725 ⇒ **0px shift**.
+  - Pre-fix, that same section was absent and then inserted: 108px card + 36px `mt-9` ≈ **144px** of movement at 1440px and 204px + 36px ≈ **240px** at 390px (measured natural card heights, built CSS, same harness).
+  - Height sweep on the built CSS (`min-h-[208px]` / `md:min-h-[112px]` emitted): placeholder == card at 320/390/414/640/768/1024/1440px for production-shaped content; a deliberately over-long title+description still exceeds the budget below 768px (275px at 320px, 230px at 390px) — see Known Issues.
+  - `npx vitest run` **122 files / 1074 tests passed** (includes the corrected `LearnHub.requests.test.tsx`: signed-in = exactly those 4 URLs, guest = exactly 2) and the new `ContinueLearning.test.tsx` (5/5). `npx tsc --noEmit` exit 0; `npx eslint` clean on the three touched files. `npm run build` succeeds and still emits `○ /atlas 1h 1y` (`dynamic = "force-static"` + `revalidate = 3600` intact), and both reserved-height utilities are present in the built CSS.
+
+**Known Issues** - (1) The reservation is in the shared static HTML, so a visitor whose set turns out EMPTY (every guest, and a signed-in reader with no series in progress) now sees the placeholder for the duration of the read and then an upward collapse of ~148px (desktop) / ~244px (mobile). That is the cost of a route that cannot know identity server-side: with no reservation the signed-in case shifts down, with it the empty case shifts up. A design-sanctioned always-on "Continue learning" strip (guest copy in the same space) is the only way to remove both — filed for kara. (2) One card's space is reserved; a visitor with two or more in-progress series (each card adds ~112px desktop / ~208px mobile plus its `mb-3`) still moves the grid by the additional cards. (3) A card whose title AND description wrap past the budget below 768px (275px measured at 320px) exceeds the reserve. (4) No live Lighthouse/CWV run is possible in this worktree (no `.env`/DB ⇒ empty catalogue), so the shift evidence is the CDP layout measurement above, not a Lighthouse CLS score; a green-deploy Lighthouse pass is still owed.
+
+### Perf follow-up: /atlas card footer no longer reflows on the signed-in upgrade (PERF-M2 + PERF-L2, t_c54f6999)
+
+**What** - Four source files + two test files, no new mechanism:
+(1) `src/components/Learn/PathCard.tsx` — both footers (guest CTA and signed-in progress) now reserve `min-h-[96px]`, and the quiz row is reserved with `min-h-[16px]` so `QuizStats` rendering nothing (no attempts yet) cannot grow the card later.
+(2) `src/components/Progress/SeriesProgress.tsx` — the loading state is now the FULL `ProgressIndicator` at 0% (`animate-pulse opacity-70`, `aria-hidden`) instead of a bare 6px pulse bar, so the prerendered HTML and the hydrated render are the same height.
+(3) `src/app/atlas/page.tsx` — `getCatalogForUserV2` and `getCatalogOrg` now run in one `Promise.all` instead of two serial awaits (PERF-L2).
+(4) `src/lib/hooks/useProgressSummary.ts` — the shared per-session summary is now marked stale on `PROGRESS_CHANGED_EVENT` / `storage` / `AUTH_CHANGED_EVENT`, closing Known Issue (4) of t_22e18719 (`invalidateProgressSummary()` had no caller, so a cached summary could outlive a progress write or a sign-out in the same tab).
+(5) Tests: `src/components/Progress/SeriesProgress.test.tsx` (new) pins the final-height loading shape; `src/components/Learn/PathCard.test.tsx` gains the footer/quiz-row reservation cases.
+
+**Why** - sato's performance review of PR #358 (t_b3882a78, PERF-M2) measured the signed-in hub upgrade shrinking each card ~15-25px (guest footer ~95px vs signed-in ~70-82px, then `QuizStats` adding a strip after hydration) and reflowing every row below it in the 2-column grid — a post-hydration CLS on the route that now upgrades its card gate client-side. PERF-M1 (the ~25-request fan-out) was **already fixed on this branch** by `92611f55` (t_22e18719: one shared `/api/progress/summary` carrying `quizStats`, `LearnHub.requests.test.tsx` asserting the budget); this card re-verified that fix rather than adding a second, competing cache, and only closed its one open gap (stale invalidation).
+
+**Verified** - `npx vitest run` **121 files / 1069 tests passed** (includes `LearnHub.requests.test.tsx`: 9 signed-in cards ⇒ exactly `[/api/atlas/cards, /api/auth/session, /api/progress/summary]`, 0 `/api/progress/quiz/run`; guest ⇒ exactly 1 request). `npx tsc --noEmit` exit 0; `npx eslint` clean on all six touched files. `npm run build` succeeds and still emits `○ /atlas 1h 1y` (`dynamic = "force-static"` + `revalidate = 3600` intact); `next start` + `curl -D -` on `/atlas` → `HTTP 200`, `x-nextjs-cache: HIT`, `s-maxage=3600, stale-while-revalidate=31532400`, and a real browser load renders `<h1>The Atlas</h1>`.
+
+**Known Issues** - (1) No live signed-in measurement was possible in this worktree (no `.env`/DB ⇒ local `/atlas` renders the empty catalogue, same gap sato recorded), so the CLS fix is verified structurally (footer floor + reserved quiz row + same-height loading skeleton in jsdom) and **still needs a Lighthouse re-measure on a green Vercel deployment**. (2) Signed-in-but-locked cards additionally render the 44px "Preview first lesson" link (ADR-221), which is part of the final signed-in layout — the guest→signed-in swap therefore still grows those cards by ~56px; the affordance is core UX and is uniform per access state, so it is documented rather than reserved away. (3) PERF-L1 (guest `cache-control` on `/api/atlas/cards`) and PERF-I1 (ISR can cache a 0-card hub on a revalidation-time DB error) remain open per the audit.
+
 ### PERF: is_admin() RLS policies are InitPlan-wrapped — one evaluation per statement instead of per row (t_61fbf171)
 
 **What** - Every RLS policy predicate that calls `public.is_admin()` in the Neon migrations now calls it as `(SELECT public.is_admin())`, so Postgres hoists it into an **InitPlan** instead of re-running the function once per row. 19 policy predicates across 14 tables in `supabase/migrations/neon/001_rls.sql` (§4 owner/admin policies + §4b admin SELECTs) were wrapped; the 3 Neon-only admin SELECT policies in §4b and their identical restatement in `003_admin_read_policies.sql` were kept byte-for-byte in sync. `public.is_admin()` itself is unchanged — same SECURITY DEFINER body, same grants. No policy was loosened or tightened: only the call shape changed.
@@ -76,7 +136,6 @@ touched — the three Supabase keys stay until 2026-11-22.
 **QA note (Resend visibility)** - `RESEND_API_KEY` IS reachable from agent workspaces via Bitwarden Secrets: `bws secret get 95184a62-6056-4d71-bd64-b4ec004c584a` (project `fb20ce7c-35e3-420b-9de0-b470012a3133`) once `BWS_ACCESS_TOKEN` is exported from `~/.hermes/.env`. `GET https://api.resend.com/emails?limit=100` with `Authorization: Bearer $RESEND_API_KEY` lists recent sends (recipient, `created_at`, `last_event` = delivered/bounced/suppressed), so `last_event: delivered` is quotable without the dashboard. There is no second sending key in play: `RESEND_SENDING_KEY` is unused by the app.
 
 **Known Issues** - (a) The cooldown map is per process, so two different serverless replicas can each send once; a hard global guarantee would need shared state (Redis/KV) and is not warranted for this LOW path. (b) Signup itself is already single-send, so no server-side dedupe was added there — the client ref is the guard. (c) Historic Vercel runtime logs for the 19:58–20:04Z window are past retention (~1h), so request counts from that window cannot be quoted; the Resend-side evidence above replaces them.
-
 ### LOW (observability): a degraded admin deny is no longer silent (t_a2660e8c)
 
 **What** - `src/lib/admin.ts`: the sentinel branch of `isAdminOrDeny()` (the `catch` that calls `isDbTokenUnavailable`) now raises one throttled server-side signal before answering the uniform deny. New exported `signalDegradedAdminDeny(now = Date.now())` increments a process aggregate hit counter and emits a single `console.warn` line — `[admin-gate] degraded-deny reason=token-unavailable code=TOKEN_UNAVAILABLE hits=<n> window_ms=60000` — at most once per `DEGRADED_ADMIN_DENY_LOG_INTERVAL_MS` (60 s); further sentinel hits inside the window only advance the counter. The line deliberately carries **no** user id, token, token path, or raw error message: the deny is uniform by design (CWE-755), so the signal must not become the PII/CWE-209 side channel the response refuses to be. The deny response is untouched — 403 `{"error":"Forbidden"}` from the API guards, `null` → `notFound()` from `requireAdminPage()` — and a non-sentinel error is still rethrown (no blanket catch). `src/lib/admin-gate.test.ts` gains a second suite (6 tests): the signal fires exactly once on a sentinel; 50 sustained sentinel denies still produce exactly one line while `hits=` keeps climbing; the throttle re-emits one window later; the emitted line contains no `user-1`, no `/token/anonymous`, no raw message and no `tokenPath`; a non-sentinel error still propagates with **no** signal; ordinary non-admins and guests emit nothing.
@@ -103,7 +162,6 @@ Tests: new `src/app/api/progress/summary/route.select-error.test.ts` (6 cases, o
 - `npx tsc --noEmit` exit 0; `npx eslint src/app/api/progress/summary/` clean; full suite → see completion metadata.
 
 **Known Issues** - (1) `postgrest-js` exposes the PostgREST/SQLSTATE `code` on the error but not the HTTP status, so the log line carries `code` and includes `status` only when the error shape actually has one. (2) A 503 is not `ok`, so `useProgressSummary` resolves `null` and the client renders the no-progress state during an outage — intentional (never show a half-known payload), and the point of the card is that this state is now *observable*; a retry/backoff on the client is out of scope. (3) The three selects still run in one `Promise.all`, so one failing select fails the whole payload — deliberate fail-closed behaviour, not changed here.
-
 ### `/api/atlas/cards` logs its catalogue-read 503 (t_601ef414, CWE-778)
 
 **What** - `src/app/api/atlas/cards/route.ts` keeps its contract (503 + `{ gate: "guest-locked", series: [] }` + `private, no-store` so the island never upgrades to a half-resolved signed-in state) but no longer swallows the failure silently: the `catch` now binds the error, logs `[atlas/cards] catalogue read failed { status?, code }` (transport fields only — no rows, no caller identity) and still returns the same 503. The catalogue loaders in `src/lib/access.ts` already rethrow every PostgREST `{ error }`, so this route was never at risk of the false-200 defect the summary route had — the gap here was purely the missing log line.
@@ -236,7 +294,6 @@ Tests: `src/app/sitemap.degraded.test.ts` (the R2-5 forced-429 suite, real `site
 - Full suite `npx vitest run` -> **140 files / 1202 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint src/app/sitemap.ts src/app/sitemap.degraded.test.ts` clean.
 
 **Known Issues** - (1) Fail-closed means a course row created at RUNTIME (admin backend, no migration) is missing from the sitemap for the duration of an outage, exactly the documented trade-off in `src/lib/atlas-launch.ts`; add the slug to `PUBLICLY_LAUNCHED_SERIES` when a course launches. (2) Per-user gated surfaces are unaffected: the sitemap only ever advertised public URLs, and this changes which public URLs it advertises, not access control.
-
 ### /atlas/[series]/preview degrades instead of 500ing under a token-route outage — and stealth-series 404 heads stop naming the course (t_91a3e30b)
 
 **What** -
@@ -258,7 +315,6 @@ Tests: new `src/app/atlas/[series]/preview/page.degraded.test.tsx` (5 cases) —
 - **Call-site audit:** all six `/atlas` page call sites (`[series]`, `[series]/[slug]`, `[series]/preview`, `check/[n]`, `exam`, `certificate`) now classify via `isDbTokenUnavailable`. The five `/app/api/*` call sites were already fail-closed on any throw (empty `items[]`, 401, per-series `catch {}`) and are unchanged — see Known Issues.
 
 **Known Issues** - (1) The API call sites (`api/progress/lesson`, `api/progress/summary`, `api/continue-learning`, `api/audio/[slug]`, `api/audio/[slug]/timings`) use blanket `catch {}` fail-closed handling rather than the `DbTokenUnavailableError` classifier; behaviour is correct (no 500, no gated payload) but an unrelated bug in those routes is also swallowed. Pre-existing, not introduced here. (2) On the degraded preview the unlock CTA still targets `/atlas/<series>/<lesson-1>`, which re-runs the seam and lands on the paywall/degraded view — intended (never loops), but a user in an outage sees "Unlock full course" on a page that would paywall anyway. (3) `generateMetadata`'s gate reads the static launch mirror, so a course row created at runtime (admin backend, no migration) gets generic metadata until it is added to `PUBLICLY_LAUNCHED_SERIES` — fail-closed, same trade-off as (1) in the t_3b6d832e entry.
-
 ### Reconcile of the JWT-bridge fail-closed branch onto main's R2-5 seam — F-2 existence leak + mint budget + /settings noindex (t_3b6d832e)
 
 **What** - `fix/atlas-series-jwt-bridge-t_223f8b3d` (cut from `992f61c7`) is 56 commits behind `origin/main` (`d3d24bc3`), which landed R2-5 (PR #363) + SEC-R2-5-M1/L1/L2 as an independent, already-deployed fix for the same 500. A `--no-ff` merge produced 9 conflicted files / 22 semantically incoherent hunks (e.g. an import of `DbAuthUnavailableError`, a class main never had). **Main's R2-5 seam wins**; only the three residuals still missing on main are re-derived here.
@@ -277,7 +333,6 @@ Tests: new `src/lib/atlas-launch.test.ts` (parity with migration 008 + stealth s
 - **Bite check on `origin/main` `d3d24bc3`** (worktree, new test files only, no source fixes): **11 failed / 18 passed across 7 files** — the five F-2 404 cases, the four budget cases, the `/get-session` bound and the `/settings` noindex assertion all fail; the live-series degraded 200 cases pass (R2-5 behaviour is genuinely unchanged). On this head those same cases are green.
 
 **Known Issues** - (1) The launch mirror is STATIC: a `courses` row created at runtime (admin backend, no migration) 404s for the duration of a credential outage rather than showing its syllabus. This is the fail-closed direction of the trade-off — a transient 404 on a public outline, never a published paywalled lesson, and never a stealth series' existence. When a new course launches, add its `series_slug` to `PUBLICLY_LAUNCHED_SERIES` in the same PR that seeds its row; the parity test reads migration 008 and fails if the two drift. (2) `generateMetadata` on the atlas routes still resolves from the static catalogue before the seam runs, so a stealth series' `<title>` can be emitted alongside a 404 under an outage — pre-existing residual LOW (same one val-el rated LOW on the old branch), not introduced here. (3) The 8 s negative cache means a mint path that recovers can stay (correctly) degraded for up to 8 s; healthy mints clear it on the next success.
-
 ### OPS: production cutover to Neon + Managed Better Auth is complete (R2-5, t_3682070b)
 
 **What** - Production (`adroit.io`) now runs entirely on Neon (Data API + Managed Better Auth): the
@@ -319,7 +374,6 @@ hold no entitlements and no admin role.
 **Verified** - Contrast measured in Chromium (CDP) against the real stylesheet compiled from `src/app/globals.css` through `@tailwindcss/postcss`, with the component's exact class list, in both themes: after the fix the status text (`#fff`) sits on `rgb(19,45,84)` → **13.72:1** on the panel and **10.81:1** on its own 8%-white tint (`rgb(38,62,98)`); measured identically in light (`html` unclassed, `body` `#F7F8FA`) and dark (`html.dark`, `body` `#0a0e1a`) because the panel is a fixed navy token. Before the fix the same page measured **1.06:1** in light and 19.25:1 in dark — reproducing the review's numbers. Two regression assertions added to `src/components/Catalog/Paywall.test.tsx`: `status.closest(".paywall-panel")` must be non-null (plus the block still carries `text-white`, which is only AA *because* of the panel), and a non-degraded DOM-shape check (no `[role="status"]`, panel's first painted child still the members-only row). Bite check: `git stash push -- src/components/Catalog/Paywall.tsx` (restores the sibling placement) turns the new assertion red (`1 failed | 5 passed` in that file) with `expected null not to be null`; restored, green. `npx vitest run` — **114 files / 972 tests passed**; targeted `Paywall.test.tsx` + `atlas/[series]/[slug]/page.degraded.test.tsx` + `atlas/[series]/certificate/page.test.tsx` — 3 files / 13 tests; `npx tsc --noEmit` exit 0; `npx eslint` clean on both touched files.
 
 **Known Issues** - (1) The status block inherits the panel's always-dark surface, so it no longer visually "belongs" to the page background in light mode — that is the fix, not a regression, but it does mean the block reads as part of the paywall card rather than as page-level chrome. (2) The contrast proof is measured, not pixel-diffed in CI: nothing in the test suite measures colour, only structure, so a future restyle that changes the panel token (e.g. making `--paywall-panel` light) would need a fresh manual measurement. (3) No live screen-reader run was performed; the announcement guarantee remains the SSR `role="status"` + `aria-live="polite"` node covered by the existing assertions.
-
 ### A11Y-M1: the degraded anonymous-token paywall announces itself (t_8d1638a7)
 
 **What** - The R2-5 fail-closed degrade path now tells the reader what it is doing instead of silently rendering the ordinary "this course is locked" paywall:
@@ -336,7 +390,6 @@ Copy is deliberately vague: no HTTP status, no `/token/anonymous`, no error clas
 **Merge reconciliation (origin/main `d3d24bc3`)** - Main independently added `src/app/atlas/[series]/[slug]/page.degraded.test.tsx` (`0231851e`, t_ffe32443: forced-429 paywall-at-200 + no quiz payload) after this branch's base, so the two branches collided add/add on that path. The two suites need different module graphs (main stubs `fetch` and runs the real route/access seam; this change mocks the access seam and renders the real `Paywall`), so main's file is kept verbatim and this change's suite moved to `page.degraded-status.test.tsx`, each with a docblock cross-reference. No test intent was dropped. Re-run after the merge: `npx vitest run` — **136 files / 1189 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint` clean on both suites; `npm run build` exit 0; `git merge-tree --write-tree origin/main HEAD` exit 0.
 
 **Known Issues** - (1) The status region only describes the state; it does not retry or auto-refresh — "try reloading" is literal. (2) The paywall's own lock copy still reads "This course is locked for you right now" in the degraded state; the status region above it is what reframes that as provisional. Rewording the lock copy itself would change a surface governed by the earlier a11y contract, so it is left alone deliberately. (3) No live-screen-reader run was performed in this environment; the announcement guarantee rests on `role="status"` + `aria-live="polite"` on a node present in the initial server render, plus the SSR assertions above.
-
 ### SEC-R2-5-M1/L1/L2: the anonymous Data API token's scope is proven before it is cached (t_52f55ea7)
 
 **What** - Hardening follow-up to R2-5 (PR #363), from val-el's security review of that PR's head (`180297ff`):
@@ -384,7 +437,6 @@ New suites: `src/app/api/progress/summary/route.degraded.test.ts` (200 `emptySum
 **Verified** - `npx vitest run` → **124 files / 1006 tests passed** (113/960 before this card; +11 files / +46 tests). `npx tsc --noEmit` exit 0. `npx eslint` exit 0 on all eleven new files plus the fixture. Bite check on the lesson-page suite: replacing the classified `isDbTokenUnavailable` branch in `page.tsx` with a bare rethrow turns all three of its tests red, confirming the suite pins the degradation rather than the happy path; the mutation was reverted and the file re-verified green.
 
 **Known Issues** - (1) **Found, reported, not fixed:** for a caller whose session resolves, `requireAdminApi()` (`src/lib/admin.ts`) has no handler for the classified `DbTokenUnavailableError` — the role read throws out of the gate and every admin API route (which calls the gate before its `try`) answers **500** instead of 403 while the token route is locked out. The guest path (verified live by QA, and pinned here) is still 403. This fixture cannot mint a signed session cookie, so the signed-in case is documented here rather than tested — the fix is a two-line degrade in `requireAdminApi` and should be its own card. (2) `progress/quiz/tiers` and `continue-learning` still wrap their bodies in a blanket `catch` (pre-existing): a genuine Data API/RLS outage is indistinguishable from a token outage there, which is why the tests pin the response shape rather than the classification. (3) The admin suite pins the uniform 403 for cookieless callers only; a future admin module must be added to `ADMIN_ROUTES` to inherit coverage.
-
 ### R2-5: guest reads no longer 500 when the anonymous Data API token is rate-limited (t_34b0e6c3)
 
 **What** - The `anonymous`-role Data API JWT is now cached across requests for its own lifetime, and every public surface degrades to the guest view when a token cannot be resolved:
@@ -421,7 +473,6 @@ Tests: `src/lib/hooks/useProgressSummary.identity.test.tsx` gains a `LoadingCard
 **Verified** - RED/GREEN bites: with only the hook change reverted, the QA-L1 test times out waiting for `done:none` (state stays `loading`); restored → green. Full suite `npx vitest run` **124 files / 1098 tests passed**. `npx tsc --noEmit` exit 0; `npx eslint` clean on both touched files. No JSX or request-budget change (`SeriesProgress` consumes the same `isLoading` flag).
 
 **Known Issues** - The discard branch clears loading even when the replacement read is still in flight, so a zero-progress card can briefly render empty bars instead of the skeleton during an identity transition. Cosmetic only; no extra request is issued.
-
 ### Fix (LOW, SEC follow-up): event-refresh epoch guard + no-store on the other per-user routes (t_15a53bb8)
 
 **What** - Three files changed, two test files extended, one new test file:
@@ -436,7 +487,6 @@ Tests: `src/app/api/auth/session/route.test.ts` is new (5 contract tests + 3 hea
 **Verified** - RED/GREEN bites: with only the hook change reverted, the new SEC-L1 test fails (`expected "series-2-1", received ""` — exactly the blanking repro); restored → green. Full suite `npx vitest run` **124 files / 1096 tests passed** (123 files / 1083 tests before this card, +13). `npx tsc --noEmit` exit 0; `npx eslint .` 0 errors (6 pre-existing warnings in `src/lib/auth/server.test.ts`). No JSX/route-config change, so the prior a11y/perf verdicts hold.
 
 **Known Issues** - None new. The `focus`-twice-mid-flight repro Val-el described still needs a real identity transition to blank the bars (two plain focus events without an epoch bump collapse into one shared read), which is what the regression test exercises. Neither change alters the request budget.
-
 ### Fix: focus re-read + QA-L1 guard + no-store headers (SEC-R2-F1/F2 delta, t_2dd0e9f9)
 
 **What** - The base branch already carries PERF-P1 (`101da747`) and PERF-CACHE-M1 (`492f9c1e`), including `auth-events.ts` and the central `invalidateProgressSummary()` calls. This commit adds only the remaining PR #372 delta on top:
@@ -449,7 +499,6 @@ Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertion
 **Why** - PR #372 was built in parallel to the base rather than on top of `101da747`/`492f9c1e`, so merging its head conflicted on duplicate cache logic. Reconciling as a clean delta avoids hand-merging duplicate auth-events/invalidation lines while preserving the genuinely new cross-tab `focus` coverage and the cache headers. Val-el's re-verify on `de2f8cf9` closed the F1 MEDIUM; this commit brings those guarantees to the current base tip.
 
 **Verified** - Full suite `npx vitest run` **123 files / 1083 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint` clean on the five touched files; `npm run build` exit 0 with `/atlas` still prerendered static (`initialRevalidateSeconds: 3600`). Request budget unchanged: the N-card fan-out collapses to ONE summary request, signed-in `/atlas` stays ≤3 and guests exactly 1. No JSX or route-config changes, so the prior a11y/perf PASS verdicts only need a delta check if that changes.
-
 ### Fix: the session cache dies on identity transitions too (PERF-CACHE-M1b, t_c0eaa6f2)
 
 **What** - Two files. The summary cache was already invalidated centrally by t_5f03a8f7; its twin — the module-level `/api/auth/session` read — still had no production invalidator.
@@ -461,7 +510,6 @@ Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertion
 **Verified** - RED/GREEN bites: with only `useAuth.ts` stashed, `useAuth.identity.test.tsx` → **2 failed / 0 passed** (`a@example.com` where B was expected); restored → green. Full suite `npx vitest run` **123 files / 1078 tests passed** (1076 + 2). `npx tsc --noEmit` exit 0; `npx eslint` clean on both touched files. `LearnHub.requests.test.tsx` green — signed-in `/atlas` still exactly 3 requests, guest exactly 1; `Header.identity.test.tsx` and the summary identity suite unchanged and passing.
 
 **Known Issues** - None new. A tab that never fires `AUTH_CHANGED_EVENT` and never regains focus still relies on the next seam or a reload — the same residual documented for the summary cache. No signed-in browser run is possible in this worktree (no `.env`/DB, `/api/auth/session` has no session), so identity flows are covered by the jsdom tests.
-
 ### Fix: progress-summary invalidation is central and cycle-free (PERF-CACHE-M1, t_5f03a8f7)
 
 **What** - Follow-up to PERF-P1 below. Three code changes, one new module:
@@ -488,7 +536,6 @@ Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertion
 **Verified** - RED/GREEN both bite: with the four source files stashed, `useProgressSummary.identity.test.tsx` → **5 failed / 1 passed** (mounted-hook refresh, in-flight discard, all three source locks) and `Header.identity.test.tsx` → **failed** (`expected 1 to be 2` reads); restored → both green. Full suite `npx vitest run` **122 files / 1073 tests passed** (was 120/1066); `LearnHub.requests.test.tsx` still green — signed-in `/atlas` stays at exactly 3 requests (cards + session + summary) and the guest path stays at exactly 1, so no regression of the shared-cache win. `npx tsc --noEmit` exit 0; `npx eslint` clean on all six touched files.
 
 **Known Issues** - (1) A cross-tab sign-out (another tab's sign-out surfaces here as a `focus` event, not an auth-changed event) still leaves the summary cached until the next identity seam or reload; `useAuth` re-reads the session there, but no seam fires, so this fix covers the same-tab account-switch flow the card reported. (2) Sign-out with cards still mounted now costs one extra `GET /api/progress/summary` (the guest payload) — an identity transition, not a page load, so it does not touch the request budget. (3) No signed-in browser run is possible in this worktree (no `.env`/DB: `/api/progress/summary` 500s here), so the browser smoke covers the guest `/atlas` only; the identity flows are covered by the jsdom tests above.
-
 ### Perf: /atlas signed-in upgrade stops fanning out to 19 requests (PERF-MEDIUM, t_22e18719)
 
 **What** - Five files, no architecture change — the client islands now share ONE read each instead of one per card:
@@ -503,7 +550,6 @@ Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertion
 **Verified** - `npx vitest run src/components/Learn/LearnHub.requests.test.tsx` — **RED before the fix** (both cases fail on the unpatched tree: >3 requests, and `quiz/run` still present), **GREEN after**: 9-card signed-in load = exactly `["/api/atlas/cards", "/api/auth/session", "/api/progress/summary"]`, i.e. **3 requests, 1 of each, 0 quiz/run**; guest load = exactly `["/api/atlas/cards"]` (unchanged 1). `npx vitest run` full suite **120 files / 1066 tests passed**; `LearnHub.gate.test.tsx` still green (3/3); `src/app/api/progress/summary` 7/7. `npx tsc --noEmit` exit 0; `npx eslint` clean on all six touched files. Live check: `next dev` on this worktree, `/atlas` → HTTP 200, `<h1>The Atlas</h1>`, `/api/auth/session` collapsed to **1** request across two mounts while the untouched `/api/continue-learning` island still doubled under dev StrictMode (evidence the session/summary caches are what dedupe, not StrictMode).
 
 **Known Issues** - (1) A full-page probe of the real `/atlas` now issues **4** requests, not 3: the pre-existing `ContinueLearning` island adds `GET /api/continue-learning`, which fires for guests too and is not part of this fan-out (sato's probe excluded it). The 19 → 3 figure is on the `{cards, summary, quiz/run}` set the finding measured. (2) `GET /api/progress/quiz/run` is kept as-is for its other consumers; `QuizStats` just no longer calls it — one card's quiz stats can now be up to one summary-read stale within a session (identical to the previous mount-time fetch semantics). (3) No real signed-in run was possible in this worktree (no `.env`/DB): `/api/progress/summary` answers 500 and `/atlas/[series]` 500s here, identical on the base commit, so the browser check covers the guest hub only. (4) `invalidateProgressSummary()` shipped exported but unwired; it is now called on every identity transition (Header sign-out, login success, password reset) — see the PERF-P1 follow-up above.
-
 ### Fix: /atlas build guard is production-only and read-failures warn (SEO-H1, t_b5e0b4bf)
 
 **What** - `src/app/atlas/page.tsx` (+ `page.test.tsx`), narrowing the SEO-M2 empty-catalogue guard:
@@ -516,7 +562,6 @@ Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertion
 **Verified** - `npx vitest run src/app/atlas` **4 files / 24 tests passed** (guard suite now covers: read-failure-at-build warns + renders, 0-visible-courses still throws, Preview read-failure renders, Preview 0-courses renders, Vercel production 0-courses throws, `ATLAS_BUILD_GUARD=0` opt-out, env-less build renders, resolved catalogue renders with ItemList); `npx vitest run src/app/api/atlas/cards/route.test.ts src/components/Learn/LearnHub.gate.test.tsx src/components/Learn/LearnHub.test.tsx src/components/Learn/PathCard.test.tsx src/lib/learn-card.test.ts src/app/atlas/page.test.tsx` **6 files / 31 tests passed**; `npx tsc --noEmit` → 0 errors in `src/app/atlas/**`; `npx eslint src/app/atlas/page.tsx src/app/atlas/page.test.tsx` exit 0. A11Y-M1 behaviour is unchanged (tests re-run green).
 
 **Known Issues** - (1) The actual Vercel build log for `dpl_GmHGYFcPD5m1yaAUAMeW75NzouVD` / `dpl_5KFV37KihRLHhe3L88qHPRSdit3E` is still unread from this host; the fix is defensive (both preview failure modes are now non-fatal) and the next Preview deployment is the proof. (2) In Preview, a read failure now publishes an empty-hub preview rather than failing — expected, but QA should not read that as data loss. (3) Real production read failures no longer block a deploy; a truly empty catalogue still does.
-
 ### Merge: R2-1 (PR #358) rebased onto main — three conflict resolutions + migration renumber (t_eecb4853)
 
 **What** - `origin/main` (`9490cf24`) merged into `neon/auth-routes-t_d9a07839` (was `2c3c6226`; R2-2 #361 and the R2-4/R1-6 follow-ups had evolved the same files). Main advanced twice while this card was in flight (`b068c3b9` PR #366 37-policy RLS reconcile, `f5862b14` PR #365 reset-password guard); both were merged in as CHANGELOG-only unions, after which `001_rls.sql` and the RLS harness are byte-identical to main again. Four conflicts resolved, no `--force` push: (1) `CHANGELOG.md` — strict union of both sides' entries (main's nine newer bodies kept verbatim, this branch's eight R2-1 bodies kept verbatim; the two headings both sides touched — `Neon migration R2-1` and `Neon R1-6` — kept this branch's complete bodies, which also restores the paragraphs #361's resolution dropped and that #367 was filed to fix); (2) `src/app/atlas/page.tsx` — kept this branch's contract (`export const dynamic = "force-static"`, `revalidate = 3600`, `gate = "guest-locked"`, `userId = null`, no server identity read) and dropped main's `getAccessUserId` / `getSupabaseServerClient` imports, which exist only in main's cookie-reading variant; (3) `src/lib/auth/users.ts` — kept main's SEC-R2-2-M2 `server-only` guard block **and** this branch's perf-P3 `id = $1::uuid` / `id = ANY($1::uuid[])` binds (main's version still had `id::text`); identity is never keyed by email; (4) `src/components/CookieConsent.test.tsx` — took main's `role="region"` a11y version (t_b717ec09), matching main's `CookieConsent.tsx`, which the merge already adopted. The branch's identity migration `003_identity_continuity.sql` collided with main's `003_admin_read_policies.sql`, so it is now **`supabase/migrations/neon/005_identity_continuity.sql`** (001–004 belong to main) with every reference updated in place (`scripts/import-legacy-identities.mjs`, `docs/decisions/2026-10-23-require-email-verification.md`, two test docblocks). Two tests needed merge-adaptation, not behaviour change: `src/lib/access.identity.test.ts` mocked the retired `@/lib/supabase/server` path (now `@/lib/db/server`, main's data-client swap) and `src/lib/db/server-only-guard.test.ts` now distinguishes the guarded set (adds `src/lib/auth/server.ts`, which holds `NEON_AUTH_COOKIE_SECRET`) from the narrower DATABASE_URL-reader set.
@@ -526,7 +571,6 @@ Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertion
 **Verified** - `npx tsc --noEmit` exit 0; `npx eslint` on all 38 changed `.ts`/`.tsx` files → 0 errors (6 pre-existing warnings in `src/lib/auth/server.test.ts`); `npx vitest run` **119 files / 1056 tests passed**; static-route and proxy acceptance re-run on the merged head (see the card for the build/probe transcript).
 
 **Known Issues** - (1) R2-1's hardening (auth proxy allowlist, `/atlas` prerender) is still not in production until this PR merges — production runs main. (2) `supabase/migrations/neon/` now legitimately holds both `003_admin_read_policies.sql` (main) and `005_identity_continuity.sql` (this branch); any documentation that still says "003 identity" is stale.
-
 ### SEC-LOW: DB DSN password off psql argv in the sibling DB harnesses (t_f94d8637)
 
 **What** - `scripts/verify-session-bridge.py`, `scripts/verify-user-provisioning.py` and `scripts/rls-isolation-check.py` (manual harnesses that run against the live Neon/production database; not shipped, not wired into CI) now use the same CWE-214 technique already reviewed in `scripts/data-api-isolation-check.py`:
@@ -540,7 +584,6 @@ New `scripts/test_psql_dsn_argv.py` (11 offline unittest cases, no network/DB) p
 **Verified** - `python3 -m py_compile` clean on all four files; `python3 -m unittest scripts/test_psql_dsn_argv.py` **11/11 passed**; `grep -n '\["psql", *[a-z_]*url' scripts/` returns nothing. Live read-only sanity against the production Neon branch (`select 1;`, no writes) through the refactored `sql()` helper: **1 returned for both the URL DSN form and an equivalent key=value DSN**, and `split_dsn`'s target contains no password in either case.
 
 **Known Issues** - (1) `--password` argv flags on `verify-session-bridge.py` / `verify-user-provisioning.py` are deliberately left as-is (separate LOW cleanup, per the card's notes); the QA password is still visible in `ps` if passed that way instead of via `$QA_SESSION_PASSWORD` / `$QA_PROVISION_PASSWORD`. (2) The `key=value` branch inherits the reference implementation's quoting limits (an inner `''` escape and a percent-encoded username are not re-encoded); both forms tested here behave. (3) No live run of the full harnesses was done — they mint and delete production auth identities; only the read-only `select 1` path was exercised end-to-end.
-
 ### Reset-password: never render a form that can only fail (t_233b6f61)
 
 **What** - `src/app/reset-password/page.tsx` (+ `ResetPasswordForm.tsx`, `page.test.tsx`):
@@ -553,7 +596,6 @@ New `scripts/test_psql_dsn_argv.py` (11 offline unittest cases, no network/DB) p
 **Verified** - Unit: `npx vitest run src/app/reset-password src/app/api/auth/reset-password src/app/auth/callback` → **4 files / 25 tests passed** (page suite rewritten: token → form, no token → "needs your reset link" alert, `error=expired`/`INVALID_TOKEN` → "This link has expired", error beats token, form never rendered in the alert states). `npx tsc --noEmit` exit 0, `npx eslint src/app/reset-password` exit 0. Live gates on `next dev` :3100: `/reset-password` → alert "This page needs your reset link", 0 password inputs; `?token=bogus-token-123` → form; `?error=INVALID_TOKEN` → "This link has expired", 0 inputs. Live end-to-end on production `https://adroit.io` (identity `chris.sympson+qa-r24-zod@`): `POST /api/auth/reset-password/request` **200** → Resend `delivered` → emailed link `GET …/neondb/auth/reset-password/<token>?callbackURL=…` **302 → https://adroit.io/reset-password?token=<token>`, page **200** with the form → submit `POST /api/auth/reset-password/update {password,token}` **200** in-browser, "Password updated" state → `POST /api/auth/login` new password **200**, old password **401** → replaying the consumed token **400** ("invalid or has expired"), no token at all **401** (unchanged by design), bogus token **400**.
 
 **Known Issues** - (1) The token is still not pre-validated at render time: a directly-typed or bookmarked `?token=` renders the form and only fails on submit with the explicit "invalid or has expired" alert. Links clicked from the email always carry upstream's `?error=INVALID_TOKEN` when dead, so the gap is limited to hand-edited URLs; a render-time probe of the auth host was rejected as an SSR latency/availability cost on a public page. (2) A signed-in user who wants to change their password has no route to do so here any more — they must request a reset link; a proper authenticated change-password flow (Better Auth `change-password` with `currentPassword`) is out of this card's scope. (3) `checkOrigin` rejects `http://localhost:*`, so a full reset cannot be completed against a local dev server without an `Origin`-less probe; the live E2E above was run against production.
-
 ### Reconcile the 37-policy inventory: 34 Supabase-origin + 3 Neon-only admin SELECT (t_de7db90d)
 
 **What** - Made the RLS inventory self-consistent at **37 policies = 34 Supabase-origin + 3 Neon-only admin SELECT**, so `supabase/migrations/neon/001_rls.sql` applies again and the harness passes on the live Neon branch.
@@ -567,7 +609,6 @@ New `scripts/test_psql_dsn_argv.py` (11 offline unittest cases, no network/DB) p
 `python3 scripts/rls-isolation-check.py` → **PASS (119 assertions), exit 0**, with `policy.origin_baseline_size got=34`, `policy.total_count got=37`, `policy.missing_from_neon got=0`, `policy.unexpected_on_neon got=0`, and all three F-1 assertions now executing: `grants.user_table.default_deny got=on`, `grants.user_table.policy_count got=0`, `grants.user_table.stray_grant_rows got=0`.
 AC3 re-read live: `public."user"` `relrowsecurity=true`, **0** policies, `has_table_privilege('authenticated', …,'SELECT')=false`, `anonymous=false`, owner `neondb_owner` reads all 17 rows. Admin read path proved behaviourally: `SET LOCAL ROLE authenticated` + `sub=<an admin>` → `user_profiles` **9**, `lesson_completion` **14**, `read_progress` **7** rows (previously 0 on those three tables), rolled back. No application code changed.
 Re-verified against the production project `dawn-darkness-89797362` / branch `br-small-tree-b7tw8byt` (t_ac9b4a65): `python3 scripts/rls-isolation-check.py` → exit 0, **PASS (119 assertions)**, 37 policies in `pg_policies`; every one of the 37 matches a policy name in `supabase/migrations/**/*.sql` (3 admin SELECTs in `neon/003_admin_read_policies.sql`, created idempotently by `001_rls.sql` §4b).
-
 ### Decision record: `requireEmailVerification` at the Neon Auth cutover (t_34b5889c)
 
 **What** - Adds `docs/decisions/2026-10-23-require-email-verification.md`, the accepted decision to enable **`requireEmailVerification = true`** together with **`sendVerificationEmailOnSignIn = true`** on Neon project `dawn-darkness-89797362` / branch `production`, behind four gates (code actually on Neon Auth in production, proof that the emailed verification link redeems server-side, a clean identity census, then the config flip and a canary for QA). The doc records why the original "19 stranded legacy identities" premise was stale (all real identities are already `emailVerified = true`; the 19 were disposable `kelex1812+qa-*` fixtures revoked under t_9aba2d2e), why the toggle matters for authorization (`emailVerified` was a dead field while `005_identity_continuity.sql` keys authorization on identity continuity), and what a failed Gate 2 would have required (a `/field-notes` token consumer calling `getAuthServer().verifyEmail({ query: { token } })` or a dedicated `/auth/verify` route).
@@ -575,7 +616,6 @@ Re-verified against the production project `dawn-darkness-89797362` / branch `br
 **Why** - The decision was taken on review card t_a4565e53 but lived only in that card's workspace; an auth-policy toggle has to be explainable from the repo, not from a Kanban thread.
 
 **Verified** - Doc-only change, no runtime effect. Gate outcomes are recorded in the card t_34b5889c thread (`neon_auth.project_config` before/after, verification-link host/redirect, identity census).
-
 ### A11Y LOW fixes: AdminShell SSR aria-hidden + consent banner semantics/targets (t_b717ec09)
 
 **What** - Three LOW a11y findings from lara's review of PR #361 (`c43fb6af`), all pre-existing:
@@ -588,7 +628,6 @@ Re-verified against the production project `dawn-darkness-89797362` / branch `br
 **Verified** - `npx vitest run src/components/Admin/AdminShell.test.tsx src/components/CookieConsent.test.tsx` **2 files / 20 tests passed** (7 new/updated assertions: an SSR `renderToString` probe that the aside ships `md:visible` with **no** `aria-hidden`, visibility-class assertions replacing the old aria-hidden ones, region/aria-live/non-modal checks and the 44 px class checks). `npx tsc --noEmit` clean; `npx eslint` clean on all four files. Live `next dev` on :3411 with a console hook injected via `Page.addScriptToEvaluateOnNewDocument` before load: `/atlas`, `/atlas/salesforce-architect`, `/field-notes` → **zero React #418/#441**, only the pre-existing dev-mode CSP `eval()` notice.
 
 **Known Issues** - (1) `aria-live="polite"` on a region that is inserted after hydration is not announced by every screen reader (live regions are most reliable when the region pre-exists); the reviewer's preferred `role="region"` option is implemented, and moving focus was rejected as it would steal focus from page interaction. (2) The desktop sidebar is only verified by unit/SSR assertions here — /admin is auth-guarded, so no live browser pass on the md+ admin surface. (3) L4 from the same review (next/image aspect-ratio warning on the header logo) is out of scope for this card.
-
 ### SEC-R2-4: hygiene fixes on the data-API isolation harness (t_17956eb8)
 
 **What** - `scripts/data-api-isolation-check.py` (the manual harness that runs against the production Neon auth/Data API/DB; not shipped, not wired into CI):
@@ -603,7 +642,6 @@ New `scripts/test_data_api_isolation_check.py` (13 offline unittest cases, no ne
 **Verified** - `python3 -m py_compile` OK; `python3 -m unittest scripts/test_data_api_isolation_check.py` **13/13 passed**. Live run against the production Neon branch (endpoints + unpooled DSN from `.env.local`, QA password generated in-process so it never touches a command line): **66/66 checks passed, exit 0**, including `== revoke QA identities → QA identities removed`. Post-run DB read-back: `public."user"` QA rows 0, `neon_auth."user"` QA rows 0, orphaned `neon_auth.account`/`session` rows 0. A `ps -axo command` sampler running throughout the run (~100 samples) found **0** command lines containing the DB password or a `scheme://user:password@` DSN, and the harness itself never appears with a password argument. Evidence JSON: `checks_total 66 / checks_passed 66 / users_revoked true`, 0 JWT-shaped strings.
 
 **Known Issues** - (1) The harness still opens a privileged connection to the production database with no `live_db_guard`-style flag; the R2-4 card did not ask for it and the guard (t_9aba2d2e) is wired only into `verify-user-provisioning.py` / `verify-session-bridge.py` — worth a follow-up if the harness is ever run by someone other than the operator who wrote it. (2) `--keep-users` still leaves a live shared-password account until revoked by hand; the docstring now says so next to the SQL. (3) The report directory (`/reports/`) remains gitignored, so run evidence lives on the kanban card, not in git.
-
 ### R2-4 fix: hydration-clean `/atlas` (console gate) + isolation harness on the branch (t_103b40ca)
 
 **What** - Every client-only read that fed the hydration render is now deferred to a server-snapshot-aware store instead of a `useState` initializer or an effect:
@@ -625,7 +663,6 @@ Theme toggle clicks cycle dark → light → dark with the label tracking the cl
 Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this card).
 
 **Known Issues** - (1) Two throwaway identities were created for the signed-in check (`kelex1812+steel-hydration@gmail.com`, `kelex1812+steel-hydr2@gmail.com`); they hold no rows and no role, and they are not visible in the `neondb` branch this worker can reach with `DATABASE_URL_UNPOOLED` (the Managed Better Auth store answered for them, `neon_auth."user"` has 11 rows without them), so they could not be deleted here — an operator with auth-admin access should remove them. (2) The dev server still logs React's dev-only `eval()`/CSP notice and, on pages with JSON-LD, "Encountered a script tag while rendering React component"; both are development-mode messages that do not appear in a production build (the acceptance gate). (3) `/atlas/[series]` intermittently 500s for guests when `$NEON_AUTH_BASE_URL/token/anonymous` throttles — the pre-existing anonymous-token issue noted on t_51f9ebfb, not addressed here.
-
 ### SEC H1: the Neon session JWT now reaches the data client (t_f34aebeb)
 
 **What** - `src/lib/db/server.ts` (the R2-2 Data API client) resolves the caller's Managed Better Auth JWT from the httpOnly session cookie (`GET $NEON_AUTH_BASE_URL/token` with the request's cookies) and sends it as `Authorization: Bearer <jwt>` on every `user_roles` / `user_entitlements` / `subscriptions` / `user_profiles` / catalog read, falling back to the `anonymous` role's token (`/token/anonymous`) only when there is no session. That transport already existed in this branch's R2-2 swap; what this card adds is the proof and the regression rail: new `src/lib/db/server.test.ts` (7 tests) pins the contract — no session cookie ⇒ the anonymous JWT, session cookie ⇒ the session JWT with the cookie forwarded server-side, refused/empty token reply ⇒ anonymous (never a bare request), missing `NEON_DATA_API_URL` / `NEON_AUTH_BASE_URL` ⇒ throw (fail closed) — and new `scripts/verify-session-bridge.py` measures the same claim live over HTTP, including the app's own request path.
@@ -635,7 +672,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `scripts/verify-session-bridge.py --app-url http://localhost:3210` (live Neon production branch, real RLS, `next dev` on the R2-2 tree) → **PASS 18/18**. Data plane: the anonymous JWT reads `user_roles` / `user_entitlements` / `user_profiles` as **0 rows**; a request with no Authorization header is refused by the gateway (`400 missing authentication credentials`); a signed-in throwaway identity reads **its own** `user_roles` row (`[{"role":"admin"}]`) once the row exists and 0 rows before it, and anonymous still sees 0 for the same row. App plane (the real request path): `POST /api/auth/login` 200 → `GET /api/auth/session` resolves the identity with `isAdmin: true` → `GET /api/admin/users` **200** listing the imported admins (`chris.sympson@gmail.com`, `juliannemsward@gmail.com`, `qa.admin@adroit.io`) → after the role row is removed the same cookie gets **403**, and no cookie gets **403**. The specific identity in the acceptance criteria was re-proved at the policy level, read-only: `SET ROLE authenticated` + `sub=eeafd509-…` (chris.sympson) → `user_roles` `role=admin`; `SET ROLE anonymous` with no claims → 0 rows. The throwaway identity and its role row were deleted afterwards and their absence re-read (`0|0|0`; no `%qa-bridge%` identity remains). Local: `npx tsc --noEmit` exit 0, `npx eslint src` exit 0, `npx vitest run` **105 files / 906 tests passed** (899 before, 7 new).
 
 **Known Issues** - (1) The live app-plane check signs in a throwaway identity granted `admin` for the run rather than `chris.sympson@gmail.com`: the worker has no password for an imported customer account (and should not), and the mechanism is identity-agnostic — the same `loadRole()` → `isAdmin()` → route gate against the same live RLS. The imported admins' own rows are asserted as data (they appear in the People list). (2) Evidence JSON (`reports/session-bridge-evidence.json`) is gitignored; it is attached to kanban task t_f34aebeb instead of committed. (3) This fix ships on PR #361 (the R2-2 data-client branch), not PR #358: #361 replaces `src/lib/supabase/*` with the Data API client, so #358 must be rebased on #361 (and must not reintroduce the Supabase read path) before either merges.
-
 ### SEC-R2-2-M2/M3: restore the `server-only` guards + drop the cached JWT on identity change (t_b5a038e0)
 
 **What** - (M2) `src/lib/db/service.ts` and `src/lib/auth/users.ts` now start with `import "server-only";` again, each under a `review F-7 / SEC-R2-2-M2` comment explaining why (they read `DATABASE_URL`, the most privileged credential in the app, so a Client Component import must fail the build instead of shipping the direct-SQL path to the browser). The guard had been present on the Supabase-era `src/lib/supabase/{service,auth-admin}.ts` and was silently lost in the R2-2 driver swap. New `src/lib/db/server-only-guard.test.ts` pins the invariant three ways: each privileged module carries the import, no unlisted non-test module carries it, and no module outside those two reads `process.env.DATABASE_URL(_UNPOOLED)`. `server-only` was declared in `package.json`/`package-lock.json` but missing from this worktree's `node_modules` (the vitest alias already points at `node_modules/server-only/empty.js`), so it was restored from a sibling install — a fresh `npm ci` produces it from the lockfile. (M3) `src/lib/db/client.ts` now invalidates the module-level token cache on all three identity transitions instead of only the two the QA fix covered: (a) sign-in/sign-out handlers (already in place from t_51f9ebfb, kept), (b) every auth-changed broadcast — `notifyAuthChanged()` drops the cache before dispatching, and the `useAuth` listener drops it before re-reading on `adroit-blog:auth-changed` **and** on `window` `focus`, which is how a sign-out in another tab arrives, and (c) any 401 from the Data API — a `dataApiFetch` wrapper passed as `dataApi.options.global.fetch` clears the cache so the next read re-reads `/api/db/token` instead of replaying a revoked/rotated JWT for the rest of the 60 s TTL. The wrapper deliberately does NOT retry the failed request (a blind replay from a transport wrapper could double-submit a write once the cache refills). `resetDbTokenCache()` is exported as the review's name for the same reset (`invalidateDbToken` stays, both are already in call sites). The cache comment now documents that identity changes are signalled explicitly and that the TTL bounds only ordinary staleness.
@@ -645,7 +681,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` → exit 0. `npm run lint` (eslint) → exit 0. `npm test` → **104 files / 899 tests passed** (891 before; 8 new: 4 token-cache/401/alias/broadcast tests in `src/lib/db/client.test.ts`, 4 guard tests in `src/lib/db/server-only-guard.test.ts`). `npm run build` → exit 0 (full route table, static + dynamic routes unchanged). Both new test groups were proven to bite: deleting `import "server-only";` from `src/lib/auth/users.ts` fails 2 of the 4 guard tests (`expected false to be true`, and the guarded set becomes `['src/lib/db/service.ts']`), then restored. The guard mechanism itself was probed directly: a throwaway module importing `server-only` exits 1 with `This module cannot be imported from a Client Component module`, and exits 0 under `node --conditions=react-server` (the condition Next's server graph uses) — probe deleted afterwards.
 
 **Known Issues** - (1) The 401 path is verified at the transport-wrapper boundary, not against a real revoked session: no credentials for an existing account were available to this worker, so `dataApiFetch` is driven directly with a 401 response and the assertion is that the next `/api/db/token` read happens (fetch count 1 → 2). (2) The wrapper invalidates but does not retry, so the request that got the 401 still returns its error to the caller — hooks that swallow read errors (`useReadProgress`, `useLessonProgress`) will show "unread" for that one render and self-correct on the next read after the cache refills; a retry would fix the flash but risks double-submitting writes. (3) `src/components/Header.tsx` and `src/app/login/page.tsx` (identity transitions) plus `next.config.ts` / `src/config/next.config.test.ts` (CSP, card t_51f9ebfb) also carry uncommitted changes in this shared worktree; `Header.tsx` is committed here because this card names it, the login page and the CSP files are left to their owning lanes.
-
 ### R2-2 QA fix: CSP `connect-src` allows the Neon Data API origin (t_51f9ebfb)
 
 **What** - `next.config.ts` now emits the Neon Data API origin in the `Content-Security-Policy: connect-src` directive. A new `neonDataApiOrigins()` helper reads the origin from `NEXT_PUBLIC_NEON_DATA_API_URL` (the same value the browser client uses, so a preview branch or local proxy is allowed without a code change) and always includes the literal production endpoint `https://ep-noisy-glade-b7jpeudp.apirest.c-13.us-east-1.aws.neon.tech` as a fallback, so a build/start that loses the env var cannot silently emit a CSP that blocks reads again; the origin is the only thing emitted (a path would never match a fetch). `https://*.supabase.co` is dropped from `connect-src` — Supabase was removed in R2-2 and no browser code talks to it any more. `src/config/next.config.test.ts` gained three regression assertions (production origin present; origin parsed out of `NEXT_PUBLIC_NEON_DATA_API_URL` when set; the retired Supabase wildcard absent). Second, `src/lib/db/client.ts` exports `invalidateDbToken()`, which clears the 60 s token cache, and both identity transitions call it: `/login` after a successful sign-in and `Header.handleSignOut` after the logout POST — a comment at the cache documents that the TTL bounds ordinary staleness, not identity changes. New `src/lib/db/client.test.ts` (5 tests) covers the token provider: single fetch per TTL, concurrent-request collapse, guest→user and user→guest invalidation, and non-OK `/api/db/token` degrading to guest.
@@ -655,7 +690,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` → exit 0. `npx eslint` on all six changed files → exit 0. `npx vitest run` → **103 files / 891 tests passed** (883 before, 8 new). Live dev server (`npx next dev -p 3312`, production Neon branch, `~/.hermes/scripts/build-headroom-guard.sh` green first): (1) `curl -D - /atlas` → the served CSP now reads `connect-src 'self' https://ep-noisy-glade-b7jpeudp.apirest.c-13.us-east-1.aws.neon.tech https://www.google-analytics.com …` with no `supabase.co`; (2) QA's exact repro re-run in page context on `http://localhost:3312/atlas` — `fetch('<data api>/courses?select=slug&limit=1')` without credentials now returns **HTTP 400** "missing authentication credentials" instead of throwing "Failed to fetch", i.e. the request reaches the Data API instead of dying at the CSP gate; (3) the same page-context fetch **with** a real anonymous Bearer JWT (minted from `$NEON_AUTH_BASE_URL/token/anonymous`) returns **HTTP 200 with 12 live course rows**, so cross-origin browser reads of the Data API work end to end under the new header; (4) a `securitypolicyviolation` listener installed before a full page reload of `/atlas` recorded **0 connect-src violations** (411 `script-src`/`eval` violations, present before this change: the CSP has no `'unsafe-eval'` and Turbopack's dev runtime uses `eval` — dev-mode only, untouched by this diff); (5) `/`, `/atlas`, `/login`, `/api/db/token` (`{"token":null}`) all 200.
 
 **Known Issues** - (1) The signed-in UI path was verified structurally, not by logging in: this worker has no credentials for an existing account and creating one needs the Neon Auth admin path. What was proven is the exact mechanism QA flagged — the CSP no longer blocks the origin and a Bearer-authenticated browser read returns 200 rows. (2) `NEON_AUTH_BASE_URL/token/anonymous` is rate-limited by Better Auth: after several probes it returned 429, which made `db/server.ts` resolve a null token and server-rendered data pages (`/atlas/omni-studio-cert`, `/api/progress/quiz/run`) return 500 until the window reset. That is pre-existing R2-2 server behaviour (non-OK token response → no Authorization header → Data API 400) and is unaffected by this change, but it is worth a follow-up card: the guest fallback should not 500 a page when the anonymous token endpoint throttles. (3) The production origin is hard-coded as a fallback literal in `next.config.ts` — if the Neon project/endpoint is ever re-created, that line and `NEON_DATA_API_ORIGIN_FALLBACK`'s test must be updated with it.
-
 ### Neon migration R2-2: data client on the Neon Data API (t_0ba3f055)
 
 **What** - `src/lib/supabase/{server,client,service,types}.ts` became `src/lib/db/{server,client,service,types}.ts` with the same exported function names, so all 139 data call sites moved by import path only — `.from()/.select()/.eq()/.order()/.upsert({...},{onConflict})`, embedded selects and the `{data,error}` contract are unchanged PostgREST. Server (`db/server.ts`): `@neondatabase/postgrest-js` with the request's Managed Better Auth JWT forwarded (`GET $NEON_AUTH_BASE_URL/token` with the request cookies), falling back to the `anonymous` role's token (`/token/anonymous`) so guest surfaces keep rendering, memoised per request with React `cache()`. Browser (`db/client.ts`): `@neondatabase/neon-js` with a same-origin token provider (`GET /api/db/token`, new route) — the session cookie is httpOnly, so browser JS cannot mint its own JWT. Service (`db/service.ts`): direct `DATABASE_URL` via `@neondatabase/serverless` for the ONLY three tables RLS makes server-write-only (`quiz_attempt`, `quiz_run`, `completion_events`); every other privileged operation (all admin reads, admin writes, catalog upserts, entitlements, audit log, role changes, sitemap) now goes through the Data API under the `is_admin()` policies already in `supabase/migrations/neon/001_rls.sql`. New migration `supabase/migrations/neon/003_admin_read_policies.sql` adds admin SELECT on `user_profiles`, `lesson_completion` and `read_progress` — without it an admin would read 0 rows on those tables (the admin users list and analytics used to read them with the RLS-bypassing service key). `.env.example` documents the Neon vars (the three `SUPABASE_*` names are gone), `.gitignore` un-ignores it, `@supabase/ssr` and `@supabase/supabase-js` are removed from `package.json`, and 25 test files were re-pointed at the new client/helper shape.
@@ -665,7 +699,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` clean; `npm test` 102 files / 883 tests green; `npm run lint` clean; `npm run build` exit 0 (after `origin/main` merged in, `690d92c5`+`4f762447`; an earlier failed build was a stale `.next` turbopack cache, cleared and re-run to green); `grep -rn "@supabase" src/` matches only blog copy in `src/data/posts.ts` (article text, not code) — no `@supabase` import remains anywhere in `src/`. Live dev server on the production Neon branch: `/atlas` HTTP 200 rendering the catalog from Neon (9 guest-visible courses; the DB has 12 live rows and the other 3 `hermes-*` rows are `access_model='granted'`, deliberately stealth-hidden from guests), `/atlas/omni-studio-cert` 200, `/api/db/token` → `{"token":null}` for a guest, `/api/progress/summary` 200, Data API probe returns 12 rows for `courses?status=eq.live` with the anonymous JWT.
 
 **Known Issues** - (1) 37 server call sites still resolve identity with `supabase.auth.getUser()`; `db/server.ts` answers that call from Managed Better Auth (`GET /get-session`) as a documented compatibility seam. Re-pointing them at `getSessionUser()` is a mechanical follow-up (R2-1 scope note 1) and should land before the seam is deleted. (2) SQL exists only in `db/service.ts` (the three deny-client-insert writes), as the card's rules prescribe for the privileged path; no other file in `src/` writes SQL. (3) `@supabase/postgrest-js` and `@supabase/auth-js` remain in `package-lock.json` only as transitive dependencies of the Neon SDKs. (4) `NEON_DATA_API_URL`/`NEON_AUTH_BASE_URL` must be set on Vercel (from BWS) before this deploys, and `neon data-api refresh-schema` stays mandatory after DDL.
-
 ### Perf P1: token cache extracted from the Neon SDK client (t_5143dce5)
 
 **What** - New `src/lib/db/token-cache.ts` holds the browser Data API token cache (`getToken`, `invalidateDbToken`, `resetDbTokenCache`, 60 s TTL) with zero imports. `src/lib/db/client.ts` keeps `createClient` from `@neondatabase/neon-js` and re-exports the three cache exports, so `client.test.ts` and any existing call site still work. `src/components/Header.tsx`, `src/app/login/page.tsx` and `src/lib/hooks/useAuth.ts` now import `invalidateDbToken` from `@/lib/db/token-cache`. New `src/lib/db/token-cache.test.ts` covers the cache semantics and asserts each of those three files imports the cache from the SDK-free module and that `token-cache.ts` performs no import.
@@ -677,7 +710,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Known Issues** - None functional; CSP (`next.config.ts`) untouched. The Neon SDK still ships on routes that actually query the Data API (`useReadProgress`, `useLessonProgress`), which is intended.
 
 ## [Unreleased]
-
 ### Fix (MEDIUM, A11Y-M1/SEO-M2): `/atlas` upgrades the gate client-side for signed-in visitors + refuses to prerender an empty hub (t_80131e31)
 
 **What** - Two follow-ups from the a11y/SEO review of the static-route fix (545d953b, t_dd870a3a), without re-introducing any server-side identity read on `/atlas` (it MUST stay `○`). **(A11Y-M1)** A new client island upgrades the prerendered guest projection after hydration. `src/lib/hooks/useCardGateUpgrade.ts` fetches the session-gated `GET /api/atlas/cards` once and merges only the two fields the static card lacks (`canAccess` from the access seam, `lessonSlugs` for `SeriesProgress`); `LearnHub` applies it (`gate` + `courses`) so signed-in visitors get card-title links to `/atlas/<slug>`, real per-series progress and `PathConstellation isGuest={false}` instead of "Sign in to access courses". The initial state is always the server's projection (state only changes in `useEffect`), so SSR/hydration stays identical. `src/app/api/atlas/cards/route.ts` is `force-dynamic` + `no-store`: guests get `{gate:"guest-locked", series:[]}` (never touching the catalogue), signed-in users get `{gate:"signed-in", series:[{slug, canAccess, lessonSlugs}]}`, and a failed catalogue read answers `503` so the island keeps the guest baseline rather than inventing an all-locked signed-in state. **(SEO-M2)** `src/app/atlas/page.tsx` now guards the prerender: when `NEXT_PHASE=phase-production-build` **and** the Supabase env is configured, an empty catalogue (read failure or 0 visible courses) throws instead of shipping a 0-card hub behind `s-maxage=31536000`; the graceful empty state remains for runtime/ISR, and the route now declares `revalidate = 3600` (static + revalidate = ISR) so daily publishing no longer needs a redeploy and a bad runtime render self-heals within the hour. **(Hydration, found while verifying)** `CookieConsent` resolved its localStorage-driven visibility in a lazy `useState` initializer, so the client's first render disagreed with the server's empty markup — React error #418 on every page for first-time visitors; it now reads the store through `useSyncExternalStore` with a `false` server snapshot and dismisses via local state — the same fix already on `main`/`neon/data-client-t_0ba3f055` as `0d54661e` (t_103b40ca), adopted verbatim here so the two branches merge without touching this file again.
@@ -687,7 +719,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` exit 0; eslint clean on all touched files; `npx vitest run` **1014 passed / 113 files** (new: `useCardGateUpgrade.test.tsx` 7 — merge delta, untouched fields, guest baseline, and four failure modes; `api/atlas/cards/route.test.ts` 5 — guest never reads the catalogue, signed-in delta + `cache-control: no-store`, 503 on a failed read, broken auth → guest; `LearnHub.gate.test.tsx` 3 — SSR guest markup (CTA, no series link) and the post-hydration upgrade to a title link + `SeriesProgress`; `CookieConsent.test.tsx` 4 — empty SSR output, banner after hydration, hidden for a stored decision, accept hides + persists; `atlas/page.test.tsx` +5 — `revalidate === 3600`, build-phase empty read throws, build-phase 0 courses throws, env-less build still degrades, build-phase success still renders 9-entry ItemList). Production-config builds (`next build` with `NEXT_PUBLIC_SUPABASE_URL` pointed at a PostgREST stub backed by the real Neon DB): happy path exit 0 with `├ ○ /atlas  1h  1y` and a prerender of 95,255 B carrying 9 `ListItem`s, 9 guest CTAs, 0 `/atlas/<slug>` anchors; failure path (unreachable PostgREST) exit 1 with `Error: /atlas prerender aborted: the catalogue read failed (… ECONNREFUSED …) … (SEO-M2 / t_80131e31)` and `Export encountered an error on /atlas/page`, so the empty hub never reaches `.next`. Live browser against `next start` (prod build, stub data): `/atlas` served `x-nextjs-cache: HIT` with **0** console errors/warnings, 9 cards, 9 guest CTAs, cookie banner appearing after hydration, and `GET /api/atlas/cards → 200` fired by the island; with the island's response stubbed to the signed-in payload the same page rendered **9** `/atlas/<slug>` title links, **0** "Sign in to access courses" CTAs and real `0 of 2 complete` progress, still with 0 console errors. `next dev` no longer logs the #418 hydration mismatch (it reproduced on the pre-change build too, which is how the `CookieConsent` cause was isolated).
 
 **Known Issues** - (1) The signed-in upgrade is one extra `no-store` request per hub visit (`/api/atlas/cards`); guests pay an auth-only fast-path request that returns immediately. (2) `canAccess` is resolved per card through the access seam, so an accessible-but-not-entitled series shows the existing "Preview first lesson →" affordance rather than a bare title link — unchanged from the signed-in hub. (3) The build guard only arms when `NEXT_PUBLIC_SUPABASE_URL` + anon key are present: a build with no data credentials still prerenders the empty hub by design (it cannot have a catalogue), which is what keeps CI/local builds green. (4) `revalidate = 3600` means a runtime revalidation that hits a DB error can serve the empty state for up to an hour; the build guard makes it non-permanent. (5) Pre-existing, out of scope, still visible in dev only: Next warns about the inline JSON-LD `<script>` in a component and about `next/image` logo dimensions in Header/Footer.
-
 ### QA F1 fix (MEDIUM): `/api/auth/[...path]` refuses to follow cross-origin redirects (t_6bac3db8)
 
 **What** - `src/lib/auth/server.ts`'s `createProxyHandlers()` now runs the SDK proxy call inside an origin guard (`AsyncLocalStorage` + a one-time wrapper around the process `fetch`). The guard re-issues the upstream request with `redirect: "manual"`, replays same-origin hops itself (max 3), and when a `3xx` points anywhere outside the configured `NEON_AUTH_BASE_URL` origin — or the chain loops — marks the request blocked and answers a fixed `502 {"error":"Auth service unavailable. Please try again later."}` instead of the upstream body. `src/app/api/auth/[...path]/route.ts` maps upstream `>=500` (including that refusal) to the same fixed `502` rather than a `400`. The SDK offers no seam here: `handleAuthProxyRequest()` hardcodes `fetch(url, {method, headers, body})` with no `redirect` option and then rebuilds the response (`new Response(...)`), so the final `.url` is dropped and neither a redirect option nor a post-hoc origin check is reachable through the public config.
@@ -697,7 +728,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` exit 0; eslint clean; `npx vitest run` **989 passed / 109 files** (`src/lib/auth/server.test.ts` +13: cross-origin `302` → 502 with the redirect resolved manually, same-origin `302` followed, protocol-relative `//evil.example` blocked, redirect loop capped, non-auth-origin fetches untouched, plus two `handler()` integration rows; `route.test.ts` 29 → 29). Live on `next dev -p 3417` with `NEON_AUTH_BASE_URL` pointed at a local origin that `302`s to a second local origin: `GET /api/auth/get-session` → **502** `{"error":"Auth service unavailable. Please try again later."}` in 5 ms with the logging second server receiving **zero** requests; `GET /api/auth/get-session?probe=ok` (same-origin 200) → `200 {"session":null,"servedBy":"A"}`, so the guard does not disturb the normal path.
 
 **Known Issues** - (1) Same-origin redirects are followed manually rather than by undici, so a hop can only be replayed for re-readable bodies (the mount only forwards `arrayBuffer()` bodies today). (2) The guard wraps `globalThis.fetch` once per process; with no active guard context it delegates unchanged, but installing a wrapper in the server runtime is a deliberate trade-off because the SDK exposes no `fetch`/`redirect` seam.
-
 ### Security hardening (M1/M2/L1): auth-email origin bound to config, transport-scoped cookie family, origin-checked logout (t_7ecb98d7)
 
 **What** - Three hardening findings from the fresh-context security review of head `8048ebbc` (t_9db4316d), none remotely reachable on Vercel but all real on a self-hosted/proxied deployment. **(M1, CWE-601/640)** `authRedirectOrigin()` in `src/lib/auth-emails.ts` no longer echoes the request `Origin`; it normalises the value and accepts it only when `getAllowedOrigins()` contains it (canonical + `www.` sibling, `NEXT_PUBLIC_SITE_URL`, `VERCEL_*` hosts, `AUTH_ALLOWED_ORIGINS`, dev loopback), otherwise it falls back to the canonical `AUTH_ORIGIN`. Because reset-request, resend-confirmation and login all route through `buildPasswordResetRedirect()` / `buildVerifyEmailRedirect()`, a forged `Host`/`Origin` can no longer put a single-use token on an attacker-controlled host. **(M2, CWE-384)** `authCookiesForUpstream()` and `hasSessionCookie()` in `src/lib/auth/transport.ts` now take the request's transport: on a secure request only `__Secure-neon-auth.*` names are accepted and a plain `neon-auth.*` cookie is **dropped, never up-converted**; on plain http the split is mirrored (only plain names accepted, then mapped to the SDK's wire names, any `__Secure-*` inbound name ignored). `hasSessionCookie()` compares parsed cookie names exactly (the plain name is a substring of the secure one). `forwardableAuthHeaders()` derives the transport itself, `src/lib/auth/server.ts`'s `getCookies` passes the already-computed `secure`, `src/proxy.ts` passes `isSecureRequest()`, and `src/lib/session.ts`'s guest fast path accepts only the cookie name valid for the request. **(L1, CWE-352)** `POST /api/auth/logout` now runs `checkOrigin()` (foreign Origin → `403 Forbidden origin`) and `checkRateLimit(getClientIp())` (→ `429`) before touching `signOut`, matching every other mutating auth route; a same-origin logout and a backend-hiccup logout still answer `200 {"status":"ok"}`.
@@ -707,7 +737,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` clean; full `npx vitest run` **981 passed / 109 files** (new/updated: `src/lib/auth-emails.test.ts` proves `https://evil.example` → canonical for both email builders plus configured-origin acceptance; `src/lib/auth/transport.test.ts` proves the exact planted-cookie exploit is dropped on https, plain-only acceptance on http, and the exact-name session check; `src/lib/session.test.ts` proves a planted plain cookie is a guest on https and a `__Secure-` cookie is a guest on http; new `src/app/api/auth/logout/route.test.ts` covers same-origin 200, foreign Origin 403 with `signOut` never called, rate-limit 429, and backend failure 200; `src/lib/auth/server.test.ts` pins the dropped plain cookie in the SDK context adapter). `npx vitest run src/lib src/app/api/auth` green.
 
 **Known Issues** - (1) An origin must be in the configured set to be used in an email link: a new preview/custom domain works unconfigured on Vercel (`VERCEL_URL`) or in dev (loopback), otherwise it needs `AUTH_ALLOWED_ORIGINS`, and until then its auth emails point at the canonical origin — fail closed, never to the caller. (2) `checkOrigin()` still accepts a genuinely same-origin request from the request's Host; that is intentional (previews), and M1 removes the only place where the Host-derived origin reached a security-sensitive destination. (3) The rate limiter on logout is the existing in-memory per-instance limiter (same caveat as every other route). (4) Whether `NEON_AUTH_COOKIE_DOMAIN` is a registrable-domain scope in production remains an environment fact to confirm — M2 makes the cookie split safe either way.
-
 ### Fix (R2-1 QA follow-up): auth routes no longer assume a hardcoded origin or https-only cookies (t_ab6c1cb6)
 
 **What** - Two environment assumptions in the auth layer are gone. (1) `src/lib/api-security.ts` no longer carries a literal `ALLOWED_ORIGINS` set (`adroit.io`, two retired `*.vercel.app` projects, `localhost:3000`): `getAllowedOrigins()` now derives the cross-origin allowlist from `NEXT_PUBLIC_SITE_URL` (+ its `www.` sibling), `VERCEL_URL` / `VERCEL_BRANCH_URL` / `VERCEL_PROJECT_PRODUCTION_URL`, the comma-separated `AUTH_ALLOWED_ORIGINS` override, and loopback origins outside production, and `checkOrigin()` additionally accepts a genuine **same-origin** POST (Origin vs the request's own Host + `x-forwarded-proto`) without any config — a cross-site page cannot forge another site's Origin, so previews, custom domains and http staging work unconfigured while foreign origins still 403 (opaque `Origin: null` now explicitly 403s). (2) `src/lib/auth/server.ts` builds the Neon Auth server on the SDK's public `createAuthServer()` toolkit instead of `createNeonAuth()`, so `getOrigin()` returns Origin → Referer → canonical site origin (never `""`, previously `403 MISSING_OR_NULL_ORIGIN` upstream that every route reported as a generic failure) and `setCookie()` writes transport-appropriate cookies: `__Secure-neon-auth.*` + `Secure` on https (unchanged), plain `neon-auth.*` without `Secure` on http (new `src/lib/auth/transport.ts` maps names both ways, so the auth backend and the inbound `Cookie` header always see the SDK's names; `AUTH_COOKIE_SECURE` can force either form). The `handler()` mount used by `/api/auth/[...path]` is re-implemented on the public `handleAuthProxyRequest()` with the same Origin synthesis + a shared-`Origin`/re-prefixed-cookie forwarding and adapted `Set-Cookie`; `src/proxy.ts` uses the same helpers for its navigation refresh and `src/lib/session.ts` recognises both cookie names on its guest fast path. New `src/lib/auth/cookie-jar.ts` makes the cookie write itself deterministic: the SDK's `cookies().set()` path is silently dropped inside a route handler in this Next version (sign-in answered `200 {"status":"ok"}` with no `Set-Cookie` at all), so every auth route now wraps its body in `withAuthCookies()`, which replays the captured cookies onto the response it returns (login, logout, session, reset-password request/update, resend-confirmation).
@@ -717,7 +746,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` clean; eslint clean on all touched files; `npx vitest run` **969 passed / 108 files** (48 new: 21 in `src/lib/auth/transport.test.ts` for origin/secure/cookie-name translation, 8 in `src/lib/auth/server.test.ts` for the adapter + `handler()` proxy, 7 in `src/lib/auth/cookie-jar.test.ts`, the rewritten `checkOrigin` block in `src/lib/api-security.test.ts`, 1 in `src/lib/session.test.ts` for the plain-http cookie name, and 2 profile-route cases replacing the retired-origin one). Live on `npm run build` + `next start` (`:3115`, real Neon Auth): `POST /api/auth/login` with **no** `Origin` → `401 Invalid email or password.` (reached upstream; was the MISSING_OR_NULL_ORIGIN failure), foreign `Origin` → `403`, same-origin LAN `Origin` → `401` (was 403), `POST /api/auth/login mode=signup` with no Origin → `200 check-email`; http LAN sign-in returned `set-cookie: neon-auth.session_token=…; Path=/; Max-Age=604800; HttpOnly; SameSite=Lax` (**no** `Secure`) and `GET /api/auth/session` with that cookie returned the user object, `GET /api/auth/get-session` through the proxy mount resolved the same session from the plain-named cookie, `POST /api/auth/logout` cleared all four cookies with `Max-Age=0`; an https-simulated request (`x-forwarded-proto: https`) still received `__Secure-neon-auth.*; Secure`, and `/`, `/atlas`, `/login` render 200. The two throwaway Neon Auth fixtures created for the smoke (`steel.qa.…`, `steel.f2.…@adroit.io`) were deleted (user, account and session rows) after the run.
 
 **Known Issues** - (1) `isSecureRequest()` treats a request with no TLS signal as http on purpose: writing a cookie the browser discards is a worse failure than dropping the `__Secure-` hardening on a deployment that has no TLS. Vercel always sends `x-forwarded-proto: https`, and `AUTH_COOKIE_SECURE=true` pins the hardened form explicitly. (2) A request that carries a real `Origin` for a *different* host than the one it was sent to is still rejected (correct), so a client that hardcodes `Origin: https://adroit.io` while calling a staging host must use `AUTH_ALLOWED_ORIGINS`. (3) The retired `adroit-blog*.vercel.app` origins are gone from the allowlist; nothing in `src/` posts from them. (4) `withAuthCookies()` is required in every new route that calls the SDK and expects cookies back — an un-wrapped route silently returns no `Set-Cookie`; the helper documents the reason at the point of use, and `cookie-jar.test.ts` pins the behaviour.
-
 ### Security MEDIUM fix (R2-1 review): `/api/auth/[...path]` closed allowlist + generic error mapping (t_be119007)
 
 **What** - `src/app/api/auth/[...path]/route.ts` is no longer an open same-origin proxy. It now forwards only the `{METHOD} {path}` pairs listed in `AUTH_PROXY_ALLOWLIST` (today exactly one: `GET get-session`); every other method/path returns `404 {"error":"Not found"}` **before** the SDK handler is constructed, so `sign-up/email`, `sign-in/email`, `delete-user`, `change-email`, `send-verification-email` and arbitrary verbs are unreachable through this mount. Every allowed request runs `checkOrigin()` and `checkRateLimit(getClientIp())` — the same helpers the hand-written routes use — before delegating. Upstream responses are no longer echoed: 2xx/3xx pass through untouched (the SDK owns session cookies), while any ≥400 is logged server-side as status only and replaced with a fixed body (`429` → `Too many attempts. Please try again later.`, everything else → `Unable to process auth request. Please try again.`). The 503-on-unconfigured-env path and the per-request handler construction (build safety) are unchanged. Route docblock updated to state the allowlist policy.
@@ -727,7 +755,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` exit 0; eslint clean on both touched files; `npx vitest run` **921 passed / 105 files** (the rewritten `src/app/api/auth/[...path]/route.test.ts` grows 3 → 29 tests: allowlisted delegation, 7 non-allowlisted GET paths and 6 non-allowlisted method/path pairs all 404 with the SDK handler and `getAuthServer` never called, guards not run outside the allowlist, foreign Origin → 403, rate limit → 429, duplicate-email 422 payload and 7 other upstream statuses never echoed, upstream 429 mapped to a fixed body, 2xx passthrough, backend-unavailable and handler-throw → 503). Live on a dev server (:3123): `POST /api/auth/sign-up/email` for the existing imported admin → **404** (was 422 with the enumeration code), `POST /api/auth/sign-in/email` → 404, `DELETE /api/auth/delete-user` → 404, `POST /api/auth/send-verification-email` → 404, `POST /api/auth/get-session` → 404 (method not allowed), `GET /api/auth/get-session` → 200 (delegated), `GET /api/auth/get-session` with `Origin: https://evil.example` → **403**, 27×200 then **429** on a 35-request burst (per-IP limiter applied), and the hand-written routes are unchanged (`GET /api/auth/session` 200; `POST /api/auth/login` evil Origin 403; signup duplicate email `{"error":"Unable to create account. Please try again later."}`; bad credentials `{"error":"Invalid email or password."}`).
 
 **Known Issues** - (1) The allowlist is intentionally minimal and closed: adding a new proxied endpoint (e.g. `POST sign-out`) is a deliberate one-line change plus a test row, not automatic. (2) `checkRateLimit` is the existing in-memory, per-instance limiter, shared with the hand-written auth routes — on Vercel the effective cap scales with warm instances (pre-existing, documented in `src/lib/api-security.ts`). (3) A cross-origin `GET get-session` is now rejected with 403, which is stricter than the hand-written `/api/auth/session`; no client reads this mount cross-origin.
-
 ### Security HIGH fix (R2-1 review): identity continuity — legacy users imported into Neon Auth by UUID (t_33739716)
 
 **What** - New `supabase/migrations/neon/005_identity_continuity.sql` imports every stranded pre-migration (Supabase-era) identity from `public."user"` into `neon_auth."user"` **with its original UUID** (name, email, `emailVerified`, image, createdAt/updatedAt preserved), so `user_roles` / `user_entitlements` / `user_profiles` / `subscriptions` resolve through the id `getAccessUserId()` now returns. It refuses to run if any legacy address collides with a neon_auth account under a *different* id (email reconciliation is an account-takeover path and is never used). New `scripts/import-legacy-identities.mjs` gives each imported identity a Better Auth **credential** account whose password is the scrypt hash of a random secret that is generated and immediately discarded (Better Auth params N=16384/r=16/p=1/dkLen=64 via `node:crypto`, no new dependency), so sign-in fails with the generic `INVALID_EMAIL_OR_PASSWORD` while "forgot password" has a real account to update — the only honest recovery path, since Supabase-era bcrypt hashes are not portable and are not reachable from this database. New `public.assert_identity_continuity()` (fail-loud) and `public.identity_continuity_report()` are the cutover gate, revoke-locked from client roles like 002's functions; `scripts/verify-identity-continuity.py` runs them read-only and writes `reports/identity-continuity-evidence.json`; `scripts/smoke-imported-admin.py` is the R2-1 acceptance smoke against an actually imported account (app sign-in → session id → JWT sub → RLS role read).
@@ -737,7 +764,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - Applied live to the R2-1 Neon project (single transaction, gate passed): 8 identities imported (18/18 `public."user"` rows now mirrored on the same uuid); `user_roles` 4/4, `user_entitlements` 38/38, `user_profiles` 8/8, `subscriptions` 0/0 resolve; `public."user"` ids missing from `neon_auth."user"` = 0; all 3 admins (`chris.sympson@gmail.com`, `juliannemsward@gmail.com`, `qa.admin@adroit.io`) resolve role `admin` through the exact id join `loadRole()` performs. `scripts/verify-identity-continuity.py` → **PASS 13/13**. Acceptance smoke (`scripts/smoke-imported-admin.py`) against the real imported admin `qa.admin@adroit.io`: `POST /api/auth/login` 200, `/api/auth/session` returns `f3ee694d-4712-4ca7-988f-7508ba1cf533`, the Neon Auth JWT's `sub` is that same uuid, and the Neon Data API (real RLS) returns `[{"role":"admin"}]` for it. `npx tsc --noEmit` clean, `npm test` **895 passed / 104 files** (6 new: 5 in `src/lib/access.identity.test.ts` for `getAccessUserId → loadRole` incl. "never keyed by email", 1 in `src/app/api/admin/users/route.test.ts` proving imported legacy identities appear with their role), eslint clean.
 
 **Known Issues** - (1) The admin **People list** and `/admin` could not be exercised against a running app in this checkout: they still read roles through the Supabase-era data client (`getSupabaseServerClient`/`getSupabaseServiceClient`) and this clone has no `NEXT_PUBLIC_SUPABASE_*` env, so both fail closed (500) locally — the smoke reports that step as SKIP (use `--require-admin-api` in an env that has the data client). The identity half is proven live through the Data API + RLS, and the People-list assembly is covered by the new route test. (2) Imported users must use **forgot password** once; their original passwords were bcrypt and are not portable, and no password is ever minted for them. (3) A future fresh sign-up with an imported address is now blocked by `neon_auth."user"."user_email_key"` — that is intended (one identity per address, no silent duplicate), but it changes the sign-up error for those 8 addresses. (4) Email delivery of the reset link still depends on Neon's provider (R2-4/Resend), unchanged by this card.
-
 ### Perf P1: restore prerendered `/atlas` (static → dynamic regression from R2-1) (t_3a3d6595)
 
 **What** - `src/app/atlas/page.tsx` now declares `export const dynamic = "force-static"` and resolves NO identity on the route at all: the `supabase.auth.getUser()` read from the first attempt and the R2-1 `getAccessUserId()` seam are both gone, so `/atlas` builds as `○ /atlas` with `atlas.html` emitted **whether or not the Supabase env vars are set** — i.e. in the production configuration too. `gate` is the prerendered guest state and `userId` is `null`, so `getCatalogForUserV2(null)` returns the anonymous-RLS guest catalogue (`includeLessonSlugs: false`, the existing guest hardening). `getAccessUserId()` keeps its Neon identity source for the `force-dynamic` routes and keeps its doc warning that calling it from a prerenderable route flips that route to ƒ.
@@ -750,7 +776,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 - **runtime** (warm `next start` on the same build): `x-nextjs-cache: HIT`, `x-nextjs-prerender: 1`, `Cache-Control: s-maxage=31536000`, Content-Length 94,871, warm TTFB **3.98–5.26 ms** over 5 requests (first request 99.6 ms) vs 59.7 ms median for the dynamic head.
 
 **Known Issues** - (1) **Behaviour change for signed-in visitors on this one hub:** `gate` is now fixed at `guest-locked` in the prerendered output, so a signed-in visitor sees the non-clickable card + "Sign in to access courses" CTA (pointing at `/login?next=/atlas/<slug>`; the login page forwards them on) instead of the in-app link, `SeriesProgress` and `QuizStats`. Per-user gate *and* per-lesson slugs cannot be prerendered — and per-lesson metadata must not ship to guests (t_3dbf4826) — so restoring a personalised hub needs a client-side gate upgrade from an API route. That is a product/design decision (kara/lois), deliberately not taken inside this perf fix. Note the route was `ƒ` in production before this change (the hash-baseline card records the same env sensitivity), so the previous per-user gate only existed because the hub was never actually static. (2) Content is baked at build time: catalogue/org edits ship on the next deploy (that is what "prerendered" means, and it is the perf review's option 1). (3) The build env must still provide `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` for a content-bearing hub; without them the page prerenders empty-but-graceful (unchanged base behaviour). (4) Once the data client swaps to Neon (Phase 3/R2-2), the `force-static` declaration and the anonymous read must be re-measured together.
-
 ### Perf P2 fix (R2-1 review): guest `/api/auth/session` short-circuits before the Neon Auth call (t_20d5300f)
 
 **What** - `getSessionUser()` (`src/lib/session.ts`) now reads the request cookie store first and returns `null` as soon as the `__Secure-neon-auth.session_token` cookie is absent, without importing or calling the auth SDK — the same guard `src/proxy.ts` already used. The cookie name is mirrored as an exported `SESSION_COOKIE_NAME` constant (the guest path must not pull the SDK in just to learn a string); `session.test.ts` pins it. Also fixed the LOW P3 query-plan finding while in the area: `src/lib/auth/users.ts` validates the URL segment as a UUID and binds `uuid` (`id = $1::uuid`, and `id = ANY($1::uuid[])` for the set query, dropping non-UUID strings before the bind), so the admin reads use the `user_pkey` Index Scan (cost 0.15) instead of `id::text = $1` Seq Scans (cost 8.07). `::text` remains on OUTPUT only. No migration added (the `createdAt` ordering is unchanged and unindexed, admin-only, 18 rows).
@@ -760,7 +785,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` clean; `npm test` **889 passed / 103 files** (886 existing + 3 new: guest-cookie-absent short-circuit, plus UUID-bind/`ANY($1::uuid[])` assertions and non-UUID short-circuits); `npm run lint` (eslint) clean on the touched files; `npm run build` exit 0. Runtime proof on a production build (`next start`), with `NEON_AUTH_BASE_URL` pointed at a local listener that logs and never answers: guest `GET /api/auth/session` with no cookies → `200 {"user":null}` in **1.2–2.0 ms** warm (6 runs) and **0 bytes** reaching the auth endpoint; the same request **with** a session cookie → the listener received `GET /neondb/auth/get-session` (481 bytes), so the cookie-bearing path still asks the backend and still degrades to `{"user":null}` (200) when it fails. Guest page navigation (`/atlas` → 200) unaffected.
 
 **Known Issues** - (1) `SESSION_COOKIE_NAME` duplicates the SDK's `NEON_AUTH_SESSION_COOKIE_NAME` deliberately; if `@neondatabase/auth` ever changes the prefix, `session.test.ts` is the only tripwire. (2) The guest decision is cookie *presence* only — a present-but-invalid token still costs one upstream round trip (correct: that is a real session that needs validating), then degrades to `null`. (3) `listAuthUsers` keeps `ORDER BY "createdAt" DESC` with no index (Seq Scan + Sort, cost 30.9); harmless at 18 admin-only rows, deliberately left for a migration because none exists today.
-
 ### Neon migration R2-1: auth routes on Managed Better Auth (t_d9a07839)
 
 **What** - Replaced the GoTrue-backed auth surface with Managed Better Auth (`@neondatabase/auth` 0.7.0-beta, Better Auth 1.7): new `src/lib/auth/server.ts` (`createNeonAuth`, lazy so `next build` never needs the env), new `src/app/api/auth/[...path]/route.ts` (all five verbs proxied; static sibling routes win, so the hardened handlers are untouched), and a rewritten `src/lib/session.ts` (`getSessionUser`/`getSessionUserId`, guest → null). The 7 routes now call the SDK: login (`signIn.email`/`signUp.email`), logout (`signOut`), session (`getSession`), resend-confirmation (`sendVerificationEmail`), reset request (`requestPasswordReset`), reset update (`resetPassword({newPassword, token})`), and `/auth/callback` (no exchange: forwards `?token=`, maps dead links to `expired`). `src/proxy.ts` refreshes the session with one `get-session` call when a session cookie is present and copies upstream `Set-Cookie` — it never redirects (the SDK's bundled middleware protects routes, which a public marketing site must not do). Rate limiting, origin checks, and fixed non-enumerating error bodies are ported verbatim; upstream detail is logged as status+code only. Reset flow is now token-based (`/reset-password?token=…`), so it works for imported legacy users who are signed out; `ResetPasswordForm` takes an optional `token` prop and the success copy no longer claims the user is signed in. Admin auth-user reads moved from the GoTrue Admin API to SQL over `neon_auth."user"` (`src/lib/auth/users.ts`, `@neondatabase/serverless` on `DATABASE_URL`), keeping `listAuthUsers` / `getAuthUser` / `authUserIdsExist` signatures so `api/admin/*` responses are unchanged. `getAccessUserId()` (the admin gate's identity source) now resolves through `getSessionUser()`. `/api/auth/session` fails closed to `isAdmin:false` if the roles read breaks instead of dropping the user.
@@ -772,7 +796,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Known Issues** - (1) The remaining ~50 server call sites still resolve identity through `supabase.auth.getUser()` (data layer is Phase 3); until that swap lands they will see no user once Supabase env is removed, so cutover order is R2-1 → Phase 3 → deploy. (2) `src/proxy.ts` refreshes only when a session cookie is present; it intentionally does not use the SDK middleware. (3) Reset/verification links depend on Neon's email provider being a custom SMTP with links (plan §2.2, currently `shared`/OTP) — links mint a `redirectTo` token, and the R2-4 preview run must confirm delivery via Resend. (4) `@neondatabase/auth` is pinned to `^0.7.0-beta`; it targets Better Auth 1.7 and is beta —  re-verify on upgrade.
 
 **Follow-up (main-merge resolution)** - The R1-4 `server-only` guard (`t_c98e662b`) lived on `src/lib/supabase/auth-admin.ts`, which this card deletes; the guard is carried onto its replacement `src/lib/auth/users.ts` (holds `DATABASE_URL`) and onto `src/lib/auth/server.ts` (holds `NEON_AUTH_COOKIE_SECRET`), so a future Client Component import of either fails the build instead of shipping the credential to the browser. Re-proven by deleting the guard's need to be re-added per module: `npx tsc --noEmit` exit 0, `npx vitest run` 921 passed / 105 files, `npm run build` exit 0. `src/lib/supabase/service.ts` keeps its R1-4 guard unchanged.
-
 ### Neon R2-4 fixes: quiz_attempt unique index + Resend SMTP for auth email + preview bypass (t_94bda24e)
 
 **What** - Three infrastructure findings from zod's R2-4 QA review (`t_8d992efb`, head `f49633b9`). (F2, HIGH) New migration `supabase/migrations/neon/004_quiz_attempt_unique.sql` carries the unique index the quiz write path upserts on, `idx_quiz_attempt_user_quiz_question ON public.quiz_attempt (user_id, quiz_name, question_index)` — the same definition that has lived in `supabase/migrations/002_quiz_attempt_unique.sql` since August and was applied to Supabase but never to Neon. Applied to the Neon production branch (`br-small-tree-b7tw8byt`), idempotent (`CREATE UNIQUE INDEX IF NOT EXISTS`), after confirming 0 duplicate groups. (F1, HIGH) Neon Auth's email provider moved from the shared provider (`auth@mail.myneon.app`) to a **standard/custom SMTP** provider pointed at `smtp.resend.com:465` (SSL, username `resend`, password = the domain-scoped `RESEND_SENDING_KEY` from BWS), sender `Adroit Academy <no-reply@auth.adroit.io>`; `email_verification_method` switched `otp` → `link` (the app routes already pass a link-style `callbackURL`, see `src/lib/auth-emails.ts`) and `send_verification_email_on_sign_up` turned on. `require_email_verification` deliberately stays **false** — 19 of the 27 existing identities are unverified, so turning it on would lock them out at cutover; that is a product decision for brainiac, not an infra setting. (F3, MEDIUM) Protection Bypass for Automation is active on the project (`protectionBypass` scope `automation-bypass`, also exposed to deployments as `VERCEL_AUTOMATION_BYPASS_SECRET`), so `x-vercel-protection-bypass: <secret>` now reaches any preview deployment anonymously.
@@ -782,7 +805,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - F2: `pg_indexes` before → 3 indexes on `quiz_attempt`, none covering the trio; after → `idx_quiz_attempt_user_quiz_question` present. Migration re-applied with `psql -v ON_ERROR_STOP=1 -f` → `NOTICE: relation already exists, skipping`, exit 0. Live end-to-end on the R2-2 build (`f49633b9`, `next start` :3000) against the production branch with a freshly signed-up user: `POST /api/progress/quiz {quizName:"ai-at-work:check:1",questionIndex:0|1}` → **HTTP 200** with server-graded `result` (was 500), both rows visible in `quiz_attempt`, and a repeat POST for the same question **updated** the row in place (`user_answer_index` 0 → 1) leaving the table at 2 rows — the upsert, not an append. F1: `neon-auth config email-provider test --recipient-email chris.sympson@gmail.com` → `{"success": true}`; Resend record `01a169c8…` `last_event: delivered`, from `"Adroit Academy" <no-reply@auth.adroit.io>`. App-sent verification: `POST /api/auth/login {mode:"signup"}` for a plus-addressed mailbox → 200 `check-email`, Resend record `01a169c9-61f5…` `last_event: delivered`, subject "Verify Your Email Address", body carries a `…/auth/verify-email?token=…` link. App-sent reset: `POST /api/auth/reset-password/request` → 200, Resend record `01a169c9-c272…` `last_event: delivered`, subject "Reset Your Password", body carries `…/auth/reset-password/<token>?callbackURL=https://adroit.io/reset-password`. The emailed link resolves: `GET` on it → **302 → `https://adroit.io/reset-password?token=eDqPrf…`**, and that token then completed `POST /api/auth/reset-password/update` (`{"status":"ok"}`, 200) followed by a sign-in with the new password (200). F3: `GET /atlas` without the header → 302 to `vercel.com/sso-api`; with `x-vercel-protection-bypass` → **200, 39,751 bytes, `<title>The Atlas | Adroit Consulting`**.
 
 **Known Issues** - (1) `require_email_verification` remains false and `send_verification_email_on_sign_in` false: verification mail is sent on sign-up only, so an existing unverified identity gets nothing until it uses resend-confirmation. Flip both once the 19 unverified legacy identities are dealt with. (2) The SMTP password is stored in Neon Auth's project config; it is the domain-scoped sending key, not the admin key, so a leak cannot send from other domains — but rotating `RESEND_SENDING_KEY` in BWS now also requires `neon neon-auth config email-provider update`. (3) `email_verification_method` is now `link`; if a future client wants OTP it must be switched back, and the app's `/reset-password` page is the only link-landing page today. (4) The preview bypass secret is a long-lived automation credential — treat the header value as a secret and rotate it if a preview URL is ever published. (5) The migration file adds the index definition only; applying it to a *fresh* branch still requires running the Neon migration set by hand — there is no automated migrator yet.
-
 ### Neon R1-6 follow-up: `provider` eager-path doc/assertion mismatch (t_de36d259)
 
 **What** - Two non-blocking findings from the R1-6 QA review (`t_392b7189`, PR #356) settled with **option B** (no behaviour change). (F1) `supabase/migrations/neon/002_provision_public_user.sql` header (former lines 60-61) and the §3 comment no longer claim `provider` becomes `'credential'` for email+password at sign-up: the `AFTER INSERT` trigger on `neon_auth."user"` runs *before* Better Auth inserts `neon_auth.account`, so the function's account lookup finds nothing and `provider` is **NULL** on the eager path; the account trigger then skips `providerId = 'credential'` on purpose (there is no provider *identity* for a password sign-up). Both comments now say exactly that and note `'credential'` appears only after a later `public.provision_public_user()` re-run (e.g. the lazy-heal trigger). (F2) `scripts/verify-user-provisioning.py` used to compute `provider IS NULL AS provider_null` on the eager path and never consume it; it now selects the actual value (`coalesce(provider,'<NULL>')` in place of the discarded `provider IS NULL` boolean) and asserts it with a new `eager.provider_null_for_credential` check, whose detail records the observed `provider` value in `reports/user-provisioning-evidence.json`. Docstring layer 2 documents the expectation.
@@ -801,7 +823,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `git grep -n` for the credential itself → no matches across the whole tree (the only hits for its prefix are prose in this CHANGELOG). `python3 -m py_compile scripts/verify-user-provisioning.py` → OK. `env -u QA_PROVISION_PASSWORD python3 scripts/verify-user-provisioning.py` → prints the fail-fast message, exit 1. `--help` renders the new help text. Regression: a full live run with an operator-supplied `QA_PROVISION_PASSWORD` and unique `--email`/`--email-b` → `PASS (22/22 assertions)`, exit 0 (eager provisioning + Data API writes 201, `quiz_attempt` still 403/42501 by policy, function unit checks, lazy heal, cross-user isolation). Rotation/removal against production: `SELECT ... FROM public."user" WHERE email LIKE '%qa-provision%'` listed 11 identities and their child rows before deletion (8 `lesson_completion`, 0 everywhere else: quiz_attempt, quiz_run, read_progress, completion_events, subscriptions, user_entitlements, user_profiles, user_roles, admin_audit_log) — no useful data, matching the review note. Deletion in one transaction: `DELETE 11` from `public."user"`, `DELETE 39` `neon_auth.session`, `DELETE 11` `neon_auth.account`, `DELETE 11` `neon_auth."user"`. A second sweep removed 5 more identities that concurrent QA workers created mid-task, and a third removed 7 more (stale checkouts on the pre-fix `main` still run the old script), after which `neon_auth_users = 0`, `public_users = 0` at 16:26:24Z. `POST /sign-in/email` with the published password for `kelex1812+qa-provision-a@gmail.com` → **HTTP 401**, `...-b@gmail.com` → **HTTP 401**.
 
 **Known Issues** - (1) The script still creates a QA identity per run and does not clean it up; with the default gone those identities all share whatever throwaway password the operator supplied, so they are only as sensitive as that secret. A `--cleanup` flag would be a follow-up, not part of this fix. (2) Deleting the identities is point-in-time: concurrent workers (zod QA runs were active during this task) that still hold an old checkout on the pre-fix `main` keep re-creating `kelex1812+qa-provision-*` identities with the published password until PR #360 merges — two later sweeps caught 5 and 7 such rows. Re-run `SELECT count(*) FROM neon_auth."user" WHERE email LIKE '%qa-provision%'` if a stale checkout is suspected, and treat the PR merge as the real cut-off. (3) Deleting `public."user"` rows cascade-deleted 8 `lesson_completion` test rows; that is the intended cleanup, not data loss. (4) The three LOW advisories from the same review (`search_path` ordering in `002`, psql-variable interpolation, swallowed unique-email collision) are untouched — they are out of scope for this card.
-
 ### Neon R1-6: provision public."user" on Managed Better Auth signup (t_749fcf79)
 
 **What** - New migration `supabase/migrations/neon/002_provision_public_user.sql` plus `scripts/verify-user-provisioning.py`. Managed Better Auth owns sign-up and writes only `neon_auth."user"`; every user-scoped table FKs to `public."user"(id)` (11 FK columns across 10 tables) and nothing copied identities across, so a real sign-up's first Data API write died with `23503` (`Key is not present in table "user"`), making lesson completion, read progress, quiz runs and profiles unsavable (R1-5, task `t_6ad12e2e`; reproduced live as 409). The fix is one provisioning function (`public.provision_public_user(uuid)`, SECURITY DEFINER, owned by `neondb_owner` so it runs with the table owner's privileges and RLS bypass, exception-guarded so it can never break auth) reached two ways: an **eager** `AFTER INSERT OR UPDATE` trigger on `neon_auth."user"` (plus a third trigger on `neon_auth.account` to carry the provider identity), and a **lazy heal** `BEFORE INSERT OR UPDATE` trigger attached by a catalog-driven loop to *every* table with an FK to `public."user"` — it reads `request.jwt.claims->>'sub'` and provisions inside the same transaction, before the FK check runs. `public."user"` gains a nullable `provider` column (the table had nowhere to carry the provider identity), and the migration re-asserts the `t_77f4d97e` default-deny posture (RLS on, zero policies) explicitly instead of inheriting it. A backfill mirrors existing identities; §7 self-verification aborts the apply if any function/trigger is missing, any `neon_auth` identity is unmirrored, a client role can EXECUTE the functions, or the auth table loses default-deny.
@@ -820,7 +841,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `grep -n "server-only" src/lib/supabase/service.ts src/lib/supabase/auth-admin.ts` → import present in both (first import); `grep -n '"server-only"' package.json package-lock.json` → dependency + lock entry (added to the lock by hand, then re-validated as lock-consistent by `npm ci`, which avoids the peer-flag churn a full `npm install` rewrite produced). `npx tsc --noEmit` → exit 0. `npx vitest run` → 100 files / 867 tests pass, including the seven suites that transitively import a privileged module (`completion.test.ts`, `sky-server.test.ts`, `supabase/auth-admin.test.ts`, `api/admin/entitlements`, `api/progress/read`, the certificate page, …); before the `vitest.config.mts` alias those seven failed at import with `This module cannot be imported from a Client Component module`. `python3 scripts/rls-isolation-check.py` → `PASS (119 assertions)`, exit 0. `npm run build` (behind `build-headroom-guard.sh`) → exit 0, compiled successfully. Guard proven to bite, twice, by adding a temporary `"use client"` route importing each module: `src/lib/supabase/service.ts` → build exit 1, `Error: 'server-only' cannot be imported from a Client Component module` at `service.ts:26` with the client graph `app/guard-probe/page.tsx → lib/supabase/service.ts`; same route re-pointed at `auth-admin.ts` → build exit 1 at `auth-admin.ts:20`. Probe removed, final clean build exit 0. (First probe attempt was invisible to the build because a `__`-prefixed App Router folder is private and never routed.)
 
 **Known Issues** - `server-only@0.0.1` ships no type declarations; the side-effect-only import (`import "server-only";`) type-checks without them, but if a future TS version requires a declaration add a one-line `declare module "server-only";`. The `vitest.config.mts` alias is the one place the guard is intentionally inert (tests run outside a Next bundle); if a future test asserts the guard itself, it must spawn a real `next build`, not a vitest import.
-
 ### Neon RLS R1-4 F-1: `public."user"` is now default-deny (RLS on, zero policies) + harness assertion (t_77f4d97e)
 
 **What** - `supabase/migrations/neon/001_rls.sql` §4 no longer runs `ALTER TABLE public."user" DISABLE ROW LEVEL SECURITY;`; it re-asserts **ENABLE** and keeps the `DROP POLICY IF EXISTS "user_select_own"` convergence step. RLS enabled with **zero policies is default-deny**, so `authenticated`/`anonymous` read nothing and write nothing even after a stray GRANT, while the table owner (`neondb_owner`, which Better Auth and the Next.js server connect as) is unaffected because owners bypass RLS. The §2 block and both comments were rewritten so the two sections agree, and the file header no longer claims the table is "protected by REVOKE, NOT by RLS". Inventory is unchanged at **34 policies** (no Neon-only policy added). `scripts/rls-isolation-check.py`: `grants.user_table.rls_disabled_by_design` (asserted `off`) is replaced by `grants.user_table.default_deny` (asserts `relrowsecurity = on` **and** `count(pg_policies where tablename='user') = 0`), plus a new behavioural `grants.user_table.stray_grant_rows` that grants SELECT to `authenticated` inside the rolled-back transaction and expects 0 rows — the exact security-review repro. Docstring/NEON_ONLY_POLICIES comments updated (the docstring still described a "35 total" Neon-only policy that no longer exists). No application code changed.
@@ -830,7 +850,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 --single-transaction -f supabase/migrations/neon/001_rls.sql` → exit 0 twice in a row, both ending `NOTICE: RLS port OK: 34 policies on public (34 expected across the 14 app tables)`. Live catalog: `select relrowsecurity from pg_class where relname='user'` = **true**; `select count(*) from pg_policies where schemaname='public'` = **34**; policies on `user` = **0**. Grant probe (acceptance 4): `begin; grant select on public."user" to authenticated; set local role authenticated; select count(*) from public."user";` → **0** (16 users in the table), previously 10/10 — rolled back. `python3 scripts/rls-isolation-check.py` → **PASS (119 assertions)**, exit 0, with `grants.user_table.default_deny got=on`, `grants.user_table.policy_count got=0`, `grants.user_table.stray_grant_rows got=0`, and the existing `11/22.user_table.read_denied` + `anonymous.user_table.read_denied` still `denied:42501`. Sensitivity proven both ways and restored after each: (a) `alter table public."user" disable row level security` → harness exit 1 `FAIL grants.user_table.default_deny: got off, expected on`; (b) an ad-hoc `create policy "user_select_own" ... for select to authenticated using (true)` → harness exit 1 `FAIL policy.total_count: got 35, expected 34`, and re-applying the migration converges it back out (0 policies on `user`).
 
 **Known Issues** - (1) The §4 `ENABLE` is redundant with §2 by design: it is the authoritative statement for the table if a mid-file failure or another card leaves the posture flipped, and re-running it is a no-op. (2) The single-writer hotspot noted by R1-4 still applies to these two files — this change was applied and verified by one worker only; no concurrent card applied migrations during it. (3) `pg_default_acl` still grants `arwd` to `authenticated` on future public relations; that is now inert for this table but remains a class-level risk for any new table without RLS (asserted by `grants.tables_reachable_without_rls`).
-
 ### Neon RLS R1-4 rework: apply 012's completion_events guard, repair the audit sequence, close the fail-open gaps (t_3f8e3504)
 
 **What** - Rework of `supabase/migrations/neon/001_rls.sql` + `scripts/rls-isolation-check.py` after val-el's FAIL on the RLS port (R1-4). Four changes: (1) **completion_events is now server-write-only on Neon**, matching `012_completion_events_server_write_only.sql` instead of live Supabase: the forgeable `completion_events_insert_own` (`WITH CHECK (auth.uid() = user_id)`) is replaced by `completion_events deny client insert` (`FOR INSERT TO authenticated WITH CHECK (false)`). (2) **`admin_audit_log` identity sequence repaired at apply time** — a new §5 `setval` block realigns `admin_audit_log_id_seq` to `max(id)` whenever it is behind (the branch was data-loaded with explicit ids, so every admin audit INSERT collided on the PK *after* the business mutation had committed). (3) **fail-open default privileges now asserted**, catalog-derived rather than list-derived: every `public` table reachable by `authenticated`/`anonymous` must have `relrowsecurity = true` (explicit allowlist, empty today, each entry requiring a written reason). (4) Two hardenings: `REVOKE EXECUTE ON FUNCTION public.is_admin() FROM PUBLIC` (+ grant to `authenticated, anonymous` — anonymous needs it because the PUBLIC-scoped catalog policies call it), and `public."user"` deliberately keeps its accepted posture (REVOKE-only, RLS *disabled*) rather than gaining a Neon-only `user_select_own` policy: that would make the inventory 35 and break the 34-policy parity baseline the security review and QA sign off on, and a grant-less role cannot reach the table anyway. The file now converges any ad-hoc `user_select_own` policy back out. Also made the harness-only role membership grant conditional and wrapped the whole body in one `BEGIN … COMMIT`, so the file actually re-applies cleanly (previously the second `--single-transaction` apply aborted with `permission denied to grant role "authenticated"`, and without the wrapper a mid-file failure left a partial policy set). Policy count stays 34 = the 34 Supabase-origin policies (completion_events swapped 1-for-1); the harness separates `EXPECTED_POLICIES` / `NEON_ONLY_POLICIES` (the latter empty today) so origin parity stays verifiable.
@@ -840,7 +859,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `psql "$DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 --single-transaction -f supabase/migrations/neon/001_rls.sql` → exit 0 twice in a row, both runs ending `NOTICE: RLS port OK: 34 policies on public (34 expected across the 14 app tables)`. Live state: `select count(*) from pg_policies where schemaname='public'` = 34; 14/14 app tables `relrowsecurity = true`; `completion_events` policy `with_check = false`; `public."user"` RLS off with no grants (REVOKE-only, 42501 for both roles). Server path: an `admin_audit_log` INSERT in the shape the admin routes use (`actor_user_id, action, target_type, target_id, details`) now succeeds (id 96) inside a rolled-back transaction — before the fix it raised `duplicate key (id)=(21)`. Client path: `SET ROLE authenticated` + `request.jwt.claims` INSERT into `completion_events` → `ERROR: new row violates row-level security policy for table "completion_events"` (42501), 0 rows committed. `python3 scripts/rls-isolation-check.py` → `PASS (117 assertions)`, exit 0, with new assertions `grants.tables_reachable_without_rls`, `grants.check_not_vacuous`, `grants.user_table.rls_disabled_by_design`, `sequence.admin_audit_log.in_sync`, `policy.origin_baseline_size` and the behavioural `{11,22}.completion_events.insert_denied`. Sensitivity proven: re-writing the deny policy as `WITH CHECK (auth.uid() = user_id)` under the same policy name (inventory unchanged, count still 34) makes the harness fail with `FAIL 11.completion_events.insert_denied: got allowed, expected denied:42501`; re-applying the migration restores `PASS (117 assertions)`.
 
 **Known Issues** - (1) `src/lib/supabase/service.ts`/`auth-admin.ts` lacked `import "server-only";` (review F-7). **RESOLVED in the R1-4 security follow-up (`t_c98e662b`)**: `server-only` is now a dependency and both privileged modules import it first, so a Client Component import is a build error instead of a service-role key in the browser bundle. (2) The harness advances `admin_audit_log_id_seq` by ~2 per run (seeding an identity column with `OVERRIDING SYSTEM VALUE` still calls `nextval`); forward drift cannot collide and the sequence assertion runs before the seed, against committed data. (3) Two concurrent cards (`t_3f8e3504` and `t_31005930`) were assigned to the same two files on the same branch; the work was consolidated into this commit, and the R1-4 fix card's explicit "public.\"user\" stays RLS-disabled" constraint reverted the interim 35th policy so the 34-policy parity baseline holds.
-
 ### Neon migration R1-3: RLS policies ported from Supabase (t_ce10555b)
 
 **What** - Added `supabase/migrations/neon/001_rls.sql`, the single idempotent RLS definition for the Neon database, and `scripts/rls-isolation-check.py`, a re-runnable cross-user isolation harness. The migration ports **all 34 policies already live on Supabase `zrggxfdyptiahskogwnn`** (14 public tables, identical policy names and commands), plus the supporting objects the policies need on Neon: an `auth` shim (`auth.uid()` uuid, `auth.user_id()` text, both reading `request.jwt.claims->>'sub'`), `public.is_admin()` (SECURITY DEFINER, same body as migration 008), the `authenticated` / `anonymous` roles (NOLOGIN, NOBYPASSRLS), schema/table/sequence GRANTs, and `REVOKE ALL ON public."user"` so the auth user table is not exposed through the Data API. Applied to the Neon dev branch; verified 34/34 policies, `relrowsecurity = true` on all 14 app tables, and 110 isolation assertions. No application code changed.
@@ -850,7 +868,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `psql "$DATABASE_URL_UNPOOLED" -v ON_ERROR_STOP=1 -f supabase/migrations/neon/001_rls.sql` applied twice (idempotent; second run only `NOTICE`s) with its own count assertion: 34 policies, 14/14 tables `relrowsecurity=true`. Independent per-table comparison against the live Supabase project via the Management API SQL endpoint: identical `(table, policy, cmd)` set, zero missing, zero extra — admin_audit_log 2, catalog_groups 2, catalog_sections 2, completion_events 2, course_prerequisites 2, courses 2, lesson_completion 4, quiz_attempt 4, quiz_run 2, read_progress 4, subscriptions 1, user_entitlements 2, user_profiles 3, user_roles 2. `python3 scripts/rls-isolation-check.py` → `PASS (110 assertions)`, exit 0. The harness runs in one rolled-back transaction (no persistent rows), simulates two real user ids via `SET ROLE authenticated` + `request.jwt.claims`, and asserts: zero rows of the other user on all ten user-scoped tables; cross-user INSERT rejected (42501) and cross-user UPDATE/DELETE affect 0 rows; own-user writes still succeed; `quiz_attempt`/`quiz_run` client writes still denied; `admin_audit_log`/`user_roles`/`courses` writes denied for non-admins; no-JWT and anonymous sessions read zero user rows while still reading live courses (12) and the catalog tables; `public."user"` is permission-denied for both roles; the owner connection still bypasses RLS (both users' rows visible), which is what keeps the server-side direct-SQL path working. Negative proof that the harness bites, run three ways and restored after each: (a) dropping `"Users can view their own read progress"` → exit 1 (`policy.total_count: got 33`); (b) dropping `"quiz_attempt deny client insert"` → exit 1 (`got 32`); (c) keeping the count at 34 but loosening the same SELECT policy to `USING (true)` → exit 1 (`11.read_progress.rows_of_other_user: got 1, expected 0`), i.e. a silent leak is caught even when the inventory looks complete.
 
 **Known Issues** - (1) Live-vs-files divergence: `012_completion_events_server_write_only.sql` was never applied to the Supabase project (live still has `completion_events_insert_own`, no deny guard), so this port mirrored live to keep count parity. **RESOLVED in the R1-4 rework below** — val-el ruled for 012's semantics and Neon now carries `completion_events deny client insert`. (2) Pre-existing, unrelated to RLS: the Neon `admin_audit_log` identity sequence is behind the imported data (`last_value` 2 vs `max(id)` 82 at discovery), so a server-side audit INSERT collides on the primary key. Left unrepaired here (`setval` is not transactional and it is outside RLS scope); the check script prints a `NOTE ... SEQUENCE BEHIND DATA` line and works around it with `OVERRIDING SYSTEM VALUE`. Fix is `select setval('admin_audit_log_id_seq', (select max(id) from public.admin_audit_log));`. (3) `public."user"` had RLS disabled and no policy — protected by REVOKE, not by RLS. **RESOLVED in R1-4 F-1** (`t_77f4d97e`): the interim `user_select_own` policy from the R1-4 rework was reverted to keep the 34-policy parity baseline, and the table is now **RLS enabled with zero policies (default-deny) plus `REVOKE ALL`** — neither `authenticated` nor `anonymous` can read or write it even if a stray GRANT lands. (4) `auth.user_id()` is created for parity with Neon's documented convention but is unused: every user-id column in this schema is uuid (11/11 checked), so all 30 `auth.uid()` occurrences stay uuid-typed.
-
 ### Configuration Walkthrough audio bridge: keep + reframe (t_628c416b)
 
 **What** - Lesson narration now BRIDGES AND KEEPS the Configuration Walkthrough section (ADR-106/107 keep + bridge), instead of reading it verbatim as raw mouse-click steps. `mdxToNarration` lesson mode detects walkthrough-style headings (anchored on the normalized text: `Configuration Walkthrough`, `Configuration steps`, `Setup walkthrough`, bare `Walkthrough`, plus `config`/`setup` prefixes) and prepends a single spoken framing line before the section: "Here is how this is configured in a sandbox. I will walk through the steps and the reasoning. You can run the exact clicks when you are back at the UI." The section body (sequence + why + exam traps) is then read as normal — it is NOT cut, unlike `Try It`. The bridge is emitted once per lesson. New `walkthroughBridge` option on `NarrationOverrides` / `NarrationOptions` (defaults to the line above; em-dash-free). Article mode (`lesson` falsy) is byte-for-byte unchanged.
@@ -860,7 +877,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx vitest run src/lib/audio-narration.test.ts src/lib/audio-emit.test.ts` (44 tests, incl. 5 new walkthrough cases); `npx tsc --noEmit` exits 0; `npm run build` and `npm run lint` pass. Ran `mdxToNarration(raw, {lesson:true})` on the real lesson `day-01-p-1a-object-permissions-crud-system-vs-object-profiles.mdx`: the Configuration Walkthrough now opens with the bridge line then reads the walkthrough content (steps 1 and 8 verified), Try It still cuts + bridges, Related Requirements + References still skipped, diagrams still narrated, ends with the knowledge-check transition, zero em-dashes in new prose.
 
 **Known Issues** - None. Committed to `feat/lesson-audio-walkthrough-bridge` only; main is untouched.
-
 ### Lesson audio refinements: smart lesson narration + TTS timeout scaling (t_36fb4f74)
 
 **What** - Two refinements to lesson audio on `feat/lesson-audio-refinements` (NOT merged to main). (1) `mdxToNarration` gains an opt-in `lesson` mode (ADR-106/107): section routing is gated on an interactive-heading ALLOWLIST, so a lesson reads only its LEARNING content - Deep Dive, Worked example, Configuration Walkthrough, Exam Traps, What's Next (recap) and any concept subheads - and cuts the hands-on `Try It` step-by-step (replaced by a single spoken bridge line, once) plus `Related Requirements` and `References` (nothing emitted). The knowledge-check transition is appended once as the final line, only when learning content was actually emitted. Article mode (`lesson` falsy) is byte-for-byte unchanged: the blog path and the 52 pre-refinement audio tests do not regress. Diagram narration (`Diagram: <alt>.`), subheading cues, and syntax stripping are preserved. (2) `scripts/build-audio.js` replaces the rigid `timeout: 120000` with a length-scaled `ttsTimeoutMs(narration)` = `min(30s + 90ms/word, 15min)` (ADR-108), applied to BOTH the blog and learn synthesizers, so a ~4k-word lesson (previously killed at exactly 120s) gets ~6.6 min and the max 5,713-word lesson ~9 min. New `NarrationOptions` fields mirrored in `src/lib/audio/contracts.ts`.
@@ -878,7 +894,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx vitest run src/app/api/audio/` (33 tests) and the full suite (834 tests) pass; `npx tsc --noEmit` exits 0; `npx eslint src/app/api/audio/` clean. Committed to `feat/lesson-audio` only; main is untouched.
 
 **Known Issues** - None. `src/data/lesson-audio.ts` is still empty scaffolding; the gate is exercised by unit tests against a seeded lesson entry.
-
 ### Fix: narration diagram lead-in no longer emits a double period when the alt ends in '.' (t_2e6e20e0)
 
 **What** - Fixed the narration builder's diagram lead-in so a spoken diagram line never ends in a double period. `mdxToNarration` now strips a single trailing sentence-ending punctuation (`.`, `!`, `?`) from the resolved diagram text (alt or `description::` override) before the lead-in wraps it with its own `.`. Previously the default `(alt) => \`Diagram: ${alt}.\`` appended a second period to every real lesson diagram alt (which already ends in `.`), producing `...or products..` — a double stop a TTS engine reads as two pauses. Added 3 regression tests: an alt ending in `.` yields a single `.`, a `description::` override ending in `.` yields a single `.`, and an alt with no trailing punctuation still gets exactly one `.`.
@@ -888,7 +903,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx vitest run src/lib/audio-narration.test.ts` (19 tests) and the full suite (828 tests) pass; `npx tsc --noEmit` exits 0. Re-ran the builder on the real 5-diagram lesson: 106 lines, 5 Diagram cues, 0 diagram lines ending in a double period (was 5 before the fix).
 
 **Known Issues** - None. Committed to `feat/lesson-audio` only; main is untouched.
-
 ### Lesson audio scaffolding on feat/lesson-audio (t_982d9989)
 
 **What** - Added the lesson-audio scaffolding on the `feat/lesson-audio` branch (NOT merged to main; the backfill cron runs later, after the diagram retrofit). A parallel `LessonAudio` module (ADR-101) with a `learn/<series>/<slug>/` storage prefix (ADR-102): new contract types in `src/lib/audio/contracts.ts`, a generated `src/data/lesson-audio.ts` (starts empty), a `--learn` mode in `scripts/build-audio.js` (with `assertSafeSeries` allowlist and a merge keyed on series/slug/voice), two-space resolution in `GET /api/audio/[slug]` and its `/timings` twin (ADR-103), and the `AudioPlayerLazy` wired into the atlas lesson page gated on `(series, slug)` (ADR-104). The narration builder `mdxToNarration` is reused unchanged (ADR-105) - verified on a real 5-diagram lesson: 106 lines, 5 Diagram cues, 16 Section cues, 0 leaked syntax.
@@ -898,7 +912,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx vitest run src/lib/audio-narration.test.ts src/lib/audio-emit.test.ts src/app/api/audio` (52 tests) and `src/app/atlas` + audio lib tests (38 tests) all pass; `npx tsc --noEmit` exits 0. Learn-mode emitter exercised in a throwaway sandbox (metadata-only): emits all lessons, scopes to one series without dropping others, rejects a hostile series name, and does not treat the next flag as a series value. No em-dashes in any new prose.
 
 **Known Issues** - (1) `src/data/lesson-audio.ts` is empty scaffolding; the lesson-audio backfill cron (post diagram retrofit) populates it. (2) The lesson page player is gated on `lessonAudio.find((a) => a.series === series && a.slug === slug)`; until the backfill runs, no lesson renders a player. (3) Committed to `feat/lesson-audio` only; main is untouched.
-
 ### Perf: the `next-build` coordinator RSS is not cap-able by build config (measured) — off-box build is the remaining lever (t_67209e0d)
 
 **What** - No functional change. Investigated the MEDIUM finding from the perf review of `e0d35e7` (t_e8566dd9): a cold build still peaks at ~2.7-2.9 GB tree RSS against t_cb011d26's stated ~0.8 GB target, because the single `next-build` coordinator (~1.5-1.6 GB) is not governed by `experimental.cpus`. Five candidate levers were applied one at a time to a **fresh cold `.next`** and measured; **none reduced the peak**, so none was shipped (the card's own rule: do not force a change that merely moves the peak). The only durable artifact is a comment block inside the existing `experimental` block in `next.config.ts` recording the measured verdicts next to `cpus: 4` (additive; no second `experimental` block).
@@ -926,7 +939,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 - Evidence (raw logs, process-tree CSVs, swap readings, `footprint`/`vmmap` captures, hash files): `/Users/kelex/.hermes/kanban/workspaces/t_67209e0d-evidence/`.
 
 **Known Issues** - (1) The coordinator cannot be capped from build config; the remaining lever is **building off-box (or on the deploy machine) while the two local models are resident**, which is recorded as a recommendation, not implemented here. (2) Baseline portability: `hashes_uncapped.txt` was captured in a worktree **without** a local env file, and build output is environment-sensitive — in a worktree **with** the Supabase credentials present the build makes the courses table reachable, `/atlas` flips from static (`○`) to dynamic (`ƒ`) and one route chunk differs (56/57 hashes match). Any future output comparison must reproduce the baseline's environment or it will report a false diff. (3) Vercel's build machine is 2 cores / 8 GB, where Next's default worker count is already `max(1, cores-1) = 1`; `cpus: 4` therefore *raises* the worker count there from 1 to 4 (measured: no build-time regression, 54.7 s vs 57.6-64.2 s uncapped), so this lane's numbers are local-box numbers only.
-
 ### Perf: cap `next build` worker fan-out at 4 (`next.config.ts`) (t_cb011d26)
 
 **What** - Added an `experimental` block to `next.config.ts` with `cpus: 4` (the file had no `experimental` block before, so this adds one rather than extending an existing one; `outputFileTracingIncludes`, `redirects()` and `headers()` are untouched). This is the knob Next itself reads in `next/node_modules/next/dist/build/index.js:getNumberOfWorkers`, whose default is `Math.max(1, os.cpus().length - 1)` (`server/config-shared.js:218`) — i.e. **11** on this 12-logical-CPU machine. Build-time resource cap only: no output, route or runtime behaviour changes.
@@ -941,7 +953,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 - No new swap: `vm_stat` `Swapouts` read **3972 before and 3972 after** the monitored build, and were still 3972 after every later build (cold and control runs included).
 
 **Known Issues** - The cap does what the card asked (worker fan-out 11 -> 4; the four `jest-worker` children total 0.90-0.95 GB instead of ~1.65 GB), but it does **not** deliver the card's "~0.8 GB build spike" estimate and should not be assumed to have removed the swap pressure on its own: the largest single term in a cold build is the one `next-build` coordinator process, which grows to **1.69 GB RSS** and is not governed by `experimental.cpus`. Measured total peak is still ~2.9 GB on a cold build (~1.7 GB warm-cache). Further reduction needs either a memory cap on the coordinator (`NODE_OPTIONS=--max-old-space-size`) or the build moving off the box while the pinned models are resident. Note also that neither the capped nor the uncapped build wrote to swap during this session, so the reduction was not re-verified against the original 2026-09-16 pressure conditions. Two `content/learn/**/questions/*.json` files are regenerated with a slightly different slug by `npm run prebuild` (tracked as deleted + new untracked); that is pre-existing generator behaviour, unrelated to this change, and was left out of the commit.
-
 ### Fix: Follow-along no longer un-checks itself when the browser's first smooth-scroll event arrives late (t_8ef99cf7)
 
 **What** - The t_a34614a1 fix removed the 800 ms cap as a mid-animation trigger, but left a second race in `beginProgrammaticScroll` (`src/components/BlogPost/AudioPlayer.tsx`): the settle timer was armed with the **150 ms inter-event window at suppression start** — before the animation had emitted a single event. Chrome does not fire the first `scroll` event for a smooth document scroll synchronously with the `scrollTo` call; the a11y re-verification measured **158.8 / 184.7 / 205.3 / 306.6 ms** (and 244.2 ms for a bare probe in a visible, focused, unthrottled tab). So the timer expired first, the animation's first event landed on the **post-suppression** path, the position-based tail check could not match (nothing had ever been suppressed, so `lastSuppressedScrollAtRef` was still `0`), and the code fell through to `setFollowing(false)`. Same user-visible symptom, reproduced **4/6 live runs (2/2 at 1x CPU, no polling)** with 1.1–1.5 s bursts — neither cap was involved.
@@ -958,7 +969,6 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 - Live, real Chrome on `next start`, signed in as the QA reader, on `/field-notes/accessibility-testing-layers-ci-2026`: with the animation's start deferred 200 ms so the first event lands **327 / 404 / 393 ms** after the `scrollTo`, the toggle stayed **checked at every event and at the end**, one `scrollTo` per block, no same-block re-scroll. The same three runs on the **pre-fix build** un-checked at **386 / 348 ms** (first events 358.7 / 247.1 ms) — the reported race, reproduced and fixed. Undeferred real bursts (first events 26–125 ms) also stay checked. AC-3 (wheel / ArrowDown stop following, audio untouched), AC-4 (bare scroll after settle un-checks, audio untouched) and the 93x44 hit target re-verified live on the fixed build.
 
 **Known Issues** - None. The rescue is deliberately narrow: it needs *no* event ever suppressed, the position still short of our own target, and the start grace. A reader who drags the scrollbar during that window in the same direction as a pending auto-scroll could have that one drag absorbed — the next event with normal cadence ends the window.
-
 ### Fix: the Follow-along suppression cap is no longer shorter than a real smooth-scroll burst (t_a34614a1)
 
 **What** - The t_078c9385 fix gated stop-following on real user *input* (wheel/touch/scroll-keys), which was correct, but it left one wall-clock timer in the path: the suppression window for OUR OWN programmatic scroll was **hard-capped at 800 ms** (`SCROLL_SUPPRESS_CAP_MS`, applied in `beginProgrammaticScroll`). Chrome's smooth-scroll event burst is **longer than that** — the a11y review measured 731 ms / 768 ms / 851 ms for an ordinary one-screen (~1000 px) jump and 1515 ms for a three-screen jump — so suppression expired *mid-animation*, the next `scroll` event from our own scroll hit the listener with the gate already open, and the toggle un-checked itself. The original symptom, moved from a 1 ms window to an 800 ms one. Three changes:
@@ -979,7 +989,6 @@ LOW a11y finding folded in: the "Follow along" toggle's label grew from a 93x16 
 - Live-browser re-measurement of the repro (dev server + signed-in reader): see the completion evidence on the card — the checkbox stays **checked** through the entire recorded burst (both the one-screen jump and the multi-screen jump) with exactly one `scrollTo` per block change and no same-block re-scroll.
 
 **Known Issues** - None. The tail tolerance is deliberately narrow (150 ms cadence + 2 px of the requested target); a reader who parks the scrollbar exactly on the auto-scrolled offset within 150 ms of the animation ending still sees the next movement un-check the toggle, which is the intended AC-4 behaviour.
-
 ### Perf: cache the Follow-along block alignment across `timeupdate` ticks (t_05dc3b79)
 
 **What** - `AudioPlayer.handleTimeUpdate` runs ~4x/s while audio plays. On every tick it re-queried the DOM (`articleBlocks()`: `main article` → `querySelectorAll(h2,h3,h4,h5,p,li,figcaption)`) and re-ran the greedy O(segments × blocks) `alignSegmentsToBlocks` over the whole manifest — even for the ticks that land on the same paragraph and change nothing. That per-tick work is now cached in `alignmentCacheRef`, keyed by `slug` + the `timings` array reference, with the DOM block elements cached alongside the alignment. A cache miss or a changed slug/timings reference rebuilds inside the existing `try/catch`; the `timings → null` path (sign-out / fetch failure) clears the cache. The follow-along scroll/change-detection logic (`lastScrollBlockRef`, `beginProgrammaticScroll`, settle/cap timers) is untouched byte-for-byte.
@@ -992,7 +1001,6 @@ LOW a11y finding folded in: the "Follow along" toggle's label grew from a 93x16 
 - `npx vitest run` → 99 files / **810 tests pass** (809 + 1 new). `npx tsc --noEmit` → exit 0. `npm run lint` → clean. `npm run build` → exit 0.
 
 **Known Issues** - None. Pure caching change: scroll behavior, suppression timers, timings generation, `/api/audio/<slug>/timings`, and `audio-scroll.ts` are untouched.
-
 ### Fix: "Follow along" no longer unchecks itself on every auto-scroll (t_078c9385)
 
 **What** - The article-audio "Follow along" checkbox stays checked while the page auto-scrolls along with the spoken paragraph. Previously the window `scroll` listener stopped following on ANY scroll not covered by a programmatic-scroll guard, and that guard was cleared **1ms** after `window.scrollTo()` — long before the browser's first `scroll` event from a smooth-scroll animation (~16ms later, then every frame for ~300-700ms). The component read its OWN animation as a user scroll, un-checked the toggle, and following stopped for good after one paragraph. The same `SCROLL_THROTTLE_MS` branch also *re-issued* the scroll every 250ms while the same block was active, keeping the page in a permanent smooth-scroll animation.
@@ -1009,7 +1017,6 @@ The toggle default (ON signed-in, OFF under `prefers-reduced-motion`), the logge
 **Verified** - The repro (and the new AC-1/AC-3/AC-4 regression tests) **fail on the unfixed code** (5 failed) and **pass after** the fix, committed permanently to `src/components/BlogPost/AudioPlayerScroll.test.tsx`. `npx vitest run` → 99 files / **809 tests pass**. `npx tsc --noEmit` → exit 0. `npm run lint` → clean on the changed files.
 
 **Known Issues** - A scrollbar drag is still detectable as a stop via the remaining `scroll` listener (it fires neither wheel nor touch), but only after our own animation has settled — a drag beginning *during* a follow-along smooth scroll is treated as part of the animation until it settles, which matches the previous intent.
-
 ### Audio read path streamed + HTTP Range passed through to R2 — only the requested bytes leave the bucket (t_70ecf56b)
 
 **What** - `GET /api/audio/[slug]` no longer downloads the whole MP3 to the server to serve a slice of it. The Range is passed to R2's `GetObject`, R2's own body stream is piped into the response, and nothing is buffered.
@@ -1030,7 +1037,6 @@ The toggle default (ON signed-in, OFF under `prefers-reduced-motion`), the logge
 - A ranged request costs one extra R2 round trip (`HeadObject`) so the span math stays byte-identical to the previous implementation (suffix ranges, end-clamping and the 416 boundary all need the total size). It carries no body, so it is a header-only request against 5-15 MB of audio no longer transferred; a no-Range request is still exactly one `GetObject`.
 - `bytes=-0`, and a range whose start is past the end, still return 416 by the same arithmetic as before — preserved deliberately, not changed.
 - The Supabase rollback path (t_f11780b8) and the write path (t_5ff36ae8) are untouched by this card; the branch is cut from `feat/r2-audio-write-t_5ff36ae8` so `putR2Object` and the streaming reads live in one `client.ts`.
-
 ### Cleanup: legacy pre-merger 'adroit-blog' references purged from current-facing docs (t_a633091b)
 
 **What** - The retired pre-merger identity is gone from everything current-facing. **README.md** now states production as `https://adroit.io` (Vercel project `adroitconsultingllc`, team `adroit-consulting`), links the wiki at `tophersymps/adroitconsultingllc/wiki/*` (including the renamed Learn Atlas page), uses the live branding (Field Notes, The Atlas, no "Learn tab"), and drops the dead note that adroit.io was unwired until launch. The inline release history, which advertised the deleted `adroit-blog-two.vercel.app` deployment as production in 13 verification records, is replaced by a pointer to the wiki Changelog page, where that history already lives with corrected naming. README went from 23 occurrences to 0. **supabase/config.toml**: local `project_id` renamed, and the retired `adroit-blog.vercel.app` entry removed from `additional_redirect_urls`. **package.json + package-lock.json** name is now `adroitconsultingllc`; the `vitest.config.mts` header comment names the live repo. **src/lib/api-security.ts**: the comment claiming the deploy lives on the "-two" subdomain and that adroit.io 404s the blog is replaced with the current reality (both legacy projects were deleted on 2026-09-15 and 404 today); the allowlist values themselves are unchanged. **content/**: 11 published lessons and 1 article had endnote citations pointing at `github.com/kelex1812/adroit-blog`; they now point at `github.com/tophersymps/adroitconsultingllc`, and the article endnote label `adroit-blog.` is `adroit.io.`. content/ is at zero matches. **docs/daily-planet-constellation-runbook.md**: the runbook `cd` path pointed at the deleted pre-merger checkout, now the canonical workspace path. **scripts/build-learn.js**: the B-04 build error message no longer prefixes its design-doc reference with the dead project name. New `docs/legacy-adroit-blog-classification.md` records the complete sweep: 251 tracked occurrences in 130 files before, 216 in 111 files after (206 carried over from the sweep plus the 10 this entry itself quotes), with every remaining occurrence given a legacy-doc, live-doc or dead-artifact verdict.
@@ -1068,7 +1074,6 @@ The toggle default (ON signed-in, OFF under `prefers-reduced-motion`), the logge
 - The audio-backfill cron hard-resets its own clone to `origin/main`, so it keeps generating Supabase-only audio until this branch is merged and deployed: run `node --env-file=.env.local scripts/migrate-audio-to-r2.cjs` after each pass until then (it is idempotent — it is what closed the 10-object gap found during this task's verification: 5 articles generated after the t_f11780b8 copy, 26.2 MB).
 - `src/data/audio.ts` remains a write hotspot shared with the audio-backfill cron (see the t_c9caef59 entry) — untouched here.
 - Production still needs the four `R2_*` vars on the Vercel project that serves adroit.io (carried over from t_f11780b8): until then production audio requests fail closed with 401. The generator/cron side is independent of that and needs no Vercel change.
-
 ### Audio storage migrated from Supabase Storage to Cloudflare R2 (S3 API), auth gate and Range contract unchanged (t_f11780b8)
 
 **What** - Article audio is now stored in and served from the **private Cloudflare R2 bucket `adroit-audio`** over its S3 API. Four deliverables:
@@ -1096,7 +1101,6 @@ The toggle default (ON signed-in, OFF under `prefers-reduced-motion`), the logge
 3. **Supabase objects are intentionally retained**, so the Free-tier storage is still occupied for now and the old bucket must not be pruned until R2 is proven in production. The migration plus its verification consumed roughly 1.1 GB of the 5 GB monthly Supabase egress.
 4. **Documentation drift, owned by brainiac.** `src/lib/audio/contracts.ts` is marked "MUST NOT hand-edit" and its prose still describes `getSupabaseServiceClient().storage.from(AUDIO_BUCKET).download()` as the read path, which is now stale. It was deliberately left untouched; the file's types and the `AUDIO_BUCKET` constant are unchanged and other callers still use the service-role client.
 5. **`AUDIO_BUCKET` ("audio") is no longer referenced by the routes.** It is still exported from `contracts.ts` and still names the Supabase source bucket used by the migration tool and the generator, so it is not dead; only the reader moved.
-
 ### Security fix: verify-content-paths.js no longer runs a shell — CWE-78 via interpolated git-diff filename (t_37234d98)
 
 **What** - `scripts/verify-content-paths.js` no longer interpolates a git-diff filename into a shell command: it used `execSync("git show HEAD:" + rel)` with no quoting and no allowlist, so a content path such as `content/blog/evil$(touch PWNDMARKER)x.mdx` ran shell code. It now calls `execFileSync("git", ["show", ...])` (no `/bin/sh`) and validates every `rel` against `^content/[A-Za-z0-9][A-Za-z0-9._/-]*$` with `..` segments rejected; anything else is skipped. Only the script and this entry changed — `scripts/build-audio.js` carried a separate CWE-78 sink and was fixed under `t_38e981ba`.
@@ -1106,7 +1110,6 @@ The toggle default (ON signed-in, OFF under `prefers-reduced-motion`), the logge
 **Verified** - Pre-fix, a hostile file `content/blog/evil$(touch PWNDMARKER)x.mdx` shell-executed (marker created, then a git error on the substituted `evilx.mdx`); post-fix it prints SKIP and creates nothing, while legitimate paths are processed identically. Clean run: 0 checked / 0 mismatched, exit 0. `npx vitest` 742 pass (scripts are outside the test suite).
 
 **Known Issues** - None. This entry's body was restored from commit `84b94852`'s message (the original commit added the heading without a body), so the detail above is that commit's recorded scope and evidence.
-
 ### Security fix: --bitrate threaded through the shell-free argv path — build-audio.js carries the deployed execFileSync fix (t_78e28287)
 
 **What** - The branch now carries `origin/main` (`c23264d` at review time, since advanced to `bb24d92`, which this branch also merged) — the lean commit itself was written against `021a77e`, so it predated the deployed `070efa1`/`b3fa284`. `--bitrate` travels as an **argv element** into the existing shell-free `execFileSync(venvPython, [engine, ...])` call — the `execSync`/`synthCmd` shell string and the temp `.narration.txt` file are gone for good. A new `BITRATE_RE = /^\d{2,3}k$/` allowlist (`assertSafeBitrate`, called once in `main()` alongside `assertSafeVoice`) rejects anything else before it reaches the engine; `scripts/reencode-audio-lean.cjs` validates `--bitrate` with the same regex.
@@ -1116,7 +1119,6 @@ The toggle default (ON signed-in, OFF under `prefers-reduced-motion`), the logge
 **Verified** - val-el's PoC (`poc-t6aeb68f3-bitrate-injection.cjs`) re-run against the fixed emitter (real CLI, throwaway sandbox — `scripts/tmp_poc_bitrate_injection_t78e28287.cjs`) both ways: no marker file for `AUDIO_BITRATE='48k; touch … #'` or `--bitrate '48k; touch … #'`, both aborting with `FATAL: invalid bitrate … rejected`. `git merge origin/main` into the branch is a no-op (no conflict) — checked against `c23264d` and again after `bb24d92`, where the only overlap was a CHANGELOG heading (resolved, both sections kept); `assertSafeSlug`/`assertSafeVoice`/`execFileSync` all present, zero `execSync` and zero `synthCmd` in `scripts/build-audio.js`. New bitrate regression tests in `src/lib/audio-injection.test.ts` (13 tests in that file now, 7 of them bitrate-specific: hostile `--bitrate` flag, hostile `AUDIO_BITRATE`, allowlist shape, a stand-in engine that records the argv it was handed, the lean default, and the `reencode-audio-lean.cjs` guard); `npm test` 749/749 pass; `npx tsc --noEmit` exit 0; `npm run build` exit 0; `npm run lint` clean. **Proven to bite:** re-introducing the pre-fix `execSync`/unquoted-bitrate form (`scripts/tmp_bite_proof_t78e28287.cjs`) fails 5 of the 13 with the marker file actually created; restoring the fix passes 13/13.
 
 **Known Issues** - Non-blocking, raised by val-el: the 35 in-place re-encoded MP3s have no retained originals (only re-run TTS could recreate them), and the orphan-deletion tool still lives at untracked `scripts/tmp_delete_audio_orphans.cjs` (guard logic sound, dry-run by default) rather than under review. Both are follow-ups, not part of this security fix.
-
 ### Security fix: build-audio.js no longer runs a shell — CWE-78 command injection via content/blog filename (t_38e981ba)
 
 **What** - `scripts/build-audio.js` built the TTS command as a SHELL STRING and ran it through `execSync` (`execSync(\`${venvPython} ${engine} --text "$(cat ${JSON.stringify(textFile)})" --voice ${voice} --out ${JSON.stringify(out)} --timing ...\`)`), and probed the result with a second shell string (`execSync(\`file -b ${JSON.stringify(out)}\`)`). `slug` is a FILENAME taken from `content/blog/*.mdx` and was interpolated straight into those strings; `JSON.stringify()` only quotes a path and does NOT stop command substitution inside double quotes. Both calls now use `execFileSync` with an argv ARRAY (no shell, so no re-interpretation of `$()`, backticks, `${}` or `;`), which also removes the temp `.audio-out/<slug>.narration.txt` file — `narration` is passed as one argv element, which preserves real newlines natively (the `"$(cat …)"` trick only existed to get newlines through a shell). Defence in depth: new `assertSafeSlug` / `assertSafeVoice` allowlists (`/^[a-z0-9][a-z0-9-]*$/` and, because `af_heart`/`bm_george` use underscores, `/^[a-z0-9][a-z0-9_-]*$/`) run at the top of the worklist loop and at the start of `main()`, before any slug/voice reaches `path.join`, a storage key or a subprocess. A slug that fails validation aborts the run (`FATAL: invalid slug "…" rejected: …`, exit 1) instead of being executed.
@@ -1126,7 +1128,6 @@ The toggle default (ON signed-in, OFF under `prefers-reduced-motion`), the logge
 **Verified** - Failing-before / passing-after on the real CLI in a throwaway sandbox (same PoC as val-el): **pre-fix** → `MARKER EXISTED (command injection): true` and `.audio-out/evil$(touch PWNEDMARKER)x.narration.txt` written; **post-fix** → `FATAL: invalid slug "evil$(touch PWNEDMARKER)x" rejected: must match /^[a-z0-9][a-z0-9-]*$/ (content/blog filename)`, `MARKER EXISTED (command injection): false`, no `.audio-out` artifacts. New regression guard `src/lib/audio-injection.test.ts` (6 tests) spawns the REAL CLI in a sandbox: hostile filename, hostile `--voice`, `../` slug, a structural check that no `execSync(`/`synthCmd` remains, a control that a legitimate slug still emits, and an allowlist-shape lock. **Proven to bite:** run against the pre-fix emitter (`021a77e`) in a separate worktree, 5 of the 6 fail (the marker-creating PoC test included); against the fix, 6/6 pass. `npx vitest run` → 97 files / 742 tests pass; `npx tsc --noEmit` → exit 0; byte-identity: `node scripts/build-audio.js --metadata-only --recent 3 --voice af_heart` re-emits `src/data/audio.ts` byte-identically (35 entries / 30 timing keys, `git diff` empty). All 91 real `content/blog/*.mdx` filenames match the new slug allowlist (verified before shipping the strict regex).
 
 **Known Issues** - The merge/`putEntry` logic fixed by `t_c9caef59` was deliberately not touched. The `.narration.txt` temp files are no longer written; any stale ones in `.audio-out/` are simply unused (and `.audio-out/` is not committed). Malformed names in `content/blog/` now abort the whole run loudly rather than being skipped — intentional (the script's contract is "fails loudly", and such a name previously meant shell execution); an operator who drops a badly-named file in gets one clear FATAL line instead of a partial run.
-
 ### Audio: lean mono/24k/48 kbps storage profile + stored-audio re-encode + 4 orphan objects deleted (t_788618d2)
 
 **What** - The whole narration library now fits the Supabase **Free** 1 GB storage tier, so no Pro upgrade is needed and no further re-encoding is required when the 91-article backfill completes.
@@ -1143,7 +1144,6 @@ Bucket total (service-role listing, not a claim): **536.5 MB / 73 objects at the
 **Verified** - `node scripts/tmp_verify_bucket_lean.cjs` re-downloads all 35 referenced objects from the live bucket and ffprobes them: 35/35 mono / 24000 Hz / 48 kbps, every duration matching the transcode report within 0.5 s, `BUCKET_LEAN_CHECK PASS`; the same run prints the 454 MB projection for 91 articles. `node scripts/tmp_verify_timings.cjs` re-reads all 30 timing manifests from the bucket: 30/30 ascending, 0-anchored, final `endSec` equal to the stored audio duration (delta 0.00 s), `TIMINGS_CHECK PASS`, so the Tier C follow-along offsets are still exact. `scripts/tmp_quality_ab.py` decoded 23 before/after pairs to PCM and compared 50 ms RMS envelopes: **23/23 correlation 0.9999** with duration delta 0.000 s and peaks preserved (quality proxies for "not mushy"; two listenable 40 s original vs 40 s lean A/B clips are attached to the card for a human ear check). `node scripts/tmp_delete_audio_orphans.cjs` -> `ORPHAN_DELETE PASS (all requested keys absent)`, with a cache-busted direct GET returning `404 Object not found / NoSuchKey` for all 4 slugs (a plain GET was still served from the CDN with `cf-cache-status: HIT`, which is why the verifier cache-busts). `scripts/tmp_engine_lean_check.py` (TTS venv, no Kokoro inference) shows the engine default emitting `bit_rate=48000` and `--bitrate 96k` still honored. `npm test` -> **96 files / 736 tests pass** (unchanged from base). `npm run build` -> exit 0, `/api/audio/[slug]` route emitted. `src/data/audio.ts` untouched: 0 dangling refs, 0 new entries.
 
 **Known Issues** - The audio-backfill cron resets its own clone to `origin/main`, so it keeps synthesizing 128 kbps until this change is merged and deployed; 5 such fresh objects (66.7 MB, all 128 k) were generated mid-run and were deliberately NOT deleted (they are in-flight cron work whose `src/data/audio.ts` entries have not landed yet). Re-run `node scripts/reencode-audio-lean.cjs` once after the cron's next pass post-merge (it is idempotent and skips already-lean objects) to sweep any 128 k file that slipped in before the merge. Orphan detection matches exact `storagePath` keys, so cron-in-flight objects look like orphans; do not run `--all-orphans` while the cron is active. Deliverable D (ReadableStream route hardening) was intentionally not implemented: `supabase-js` `.download()` already buffers the whole object into a Blob before the `Response` is constructed, so streaming the Response body would not reduce peak function memory (only a raw signed-URL fetch pipe would) while it would churn the 10 route contract tests covering the auth / Range / 206 / 416 matrix; live 13 to 20 MB bodies already serve 200, confirming the 4.5 MB function-body cap is not triggered.
-
 ### Fix: build-audio.js now MERGES on every path — a non-incremental run can no longer drop entries or timingsStoragePath (t_c9caef59)
 
 **What** - `scripts/build-audio.js` seeded its entry list with `let entries = incremental ? readExistingEntries() : []` (`build-audio.js:214`), so any run WITHOUT `--incremental`/`--backfill` re-emitted `src/data/audio.ts` from scratch and silently dropped every entry it did not re-synthesize — including that entry's `timingsStoragePath` (only emitted when the current run produced a timing manifest). The emitter now reads the existing module on EVERY path and re-emits the union keyed by `slug`+`voice` (`const entries = readExistingEntries(); const byKey = new Map(...)`), with a `putEntry()` merge helper that never DOWNGRADES an entry: a field already on disk (e.g. `timingsStoragePath`) is only overwritten when this run actually produced a replacement, so `--metadata-only` re-emits can't strip a timing key either. `emit()` (format, sort, trailing newline) is byte-for-byte unchanged.
@@ -1153,7 +1153,6 @@ Bucket total (service-role listing, not a claim): **536.5 MB / 73 objects at the
 **Verified** - New regression guard `src/lib/audio-emit.test.ts` (5 tests) spawns the REAL CLI in a throwaway sandbox (metadata-only: no TTS, no network, no Supabase) against a fixture whose `timingsStoragePath` entry is NOT in the run's worklist, and asserts the field + every other entry survives. **Proven to bite:** re-applying the pre-fix `incremental ? readExistingEntries() : []` line fails 2 of the 5 (`expected [ 'alpha-2026/af_heart' ] to deeply equal [ … 2 more ]`); restoring the fix passes 5/5. `npx vitest run` → **96 files / 736 tests pass** (731 before + 5 new). `npx tsc --noEmit` → exit 0. `npm run build` → exit 0. Byte-identity: `node scripts/build-audio.js --metadata-only --recent 3 --voice af_heart` against the repo's real `src/data/audio.ts` re-emitted 30 entries with `git diff` empty (byte-identical, incl. the 25 timing keys).
 
 **Known Issues** - `--backfill` already implied an incremental merge on main (since `c2b6655`), so the live bite was `--recent N` / `--slug X` without `--backfill`; both are now merged unconditionally. The deeper cron-side risk is unchanged and out of scope: `~/.hermes/scripts/audio-article-backfill.py` hard-resets its own clone to `origin/main` and seeds `audio.ts` from `origin/main`, so an entry that exists only on an unmerged feature branch is still lost when the cron publishes (merge-base problem, not an emitter problem) — the emitter fix removes the from-scratch rewrite, not that ordering hazard. `src/data/audio.ts` remains a write hotspot shared with the cron; never hand-edit it.
-
 ### Fix: re-reconcile the 5 Tier-C pilot timingsStoragePath in src/data/audio.ts + regression guard (t_ebba3564)
 
 **What** - The critical A11y finding on the Tier C review (`t_7816c21f`) is closed: the shared `src/data/audio.ts` in the `feat/audio-tier-c-t_1489ca98` worktree had lost `timingsStoragePath` for all 5 pilot articles (the audio-backfill cron re-emits that file from an origin/main merge-base that predates this feature). Re-ran the parent's own merge tool (`scripts/tmp_merge_timings.cjs`) so BOTH the 5 pilot timings keys AND the concurrent backfill's new entries are present (29 entries, no truncation), and committed it (`53d4c9e`) so the worktree is clean against HEAD. Added a named-pilot regression test in `src/lib/audio.test.ts` ("the 5 Tier C pilot articles keep their timingsStoragePath wiring") that fails loudly if any of the 5 pilots loses its key again — proven to bite by temporarily deleting one key (1 failed / 6 passed) then restoring it.
@@ -1163,7 +1162,6 @@ Bucket total (service-role listing, not a claim): **536.5 MB / 73 objects at the
 **Verified** - `npx vitest run src/lib/audio.test.ts src/app/api/audio src/components/BlogPost` → 6 files / 38 tests pass. `git diff src/data/audio.ts` clean vs commit. Negative check: dropping the `prompt-caching-ai-infrastructure-2026` key fails the new test with the expected message.
 
 **Known Issues** - The low-severity a11y note (Follow-along checkbox 14x14px < 24px WCAG 2.5.8 target, `AudioPlayer.tsx` L283-288) remains open and non-blocking, unchanged by this fix. Only the 5 pilots carry timings; the other articles degrade gracefully without the toggle. The `src/data/learn.ts` / other dirty files in the shared worktree are unrelated concurrent work and were NOT touched.
-
 ### Audio Tier C: floating top player + exact paragraph scroll-sync via segment timings + 5 pilots regenerated (t_1489ca98)
 
 **What** - Tier C upgrade to the shipped article-audio feature: the player now FLOATS pinned at the top of the article viewport (docked just below the site header) while the article scrolls, and an exact paragraph scroll-sync ("Follow along") tracks the exact spoken paragraph using REAL generator-time segment timings rather than a proportional estimate.
@@ -1179,7 +1177,6 @@ Bucket total (service-role listing, not a claim): **536.5 MB / 73 objects at the
 **Verified** - `npm run test` 95 files / **730 pass** (new: `src/lib/audio-scroll.test.ts` 7 — activeSegmentIndex/align/targetY clamps; `src/components/BlogPost/AudioPlayerScroll.test.tsx` 6 — toggle present, auto-scroll on play, stops on toggle-off, user-scroll stops without pausing, reduced-motion default off; `src/app/api/audio/[slug]/timings/route.test.ts` 7 — 200/401/404 + shape lock; contracts + audio data timing contract tests). `npm run build` exit 0, `/field-notes/[slug]` still an SSG route (92 paths). `npm run lint` clean. **Live browser verification:** player floats at top=64px while scrolling to near-document-bottom for BOTH the logged-out locked card and a signed-in native player; Follow-along toggle present + defaults ON for signed-in; a user wheel scroll stops following without pausing; emulating `prefers-reduced-motion: reduce` flips the default OFF. **External (DoD-8) verified:** all 5 pilot timing manifests + MP3s read back from the private Supabase bucket (HTTP 200, audio/mpeg + application/json), and each manifest's last `endSec` equals its ffprobe-measured MP3 duration exactly (delta 0), proving the timings map the real audio.
 
 **Known Issues** - A concurrent backfill cron writes to the same shared `src/data/audio.ts`; if a future run's merge-base lacks the pilot timings keys they can be re-dropped (mitigated by the reconciliation + verified manifests). Only the 5 pilots have timings; the other ~86 articles render the floating player without the Follow-along toggle until the backfill PR regens them with timings. The activation animation is scoped to a drop shadow + transition (no intrusive motion) and is off under reduced-motion.
-
 ### Fix: AudioPlayer width matches hero + clean-text narration, 5 pilots regenerated (t_f9646deb)
 
 **What** - Two user-visible fixes to the shipped article-audio feature, plus a regeneration so listeners hear clean audio immediately.
@@ -1195,7 +1192,6 @@ Bucket total (service-role listing, not a claim): **536.5 MB / 73 objects at the
 **Verified** - `npm test` 92 files / 710 pass (was 704; +6 flattenLine clean-text cases: fence/bullet/HTML/numbered/blockquote/inline-code + mixed). `npm run lint` clean on all changed files (`scripts/build-audio.js` is eslint-ignored by project config); `tsc --noEmit` exit 0. Flat-narration probe on all 5 pilot articles reports CLEAN (no literal backslash-n, no ```, no leading bullets, no HTML tags). `npm run build` exit 0. Regen externally verified: pilot MP3s re-uploaded to Supabase and read back as audio (DoD-8).
 
 **Known Issues** - None. `flattenLine` is now exported (was private). The 5 pilot regenerated MP3s are the only audio affected; the other ~86 articles retain their original narration/audio until a later full run.
-
 ### Perf: AudioPlayer F1-F3 — lazy import, Range/206 streaming, preload=none (t_c4c2da46)
 
 **What** - Closed sato's three MEDIUM performance findings (t_c829cab6) on the live article-audio feature. Audio behavior is unchanged; this is a delivery/streaming pass.
@@ -1209,7 +1205,6 @@ Bucket total (service-role listing, not a claim): **536.5 MB / 73 objects at the
 **Verified** - `npm test` 92 files / 704 tests pass (was 698; +6: route now covers Range/206/Content-Range/suffix/open-ended/416/If-Range/malformed, AudioPlayer asserts `preload="none"`); `npm run lint` exit 0; `tsc --noEmit` clean; `npm run build` exit 0. **F1 prod-build evidence:** the audio body chunk is referenced by 0 of 92 static field-notes HTML pages and only reachable via the runtime lazy loader on audio pages; the no-audio page's dev server fetches only the 627 B lazy-stub, the audio page fetches the 12.5 KB body chunk. **Range/206:** unit-level bytes-exact (0-4→"fake-", bytes=-4→"ytes", open-ended 10-→"ytes") against the real `GET` handler; live HTTP on the dev server: `/api/audio/<pilot>` → 401 unauthenticated with and without a Range header, article pages both SSR 200. **Browser (audio pilot, 375px, dark):** locked "Sign up to listen" card renders after lazy hydration for the logged-out visitor, zero horizontal overflow, and no `<audio>` element (no audio fetch for anon).
 
 **Known Issues** - None. The `next/dynamic` lazy wrapper means the locked sign-up card mounts on the client after hydration (was server-rendered before), so a no-JS visitor sees nothing in the audio slot — acceptable regression risk for an auth-gated perk, and the signed-in player + locked card both render correctly in JS-enabled browsers.
-
 ### Security: stop leaking private audio storagePath into client HTML (t_3305e6ae)
 
 **What** - `AudioPlayer` no longer receives the full `ArticleAudio` object
@@ -1231,7 +1226,6 @@ bucket is ever misconfigured public. Trivial, no behavior change.
 **Known Issues** - None. `storagePath` remains in the generated `src/data/audio.ts`
 and the `/api/audio` route (both server-side only); `AudioPlayer.test.tsx` updated
 to assert on the `hasAudio` boolean contract.
-
 ### Audio: article audio — authed player, streaming route, narration, pilot (t_0ddd606c)
 
 **What** - Shipped the article-audio feature: an in-page `AudioPlayer`
@@ -1278,13 +1272,11 @@ follow-up). Full-suite count moved 672→698 (the +26 audio tests; one legacy su
 test count differs slightly from the prior write-up).
 
 ## [v1.0.0] — 2026-09-02
-
 ### Omni-Content-and-Constellation-Enhancement
 
 Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constellations & Chronicle feature.
 
 ## [Unreleased]
-
 ### Fix: /field-notes LCP ~6s — eager-load the featured hero banner (t_d912a075)
 
 **What** - Added a `priority` prop to `BannerImage` (`src/components/BlogListing/BannerImage.tsx`) and set it `true` only on the featured card (`src/components/BlogListing/FeaturedPost.tsx`). Because Next.js 16.3.4's `priority` enables eager loading + a `<link rel="preload">` but does NOT emit `fetchpriority="high"` on its own, `BannerImage` also passes `fetchPriority="high"` when `priority` is true.
@@ -1294,7 +1286,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verified** - prod build exit 0; `tsc --noEmit` clean; 672/672 tests pass; rendered HTML shows the featured banner img + its preload link with `fetchpriority="high"` and no `loading="lazy"`, while all below-fold card images remain `loading="lazy"`; Lighthouse 13.4.1 `lcp-discovery-insight` (the successor to `lcp-lazy-loaded`) now scores **1** with `fetchpriority=high applied`, `requestDiscoverable`, and `eagerlyLoaded` all true; CLS stays **0** (stable across 2 runs).
 
 **Known Issues** - Local (unthrottled) prod-build LCP still reads ~6 s on this machine, but the image subparts are only ~300 ms (TTFB 13 ms / load delay 5 ms / load 24 ms / render 257 ms) — the remainder is main-thread parse of the serialized posts RSC payload, a separate pre-existing concern outside this card's scope. The lazy-loading defect itself (the failing audit) is resolved.
-
 ### Fix: stale section-name copy after URL migration (hub h1s + title templates; t_66e03332)
 
 **What** - Copy-only fix aligning visible section names with the renamed routes (/blog→/field-notes, /learn→/atlas) that Task 1 (ddec282) left behind:
@@ -1306,8 +1297,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Why** - The h1s/titles contradicted the site's own navigation and the route names — an SEO/consistency defect (h1 must describe the page the URL and title describe), flagged LIVE by the A11y/SEO audit (t_7f14b97a, LOW).
 
 **Known Issues** - None. Pure copy change; no layout/design impact. `src/lib/seo.ts` header comment still reads "Adroit Consulting Blog" (code comment only, not user-facing copy) — left untouched to keep the diff minimal.
-
-
 ### URL migration Task 2: content path rewrite + publishing gate (Parts E/F; t_5974fce6)
 
 **What** - The content + gate half of the URL migration, landed after Task 1 (ddec282) renamed the routes. This is scripted + reviewable, not hand-edited:
@@ -1326,7 +1315,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `verify-article.py` on a `/field-notes/` sample: `INTERNAL_LINK: OK` + `RESULT: PASS`; legacy `/blog/` link also accepted during transition; a no-link sample still `FAIL`s. Sweep across all 81 blog articles: `INTERNAL_LINK` PASS 81 / FAIL 0 (learn lessons are gated by `verify-lessons.py`, not this gate — pre-existing). `npx tsc --noEmit` 0 errors; `npx vitest run` 88 files / 672 tests pass; `npm run lint` exit 0; `npm run build` exit 0. Runtime on dev server: `/field-notes`, `/field-notes/<slug>` (rewritten article), `/atlas` all HTTP 200; `/blog/*` + `/learn/*` 308-redirect to the new paths.
 
 **Known issues** - Atlas series/lesson pages (`/atlas/<series>`, `/atlas/<series>/<slug>`) return 500 in this workspace because Supabase creds are absent locally (`Supabase URL and anon key are required`) — pre-existing, unrelated to this change, and confirmed identical on series whose lessons were not touched. Some historical domain notes in the article-engine skill (canonical domain + "adroit.io/blog intentionally not wired") remain as-is — they record prior decisions and are not active internal-link publishing instructions. NOT pushed (report boundary — Kelex pushes via daily-planet-push.sh main).
-
 ### Fix: mobile hamburger renders as one long line - add flex-col to toggle (t_ec2ae7ae)
 
 **What** - The mobile menu toggle button in `src/components/Header.tsx` is an `inline-flex` container but was missing `flex-col`, so its three `w-5 h-[2px]` bars laid out side-by-side horizontally as a single ~60px line on Android. Added `flex-col` to the toggle button className so the three bars stack vertically into a proper hamburger glyph.
@@ -1339,7 +1327,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npx vitest run src/components/Header.test.tsx` 9/9 pass; full suite 88 files / 673 tests pass (673, +1 from the new regression test); `npm run lint` exit 0; `npm run build` exit 0. Runtime verified in a 390x844 mobile viewport on a live dev server: the toggle button renders 44x44 and its three bars share x=334 (same column) at y=23/31/39 (stacked vertically), not one continuous line.
 
 **Known issues** - None. (fix: add flex-col to mobile hamburger toggle so bars stack vertically (t_ec2ae7ae))
-
 ### URL migration: /blog → /field-notes, /learn → /atlas (route rename + 301s + code refs; t_1ab5ef9f)
 
 **What** - Moved the Adroit content-hub URL paths to match the brand names (Field Notes + The Atlas). This is the code/route half (Parts A-D of the migration plan); content MDX rewrite + gate change land separately in Task 2.
@@ -1355,7 +1342,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npx tsc --noEmit` exit 0 (proves route unions + calls updated); `npx vitest run` 88 files / 672 tests pass; `npm run lint` exit 0; `npm run build` exit 0 (new route set: /atlas/*, /field-notes/*, /preview/atlas/*, /preview/field-notes/*; no /blog or /learn page routes remain). Runtime on dev server: `/field-notes`, `/field-notes/categories`, `/atlas`, `/tags`, `/field-notes/<slug>` all HTTP 200; `/blog` → 308 `/field-notes`, `/blog/<slug>` → 308 `/field-notes/<slug>`, `/learn` → 308 `/atlas`, `/learn/<series>/<slug>` → 308 `/atlas/...`. Confirmed SiteRoute union no longer contains "/blog" or "/learn" literals. Nav renders "The Atlas" → /atlas and footer Field Notes → /field-notes.
 
 **Known issues** - The Atlas hub card sections and some data-gated routes require Supabase creds absent in this workspace (render empty/500 in headless copy — pre-existing and unrelated). Old `/blog/feed.xml` subscribers are preserved via the 301. Content MDX internal links still point at `/blog/` and `/learn/` until Task 2 rewrites them; those route links will 404/redirect until Task 2 lands with the route change deployed together.
-
 ### Fix: /api/admin/access/effective 500 - 'Failed to load effective access' (t_73b751bd)
 
 **What** - Admin panel on live adroit.io was broken: the client hook threw "Failed to load effective access" because GET /api/admin/access/effective returned a bare 500. Root cause: the prod adroitconsultingllc Vercel env was missing `SUPABASE_SERVICE_ROLE_KEY`. The route's first line inside the try block, `getSupabaseServiceClient()` (src/lib/supabase/service.ts), fails closed and throws when that env var is absent, and `listAuthUsers()` (src/lib/supabase/auth-admin.ts) requires it too. The catch block swallowed the real error into a bare `{"ok":false,"error":"Server error"}` 500, so the client (and operators) could not tell a 403 gate from a downstream read failure.
@@ -1370,7 +1356,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npm test` 88 files / 672 tests pass (route suite 5/5); `npm run lint` exit 0; `npm run build` exit 0. Live: prod env now carries `SUPABASE_SERVICE_ROLE_KEY`; the route's 6 reads succeed against prod Supabase when the key is present.
 
 **Known issues** - The env fix only takes effect on the running prod functions after a redeploy and requires an admin session to exercise end-to-end; those are handled by the orchestrator's push + QA live check.
-
 ### Spacing sweep: normalize Learn/Atlas hub vertical rhythm + full-site audit (t_6a43944e)
 
 **What** - Fixed the cramped Filters-to-Continue-Learning seam on the /learn hub and normalized the hub's vertical rhythm to the site's established ~36px section gap. In `src/components/Learn/LearnHub.tsx` the card sections were `mt-9 first:mt-4`; because Continue Learning renders before them, no section is ever the `:first-child`, so `first:mt-4` silently stopped firing (the defect pattern) and the dead selector is now removed. In `src/components/Learn/ContinueLearning.tsx` the dark banner was `mb-7` with no top margin, leaving the Filters row to banner gap cramped. Changed it to `mt-9` (36px top). Net result: Filters, Continue Learning, and every card section now sit at a uniform 36px (mt-9) boundary whether or not Continue Learning renders.
@@ -1382,7 +1367,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npm run lint` exit 0; `npx vitest run` 88 files / 671 tests pass; `npm run build` exit 0. Live render checked on the DB-independent public surfaces at desktop + 375px in light and dark: `/`, `/blog`, a `/blog/[slug]` article, `/tags`, `/tags/[tag]`, `/contact`, `/privacy`, `/digital-experience`, `/platform-strategy`, `/operational-intelligence`, `/learn` (filters render; card sections are Supabase-gated and render empty in this headless copy because `.env` creds are absent — pre-existing and unrelated). No horizontal overflow and no cramped/oversized region gaps found beyond the fixed Learn seam.
 
 **Known issues** - The Learn card sections and Continue Learning banner require Supabase credentials to render, so their exact pixel rhythm is verified by CSS margin-collapse reasoning (all boundaries `mt-9` = 36px) rather than a live screenshot in this environment.
-
 ### Fix: /blog/categories SEO title no longer overrides the Field Notes layout (t_4eab5500)
 
 **What** - `src/app/blog/categories/page.tsx` exported its own `metadata` whose `title: "Blog Categories | Adroit Consulting"` overrode the correctly-renamed layout metadata (`"Categories | Field Notes"`), because Next.js page-level metadata takes precedence over the nested route layout's. Fixed `page.tsx` metadata title to `"Categories | Field Notes"` (description and `path` unchanged).
@@ -1392,7 +1376,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npx eslint src/app/blog/categories/page.tsx` exit 0; `npx tsc --noEmit` exit 0; `npm run build` exit 0. Runtime: `/blog/categories` resolves HTTP 200 and renders `<title>Categories | Field Notes</title>`.
 
 **Known issues** - None. Visible page copy ("Blog Categories" H1) and the blog-post SEO title suffix are intentionally out of scope for this metadata-override fix.
-
 ### Branding: rename "Learn" label to "The Atlas" (nav/breadcrumb/SEO; routes unchanged, t_df849483)
 
 **What** - Renamed the user-facing label for the structured curriculum hub (sequenced Salesforce/Agentic AI/OmniStudio paths, daily lessons, cert exams) from "Learn" to "The Atlas" in the display surfaces that carry it, pairing with the blog now named "Field Notes". This is a label-text rename ONLY — the route/URL `/learn` (and `/learn/<series>`, exam, certificate, preview paths) is unchanged to avoid redirect/SEO/bookmark risk.
@@ -1406,7 +1389,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npx eslint` on the 4 changed files exit 0 (0 errors/warnings); `npx tsc --noEmit` exit 0 (proves route unions untouched); `npm run build` exit 0; full vitest suite 88 files / 671 tests pass. Runtime: `/` nav renders both "Field Notes" → `/blog` and "The Atlas" → `/learn`; `/learn` renders `<title>The Atlas | Adroit Consulting</title>`; `/` and `/learn` both resolve HTTP 200. `git diff` is label-text only (no href/route/logic changes). The Supabase-gated data routes (`/learn/<series>`, `/preview/learn/[series]/[slug]`) return 500 in this headless copy workspace because `.env` Supabase credentials are absent (`Supabase URL and anon key are required` at client init) — pre-existing and unrelated to this display-only change; the breadcrumb back-link branch is verified via the component test.
 
 **Known issues** - None. In-scope "Learn" strings changed only where they are nav/breadcrumb/SEO chrome labels; the `/learn` hub page's own `<h1>` ("Learn") and internal LearnHub/LearnCardSeries interaction naming are body content / internal naming, intentionally left per the card's Do-Not list. Out-of-scope prose uses of the word "Learn" (lesson-body "Learn why…", generic "Learn more" CTAs) are untouched.
-
 ### Branding: rename "Blog" label to "Field Notes" (nav/footer/breadcrumb/SEO; routes unchanged, t_418bab6d)
 
 **What** - Renamed the user-facing label for the Adroit insights article hub from "Blog" to "Field Notes" in the four display surfaces that carry it. This is a label-text rename ONLY — the route/URL `/blog` (and `/blog/categories`, `/tags`) is unchanged to avoid redirect/SEO/bookmark risk.
@@ -1422,7 +1404,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npx eslint` on the 5 changed files exit 0 (0 errors/warnings); `npx tsc --noEmit` exit 0 (proves route unions untouched); `npm run build` exit 0; full vitest suite 88 files / 671 tests pass. Runtime: `/` nav renders "Field Notes" linking to `/blog`; `/blog` renders `<title>Field Notes | Adroit Consulting</title>`; `/blog` and `/blog/categories` both resolve HTTP 200. `git diff` is label-text only (no href/route/logic changes). The auth-gated `/preview/blog/[slug]` returns 500 in this headless environment because it requires a Supabase session (`getSupabaseServerClient()` gate) — pre-existing and unrelated to this change; the back-link is verified via the component test.
 
 **Known issues** - None. Out-of-scope "Blog" strings remain intentionally untouched per the card (BackLink "Back to Blog", BlogListing "Adroit Consulting Blog", tags/blog-post SEO titles, categories page copy).
-
 ### Cleanup: remove dead `kind` prop from MDXArticle (lint bed, t_6146a0f3)
 
 **What** - `MDXArticle` carried an unused `kind?: "blog" | "learn"` prop (with default `"blog"`) that its body never read, producing an `@typescript-eslint/no-unused-vars` lint warning. Since 2026-08-16 both blog and learn apply the footnote->Sources rename unconditionally, so the blog/learn branch it once drove no longer exists. Removed the prop declaration + doc line and the `kind = "blog"` default, and dropped `kind=` from all 4 call sites that passed it (`PreviewFirstLesson.tsx`, `/preview/blog/[slug]`, `/preview/learn/[series]/[slug]`, `/learn/[series]/[slug]`). `/blog/[slug]/page.tsx` already passed no `kind`.
@@ -1432,7 +1413,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `npx eslint src/components/MDX/MDXArticle.tsx` exit 0 (warning gone); `npx tsc --noEmit` exit 0; `npm run build` exit 0. Behavior unchanged: `renameFootnoteHeading()` still applies the Sources rename unconditionally to both blog and learn preview+runtime.
 
 **Known issues** - None.
-
 ### Visual parity: restore company logo in header/footer + home hero particles; remove dead `apps/web` subtree (`cutover/v2-into-main`, t_d4138a75)
 
 **What** - PR #68 (`cutover/v2-into-main` to main) was held by the repo owner: the merged site's header showed a text "A" tile instead of the real company logo, the home hero's animated floating-particle lines were not visible, and the dead legacy `apps/web` monorepo subtree remained in the tree as duplicate/conflicting code. This card restored visual parity with live adroit.io and removed the duplicates.
@@ -1448,7 +1428,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `tsc --noEmit` exit 0; full vitest suite 88 files / 671 tests pass (0 regressions); `npm run build` exit 0 (home + all routes generate). Visually verified in a running production `next start` build via browser: light mode header shows the full-color Adroit logo (40x40, naturalWidth 512, no next/image SVG block), dark mode swaps to the white logo on the dark header, footer shows the white logo on the dark band in both modes, and `#hero-particles` renders its `<canvas>` particle network in both themes. Screenshots at /tmp/merged_home_light.png, /tmp/merged_home_dark.png, /tmp/prod_home_light.png, /tmp/prod_home_dark.png.
 
 **Known issues** - None known. The deploy-lane files `render.yaml` and `docs/deploy-free-hosting.md` (untracked, reference the old `apps/web` root) are alpha's concern, not touched here.
-
 ### a11y: restore US-5 unconfirmed-email recovery path on login (`v2`, t_be6b4bd2)
 
 **What** - PR #10's H1 hardening collapsed every `POST /api/auth/login` sign-in failure to the fixed generic `"Invalid email or password."` (401), which made the client's unconfirmed-email branch (`/confirm/i.test(data.error)` in `src/app/login/page.tsx`) dead code: an existing-but-unconfirmed account signing in got a misleading `role="alert"` and no way to resend the confirmation email. Fixed by restoring a NON-enumerating, fixed-but-distinct signal for the sign-in path only: when GoTrue reports the account is unconfirmed (error message or code matching `/confirm|not_confirmed/i`), `route.ts` now returns a distinct status 403 with the fixed friendly message, while genuine wrong-password / unknown-email sign-ins still return the fixed generic 401. The client now keys off `res.status === 403` to reach the US-5 guidance + working "Resend confirmation email" button (which calls `/api/auth/resend-confirmation`).
@@ -1461,7 +1440,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 + `src/app/api/auth/login/route.test.ts` - added 4 tests: distinct 403 on unconfirmed sign-in (no raw echo), generic 401 on wrong-password, no confirmation leak on sign-up, generic 401 on non-confirm failures.
 
 **Known issues** - None. The 403 signal is specific to the sign-in path; sign-up and all other failures remain generic.
-
 ### Security hardening: login rate-limit + origin + no error echo; completion_events server-write-only (`v2`, t_bd7ac2a0)
 
 **What** - Closed the two remaining steel-scoped findings (H1 HIGH, M2 MEDIUM) from val-el's full merged-site security audit (t_0a1bd35a; report at deliverables/security-audit.html). The C1/H2/M1 findings from that audit were already resolved on the current v2 head by PR #6 (next 16.3.4, sharp 0.35.4, npm audit 0 vulns, contact rate-limit via getClientIp + reCAPTCHA fail-closed) and were re-verified here. H1: `src/app/api/auth/login/route.ts` - the highest-value brute-force / credential-stuffing target - was the only auth mutation with no rate limit, no origin (CSRF) check, and it echoed raw Supabase/GoTrue error.message on failure (account enumeration). It now applies `checkOrigin` (403) and `checkRateLimit(getClientIp(req))` (429) before parsing the body (mirroring reset-password/request) and returns fixed generic messages ("Invalid email or password." / "Unable to create account. Please try again later.") while logging the real detail server-side only. M2: completion_events could be self-forged by an authenticated client via the anon key + its own JWT (INSERT policy `with check (auth.uid() = user_id)`), letting a user mint certificate/course/exam completions without earning them. New migration `012_completion_events_server_write_only.sql` revokes the client INSERT (deny-guard `with check (false)`, mirroring migration 006 for quiz_run/quiz_attempt); all completion_events INSERTs now route through `getSupabaseServiceClient()` (BYPASSRLS), with reads staying on the RLS-bound client.
@@ -1479,7 +1457,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `tsc --noEmit` exit 0; changed files `eslint` 0 errors; full suite 667 tests pass (667 prior + 9 new, 0 regressions); `npm run build` exit 0; `npm audit` 0 vulnerabilities on the merged head.
 
 **Known issues** - Branch protection on the public repo main + v2 (C2) is alpha's fix card (t_9137726a); it is deploy/infra, not code, and stays outside this card's scope. The full-security re-audit (t_0a1bd35a) and QA (t_bfb87dbd) will re-review the v2 head.
-
 ### SEO: per-route canonical + og metadata on the 6 marketing pages (`v2`, t_5ec87252)
 
 **What** - Standardized all six ported marketing pages (home `/`, `/platform-strategy`, `/operational-intelligence`, `/digital-experience`, `/contact`, `/privacy`) onto the existing `buildMetadata({ title, description, path })` helper from `src/lib/seo.ts`. Each page now renders its own absolute canonical URL, `og:url`, `og:image`, and `og:type="website"` instead of inheriting the homepage's canonical/og from the root layout. `/contact` is a client component and cannot export `metadata`, so it gained a co-located server `src/app/contact/layout.tsx` (mirrors the `/login` precedent) that provides a unique title ("Contact Adroit Consulting"), description, canonical, and og:url.
@@ -1495,8 +1472,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `tsc --noEmit` exit 0; `eslint src/app/` 0 errors; full suite 658 tests pass; `npm run build` exit 0. Live-rendered `<head>` verified on all 6 routes: each emits canonical + og:url = its own `https://adroit.io/<route>` (home = `https://adroit.io`), og:image present on home + 3 service pages, `/contact` emits its unique title/description/canonical.
 
 **Known issues** - None. `/contact` and `/privacy` og:type render as `article` (the `buildMetadata` default, matching `/blog`/`/login` precedent) rather than `website`; this is pre-existing helper behavior and out of scope for the canonical/og finding. No indexation or robots changes.
-
-
 ### a11y hardening: header disclosure Escape-close + focus, contact submit live regions (`v2-dev`, t_befe5aac)
 
 **What** - Addressed the two non-blocking WCAG a11y findings from lara's audit (t_3778281e). Header disclosure menus (desktop "Services" dropdown + mobile hamburger drawer in `src/components/Header.tsx`) now close on Escape and return focus to their activating toggle button, from both the trigger and from a link inside the open panel. aria-expanded/aria-controls stay in sync. The `/contact` submit outcome is now announced to screen readers and landed on: the error message renders in a `role="alert"` container, and the success panel is a `role="status"` live region whose heading receives keyboard/programmatic focus on success.
@@ -1512,7 +1487,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `tsc --noEmit` exit 0; `eslint` 0 errors; full suite 658 tests pass (652 + 6 new); `npm run build` exit 0. Live browser check (:3211): desktop Services disclosure opens via keyboard, Escape closes it and returns focus to the trigger; mobile drawer at 390px closes on Escape from the toggle and from inside a link with focus restored; /contact error renders role="alert" with the message and success renders role="status" with focus on the "Thank you for your inquiry" heading.
 
 **Known issues** - None. Regression scope is keyboard focus/live-region hardening only; desktop/mobile nav and the contact form behave identically for mouse/touch users (menu still opens on click/hover as before).
-
 ### Security hardening: contact reCAPTCHA CSP + fail-closed, rate-limit IP, dependency bump (`v2-dev`, t_fd9f68c2)
 
 **What** - Fixed the four findings from val-el's security review of the merged Adroit site (t_953e04ab, v2 6702179). Added `https://www.google.com` and `https://www.gstatic.com` to the served CSP `script-src` (plus the same hosts to `connect-src`, `frame-src` for the reCAPTCHA iframe, and `gstatic` to `img-src`) so the contact form's reCAPTCHA v3 actually loads in production instead of being blocked. The `/api/contact` rate limit is now keyed on the trusted proxy-provided client IP via the shared `getClientIp()` helper (prefers `x-real-ip`, else the rightmost `x-forwarded-for` hop) instead of the attacker-spoofable leftmost hop. reCAPTCHA now fails CLOSED in production when `RECAPTCHA_SECRET_KEY` is unset (returns 503) rather than silently running with bot defense off. Bumped `next` 16.3.0 to 16.3.4, added `sharp` 0.35.4 (previously transitive <0.35.4, both in the Aug-2026 CVE range), and ran `npm audit fix` (now 0 vulnerabilities).
@@ -1529,7 +1503,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 **Verification** - `tsc --noEmit` exit 0; `eslint` 0 errors; 650 tests pass (643 + 7 new); `npm run build` succeeds with `/api/contact` in the route table; `npm audit` 0 vulnerabilities. Live dev-server check: CSP header served with reCAPTCHA hosts, and with a site key set the reCAPTCHA script + invisible iframes load from google/gstatic (was CSP-blocked before).
 
 **Known issues** - The contact rate limit remains in-memory per-instance (accepted, matches prior behavior and val-el's acknowledgment). The fail-closed 503 path requires the secret to be present in the deployed env (it is set on the adroit.io Vercel project). `src/components/MDX/MDXArticle.tsx` still has the pre-existing unused-variable warning.
-
 ### Adroit site + blog merger: marketing port + unified chrome (`v2-dev`, t_953e04ab)
 
 **What** - Ported the six adroit.io marketing pages into the blog host and unified the site chrome, per the merger build plan (t_bf0336b5) and kara's unified design tokens (t_f9f4d486). Root `/` is now the marketing home (the blog redirect to /blog is removed). New routes: `/`, `/platform-strategy`, `/operational-intelligence`, `/digital-experience`, `/contact`, `/privacy`, plus a unified `Header` + `Footer` (Home, Services dropdown x3, Blog, Learn, Contact, search, theme toggle, sign in/avatar) reading one shared `SiteNavModel` from `src/lib/nav.ts`. No external adroit.io self-links remain (Contact and the service pages are local routes). Added consent-gated GA4 (`CookieConsent` + `AnalyticsInit`, localStorage `adroit_cookie_consent`), the marketing brand + band tokens (carmine/navy/charcoal/slate) into `globals.css` for both light and dark mode, the marketing brand favicon/OG/manifest assets in `public/`, a full-site `siteConfig`, the ported `/api/contact` (honeypot, reCAPTCHA v3, 3/hr/IP rate limit, Salesforce Web-to-Lead with `SALESFORCE_OID`, origin-allowlist gate), and a consolidated sitemap covering marketing + blog + learn.
@@ -1556,7 +1529,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 + Tests updated: Header nav contract (Home instead of Posts), not-found CTAs; all 643 tests green.
 
 **Known issues** - `apps/web` (the grafted marketing origin reference) is excluded from the root tsc + eslint; it is removed at the final cutover after the port is QA'd. The merged v2/v2-dev preview origins will need to be added to `src/lib/api-security.ts` `ALLOWED_ORIGINS` once the Vercel relink happens (step 8), before state-changing routes on the preview are exercised. The contact form's in-memory rate limit is per-instance (accepted, matches prior behavior). `src/components/MDX/MDXArticle.tsx` has one pre-existing unused-variable warning.
-
 ### Fix: contact form success check gates on `json.ok` not `json.success` (`v2-dev`, t_4e558b40)
 
 **What** - Fixed `src/app/contact/page.tsx` so the client success check reads `json.ok` (matching the `/api/contact` response and the `ContactSubmitResult` contract), not the never-returned `json.success`. Previously `!json.success` was always true, so a genuinely successful lead submission displayed the error message and the "Thank you for your inquiry" success panel was unreachable.
@@ -1568,7 +1540,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 + `src/app/contact/page.test.tsx` (new) - regression tests for the success (`{ ok: true }` -> "Thank you for your inquiry") and error (`{ ok: false, error }` -> error panel) branches with a mocked fetch.
 
 **Verified** - `npx tsc --noEmit` exit 0, eslint clean on both changed files, full suite now 645 tests green (was 643). No sibling file had the same `json.success` mismatch for this route (the reCAPTCHA `data.success` in the route is the Google API response, not our contract).
-
 ### Admin drawer: focus-on-open (`fix/admin-drawer-focus-open-t_6bfc64a0`)
 
 **What** — When the mobile off-canvas admin drawer opens (a <md viewport), focus now moves to the first nav link instead of staying on the hamburger trigger. A keyboard-only admin's forward-Tab from an open drawer now walks the drawer's nav links rather than dropping onto page content behind the navy scrim.
@@ -1580,7 +1551,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 + `src/components/Admin/AdminShell.test.tsx` — two new tests: (1) opening the drawer on a mobile viewport moves focus to the first nav link (`Overview`); (2) a desktop viewport mount does not steal focus into the drawer. Existing tests unchanged and passing.
 
 **Known issues** — none. Focus is not fully trapped inside the open drawer (Tab past the last nav link continues to the topbar content behind the scrim), which is out of scope for this follow-up and matches the accepted focus-on-open pattern; a focus-trap/modal-behavior pass is a candidate future enhancement.
-
 ### Server-authoritative lesson auto-completion — checks + exam (`feat/server-authoritative-lesson-completion-t4005eb8b`)
 
 **What** — Made lesson auto-completion server-authoritative for the server-graded tiers. A perfect knowledge check (a full-coverage `quiz_attempt` set that re-derives as 100%) now marks its covered lessons complete, and passing the cert-prep exam marks the course complete and lights the constellation — both derived from the server-graded `quiz_attempt` rows, never a client-observed score. The exam pass deliberately does NOT write `lesson_completion` rows, so uncompleted lessons stay open for the learner to revisit.
@@ -1595,8 +1565,6 @@ Baseline v1.0.0 — Omni content + course-structure/cert-standards bar + Constel
 + `src/lib/sky.ts` — `buildConstellation.complete` now also derives true when the exam is passed (exam-passed course reads complete while individual uncompleted lessons stay visible/open).
 
 **Known issues** — none. The client-graded per-lesson quiz tier is unchanged (flagged for a separate follow-up). Constellation complete-via-exam requires the exam's graded `quiz_attempt` rows to be present (loadExamPassedBySeries), which the batch route writes.
-
-
 ### Public read surfaces — mobile thumb-conformance hardening (`feat/public-mobile-responsive-t_c4c0a710`)
 
 **What** — Hardened the public READ surfaces for small-viewport thumb use
@@ -1648,7 +1616,6 @@ the pager row wrap (`flex flex-wrap items-center justify-center gap-1.5`)
 keeps every button at the 44px thumb floor while dropping the row to two
 lines on narrow phones — `docOverflowPx = 0` restored at 390px. On
 tablet/desktop widthsthe row still fits a single line, so no visual change.
-
 ### Account & auth surfaces — mobile thumb-conformance (`feat/account-auth-mobile-responsive-t_e086d55b`)
 
 **What** — Raised the sub-44px interactive targets on the /profile identity
@@ -1696,7 +1663,6 @@ token replaced (ADR-233 philosophy.
 **Known issues** — none. Inline text links(Forgot password?, Back to blog,
 mode toggles) intentionally stay inline — WCAG 2.5.8 exempts target
 padding in running prose.
-
 ### Admin mobile-responsive sweep — off-canvas drawer + table hardening (`feat/admin-mobile-responsive-t_71a0d478`)
 
 **What** — the fixed `w-60` admin sidebar now collapses to an off-canvas
@@ -1757,7 +1723,6 @@ layout/contract/data change; verified in-browser at 375/390/768/1280.
 768px is the public header desktop nav (Posts/Categories/Tags/Learn/Adroit.io/
 Contact/QM), out of scope for this branch (t_c4c0a710 / PR #372) and already
 accepted across all PR #384 surfaces.
-
 ### Mobile responsive — Learn hub, syllabus, lesson, exam, certificate, preview, constellation, lab (t_9ca96a47)
 
 **What** — thumb-conformance pass for the Learn + special surfaces
@@ -1792,7 +1757,6 @@ checkbox, overflow_px = 0 across all eight surfaces.
 t_c4c0a710's fix (PR #372) and is intentionally out of this branch to avoid a
 merge collision; it lands on main via its own PR. Footer/nav text links are
 public-header scope and left at text size per the sweep brief (no re-layout).
-
 ### Hubble Field — constellations sized to the curriculum (`feat/hubble-field`)
 
 **What** — a course's constellation is chosen by the curriculum's *final*
@@ -1842,7 +1806,6 @@ a click in the middle of a winding figure such as Draco misses.
 **Still open** — planned finals per course (none in content); who owns
 course→figure pins vs automatic size match; live-session check of `/profile`
 and `/learn/[series]` before merge.
-
 ### Hubble Field — Phase 2, the star chart in production (`feat/hubble-field`)
 
 **What** — `/profile` "Your Sky" and the `/learn/[series]` on-course tracker now
@@ -1929,7 +1892,6 @@ live database (this branch was built without Supabase credentials reachable), so
 both were verified by build, tests and the lab surface rather than a logged-in
 session. Knowledge-check nodes and the `ConstellationState` role anchors remain
 v2 work needing their own ADR.
-
 ### Hubble Field — Phase 1 lab, landing on a 2D star chart (`feat/hubble-field`)
 
 **What** — opened a gated internal observatory at `/lab/hubble-field` so the
@@ -1978,7 +1940,6 @@ src/components/Constellations/lab` 12/12 pass (was 18 before the four rejected
 WebGL studies and their six tests were deleted). Open `/lab/hubble-field` in
 `npm run dev`; the Star chart study is the default. Production port waits on
 Chris signing `design/hubble-field/CHECKPOINT.md`.
-
 ### deep-sky v1.2.0 — Profile galaxy navigation ("Sky Roads") (t_62a40095)
 
 **What** — made `/profile` "Your Sky" a navigable, guided-map galaxy per kara's
@@ -2008,7 +1969,6 @@ guided-map + frontier beacon turns the sky into navigation.
 `LineDashedMaterial` with computed distances, deferred); article stars remain
 zero until the article write site lands (G1 source exists in the model); scene
 depth/perf tuning (glyph counts on 375px) is left to perf review.
-
 ### deep-sky v1.2.0 — On-course tracker retune (Orion) (t_081a1ccc)
 
 **What** — ported the approved v2 deep-sky visual base into the real
@@ -2055,8 +2015,6 @@ the 3D scene (guests see the locked-sky teaser, by design); the
 `lesson_completion` table is the source of truth, so the old
 `completion_events`-derived sky data is intentionally no longer used by
 `loadProfileSky`.
-
-
 ### Immersive 3D Constellations — celestial-immersion v1.1.0 (t_4181dffd)
 
 **What** — built the immersive 3D Learn constellation experience on the
@@ -2104,7 +2062,6 @@ progress (guests see the locked-sky teaser); the `011_article_event.sql`
 migration must be applied together with the write site (until then the galaxy
 falls back to zero article stars). The AC-7 human visual sign-off (Chris) is
 the final gate on the visual language.
-
 ### Fix: Remove ellipsis-truncated central-focus answers across all 5 generated Omni series (t_bcb71c5a)
 
 **What** — a11y/lara's re-audit (t_df970416) found 215 correct answers across
@@ -2136,7 +2093,6 @@ all 6 series OK. Determinism: SHA-256 over 176 generated files identical across
 two wipe+regenerate runs. Content-only change (no TS/JS touched).
 
 **Known issues** — none.
-
 ### Fix: Regenerate Omni content — complete-sentence answers + unambiguous distractors (t_1b282209)
 
 **What** — Fixed the Omni-bar question generator
@@ -2177,7 +2133,6 @@ across all 6 series: 810 correct answers scanned, 0 colon-terminated, 0 under
 40 chars, 0 ambiguous comprehension distractors. `validate-omni-bar.py` passes
 all 6 series; `npx vitest run` 462/462 green (baseline 461 + a11y t_96d952ef
 Escape-dismiss test).
-
 ### Fix: Constellation celebration focus/Escape + FullSky rank announcements (WCAG 2.4.3/2.1.1/4.1.2, t_96d952ef)
 
 **What** — Addressed 3 a11y findings from lara's B-18 audit. (1)
@@ -2203,7 +2158,6 @@ auto-dismissing toast-style celebration.
 
 **Known Issues** — None. Existing tests updated (`dialog` role → `status`) and a
 new Escape-dismiss test added (462 passing).
-
 ### Fix: dark-mode red progress fill contrast — SeriesProgress & QuizWidget (WCAG 1.4.11, t_0271699e)
 
 **What** — Fixed the WCAG 1.4.11 (non-text/UI-component) contrast failure on red
@@ -2230,7 +2184,6 @@ still accompany the bar. Verified via `scripts/contrast.js`; `access.test.ts`
 31/31 pass, full suite 461/461 pass, ESLint clean.
 
 **Known issues** — None.
-
 ### Build: Course structure to the Omni bar — exams, checks, cert scaffolding for all series (B-25/B-28, t_4204244b)
 
 **What** — Raised every non-OmniStudio learn series to the OmniStudio Cert bar so
@@ -2269,7 +2222,6 @@ not human-curated; per-series question quality is best validated during QA
 hands-on exercise blocks, capstone deliverables, cheat sheets, prereq/outcome
 mapping) remain open backlog items — the Omni bar (exams/checks/cert) is the
 agreed first tier.
-
 ### Build: Constellations + Chronicle surfaces — star ignition, series outline, profile full sky, certificate celebration (B-18, t_c72908a6)
 
 **What** — Implemented the B-18 achievement surfaces on top of the B-19 data
@@ -2319,7 +2271,6 @@ when no published lessons exist, so unpublished-but-planned lessons are not
 counted in the star totals on these content-dir series. Constellation visual
 states are correct for authed + guest; the live streak in the pop reflects the
 post-write value via `GET /api/progress/achievement`.
-
 ### Build: Constellations data foundation — widened event log, now-relative streak, derived rank (B-19, t_e9c1c761)
 
 **What** — Laid the data foundation for the Constellations + Chronicle achievement
@@ -2366,7 +2317,6 @@ rank ladder, or Chronicle feed to render.
 --noEmit` clean, `eslint` clean (1 pre-existing warning in MDXArticle.tsx). The
 migration must be applied via `supabase db push` before the new event types can
 be inserted in a live database; the code is written to fail softly until then.
-
 ### Fix: SearchOverlay a11y — focus trap, focus restoration, results aria-live (B-21, t_754b2240)
 
 **What** — `src/components/SearchOverlay.tsx` rendered `role="dialog" aria-modal="true"`
@@ -2396,7 +2346,6 @@ without these; it failed the a11y audit for B-21.
 
 **Known issues** — None. Full suite 436/436 passing; `eslint` and `tsc --noEmit`
 clean.
-
 ### Fix: slash-tag slugs UI/UX → ui-ux, CI/CD → ci-cd (B-22, t_87e3f9a3)
 
 **What** — Canonical tags `UI/UX` and `CI/CD` previously slugified to
@@ -2427,7 +2376,6 @@ navigation and sitemap integrity for two canonical topics.
 **Known issues** — The old `/tags/ui/ux` and `/tags/ci/cd` URLs 404 (rather
 than 301-redirecting to the new slugs). They never served content, so 404 is
 accepted; a redirect could be added later if inbound links matter.
-
 ### Fix: /blog post cards truly rendered in the initial HTML — thread searchParams server-side (t_8c96daf5)
 
 **What** — Eliminated the client-side-rendering bailout that kept B-08's post
@@ -2477,7 +2425,6 @@ the client JS bundle.
 longer CDN-cacheable as a build-time static file; the content-in-initial-HTML
 CWV benefit is preserved. The full `posts` array is still serialized into the
 RSC flight payload (the documented trade-off from Brainiac #9).
-
 ### Fix: /blog 8-card grid now statically rendered in initial HTML (SSR/CWV, t_66f1d65c)
 
 **What** — Two related changes so the first page of blog post cards is present in the
@@ -2516,7 +2463,6 @@ with titles and no "Loading posts" flash. `npx vitest run`: 425 passed (2 new in
 server-side into the island as a plain prop. The fallback component and this
 entry's mechanism are removed; that server-threading fix is what actually puts
 the first page of cards in the initial HTML.
-
 ### Feature: Post→Learn funnel, site search, canonical tag vocabulary (B-20, B-21, B-22, t_ca624544)
 
 **What** — Three Phase-3 content/conversion features:
@@ -2558,7 +2504,6 @@ reversing B-08's client-bundle goal for pages carrying the header — an accepte
 trade-off for client-side search (the two datasets are static imports; the
 overlay mounts lazily on open). The `/tags/[tag]` definition is server-rendered;
 the page keeps its pre-existing `useSearchParams` Suspense fallback.
-
 ### Fix: Server-render /blog listing + client filter island (B-08, t_f7e84aca)
 
 **What** — Refactored `/blog` from a fully client-rendered page into a
@@ -2596,7 +2541,6 @@ in Brainiac #9), and the executable client JS no longer carries `posts.ts`.
 false — QA showed the cards only rendered after hydration. The LCP/CWV goal was
 met by t_8c96daf5, which threads `searchParams` server-side so the first page is
 in the initial HTML; see entry above.)
-
 ### Feature: GA4 analytics, sitemap hygiene, per-post OG images, /tags nav (t_3bc6e7ad)
 
 **What** — Five backlog items (Wave 1 SEO/analytics quick wins):
@@ -2643,7 +2587,6 @@ The GA measurement ID itself is intentionally NOT committed to `.env.local` /
 the repo — ops must add it to the deploy env. `ExamWidget`'s `exam_complete`
 fires on the submit response before the results phase transition, which is the
 correct single measurement point (double-submit is already guarded).
-
 ### Fix: Branded 404, guest profile teaser, exam-less certificate records, dead-form cleanup (t_40c49bdc)
 
 **What** — Four backlog items (Wave 1 quick wins + trust fixes):
@@ -2680,7 +2623,6 @@ errored on submit.
 
 **Known issues** — None. 393 tests pass (62 files; +6 new: 3 certificate-page
 B-07, 2 profile B-09, 1 not-found B-03); lint 0 errors; `npm run build` GREEN.
-
 ### Fix: Learn content truthfulness + progress affordances + Hermes "coming soon" (t_9cd41aaa)
 
 **What** — Four backlog fixes on the Learn Platform v2:
@@ -2720,7 +2662,6 @@ surfaced because v4 stealth-hidden every non-live course from non-admins.
 **Known issues** — None. 387 tests pass (59 files; +3 access-seam cases for
 B-10/D1, one v4 expectation updated to the B-10 rule); lint 0 errors (1
 pre-existing MDXArticle warning); `npm run build` GREEN (incl. new B-04 guard).
-
 ### Fix: security hardening of /api/auth/reset-password/update (t_81dd7f16)
 
 **What** — Defense-in-depth hardening of the password-update endpoint,
@@ -2741,7 +2682,6 @@ auth gate → guest 401), but the contract requires the defences.
 
 **Known issues** — None. 384 tests pass (59 files; +2 new cases for 429 and
 403); lint 0 errors (1 pre-existing MDXArticle warning); `npm run build` GREEN.
-
 ### Fix: a11y focus indicator + hint contrast on auth forms (t_56d7e63f)
 
 **What** — Fixed the two a11y findings from the password-reset flow review
@@ -2765,7 +2705,6 @@ gray-400 hint text failed AA 4.5:1 on white.
 
 **Known issues** — None. 382 tests pass (59 files); `tsc --noEmit` clean;
 `npm run build` GREEN; lint 0 errors (1 pre-existing MDXArticle warning).
-
 ### Fix: server-side auth gate on /reset-password (t_13982e68)
 
 **What** — Converted `/reset-password` from a client-gated page into a
@@ -2794,7 +2733,6 @@ sensitive state to guests)."
 **Known issues** — None. The authed form path is covered by unit test (live
 verification requires a real recovery-code exchange, which needs a Supabase
 email round-trip).
-
 ### Feature: Password reset flow (t_e25638b3)
 
 **What** — Full password-reset flow per the architecture doc
@@ -2833,7 +2771,6 @@ hardens the auth-email redirects.
 
 **Known issues** — None. 21 new unit tests cover the request/update/
 callback routes and `buildAuthRedirect` (378 total, all passing).
-
 ### Fix: Light-mode access-chip text WCAG AA contrast (t_5d3bf5a1)
 
 **What** — In light mode, the five-state `EffectiveAccessChip` text color
@@ -2855,7 +2792,6 @@ unchanged: `html.dark` re-maps the colored access tokens back to the
 strong `var(--am-*)` hues exactly as before, so dark contrast (5.26–7.39:1)
 is untouched. Only `src/app/globals.css` changed; `src/shared/` is
 byte-identical.
-
 ### Build: Admin Experience Redesign (t_888621eb)
 
 **What** — Production build of the Admin Experience Redesign to the arch
@@ -2933,8 +2869,6 @@ Changed files (build):
 - `src/app/learn/[series]/preview/page.tsx` (+ test)
 - `src/app/globals.css` (additive admin-experience tokens)
 - Deleted: `src/app/admin/matrix/page.tsx`, `src/app/admin/matrix/page.test.tsx`
-
-
 ### Fix: Admin Access Matrix surfaces subscription status (t_32ce7d79)
 
 **What** — The admin Access Matrix (`/admin/matrix`) showed a user as "no
@@ -2975,7 +2909,6 @@ Changed files:
 - `src/app/admin/matrix/page.tsx` — Sub badge + S chip + legend.
 - Tests: `users/route.test.ts`, `users/[id]/route.test.ts` (new),
   `admin/matrix/page.test.tsx` (new).
-
 ### Fix: Paywall panel white-on-light in Light mode — WCAG contrast (t_8f63198c)
 
 **What** — Added the missing `.paywall-panel` rule to `src/app/globals.css`.
@@ -2999,7 +2932,6 @@ was already effectively dark there).
 
 Changed files:
 - `src/app/globals.css` — new `.paywall-panel` rule (additive).
-
 ### Fix a11y: Paywall AVAILABLE accent-label contrast on navy panel (t_919cfc83)
 
 **What** — The `AVAILABLE` access-option label on the locked-paywall panel no
@@ -3028,7 +2960,6 @@ Changed files:
   `text-[var(--paywall-accent)]` on the `AVAILABLE` span.
 - `src/components/Catalog/Paywall.a11y.test.tsx` — new render test asserting the
   label uses the paywall-scoped token.
-
 ### Learn v2 completion: provision Hermes L2/L3, populate course profiles, admin back-nav (t_f94e01d5)
 
 **What** — Closed three phase-audit gaps (G2/G4/G5) against the live DB + admin UI.
@@ -3067,7 +2998,6 @@ new AdminShell back-nav, LearnHub Level-ordering, and admin course profile round
 tests.
 
 **Known issues** — None.
-
 ### Fix: Learn v2 onGradient DifficultyPill + audience chip contrast — WCAG 1.4.3 (t_3c85cbc2)
 
 **What** — Replaced the translucent-white overlay on the v2 course-outline
@@ -3085,8 +3015,6 @@ the passing PathCard pills — yields 8.18–14.23:1 across all 10 gradient stop
 themes). Non-gradient DifficultyPill `STYLES` untouched; no other Learn v2 surface changed.
 
 **Known issues** — None. tsc, lint, build clean; 297 tests pass (41 files).
-
-
 ### Fix: Learn v2 gradient band sibling elements contrast — WCAG 1.4.3 (t_c5203795)
 
 **What** — Extended the dark-overlay treatment from d2c3e3b to the four remaining
@@ -3111,8 +3039,6 @@ fallback, both themes.
 
 **Known issues** — None. tsc, lint, build clean; non-onGradient variants of
 CertReadiness/QuizStats untouched.
-
-
 ### Feature: Learn Platform v2 — org-as-data, unified catalog contract, course profile, hub restructure, completion foundation (t_73759dd5)
 
 **What** — Rebuilt the Learn catalog on a once-and-done, scalable structure
@@ -3162,8 +3088,6 @@ surfaces populate; until then `/learn` renders a graceful empty state. Content t
 should author `recommended_background`/`difficulty`/`audience`/`outcomes`/`tags` via the
 admin form (org fields) — `series.json` keeps only display. 297 tests pass (build + lint
 clean).
-
-
 ### Fix: /api/admin/users 500 — auth schema not exposed to PostgREST (t_48183726)
 
 **What** — Admin user reads no longer hit the `auth` schema through PostgREST
@@ -3183,7 +3107,6 @@ even though 8 users (2 admins) existed.
   fails, an inline alert renders and the Users stat shows `—` instead of a wrong 0.
 
 **Known issues** — None. 281 tests pass (11 added), tsc + lint + build clean.
-
 ### Feature: Admin platform enhancements v4 (t_0ed19ad0)
 
 **What** — Incremental admin-platform build on the existing course-catalog +
@@ -3243,7 +3166,6 @@ row is advisory (series-level quiz counts as published) and does not block a
 launch — the hard gate is title + ≥1 published lesson + access model. Admin
 analytics uses the service client (BYPASSRLS) after the admin gate, consistent
 with the other admin endpoints.
-
 ### Fix: Dark-mode unreadable elements on /login (t_500a5af8)
 
 **What** — Token-bridge asymmetry on the Adroit Academy `/login` screen: the
@@ -3274,7 +3196,6 @@ arbitrary-value classes confirmed compiled in the served CSS gated under
 **Known issues** — None. `src/data/learn.ts` had an unrelated pre-existing
 uncommitted working-tree change (not part of this task); left untouched and not
 committed.
-
 ### Fix: Security audit findings — course catalog + admin entitlement gates (t_8813eb56)
 
 Resolves every finding from val-el's security audit
@@ -3328,7 +3249,6 @@ Resolves every finding from val-el's security audit
   audit only listed the POST, so gating the GET is a superset.
 - The `nanoid` override is build-time only and does not change runtime
   behaviour.
-
 ### Fix: A11y + SEO audit findings — course catalog + admin (t_d2dfc405)
 
 Resolves every finding from lara's WCAG 2.2 / SEO audit
@@ -3367,7 +3287,6 @@ Resolves every finding from lara's WCAG 2.2 / SEO audit
   live 4.85:1, archived 6.93:1). Paywall copy fix was the code-level resolution
   the audit recommended; if a different CTA/UX is wanted, that's a design call
   for kara.
-
 ### Fix: stale content-count test fixtures (continue-learning + tiers) (t_f44be1e9)
 
 Three vitest expectations hardcoded lesson counts that Daily Planet's content
@@ -3398,7 +3317,6 @@ in every case — only the fixtures were stale.
   `NODE_OPTIONS=--localstorage-file=<path>` because node's experimental global
   `localStorage` shadows jsdom's; `QuizWidget.test.tsx` reads/writes
   `localStorage` and fails under that shadowing independently of this change.
-
 ### Platform: Course Catalog + Entitlements + Admin (t_2eab480f)
 
 DB-backed course lifecycle (status) + access model (entitlements) + a server-side
@@ -3463,7 +3381,6 @@ scope but the model (subscriptions/one-time) is ready (ADR-204).
   unreachable — documented arch §10 behavior, correct until migration is applied.
 - Blog routes, content files, and the a11y focus-ring/ShareBar changes (lara,
   uncommitted at session start) are untouched.
-
 ### Fix: Dark-mode gaps in Learn lessons view — MarkComplete, toggles, lesson rows (t_38a3f180)
 
 Three elements in the Learn lessons (series syllabus) view stayed light on the dark
@@ -3503,7 +3420,6 @@ site's semantic tokens so contrast reaches the dark palette's guaranteed floor
 
 **Known issues** — none. Light mode is byte-identical (dark: variants only activate
 under `html.dark`).
-
 ### Fix: Dark-mode contrast gaps (featured border, filter pills, pagination, empty state, article prose) + theme-switch cross-fade (t_6ab6c68e)
 
 Five dark-mode contrast gaps, all root-caused in code before implementation, plus a
@@ -3567,7 +3483,6 @@ for reduced-motion users.
 
 None. The stale `next dev` server on :3000 (from the earlier worker collision) is a
 separate process and was left running (out of scope — see docs/worker-collision-t_926221f7.md).
-
 ### Fix: PostCard dark-mode contrast — white card got no dark override, ink tokens remapped onto white = 2.55:1 (t_20fb49e9)
 
 Lara's checker re-verified the earlier read-time meta fix (commit 2433c2b,
@@ -3607,7 +3522,6 @@ WCAG AA in both themes with one container-level change (no per-class hacks).
 
 None. Loading-skeleton pulse blocks in PostCardWithRead.tsx are transient
 placeholder surfaces (no text content), intentionally left as-is.
-
 ### Fix: Round 3 SEO findings — duplicate Lesson title/OG/JSON-LD prefix, non-ISO datePublished (t_fa2f15c7)
 
 Round 3 SEO audit (t_14e4882a) findings, all code-level and verified against
@@ -3643,7 +3557,6 @@ rejecting the non-standard date format.
 **Known Issues**
 
 None. The `/login` finding required no change — already fixed in 110ed35.
-
 ### Fix: Certificate lessons eligibility icon — emerald contrast carryover (t_253cd18c)
 
 A11Y re-audit (run 2810) carryover from t_926221f7. The `lessons` eligibility
@@ -3668,8 +3581,6 @@ Non-text contrast (WCAG 1.4.11) for the completion status indicator.
 **Known issues**
 
 None. Baseline preserved: tsc 0, vitest 212/212, `next build` clean.
-
-
 ### Fix: Round-3 low-severity a11y hardening — decorative contrast, APG radiogroup, dark-mode reach (t_42efdd92)
 
 Follow-up to the Round-3 a11y audit (t_d56a2fb4 → Lara). All items LOW severity,
@@ -3727,7 +3638,6 @@ deprecates; tokenizing closes dark-mode gaps the global remap can't reach.
 - ExamWidget F4/F5 verified by unit tests (component requires auth to render);
   direct guest navigation to the exam route 404s on series without a cert exam
   (`getCertExam` → `notFound()`) — pre-existing gating, unchanged.
-
 ### Fix: Round 3 remaining a11y findings — dark-mode contrast, learn-flow, spacing (t_47b7ed5e)
 
 Consolidated fix for the three Round-3 audits still blocked on re-verified
@@ -3792,7 +3702,6 @@ both themes and restores the intended spacing token values.
 Verified: `tsc --noEmit` clean, `eslint` clean on all touched files, vitest
 212/212, `next build` clean, live-browser checks at 360px (no syllabus
 overflow; guest CTA 44px) and dark mode (featured link/meta contrast).
-
 ### Fix: Round 3 a11y/SEO findings — contrast, APG menu, headings, login metadata, spacing (t_cea9bcf8)
 
 Closes the Round-3 lara audit findings (WS1-6) that remained open at HEAD.
@@ -3851,8 +3760,6 @@ semibold and was NOT part of the audited A4 scope (audit named ExamLocked +
 ExamWidget only) — flagged for a future sweep. Loading fallbacks in
 PostCard/ReadFilter/ExamCard/QuizWidget still use raw gray-400 (out of the
 audit's named files).
-
-
 ### Fix: Salesforce System Architect Primer now under Learning Paths (t_9697ca50)
 
 The "Salesforce System Architect Primer" course rendered under a "Salesforce
@@ -3874,7 +3781,6 @@ Implementation Path in the General/Learning Paths bucket.
 
 **Known issues** — none. Filter counts verified in the running app: All 3,
 Certifications 1 (OmniStudio only), General 2 (Agentic AI + Architect).
-
 ### Fix: allow live deployed origin on profile PATCH (t_34f01164)
 
 Profile save (PATCH /api/profile) returned 403 {"error":"Forbidden origin"} on
@@ -3899,7 +3805,6 @@ browser's `Origin` header for a save was rejected.
 on the deployed site.
 
 **Known issues** — none. The fix is additive to the allowlist only.
-
 ### Security: strip knowledge-check answer key from client bundle (t_79a92b83, CWE-200)
 
 Val-el's audit finding 2 (t_77dd715a): the check page shipped the FULL
@@ -3948,7 +3853,6 @@ untouched.
 - Per-question feedback inherently discloses each answer after it is
   submitted — identical disclosure model to the exam batch route; the initial
   payload no longer carries any part of the key.
-
 ### Draft-state plumbing: status field + build filters + preview routes + auth gate (t_e1c8239e)
 
 Implements brainiac's draft-state architecture (`docs/draft-state-architecture.md`,
@@ -4009,7 +3913,6 @@ additive); series-with-all-drafts renders as "coming soon" (accepted);
 `PREVIEW_ALLOWED_EMAILS` must be set in Vercel env (or the constant fallback
 used) before editors can preview in prod; Vercel `outputFileTracingIncludes`
 needs a real-deploy check (criterion 7).
-
 ### Dark mode: blog post page token refresh + AA contrast fixes (t_1addcce3)
 
 Implements kara's dark-mode refresh spec (`deliverables/dark-mode-token-spec.md`,
@@ -4056,7 +3959,6 @@ Light mode: navy h1 `#0B1D3A`, white share circles, gray tag pills — unchanged
 dark: variants — flagged as follow-up in the spec (§6), not part of this task.
 Category Tag pills (colored pastel chips) keep their light styling by design
 spec decision.
-
 ### Security: slim guest /learn payload to card-render data (t_3dbf4826)
 
 Closes Val-El's payload-hygiene follow-up from the guest-gating audit
@@ -4087,7 +3989,6 @@ description + lesson count.
 badge + sign-in CTA render, while lesson titles/excerpts/slugs appear **0**
 times in the guest payload. Guest card remains non-clickable; syllabus
 readability intentionally unchanged.
-
 ### Security: harden user_profiles RLS to migration-003 standard (t_ecf3b702)
 
 Closes Val-El's audit findings (t_6cd3026f — fresh user_profiles re-audit:
@@ -4114,7 +4015,6 @@ correct qual/with_check expressions. Functional RLS test under the
 returns 0 rows; cross-user UPDATE affects 0 rows; and a `user_id`
 reassignment attempt is blocked by the new WITH CHECK. `npm run lint` and
 `npm run build` both pass (SQL-only change; suite is a regression guard).
-
 ### Security: validate login `next` param — CWE-601 open redirect (t_6c96683f)
 
 Closes Val-El's audit finding (t_d8a9dae6 — guest gating audit; the only open
@@ -4134,7 +4034,6 @@ item, LOW/CWE-601).
 (`https://evil.com`, `//evil.com`, `/\evil.com` → `/blog`) and the legit
 pass-through (`/learn/omni-studio-cert`). Full suite 180 pass; `tsc --noEmit`
 clean; eslint clean.
-
 ### Security: harden profile API rate limiting (t_947d67fc)
 
 Closes Val-El's audit findings (t_ea087e3e, OWASP A04 — rate limiting gaps).
@@ -4158,7 +4057,6 @@ Closes Val-El's audit findings (t_ea087e3e, OWASP A04 — rate limiting gaps).
 **Tests**: `route.test.ts` +1 (GET 429s when the per-IP limit is exceeded),
 `api-security.test.ts` +5 (`getClientIp` trusted-source ordering). 172 total
 pass; `tsc --noEmit` clean; eslint clean.
-
 ### Fix: LearnHub group-count badge contrast — WCAG 1.4.3 AA (t_8b9ee30a)
 
 Closes a11y finding: the group-header count badge rendered
@@ -4180,7 +4078,6 @@ headroom in both themes.
   card-tint in both themes (light 7.11:1, dark 5.84:1 — both PASS ≥4.5).
 
 `tsc --noEmit` clean; `scripts/verify_contrast.py` all PASS.
-
 ### Fix: text-gray-400 contrast on lesson surfaces — WCAG 1.4.3 AA (t_f5c7f22c)
 
 Closes out-of-scope a11y findings (Lara, t_5c11d157): `text-gray-400`
@@ -4192,7 +4089,6 @@ to `text-gray-500` (#6B7280, 4.83:1 on white) per Lara's verification.
 - `src/components/Learn/EmptyState.tsx` — empty-series helper body (12.5px)
 
 Exempt per Lara: ExamCard.tsx disabled-button inactive UI. `tsc --noEmit` clean.
-
 ### Fix: dark-mode contrast — --ink-faint / --accent pass WCAG AA (t_8a679ec4)
 
 Closes mandatory a11y finding (t_30f64725, HIGH): `--ink-faint` failed
@@ -4239,7 +4135,6 @@ ran the app live in both themes — computed tokens confirm the new values,
 rendered pages legible, active subgroup chip `#C8102E`/white. Audit's
 remaining HIGH findings (`--signal-done` light, Learn h1 gradient tail)
 are tracked under their own fix tasks, not this one.
-
 ### Security: profile PATCH now applies Origin check + IP rate limit (t_3b046f56)
 
 Closes audit finding #3 (t_4ce798cb, CWE-352 / CWE-799): `PATCH /api/profile`
@@ -4262,7 +4157,6 @@ already partially mitigated (HttpOnly + SameSite=Lax session cookie); this
 brings profile writes to the same defense-in-depth standard as sibling
 routes. Verified live: evil-origin PATCH → 403, allowed-origin guest PATCH →
 401, 31st rapid PATCH from one IP → 429.
-
 ### Verification: exam-flow a11y fixes (t_77103142)
 
 Auto-decomposed fix task confirmed redundant — the exam-flow a11y findings
@@ -4277,7 +4171,6 @@ and auto-activates, and no `gray-400` remains in the exam components.
 `npx vitest run src/components/Progress/ExamWidget.test.tsx` 5/5 pass, full
 suite 164/164, `tsc --noEmit` clean, `npm run build` passes. No new code
 changes required.
-
 ### Verification + fix: certificate-view a11y (t_08878885)
 
 Auto-decomposed fix task verified the certificate findings from the
@@ -4298,7 +4191,6 @@ Demoted to `h2` so the heading sequence is `h1` → `h2` (WCAG 1.3.1 /
 
 Verification: `npx vitest run` 166/166 pass (`Certificate.test.tsx` 7/7),
 `tsc --noEmit` clean, `npm run build` passes.
-
 ### Verification: quiz-tier a11y fixes (t_0e84aaef)
 
 Auto-decomposed fix task confirmed redundant — the quiz-tier a11y findings
@@ -4307,7 +4199,6 @@ semantics) from the deploy-gate checklist were already resolved in commit
 `e4958c7` (parent build t_5664453e) and independently re-verified here:
 source fixes present, `npx vitest run` 164/164 pass, `tsc --noEmit` clean,
 `npm run build` passes. No new code changes required.
-
 ### Security: batch exam response no longer leaks the answer key for unanswered questions (t_c0c452f5)
 
 Closes the exam-key disclosure regression (CWE-200) introduced alongside the
@@ -4324,7 +4215,6 @@ re-opening the certificate-forgery path the coverage fix was meant to close.
   optional (`?: number`), documented as omitted for unanswered questions.
 - Tests — `batch/route.test.ts` regression assertion: on a 1/60 answer set only
   the answered item carries `correctAnswerIndex`; the other 59 omit it.
-
 ### Security: quiz_run / quiz_attempt are now server-write-only (t_bb6ed113)
 
 Closes the RLS client-forge path (CWE-807) that let an authenticated client
@@ -4359,7 +4249,6 @@ writes fail. Before applying migration 006, set `SUPABASE_SERVICE_ROLE_KEY`
 production env and local `.env.local`; then push 006. Until the migration is
 applied the code is inert; until the key is set, server writes return 500
 (fail closed — never a silent forgeable fallback). Ops: alpha.
-
 ### Feature: Round 3 — account & Learn experience (t_e0362113)
 
 Full Round 3 implementation per Brainiac's architecture
@@ -4427,7 +4316,6 @@ t_f75bc52d entry was resolved here by regenerating learn.ts with subgroup;
 the stale agentic-ai totalLessons assertion in
 `src/app/api/progress/quiz/tiers/route.test.ts` was corrected 7 → 8 to match
 current content.)
-
 ### Fix: avatar hue tokens must live in the `--color-*` namespace (t_f75bc52d)
 
 The avatar initials rendered white-on-transparent (invisible against the white
@@ -4447,7 +4335,6 @@ verification to catch.
 
 **Known Issues** — none. (Pre-existing `src/data/learn.ts` drift from commit
 1cba1d4 remains out of scope; see the feature entry below.)
-
 ### Feature: avatar menu + profile/settings pages (t_f75bc52d)
 
 Replaces the signed-in header corner (raw email + "Sign out" text button)
@@ -4500,7 +4387,6 @@ mockup-settings.html).
   commit 1cba1d4 (Add lesson 8) — out of scope for this task; learn.ts is
   restored to HEAD after verification. No changes to `content/`, sort logic,
   or build scripts per plan AC 8.
-
 ### Fix: progress rollup lessons total uses planned 46, not published 9 (t_39a3fef7)
 
 Resolves zod's QA finding F2 (MEDIUM) from review t_1d04b259. The tier
@@ -4537,7 +4423,6 @@ disagreed about course size (US-006 AC1 requires "Lessons X/46").
 
 - None. `lessons.completed` behavior is unchanged (distinct
   `lesson_completion` rows).
-
 ### Fix: scrub prose Practice Questions from day-09 lesson MDX — guest question leak (t_9032aa28)
 
 Resolves zod's QA finding F1 (HIGH) from review t_1d04b259. Lesson 9's
@@ -4567,7 +4452,6 @@ both the GuestCTA placeholder AND the complete question set with answers.
 **Known Issues**
 
 - None.
-
 ### Fix: canonical question-count coverage in quiz score consumers (t_55105899)
 
 Resolves zod's QA finding (review t_121cbcce of fix t_fb1663ec) — HIGH,
@@ -4614,7 +4498,6 @@ partial `quiz_attempt` set.
 - The certificate page's per-check canonical lookup assumes `checkMetas`
   indexes align with `checkQuizNames`; both derive from
   `getKnowledgeChecks(series)`, so they are order-stable.
-
 ### Security: server-side source of truth for grading, unlock, and certificates (t_7469e31d)
 
 Resolves val-el's security audit (t_7469e31d) — 5 findings, all confirmed
@@ -4670,7 +4553,6 @@ and the exam answer key shipped in the client bundle.
   unchanged and semantics identical.
 - Certificate completion date derives from the latest graded exam answer
   (`quiz_attempt.attempted_at`) since that table has no run boundaries.
-
 ### Fix: enforce exam unlock server-side + certificate eligibility checks (t_c6333dd3)
 
 Resolves val-el's security audit (t_05fad9a9) — MEDIUM, OWASP A01 (Broken
@@ -4713,7 +4595,6 @@ knowledge checks.
   short-circuits before the batch upsert on failure.
 - `areAllChecksPassed` treats an empty check list as unlocked; there is no
   series today with an exam but zero checks (all tier exams have check files).
-
 ### Fix: a11y findings — quiz tiers + exam + certificate (t_5664453e)
 
 Resolves lara's audit (t_5ed4bb0f) — 4 medium + 4 low WCAG 2.2 AA findings
@@ -4789,7 +4670,6 @@ structured-data touched. No shared contracts or curriculum data modified.
   heading could be added later if design wants it.
 - `text-gray-400` remains in non-quiz-tier pages (blog/header/tags) and on
   decorative/aria-hidden icons — out of scope for this audit, unchanged.
-
 ### Implement: certificate of completion (t_959ca6bf)
 
 Adds the printable certificate of completion at `/learn/[series]/certificate`,
@@ -4857,7 +4737,6 @@ rows (ADR-106); no image generation — a clean designed SVG-seal certificate.
 - Config: `browser.allow_private_urls` enabled in the steel profile so kanban workers can
   verify localhost apps with the browser tool (reversible via `hermes config set
   browser.allow_private_urls false`).
-
 ### Content gen: emit quiz JSON tiers from curriculum (t_22855141)
 
 Emits the three-tier quiz content for the OmniStudio cert course from the canonical curriculum
@@ -4899,7 +4778,6 @@ idempotent generator, `scripts/generate-omni-quizzes.py`.
   If the daily cron writes a lesson MDX with a different title slug, the sidecar won't match until
   the generator is re-run after the lesson publishes (it reads MDX frontmatter slugs when present).
 - Lesson 46's questions are not pooled into any knowledge check (checks cover lessons 1–45 per spec).
-
 ### Implement: lesson quiz + checks + exam + ordering/filter (t_9756b64d)
 
 Builds the interactive three-tier quiz experience on top of the generated JSON tiers:
@@ -4962,7 +4840,6 @@ ordering, and a completion filter — all gated behind login (ADR-101/104/105).
   correct); a future UI could surface "N unanswered" before submit.
 - Authed end-to-end flows (quiz_attempt rows, check pass → exam unlock) require a real Supabase
   session and were verified via API/route contract + unit tests, not a live login.
-
 ### Fix: motion QA findings — ShareBar hydration, score ring, read-sync (QA t_ea005360)
 
 Resolves all findings from zod's motion review: H-1 HIGH (ShareBar hydration mismatch + broken share URLs on every post page), M-1 MEDIUM (score ring fill never animates), M-2 MEDIUM (useReadProgress sync localStorage read → full hydration failure on post pages with read records), M-3 MEDIUM (Moment posture absent: no check-pop on read badge / MarkComplete, abrupt explanation reveal), L-1 LOW (no automated tests for animation behavior), L-2 LOW (LessonCard hover:pl-4 animates layout property).
@@ -5003,11 +4880,9 @@ Resolves all findings from zod's motion review: H-1 HIGH (ShareBar hydration mis
 - `LessonCard` hover now uses `hover:translate-x-1` (transform) instead of `hover:pl-4` (padding), and the transition is scoped to `background-color,transform` rather than `transition-all` — no per-frame layout/reflow on hover.
 
 **Static checks:** `tsc --noEmit` 0 errors, `eslint` 0 errors, `npm run build` clean, `npm test` 28/28 pass. Browser-verified live: share URLs populate, read state hydrates with no console errors, score ring spring class + final dasharray present, read badge `check-pop` class present, MarkComplete `check-pop` on toggle, LessonCard transform hover.
-
 ### Known Issues (new)
 
 - None introduced. H-1 / M-1 / M-2 / M-3 / L-1 / L-2 resolved; quiz mechanics, a11y, security, and mobile behavior unchanged and still passing.
-
 ### Fix: quiz hydration mismatch + attempt-count inflation (QA t_51d10f42)
 
 Resolves all findings from zod's quiz review: F-1 HIGH (hydration mismatch on every quiz page for returning users), F-2 MEDIUM (attemptCount inflates +1 per page visit/refresh), F-3 MEDIUM (no automated test coverage), and the optional F-4 (radiogroup arrow-key roving).
@@ -5034,11 +4909,9 @@ Resolves all findings from zod's quiz review: F-1 HIGH (hydration mismatch on ev
 - `QuizWidget` option group now handles ArrowUp/Down/Left/Right with wrap-around and automatic activation per the WAI-ARIA radiogroup pattern (previously Tab/Space/Enter only).
 
 **Static checks:** `tsc --noEmit` 0 errors, `eslint` 0 errors (`.vercel/**` build output added to eslint ignores alongside `.next`/`out`/`build`), `npm run build` clean, `npm test` 18/18 pass. Browser-verified with seeded localStorage: no hydration errors on `/learn`, `/learn/[series]`, `/learn/[series]/quiz`; attemptCount stable across reloads for completed and partial quizzes; real runs and retakes still record exactly once.
-
 ### Known Issues (new)
 
 - None introduced. F-1/F-2/F-3/F-4 resolved; quiz mechanics, a11y, security, and mobile behavior unchanged and still passing.
-
 ### Fix: /api/progress/read 400s on blog contentSlug (QA t_b0f76a83, t_808e5885)
 
 Resolves the HIGH finding from zod's progress-tracking review: POST/DELETE `/api/progress/read` always returned 400 for blog content because every blog call site sends the canonical ADR-002 namespaced slug `blog/<slug>` while `validateSlug` (SLUG_RE `^[a-zA-Z0-9_-]+$`) rejected the `/`. Authed cross-device read sync (US-003 AC4) never wrote/removed Supabase rows, and every mark/unmark toggle fired a console 400 even for guests.
@@ -5052,10 +4925,8 @@ Resolves the HIGH finding from zod's progress-tracking review: POST/DELETE `/api
 
 **LOW — mobile 390px "Oldest" sort control no longer clipped**
 - `src/app/blog/page.tsx`: the toolbar's `.ml-auto` row (ReadFilter + SortToggle) is now `flex flex-wrap items-center justify-end` — at 390px the row needs ~385px (241+136+8) but only has 342px, so SortToggle wraps to its own right-aligned line instead of being cut off by the hero's `overflow-hidden`. Desktop layout unchanged (verified visually; computed style confirms `flex-wrap: wrap`).
-
 ### Known Issues (new)
 - None introduced. The 400 was the only open HIGH; the sort clip the only LOW. Both resolved with no API surface or storage-format changes.
-
 ### Fix: QuizStats nested anchor on /learn (QA run #2557, t_97f2451c)
 
 Resolves the single remaining MEDIUM finding from zod's re-review (t_dfa1c8cd) of commit db25389.
@@ -5064,10 +4935,8 @@ Resolves the single remaining MEDIUM finding from zod's re-review (t_dfa1c8cd) o
 - `QuizStats` gains an `as` prop (`"link"` default | `"span"`). `PathCard` (learn hub) now renders the strip as a non-interactive `<span>` — the whole card already links to the series, so the strip is purely informational ("Quiz avg X% · N attempts"). The series-header usage (`/learn/[series]`, `onGradient`) keeps the interactive `Link` variant, which is not nested.
 - Why: the previous `Link` inside `PathCard`'s `Link` produced `<a><a>…</a></a>`, invalid HTML that React flagged with "In HTML, <a> cannot be a descendant of <a>" after client hydration injected the strip (server HTML was clean because the strip only renders when attempts exist in localStorage). Removing the nested anchor also removes the ambiguous click target for assistive tech and the flaky first-click navigation.
 - Verified: `tsc --noEmit`, `eslint`, `npm run build` all clean; production server loaded `/learn` with quiz attempts present — no nested anchors in DOM, no console errors/hydration warnings; series header still links to `/learn/<series>/quiz`.
-
 ### Known Issues (new)
 - None introduced. The nested-anchor error was the only open finding; all 9 prior findings remain fixed (db25389).
-
 ### QA Findings — Blog Life & Depth re-review (t_574d3153)
 
 Resolves all 9 findings from zod's QA review run #2552 (t_dfa1c8cd) of the Blog Life & Depth feature (read tracking, lesson completion, quiz engine, auth).
@@ -5086,13 +4955,11 @@ Resolves all 9 findings from zod's QA review run #2552 (t_dfa1c8cd) of the Blog 
 - **US-002 AC3 — button press feedback.** `active:scale-[0.98]` added to primary interactive controls: MarkAsRead, MarkComplete, category pills, read-filter segments, SortToggle, pagination, quiz Check/Next/Retake, header Contact CTA, login submit.
 - **US-002 AC5 — hero fade-in on load.** `hero-fade-in` keyframes (opacity + 10px rise, 0.6s ease-out) in `globals.css`, applied to the blog and learn heroes; the existing `prefers-reduced-motion` block neutralises it automatically.
 - **Banner backfill — 13/13 posts now have `bannerImage`.** Added `scripts/backfill-banners.js` (regenerates safely) and three on-brand category banners (`public/banners/category-sf.png`, `category-react.png`, `category-ai.png`), wired into MDX frontmatter; `build-posts.js` regenerated `src/data/posts.ts` so every card/post renders a real banner instead of the gradient fallback.
-
 ### Known Issues (new)
 - `quiz_run` migration (004) must be applied to the linked Supabase project (local stack wasn't running during this fix; repo verified by build/lint). Without it, authed quiz stats fall back to localStorage — the guest path is unaffected.
 - `/login` requires Supabase email confirmation to be configured (already `enable_confirmations = true` in `supabase/config.toml`); sign-up returns a "check your email" notice until confirmed.
 - Read/lesson unmark and quiz-run writes are fire-and-forget like the mark path: if the network drops, localStorage remains authoritative and the next successful sync corrects Supabase.
 - Category banner art is a deliberate, brand-consistent placeholder set (generated, matching category gradients) — Jimmy's parallel content task can still swap in post-specific imagery later without code changes.
-
 ### Security Fixes — Auth/session hardening follow-up (t_a719a31c)
 
 Fixes remaining findings from val-el's auth-session audit (t_4ee14a75) + RLS audit (t_ea38d052), layered on top of t_c7f51ff6.
@@ -5106,12 +4973,10 @@ Fixes remaining findings from val-el's auth-session audit (t_4ee14a75) + RLS aud
 
 **LOW (RLS hardening from t_ea38d052 I3)**
 - **I3 RLS posture** — new `supabase/migrations/003_security_hardening.sql`: all 12 policies re-created with explicit `TO authenticated` (was implicit PUBLIC); all 3 UPDATE policies now carry an explicit `WITH CHECK (auth.uid() = user_id)`; `user_id` columns on `read_progress` / `lesson_completion` / `quiz_attempt` gain `REFERENCES auth.users(id) ON DELETE CASCADE` (named FK constraints, dropped if present).
-
 ### Known Issues (new)
 - `scripts/update-supabase-auth.py` now requires `SUPABASE_SERVICE_ROLE_KEY` in the shell env — if you need to re-run the GoTrue settings PATCH, export the real service_role key first (do not add it to any tracked file).
 - Migration 003 must be applied to the linked Supabase project (local stack wasn't running during this fix; repo state verified by build/lint/tests only). `user_id` FK constraints require `auth.users` to exist (it does in every Supabase project).
 - Proxy adds a `getUser()` round-trip on every page navigation; acceptable for a low-traffic blog. Excluded from API routes so progress POSTs are not double-refreshed.
-
 ### Security Fixes — Next upgrade + progress API hardening (t_c7f51ff6)
 
 Fixes all findings from val-el's security audit (t_3bbee885) of the progress-tracking feature (Supabase RLS + auth + progress API).
@@ -5130,13 +4995,10 @@ Fixes all findings from val-el's security audit (t_3bbee885) of the progress-tra
 - **F7 Weak password/signup hygiene (CWE-521 / OWASP A07)** — `supabase/config.toml`: `minimum_password_length` 6 → 8, `password_requirements` `""` → `lower_upper_letters_digits`, and `http://localhost:3000` removed from `additional_redirect_urls` (prod config keeps prod-only redirects).
 
 **Not in scope (per audit F8)** — MDX rendered without `rehype-sanitize`; content is trusted in-repo. Add sanitization before any user-authored content path.
-
 ### Known Issues
 - CSP `script-src 'unsafe-inline'` is required because every page is statically prerendered — nonce-based strict CSP would force dynamic rendering on all pages (kills SSG/CDN caching). Acceptable for a static content site with no user-generated HTML; revisit if the app moves to dynamic pages.
 - In-memory rate limiter resets on server restart (not persisted) — fine for a blog; swap for a shared store if the app scales horizontally.
 - Quiz sync is fire-and-forget per ADR-004; with the new unique constraint, re-answering a question updates the same row (latest attempt wins) rather than appending.
-
-
 ### A11y/SEO Fixes — Progress UI + Quiz (t_08b3706e)
 
 Fixes all HIGH/MEDIUM/LOW findings from lara's a11y audit of the progress-tracking feature (parent t_c9c0a24f).
@@ -5162,19 +5024,16 @@ Fixes all HIGH/MEDIUM/LOW findings from lara's a11y audit of the progress-tracki
 - Results card has a visually-hidden `h2` ("Quiz results") so the heading outline stays valid
 - ReadingProgress bar `aria-hidden` (decorative)
 - MarkAsRead touch target increased (labeled variant `min-h-11` = 44px, icon-only `min-h-9` = 36px)
-
 ### Known Issues
 - **ShareBar hydration mismatch (pre-existing, out of scope)** — `src/components/BlogPost/ShareBar.tsx` builds share URLs from `window.location.href` during client render vs empty string on the server, producing a React hydration warning and an empty `?text=`/`?url=`/`?u=` in the server-rendered share links. Present before this feature (untouched by d15ba1e); the "1 issue" badge in Next dev tools. Recommend a follow-up fix (render href from `useEffect` state or a static canonical URL). ShareBar itself predates progress tracking.
 - Quiz radio buttons remain individually tabbable (click-first interaction) rather than the arrow-key navigation of a classic APG radio group — deliberate: the widget is mouse/touch-first and all options stay discoverable.
 - Quiz answers persist only in localStorage per ADR-004 (intended); authenticated quiz sync to Supabase is fire-and-forget
-
 ### Integration Verification (t_b4ac5a38)
 - **Build gate** — `npm run build` + `npm run lint` pass clean (Next 16.2.9, TS strict, eslint no findings)
 - **API contracts verified** — `GET /api/progress/summary` returns `{readContent:{blog,lesson}, completedLessons}` (200, empty for guests); `POST /api/progress/read` / `lesson` / `quiz` accept the documented payloads, 400 on invalid type / missing slug, `unauthenticated` fallback for guests
 - **Routes verified in running app** (dev server, localhost:3000) — `/blog` (progress bar "N of 13 posts read" + per-card MarkAsRead), `/blog/[slug]` (PostReadProgress + MarkAsRead toggle, state syncs with listing), `/learn` (per-series completion bars), `/learn/[series]` (SeriesProgress + MarkComplete + "Take the quiz" CTA), `/learn/[series]/[slug]` (completion state + toggle), `/learn/[series]/quiz` (5-question MCQ, Check Answer / Next / score ring / Retake), `/tags`, `/blog/categories`, `/feed.xml`, `/sitemap.xml`; quiz-less series `/learn/agentic-ai/quiz` correctly 404s
 - **Interactions verified as real handlers** — MarkAsRead toggles localStorage `adroit-blog:read:blog/<slug>` and updates the aggregate bar live (0→1 of 13); MarkComplete toggles `adroit-blog:lesson:<slug>` and SeriesProgress updates live (0→1 of 3); quiz attempts persist to `adroit-blog:quiz:<name>` with correct/incorrect tracked (5/5 attempted, results view + Retake). No `() => {}` stubs found
 - **Supabase connectivity** — project `zrggxfdyptiahskogwnn` ACTIVE_HEALTHY; `read_progress`, `lesson_completion`, `quiz_attempt` tables present (REST 200, RLS blocks anonymous reads as intended); guest path falls back to localStorage cleanly
-
 ### Added
 - **Progress tracking — Blog Life & Depth (per arch plan t_718bb3ca, tasks 2–5)**:
   - **Supabase client layer** — `src/lib/supabase/client.ts` (singleton anon browser client) + `src/lib/supabase/server.ts` (cookie-based server client via `@supabase/ssr`, new dependency) + typed rows in `src/lib/supabase/types.ts`
@@ -5186,7 +5045,6 @@ Fixes all HIGH/MEDIUM/LOW findings from lara's a11y audit of the progress-tracki
   - **Page integrations** — `/blog` top reading-progress bar (`BlogReadProgress`, real merged count), `/blog/[slug]` read state + toggle, `/learn` per-series completion bars, `/learn/[series]` header progress + per-lesson MarkComplete toggles + "Take the quiz" CTA, `/learn/[series]/[slug]` completion state + toggle
   - **Quiz content + page** — `content/omni-studio-cert/questions.json` (5-question OmniStudio cert MCQ with explanations) + `/learn/[series]/quiz` page (SSG, loads questions.json, 4-option MCQ with progress segments, Check Answer / Next, score-ring results + Retake)
   - **Quiz loader** — `src/lib/quiz.ts` (getQuizForSeries / getQuizSeriesSlugs, reads `content/<series>/questions.json`)
-
 ### Changed
 - **API routes now use the cookie-based server client** (`src/lib/supabase/server.ts`) instead of the browser singleton — RLS-authenticated upserts work in route handlers; guests still get `unauthenticated` fallback
 - **Lesson pages use completion semantics** (useLessonProgress / lesson_completion) instead of read tracking — the old `series/<slug>` MarkAsRead toggle and per-lesson read pills were removed
@@ -5212,7 +5070,6 @@ Fixes all HIGH/MEDIUM/LOW findings from lara's a11y audit of the progress-tracki
 - **Security headers** — `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` on all routes.
 - **`noUnusedLocals`** — enabled in tsconfig compilerOptions for stricter TypeScript checking.
 - Blog listing (`/blog`) — layout wrapper with static metadata export (client component compatible).
-
 ### Changed
 - **Design pass — elevated editorial polish (per Brainiac's implementation plan t_71faff13 + Kara's design system)**:
   - **Design tokens** — added `shadow-card`, `shadow-card-hover`, and per-category glow tokens (`shadow-glow-sf/react/ai/mkt`) to the `@theme inline` block in `globals.css` so cards, tag chips, and category panels use the token-based elevation system instead of ad-hoc shadows
@@ -5228,19 +5085,16 @@ Fixes all HIGH/MEDIUM/LOW findings from lara's a11y audit of the progress-tracki
 - `package.json` prebuild now runs `node scripts/build-posts.js && node scripts/build-learn.js`
 - `src/app/sitemap.ts` extended with learn URLs (weekly cadence, lessons priority 0.7)
 - CHANGELOG restructured to reflect full platform feature set.
-
 ### Fixed
 - **Learn lesson MDX rendering** — frontmatter is stripped before MDX rendering. (The blog renderer passes raw content through and renders the frontmatter blob as a heading — pre-existing behavior left untouched per scope; Learn does not replicate it.)
 - **SEO robots** — layout now exports proper `robots: { index: true, follow: true }` via `buildMetadata()` (was default noindex).
 - **Blog listing metadata** — added metadata layout wrapper so `/blog` has proper title/description/OG tags.
-
 ### Known Issues
 - No lessons published yet (Jimmy cron starts daily content 2026-08-04) — both series render the graceful "coming soon" empty state; when lessons land, ordering is newest-first automatically
 - `/learn` hub card bands use CSS gradients only (design's placeholder texture assets were intentionally not wired into production — replace with real imagery if desired later)
 - Unknown series/lesson slugs render the framework default 404 (no custom not-found page yet)
 
 ## [2026-06-15] — Brand Styling (Round 2)
-
 ### Added
 - **Next.js 16 project** with Tailwind CSS v4 and TypeScript
 - **Design token system** — brand colors (navy #0B1D3A, red #C8102E, navy-dark #060F1F), Inter typography, border radii, shadows — mapped to Tailwind v4 `@theme` custom tokens
@@ -5255,7 +5109,6 @@ Fixes all HIGH/MEDIUM/LOW findings from lara's a11y audit of the progress-tracki
 - **Root redirect** (`/`) — auto-redirects to `/blog`
 - **Kara's design mockup** — copied to workspace as reference
 - **Responsive breakpoints**: mobile (320px-767px: single column, hamburger nav, smaller fonts), tablet (768px-1023px: single column grid, full nav visible, 2-col footer), desktop (1024px+: full 2-col grid, 4-col footer, 1120px container), large desktop (1280px+: centered layout)
-
 ### Fixed
 - **Categories page** — added `<Header />` and `<Footer />` (was rendering without navigation or footer)
 - **Blog listing URL sync** — category filter now reads `?category=` query param from URL on load, and updates URL when pills are clicked
@@ -5263,7 +5116,6 @@ Fixes all HIGH/MEDIUM/LOW findings from lara's a11y audit of the progress-tracki
 - **Social icons** — removed `cursor-pointer` and hover effects from Footer social icons (they were decorative but looked interactive)
 - **Client navigation** — converted `<a>` tags to `<Link>` for client-side routing on Categories page
 - **Build compliance** — wrapped `useSearchParams()` in `<Suspense>` per Next.js 16 requirements
-
 ### Known Issues
 - Subscribe form and social share buttons are UI-only (no backend integration)
 - Post card images use CSS gradients as placeholders — replace with actual images when available
