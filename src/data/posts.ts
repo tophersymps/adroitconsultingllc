@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "speculative-decoding-draft-verify-2026",
+    "title": "The Draft Is Cheap: Speculative Decoding in Production",
+    "excerpt": "Speculative decoding trades spare compute for fewer weight reads. The speedup lives or dies on one number you measure on your own traffic: acceptance rate.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 24, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Speculative Decoding",
+      "LLM Serving",
+      "vLLM",
+      "Inference Optimization"
+    ],
+    "bannerImage": "/banners/speculative-decoding-draft-verify-2026.webp",
+    "ogImage": "/banners/speculative-decoding-draft-verify-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "rls-policy-performance-tuning-2026",
     "title": "RLS Performance: Diagnose the Policy Before You Rewrite It",
     "excerpt": "Row-level security pays one predicate per row scanned. Prove the policy is the bottleneck, then index it, wrap the auth call, and reshape the expression.",
