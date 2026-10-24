@@ -36,6 +36,12 @@ async function fetchSearchDocs(signal: AbortSignal): Promise<SearchDoc[]> {
   return Array.isArray(body?.docs) ? body.docs : [];
 }
 
+/** The cache entry while it is still fresh, else null (refetch). */
+function freshCachedDocs(): SearchDoc[] | null {
+  if (!docsCache) return null;
+  return Date.now() - docsCache.at < DOCS_TTL_MS ? docsCache.docs : null;
+}
+
 type LoadState = "idle" | "loading" | "ready" | "error";
 
 /**
@@ -61,37 +67,45 @@ type LoadState = "idle" | "loading" | "ready" | "error";
 export default function SearchOverlay() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [docs, setDocs] = useState<SearchDoc[] | null>(null);
-  const [loadState, setLoadState] = useState<LoadState>("idle");
+  // Seeded from the module cache so a remount within the TTL never refetches.
+  const [docs, setDocs] = useState<SearchDoc[] | null>(freshCachedDocs);
+  const [failed, setFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const hasOpenedRef = useRef(false);
   const router = useRouter();
 
-  // Lazy load on first open (and refresh after the TTL expires).
+  // Lazy load on first open. Only async callbacks set state (never the effect
+  // body — `react-hooks/set-state-in-effect`), and an AbortController cancels
+  // an in-flight fetch when the overlay closes or unmounts. A second open finds
+  // `docs` already set (or the module cache fresh) and makes no request.
   useEffect(() => {
-    if (!open) return;
-    if (docsCache && Date.now() - docsCache.at < DOCS_TTL_MS) {
-      setDocs(docsCache.docs);
-      setLoadState("ready");
-      return;
-    }
+    if (!open || docs) return;
     const controller = new AbortController();
-    setLoadState("loading");
     fetchSearchDocs(controller.signal)
       .then((next) => {
         if (controller.signal.aborted) return;
         docsCache = { docs: next, at: Date.now() };
         setDocs(next);
-        setLoadState("ready");
+        setFailed(false);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        setLoadState("error");
+        setFailed(true);
       });
     return () => controller.abort();
-  }, [open]);
+  }, [open, docs]);
+
+  // Derived, never stored: loading = open with no index yet, error = last
+  // attempt failed (a reopen retries).
+  const loadState: LoadState = docs
+    ? "ready"
+    : failed
+      ? "error"
+      : open
+        ? "loading"
+        : "idle";
 
   const results: SearchResults = useMemo(
     () =>
