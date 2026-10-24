@@ -1,8 +1,7 @@
 import Link from "next/link";
 import type { BlogPost } from "@/data/types";
-import { learnSeries } from "@/data/learn";
-import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { toLearnCardSeries } from "@/lib/learn";
+import { getGuestVisibleSeries } from "@/lib/learn-visibility";
 import {
   getRelatedPosts,
   resolveRecommendedSeries,
@@ -24,21 +23,16 @@ interface KeepLearningProps {
  *     "why this fits" reason.
  *  2. A lightweight related-posts row (same category, 3 cards).
  *
- * Server component: resolves the recommendation from the static learn dataset
- * and renders the same card component the /atlas hub uses (no divergence).
- *
- * DISCLOSURE BOUNDARY (security t_0071d4a0, CWE-200): the collection is
- * filtered to the static launch mirror BEFORE it reaches the resolver, so a
- * stealth series is never selected in the first place. Filtering the input
- * (not merely skipping the render) is what keeps the series record out of the
- * RSC flight payload: `PathCard` receives the series as a prop, so anything
- * the resolver returns is serialised into the prerendered HTML. Doctrine
- * (t_0194c233 / t_2cc94bb7): a series may be named publicly iff
- * `isPubliclyLaunchedSeries(slug)` — do not add an unfiltered fallback.
+ * Server component. ADR-217: the series list comes from the guest-visibility
+ * seam (`getGuestVisibleSeries`), NEVER straight from `@/data/learn` — a
+ * stealth series must not reach `toLearnCardSeries` or the RSC flight payload
+ * of a publicly prerendered post (S1). When the mapped series is not
+ * guest-visible, `resolveRecommendedSeries` simply returns undefined and the
+ * existing `rec &&` guard renders no funnel block.
  */
-export default function KeepLearning({ post, allPosts }: KeepLearningProps) {
-  const launchedSeries = learnSeries.filter((s) => isPubliclyLaunchedSeries(s.slug));
-  const rec = resolveRecommendedSeries(post, launchedSeries);
+export default async function KeepLearning({ post, allPosts }: KeepLearningProps) {
+  const visibleSeries = await getGuestVisibleSeries();
+  const rec = resolveRecommendedSeries(post, visibleSeries);
   const related = getRelatedPosts(post, allPosts);
 
   return (
