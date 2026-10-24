@@ -62,9 +62,21 @@ export async function GET(): Promise<Response> {
       },
       { headers: NO_STORE_HEADERS },
     );
-  } catch {
+  } catch (err) {
     // Catalogue read failed → 503 so the island keeps the guest baseline
     // instead of upgrading to a half-resolved (all-locked) signed-in state.
+    //
+    // CWE-778 (t_601ef414): the catalogue loaders already fail closed (each one
+    // rethrows a PostgREST `{ error }`), but swallowing it here made a Data API
+    // or RLS outage invisible — the only signal was a 503 nobody correlated.
+    // Log the transport fields only: PostgREST messages/details can echo a
+    // column value and the caller's identity must never be logged.
+    const { status, code } = (err ?? {}) as { status?: unknown; code?: unknown };
+    const context: { status?: number; code?: string } = {};
+    if (typeof status === "number") context.status = status;
+    if (typeof code === "string") context.code = code;
+    console.error("[atlas/cards] catalogue read failed", context);
+
     return NextResponse.json(
       { gate: "guest-locked", series: [] },
       { status: 503, headers: NO_STORE_HEADERS },
