@@ -13,6 +13,12 @@ What it does
 ------------
 1. Signs in two QA users against Neon Auth (creating them with /sign-up/email
    if they do not exist yet) and fetches per-user bearer JWTs from /token.
+   Because email_and_password.requireEmailVerification=true is live and no
+   verification mail can be delivered here, a freshly created fixture is
+   verified by the harness itself (single update over the owner connection on
+   the ids it just created) before sign-in is retried once. A sign-up that
+   answers 200 without storing an identity (stale fixture) is purged and
+   recreated once instead of surfacing as a misleading auth error.
 2. Fetches an anonymous-role JWT from /token/anonymous.
 3. Runs the raw "brand new account" own-write probe: a freshly signed-up
    Better Auth user inserts their own lesson_completion over the Data API.
@@ -335,17 +341,116 @@ def resolve_endpoint(env_key, secret_id, label):
 # --------------------------------------------------------------------------
 
 
+def auth_user_id(email):
+    """The neon_auth."user" id for an email, or None when no identity is stored."""
+    found = sql(f'select id from neon_auth."user" where email = {sql_literal(email)} limit 1;')
+    return found.strip() or None
+
+
+def mark_email_verified(user_id):
+    """Satisfy requireEmailVerification for a QA fixture.
+
+    There is no mail provider in this environment and neon_auth.verification
+    writes nothing for email verification, so the fixture is verified through
+    the privileged owner connection (bootstrap-only; no isolation assertion
+    depends on this).
+    """
+    assert_uuid(user_id, "fixture user id")
+    sql(f'update neon_auth."user" set "emailVerified" = true '
+        f"where id = {sql_literal(user_id)};")
+
+
+def purge_identity(email):
+    """Remove every row for a fixture email so it can be recreated cleanly."""
+    lit = sql_literal(email)
+    sql(f"""
+delete from public."user"     where email = {lit};
+delete from neon_auth.session where "userId" in (select id from neon_auth."user" where email = {lit});
+delete from neon_auth.account where "userId" in (select id from neon_auth."user" where email = {lit});
+delete from neon_auth."user"  where email = {lit};
+""")
+
+
+def _unverified(status, body):
+    text = body if isinstance(body, str) else json.dumps(body)
+    return status == 403 and "EMAIL_NOT_VERIFIED" in text
+
+
+def _sign_in(email, password):
+    return auth("POST", "/sign-in/email", body={"email": email, "password": password})
+
+
+def _create_identity(email, password):
+    """sign-up + self-verify. Returns the new id, or None when nothing was stored.
+
+    sign-up answers 200 even when it is an anti-enumeration no-op, so the id is
+    confirmed through neon_auth."user" rather than trusted from the response.
+    """
+    status, body, _ = auth("POST", "/sign-up/email",
+                           body={"email": email, "password": password, "name": f"QA R1-5 {email}"})
+    if status not in (200, 201):
+        raise SystemExit(f"cannot create QA user {email}: HTTP {status} {str(body)[:300]}")
+    user_id = auth_user_id(email)
+    if not user_id:
+        return None
+    # requireEmailVerification=true: no mail provider here, so verify directly
+    mark_email_verified(user_id)
+    return user_id
+
+
 def sign_in(email, password):
-    """Returns (token, user_id). Creates the account on first run."""
-    status, body, headers = auth("POST", "/sign-in/email", body={"email": email, "password": password})
+    """Returns (token, user_id). Creates the account on first run.
+
+    Under email_and_password.requireEmailVerification=true a freshly signed-up
+    identity cannot sign in (403 EMAIL_NOT_VERIFIED) and no verification mail
+    can be delivered here. The harness therefore verifies the fixtures it just
+    created itself, over the owner connection, then retries sign-in once, so a
+    single command works on a database with no pre-existing QA identities.
+
+    A leftover fixture that sign-up refuses to overwrite (200 no-op) is purged
+    and recreated once, instead of surfacing as a misleading auth error.
+    """
+    status, body, headers = _sign_in(email, password)
+
+    if status != 200 and _unverified(status, body):
+        # identity already exists (e.g. a --keep-users run) but unverified
+        existing = auth_user_id(email)
+        if existing:
+            print(f"  fixture {email} exists but is unverified; marking emailVerified and retrying")
+            mark_email_verified(existing)
+            status, body, headers = _sign_in(email, password)
+
     if status != 200:
-        status, body, _ = auth("POST", "/sign-up/email",
-                               body={"email": email, "password": password, "name": f"QA R1-5 {email}"})
-        if status not in (200, 201):
-            raise SystemExit(f"cannot create QA user {email}: HTTP {status} {str(body)[:300]}")
-        status, body, headers = auth("POST", "/sign-in/email", body={"email": email, "password": password})
+        user_id = _create_identity(email, password)
+        if not user_id:
+            print(f"  sign-up for {email} returned 200 but stored no identity; "
+                  "purging the stale fixture and recreating it once")
+            purge_identity(email)
+            user_id = _create_identity(email, password)
+        if not user_id:
+            raise SystemExit(
+                f"cannot create QA user {email}: sign-up answered 200 but no "
+                f'neon_auth."user" row exists for that email (stale fixture could not be recreated)'
+            )
+        status, body, headers = _sign_in(email, password)
         if status != 200:
-            raise SystemExit(f"cannot sign in {email}: HTTP {status} {str(body)[:300]}")
+            # stale credential from an earlier run (password drift): the identity
+            # exists and is now verified but still rejects this password
+            print(f"  fixture {email} still rejects the current password; "
+                  "purging the stale identity and provisioning it from scratch")
+            purge_identity(email)
+            user_id = _create_identity(email, password)
+            if not user_id:
+                raise SystemExit(
+                    f"cannot create QA user {email}: purge left no identity and sign-up "
+                    f'stored nothing (neon_auth."user" has no row for that email)'
+                )
+            status, body, headers = _sign_in(email, password)
+            if status != 200:
+                raise SystemExit(
+                    f"cannot sign in {email} after self-verification: "
+                    f"HTTP {status} {str(body)[:300]}"
+                )
 
     cookies = _cookies(headers)
     status, body, _ = auth("GET", "/token", cookie=cookies)
