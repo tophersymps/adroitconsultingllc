@@ -14,7 +14,11 @@
  * (ADR-212 — next-course is DERIVED, not stored).
  */
 import { accessSeam, getCatalogOrg } from "@/lib/access";
-import { getLessonsForSeries, getSeriesBySlug } from "@/lib/learn";
+import {
+  getLessonsForSeries,
+  getSeriesBySlug,
+  seriesShortLabel,
+} from "@/lib/learn";
 import type { LearnCardSeries } from "@/data/types";
 import type {
   CatalogCourse,
@@ -202,6 +206,8 @@ export function toLearnHubCards(
     name: c.name,
     description: c.description,
     gradient: c.gradient,
+    // ADR-221: same server-resolved label as `toLearnCardSeries` — one map.
+    shortLabel: seriesShortLabel(c.course.series_slug),
     lessonCount: c.lessonCount,
     totalLessons: c.totalLessons,
     curriculumLessons: c.curriculumLessons,
