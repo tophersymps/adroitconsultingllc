@@ -169,6 +169,9 @@ async function main() {
 
   // Deterministic verified state — never depend on requireEmailVerification being false.
   sql(env, `UPDATE neon_auth."user" SET "emailVerified" = true, "updatedAt" = now() WHERE id = ${lit(id)};`);
+  // Mark it throwaway: public."user".is_test makes the 007 delete trigger hard-delete
+  // this account instead of giving it a 30-day recovery window (it is not a real person).
+  sql(env, `UPDATE public."user" SET is_test = true WHERE id = ${lit(id)};`);
   // The eager trigger owns this mirror; assert it instead of assuming it.
   const provisioned = sql(env, `SELECT count(*) FROM public."user" WHERE id = ${lit(id)};`);
 
