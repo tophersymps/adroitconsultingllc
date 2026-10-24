@@ -200,6 +200,48 @@ Surfaces: `/atlas/[series]`, `/atlas/[series]/[slug]`, `/check/[n]`, `/exam`, `/
 **Why** - Triage t_2fdc4d06 / design t_3b6c1056: `$NEON_AUTH_BASE_URL/token/anonymous` allows ≈250 mints per 60 s per client and then locks out for a fixed 60 s (advertised only as `x-retry-after`), and the bucket is shared with `/token` — so guest traffic also denied session-JWT minting to signed-in users. A 429 resolved a null JWT, `createDbClient` issued a request with no `Authorization` header, the Data API answered `400 missing authentication credentials`, `if (error) throw` in `access.ts` turned that into a page 500, and `access-gate.ts` turned it into `500 {"error":"Server error"}` on `POST /api/progress/quiz/run`. Guests are the majority of traffic on a public site, so a token-route hiccup took out the catalog.
 
 **Known Issues** - (1) The cache is process-local by design: a cold serverless instance during a lockout mints once, fails, and degrades to the guest view (correct, but it means a cold start inside a 60 s window serves the degraded page). (2) `setInterval`-free, so `anonTokenStats` are per-process and reset on deploy; they are the observability hook, not a metric backend. (3) The degraded client covers the PostgREST builder surface explicitly; a future builder method not in its list would throw inside a page instead of degrading — extend `BUILDER_METHODS` when adding one. (4) `/api/db/token` and `src/lib/db/client.ts` are untouched: they use `/token` only and are unaffected by this class of failure. (5) The per-surface degrade paths are covered by the token-layer tests plus the `/atlas/[series]` page and `/api/progress/quiz/run` route degraded suites; the remaining per-surface test files named in lois's AC map are not added by this card.
+### Fix (LOW, robustness): discarded mount read clears `isLoading`; epoch-guarded refresh (t_4e6198a6)
+
+**What** - One file changed, one test file extended. `src/lib/hooks/useProgressSummary.ts`:
+(1) QA-L1 — when an identity transition discards the mount read (`epoch !== summaryEpoch`), the hook now sets `isLoading(false)` before returning instead of leaving it `true` for the lifetime of the instance. `refresh()` only called `setSummary(...)`, so a discarded mount read left the skeleton pulsing forever on any identity with zero merged progress (guest, or a fresh sign-in): `SeriesProgress` renders `isLoading && done === 0`.
+(2) QA-L1 — the event `refresh()` now also clears `isLoading` when it applies a read, so the replacement read's delivery ends the loading state even if the mount read is discarded.
+QA-L2's epoch guard in `refresh()` already landed in `dc154afa` (SEC-L1, t_15a53bb8); this card only adds the regression lock for it.
+
+Tests: `src/lib/hooks/useProgressSummary.identity.test.tsx` gains a `LoadingCard` probe plus two cases — QA-L1 (hold the mount read, sign out, resolve the new guest read, then let the stale mount read settle last ⇒ `isLoading === false` and `done:none`, no `series-1-1` leak) and QA-L2 (a superseded refresh settles last after the newer payload rendered ⇒ lesson bars keep `series-2-1` and the quiz strip keeps `41/1`).
+
+**Why** - Val-el's LOW robustness findings while re-verifying PR #375 head `0aaaf698` (card t_fc5c82e6). Both fail closed — no cross-user data can leak or be misattributed — but both are user-visible. L1 was still open on the PR head; L2's guard was already delivered by t_15a53bb8.
+
+**Verified** - RED/GREEN bites: with only the hook change reverted, the QA-L1 test times out waiting for `done:none` (state stays `loading`); restored → green. Full suite `npx vitest run` **124 files / 1098 tests passed**. `npx tsc --noEmit` exit 0; `npx eslint` clean on both touched files. No JSX or request-budget change (`SeriesProgress` consumes the same `isLoading` flag).
+
+**Known Issues** - The discard branch clears loading even when the replacement read is still in flight, so a zero-progress card can briefly render empty bars instead of the skeleton during an identity transition. Cosmetic only; no extra request is issued.
+
+### Fix (LOW, SEC follow-up): event-refresh epoch guard + no-store on the other per-user routes (t_15a53bb8)
+
+**What** - Three files changed, two test files extended, one new test file:
+(1) `src/lib/hooks/useProgressSummary.ts` — the event-driven `refresh()` (fed by `AUTH_CHANGED_EVENT` and the cross-tab `focus` listener) now captures `summaryEpoch` before awaiting and drops the result if the identity changed while the read was open. `fetchProgressSummary` already returns `null` for a read that crossed an identity transition (privacy guard), but applying that `null` erased the new identity's payload whenever the abandoned read settled last — the progress bars rendered empty while the quiz strip correctly kept the new user's `10/1`. Mount effects and `useSessionQuizStats.readAgain` already had this guard; this closes the event path.
+(2) `src/app/api/auth/session/route.ts` — all three returns (signed-in, guest, degraded) now carry `Cache-Control: private, no-store`. The payload is identity (`id`/`email`/`isAdmin`).
+(3) `src/app/api/atlas/cards/route.ts` — the guest return (and the broken-auth fallback that shares it) now carries `private, no-store` too, and the signed-in/503 paths were upgraded from `no-store` to `private, no-store` for consistency with `/api/progress/summary`.
+
+Tests: `src/app/api/auth/session/route.test.ts` is new (5 contract tests + 3 header assertions: signed-in, guest, degraded); `src/app/api/atlas/cards/route.test.ts` gains a 4-case header describe (guest, broken-auth guest, signed-in, 503) and its existing cache assertion now expects `private, no-store`; `src/lib/hooks/useProgressSummary.identity.test.tsx` gains the SEC-L1 race — an event refresh is in flight when the identity changes, B's read lands and renders, then the abandoned read settles last, and B's `lessons`/quiz numbers must survive.
+
+**Why** - Val-el's re-verify of PR #372 head `de2f8cf9` (t_d2303765) closed the MEDIUM F1 and routed these two LOW items: the event-refresh path had no epoch re-check (UI blanking, no data leak — the applied value is `null`), and two per-user JSON routes still shipped no `Cache-Control`. SEC-R2-F2 had added the header only to `/api/progress/summary`. Neither gates deploy; both are defense-in-depth / availability fixes.
+
+**Verified** - RED/GREEN bites: with only the hook change reverted, the new SEC-L1 test fails (`expected "series-2-1", received ""` — exactly the blanking repro); restored → green. Full suite `npx vitest run` **124 files / 1096 tests passed** (123 files / 1083 tests before this card, +13). `npx tsc --noEmit` exit 0; `npx eslint .` 0 errors (6 pre-existing warnings in `src/lib/auth/server.test.ts`). No JSX/route-config change, so the prior a11y/perf verdicts hold.
+
+**Known Issues** - None new. The `focus`-twice-mid-flight repro Val-el described still needs a real identity transition to blank the bars (two plain focus events without an epoch bump collapse into one shared read), which is what the regression test exercises. Neither change alters the request budget.
+
+### Fix: focus re-read + QA-L1 guard + no-store headers (SEC-R2-F1/F2 delta, t_2dd0e9f9)
+
+**What** - The base branch already carries PERF-P1 (`101da747`) and PERF-CACHE-M1 (`492f9c1e`), including `auth-events.ts` and the central `invalidateProgressSummary()` calls. This commit adds only the remaining PR #372 delta on top:
+(1) `src/lib/hooks/useProgressSummary.ts` — both `useProgressSummary` and `useSessionQuizStats` now listen for `focus` and re-read via `refreshProgressSummary()`; the re-read is deferred to a microtask so it runs after `useAuth`'s synchronous epoch bump regardless of listener order. Mount effects capture the identity epoch and discard a read that settles after it changed (QA-L1), so a stale `null` cannot erase B's payload.
+(2) `src/app/api/progress/summary/route.ts` — guest, authenticated and fail-closed 500 responses now carry `Cache-Control: private, no-store` (SEC-R2-F2/CWE-525).
+(3) `src/lib/hooks/useAuth.ts` — the auth-changed/`focus` listener now defers its refresh to a microtask so N mounted `useAuth` instances invalidate first and share ONE final-epoch session read. Without this, each listener started its own read at an intermediate epoch and only the last instance updated after a cross-tab change.
+
+Tests: `src/app/api/progress/summary/route.test.ts` gains three header assertions (200 authenticated, 200 guest, 500 fail-closed); `src/lib/hooks/useProgressSummary.identity.test.tsx` gains the focus fan-out case and the QA-L1 stale-read race case. The base's `notifyAuthChanged()` regression test and source locks are retained.
+
+**Why** - PR #372 was built in parallel to the base rather than on top of `101da747`/`492f9c1e`, so merging its head conflicted on duplicate cache logic. Reconciling as a clean delta avoids hand-merging duplicate auth-events/invalidation lines while preserving the genuinely new cross-tab `focus` coverage and the cache headers. Val-el's re-verify on `de2f8cf9` closed the F1 MEDIUM; this commit brings those guarantees to the current base tip.
+
+**Verified** - Full suite `npx vitest run` **123 files / 1083 tests passed**; `npx tsc --noEmit` exit 0; `npx eslint` clean on the five touched files; `npm run build` exit 0 with `/atlas` still prerendered static (`initialRevalidateSeconds: 3600`). Request budget unchanged: the N-card fan-out collapses to ONE summary request, signed-in `/atlas` stays ≤3 and guests exactly 1. No JSX or route-config changes, so the prior a11y/perf PASS verdicts only need a delta check if that changes.
 
 ### Fix: the session cache dies on identity transitions too (PERF-CACHE-M1b, t_c0eaa6f2)
 
