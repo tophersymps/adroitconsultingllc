@@ -1,0 +1,214 @@
+---
+title: "Lesson 78: Org Governance: Change Management, Release Calendars, and the DevOps Culture Behind Both"
+slug: org-governance-change-management-release-calendars-devops-culture
+series: "salesforce-architect"
+lesson: 78
+excerpt: "Most orgs do not fail because of one bad deployment. They fail because forty changes arrive with no owner, no calendar, and no shared definition of done. This lesson covers decision rights, change tiers, release trains, the fixed Salesforce release calendar, and the DevOps habits that make governance something a team uses instead of something it routes around."
+date: "October 24, 2026"
+author: "Adroit Consulting"
+readTime: "16 min read"
+tags: [Salesforce, Architecture, Governance, DevOps, Change Management]
+---
+
+# Lesson 78: Org Governance: Change Management, Release Calendars, and the DevOps Culture Behind Both
+
+Ask an architect why a Salesforce org became hard to maintain and you will hear about a bad data model, a runaway trigger, or a field count nobody can explain. Those are symptoms. The cause is usually upstream: too many people changing the same system with no agreed way to decide what gets built, when it ships, and who is allowed to say no.
+
+Governance sounds like paperwork. In practice it is the difference between a team that can answer "what changed last Tuesday and why" and a team that cannot. Every org has governance. The only question is whether it was designed or whether it accreted from whoever was loudest in a Slack thread.
+
+This lesson covers the three parts that hold a busy org together: the decision rights that determine who approves what, the release calendar that turns a list of requests into a schedule, and the DevOps culture that decides whether people follow the process or quietly work around it. There is a worked example with real arithmetic, a set of hard limits that constrain any release process built on change sets, and a set of exercises you can run against your own org.
+
+## Define the terms first
+
+Governance conversations go badly when two people use the same word for different things. Start with precise definitions.
+
+- **Governance**: the set of decision rights, standards, and review mechanisms that determine how change enters the org and who is accountable for it. Governance is not a committee. A committee is one mechanism a governance model might use.
+- **Change management**: the operational process that takes a request from idea to production, including assessment, approval, testing, deployment, and verification. Governance decides who may approve. Change management is the path the change travels.
+- **Change request**: a described unit of work with a business reason, an owner, an impact assessment, and a rollback position. A change request that says "add some fields for marketing" is not a change request. It is a wish.
+- **Change advisory board (CAB)**: the forum that reviews changes above a defined risk threshold. A CAB that reviews every picklist value is a bottleneck with a calendar invite.
+- **Change tier**: the classification that determines how much review a change receives. Standard, normal, and emergency are the usual three, and the threshold between them is the part worth designing.
+- **Release calendar**: the published schedule of deployment windows, freezes, Salesforce upgrade dates, and business events that constrain when production may change. It is a shared artifact, not a personal reminder.
+- **Release train**: a fixed cadence on which a bundle of changes ships, whether or not every request made it. The train leaves on schedule. Requests that miss it wait for the next one.
+- **Change freeze**: a period when production changes are restricted. A well-designed freeze blocks a specific risk class. A badly designed freeze blocks everything and teaches teams to hoard changes until it lifts.
+- **Technical debt**: work deferred to hit a date, with a known cost and (ideally) a named owner and a trigger for repayment. Debt without a record is just damage.
+- **Configuration drift**: the gap between what version control says an org contains and what the org actually contains. Drift is the default state of any org where changes can be made in the UI.
+- **DevOps culture**: the working norm that the people who build a change also own its behavior in production, that small batches are preferred to large ones, and that incidents are reviewed to fix systems rather than to assign blame.
+
+## The release calendar is a constraint you do not control
+
+Every architecture plan sits inside a calendar that Salesforce sets and you do not. Salesforce delivers three major releases a year, in Spring, Summer, and Winter, with production upgrades landing in February, June, and October. Upgrades are mandatory and cannot be deferred or opted out of. [^1]
+
+Before production upgrades, Salesforce upgrades a subset of sandboxes to the preview release, roughly four to five weeks ahead, which gives you a window to test your critical paths against the new version. Sandbox preview upgrades happen in January, May, and September. [^1] The maintenance schedule is published up to a year in advance, which means the dates are knowable far enough ahead to plan around. [^2] For teams on scratch orgs, the same transition has explicit dates: the Winter '27 preview ran from August 30 to October 10, 2026, Spring '27 previews run from January 10 to February 20, 2027, and Summer '27 previews run from May 9 to June 12, 2027. [^3]
+
+Put those dates in your delivery calendar and schedule backward from them, not forward from your backlog. A workable pattern looks like this:
+
+1. **T minus 8 weeks**: release notes review. The architect and the admin lead read the release notes and the release matrix, then list every feature change that touches an object, an automation, an integration, or a permission model in use.
+2. **T minus 6 weeks**: freeze structural changes to the sandboxes you will use for preview testing. You cannot test the new release on a moving target.
+3. **T minus 5 weeks (preview available)**: run the regression suite in the preview sandbox. This is the only environment where you can see the new version before it reaches users.
+4. **T minus 3 weeks**: decision gate. Either you are ready, or you have a documented list of accepted risks with owners.
+5. **T minus 2 weeks**: production code freeze for anything not related to release readiness. Deploy the minimum.
+6. **Production upgrade**: monitor, not deploy. Do not schedule your own release into the upgrade window.
+
+Two facts make this non-negotiable. First, Salesforce states plainly that it is impossible to roll back a managed package installation, which is why testing before the production upgrade matters. [^1] Second, the upgrade itself is silent and zero downtime, which sounds reassuring until you realize it also means there is no maintenance window during which users expect things to be broken. A regression appears as a normal user reporting that something used to work. [^1]
+
+The calendar also contains your own events: quarter end, fiscal close, a product launch, a peak season. The architect's job is to produce one combined calendar where Salesforce upgrades, business blackout dates, and your own release windows are visible in the same place. When those live in three different systems, the first collision is discovered in production.
+
+## Governance is a set of decision rights, not a recurring meeting
+
+The most useful way to design governance is to stop asking "what should the CAB review" and start asking four questions. Who approves changes to objects, fields, and automations that other systems depend on? Who owns priority when two business units want the same sprint? Who decides when technical debt gets paid down? Which business metrics prove a change was worth making? Salesforce's own guidance for a center of excellence frames governance around exactly these ownership questions, plus one more that teams avoid: who decides when debt is worked around rather than fixed. [^4] Answer that last one explicitly, or it gets answered informally every time by whoever is under pressure.
+
+For a Salesforce org, decision rights usually split along these lines:
+
+- **Platform architect or architecture review**: data model changes, integration patterns, security model changes, anything that creates a new system of record. These are expensive to reverse and cheap to review.
+- **Product owner or business lead**: priority, scope, and acceptance. They should not be approving field-level security.
+- **Admin lead or release manager**: sequencing, deployment mechanics, environment availability, and the release calendar.
+- **Security and compliance**: data classification, retention, external access, and anything touching regulated data.
+- **Operations**: production readiness, monitoring, rollback, and incident response.
+
+Then attach a tier to each class of change. The tier determines the path, not the importance of the person requesting it.
+
+| Tier | Examples | Review | Lead time |
+|---|---|---|---|
+| Standard | Reports, dashboards, list views, email templates, picklist additions (non-restricted), permission set assignments | Pre-approved pattern, automated validation, no CAB | Same week |
+| Normal | New fields, page layouts, flows, validation rules, new integrations, permission model changes | Peer review plus architect sign-off above a defined threshold | 1 to 2 release cycles |
+| Major | New objects or relationships, record type changes, sharing model changes, code deployments affecting multiple teams | Architecture review, test evidence, rollback plan, CAB | Scheduled release train |
+| Emergency | Production defect blocking revenue or compliance | Named approver on call, minimal change, mandatory retrospective within 5 business days | Immediate |
+
+The value of the table is not the table. It is that a requester can predict the path before they start, and an approver can point at a rule instead of making a judgment call under social pressure.
+
+One design note: emergency is a tier, not an escape hatch. If more than a small fraction of changes are classified emergency, the classification is lying. Measure the share. If it climbs, the normal path is too slow, and teams have learned that declaring an emergency is cheaper than waiting. That is a process defect, not a discipline problem.
+
+## Worked example: the four-hour window that could not hold the backlog
+
+Northwind Services runs Salesforce for sales and service across four delivery teams. Production changes go out in one Saturday window every two weeks, four hours long. The team has measured its own timings: validation takes about 20 minutes, deployment about 25, and the run needs slack for a failed validation and a retry. Four hours of window, at 45 minutes of serial work per change with no retry, gives five changes. The release manager plans four, because something always goes wrong.
+
+Thirteen windows per quarter, four changes per window: 52 slots. The intake queue for the same quarter holds 90 requests. That is 38 changes that cannot ship, per quarter, before anything goes wrong. The arithmetic is unforgiving: the backlog grows by 38 every quarter, and each quarter's overflow competes with the next quarter's intake.
+
+The org's response is predictable because it is universal. Teams bundle unrelated work into one change set to claim a slot, which raises batch size and blast radius. Requests that cannot wait become "urgent" and get deployed outside the window with a lighter review. The Saturday window becomes theater: the planned changes ship, and the risky ones ship on a Tuesday afternoon when the release manager is in another meeting.
+
+Now reclassify the 90 requests using the tier table. Northwind finds that 60 of them are reports, dashboards, list views, and non-restricted picklist additions. None of those need a four-hour Saturday window. They need validation, a named approver, and a deployment path.
+
+Move those 60 to a weekly 30-minute standard-change window. Thirteen weeks in a quarter means about 4.6 changes per weekly window, which is comfortable for a 30-minute slot because each one validates and deploys in a fraction of the time of a structural change. The Saturday window now carries the remaining 30 normal and major changes. At 13 windows, that is 2.3 changes per window against a capacity of 4. The overflow disappears, not because anyone worked harder, but because two different risk classes had been forced through one pipe.
+
+The same arithmetic works in reverse when you are deciding whether to invest in automation. If your window holds 4 changes and your intake is 90, automation that cuts validation from 20 minutes to 8 minutes does not fix the queue, because the constraint is window frequency and classification, not deployment speed. Automation that lets you deploy on demand, on a validated commit, does fix it. That is the difference between optimizing a step and changing the system.
+
+## Freezes defer risk, they do not remove it
+
+Change freezes are the most overused control in enterprise Salesforce work. A freeze around quarter end, another around the release, another around peak season, and a fourth around an audit. Lay those on a calendar and you get an org with perhaps a dozen deployable weeks a year, which means every request competes for the same narrow band and batch sizes grow. Large batches are riskier than small ones, so the freeze designed to reduce risk ends up increasing it.
+
+Better design has three properties.
+
+**Freeze by risk class, not by date.** A freeze that blocks all changes punishes the low-risk work that keeps users productive. Block changes that touch money, order capture, integrations, and the sharing model. Let reports and permission assignments through a standard path.
+
+**Publish the freeze dates with the release calendar.** A freeze announced two weeks ahead is a surprise. A freeze published a quarter ahead is a planning input. The latter is the only version that changes behavior.
+
+**Define the exception path in advance.** Name the approver, the evidence required, and the rollback position. An exception path that has to be invented during an incident will be bypassed next time.
+
+On the platform side, remember that freezes do not pause the rest of the world. Managed packages still update, Salesforce still upgrades, integrations still change on the other side, and certificates still expire. A change freeze on your own deployments is not a freeze on your dependencies.
+
+## What DevOps culture means on a Salesforce team
+
+Salesforce's Well-Architected guidance puts DevOps culture alongside observability and incident readiness as part of operational excellence, and describes it in organizational terms: breaking down silos so that shared responsibility for outcomes replaces throwing work over a wall. [^5] That is the useful definition, because it explains why tool adoption alone changes nothing. A team using the sf CLI with a change-set mindset still ships big batches, still hides failures, and still blames the admin who deployed on Friday.
+
+Concretely, the culture shows up in a handful of observable norms.
+
+**Version control is the source of truth, including for configuration.** If a change can only be explained by looking at the org's setup audit trail, you do not have a source of truth. You have a history.
+
+**Small batches.** A change set with 400 components is not a change. It is a release in disguise, and when it fails, nobody can tell which of the 400 caused it.
+
+**Every change goes through the same path.** The architect's own field addition follows the review, validation, and deployment process that the admin's does. Exceptions for senior people are how a process loses legitimacy.
+
+**CI validates every commit.** In Salesforce terms, that means a validation deployment against an integration or staging environment, with tests run, on a pipeline that blocks merge on failure. Well-Architected's DevOps practice list is specific here: protected main branch, CI validation on every commit, deployment validation before production, deployment monitoring, and a runbook that documents procedures, validation, and rollback. [^5]
+
+**Deployment windows are based on evidence, not habit.** Usage logs from event monitoring tell you when the org is actually quiet, which is often not when the team assumes. [^6]
+
+**Canaries and feature flags for high-risk changes.** Well-Architected describes releasing to a small user subset first, monitoring for 24 to 48 hours, and expanding only after the metrics hold. It also recommends feature flags behind custom metadata or custom settings for high-risk work, so rollback is a configuration change rather than a deployment. [^6]
+
+**Blameless reviews with a system fix as the output.** A post-incident review that ends with "remind people to be careful" has produced nothing. The output should be a guardrail, a test, a validation rule, or a pipeline gate.
+
+### The change set constraint you cannot design around
+
+If any part of your release process still runs on change sets, four hard limits shape what governance can promise.
+
+Change sets only travel between orgs affiliated with the same production org, and only over an authorized deployment connection. [^7] They carry metadata, never records. [^7] They are limited to 10,000 files and 400 MB, and Salesforce recommends staying near 5,000 components. [^8] They cannot delete or rename components, so any deletion is a manual step in the target org, which means it is a step that can be forgotten. [^9] And a successful deployment cannot be rolled back: the transaction is one-way, and if it fails partway, the whole transaction rolls back, but once it succeeds the changes are committed. [^9]
+
+That last property matters for governance more than any other. A process built on change sets cannot offer a true rollback, only a forward fix. If your change policy assumes rollback is available, it is assuming something the mechanism does not provide. Either you build the rollback as a separate deployment of the previous metadata state, or you write the policy honestly: deploy small, validate first, and accept that recovery means forward repair.
+
+The organizational consequence is that the review gate has to carry more weight than it does in a system with instant rollback. That is why validation against a staging org, with tests, before the production deployment is not bureaucracy. It is the only place a defect can be caught cheaply.
+
+## Measure the system, not the people
+
+Governance that cannot be measured becomes a matter of opinion, and opinion usually favors whoever is most senior in the room. Two sets of metrics cover most of what you need.
+
+**Delivery performance.** DORA's model measures throughput with change lead time, deployment frequency, and deployment rework rate, and instability with change failure rate and failed deployment recovery time. [^10] For a Salesforce team, adapt the definitions rather than importing them wholesale. Lead time runs from approved request to production, not from first commit, because intake is where most of the wait actually happens. Deployment frequency counts production releases, including standard-tier changes, or you will undercount the work. Rework rate catches the changes that had to be redeployed because the first attempt was wrong, which is the quiet failure mode in orgs that celebrate deployment counts.
+
+**Governance health.** Five numbers tell you whether the process is working:
+
+- Share of normal and major changes with automated test evidence attached.
+- Emergency change share as a percentage of total production changes.
+- Rollback and forward-fix count per quarter, and their causes.
+- Unplanned work as a share of team capacity, which is the clearest early signal that governance is failing.
+- Configuration drift count from the quarterly comparison between source control and the org.
+
+Set thresholds, not targets for their own sake. An emergency share above 10 percent means the normal path is too slow. Drift above zero in a metadata area you claim to control means the process has a hole. Lead time that is stable while the backlog grows means you are shipping at capacity and the constraint is intake, not delivery.
+
+## Anti-patterns and what to do instead
+
+| Anti-pattern | What it looks like | Fix |
+|---|---|---|
+| The everything-CAB | Every change, including a dashboard, waits for a weekly meeting | Tier the change classes, pre-approve standard patterns, audit a sample instead of reviewing each one |
+| The freeze calendar | Six or more frozen weeks a year, announced late | Freeze by risk class, publish dates a quarter ahead, keep a standard-tier lane open |
+| Bundle to fit the window | Unrelated changes packed into one change set to claim a slot | Add window capacity or add a second, lower-risk lane |
+| Emergency inflation | A third of changes are "urgent" | Measure the share, shorten the normal path, require a retrospective for every emergency |
+| Governance by seniority | Review outcomes depend on who is in the room | Written decision rights and thresholds, published and applied to architects too |
+| Tool-first DevOps | Pipeline exists, batches are still huge, tests still manual | Change batch size and review norms first, then automate the path |
+| Documentation as a gate | Design docs written after deployment to satisfy an audit | Tie the doc to the decision, and review it before the build, not after |
+
+## Put it in the design document
+
+A governance section in a solution design document should be short enough that people read it. Six items:
+
+1. The decision rights table: who approves which class of change.
+2. The release calendar: Salesforce upgrade dates, preview windows, business blackouts, deployment windows.
+3. The tier definitions and lead times, with the emergency path and its named approver.
+4. The gates: what evidence is required to move from build to test to production, and what counts as evidence.
+5. The recovery position: rollback, forward fix, or feature flag, stated per change class.
+6. The metrics and their review cadence, with the person who owns the review.
+
+If a document cannot state item 5 honestly, the rest of the governance section is aspirational.
+
+## Try it
+
+1. Your org has 120 change requests this quarter and 12 production windows, each capable of 3 changes. What is the shortfall, and what are the two structural levers that fix it without asking anyone to work weekends? *(Answer: 36 slots against 120 requests, a shortfall of 84. Levers: classify low-risk work into a separate, more frequent lane, and increase window frequency or deployable capacity. Working harder does not close an 84-change gap.)*
+
+2. A team proposes freezing production for the four weeks around the Winter release. What is the risk in that plan, and what would you propose instead? *(Answer: a four-week all-change freeze pushes work into a narrow band before and after it, which increases batch size and rollback risk. Instead, block only high-risk classes, keep the standard lane open, test critical paths in the preview sandbox during the preview window, and publish the dates a quarter ahead.)*
+
+3. Your change sets cannot delete a deprecated custom field, and the deployment otherwise succeeded. What does that tell you about the process, and what should the runbook say? *(Answer: change sets cannot delete or rename components, so deletion is a separate manual step. The runbook should list post-deployment manual steps with an owner and a verification query, and the change request should not be closed until they are done.)*
+
+4. Emergency changes are 28 percent of production changes. What is the most likely cause, and what would you measure next? *(Answer: the normal path is too slow or too unpredictable, so declaring an emergency is cheaper. Measure lead time for normal changes and how much of it is waiting rather than working, then look at which tiers the emergencies come from.)*
+
+5. A quarterly drift check finds 14 components in production that are not in source control. What are the three most likely sources, and which one would you fix first? *(Answer: UI changes made directly in production, hotfixes deployed without a commit, and managed package metadata that is expected to differ. Fix the hotfix path first if it exists, because it is the one that will recur and it bypasses every gate.)*
+
+## What's next
+
+You can now name who decides what, put every change on one calendar, size a release process against real intake, and tell the difference between a freeze that reduces risk and one that stores it up. The next lesson takes the decisions this governance model produces and asks where they live: keeping architecture documentation alive, with living docs and architecture decision records that stay accurate after the project ends.
+
+[^1]: Salesforce Help. "Salesforce upgrade release schedule FAQ." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=005224913&language=en_US&type=1)
+
+[^2]: Salesforce Trailhead. "Salesforce Release Process and Transitioning Tips." [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/sf_releases/sf_releases_start)
+
+[^3]: Salesforce Developers. "Select the Salesforce Release for a Scratch Org." [developer.salesforce.com](https://developer.salesforce.com/docs/platform/sfdx-dev/guide/sfdx-dev-scratch-orgs-version-selection.html)
+
+[^4]: Salesforce. "Build a Salesforce Center of Excellence That Keeps Pace with Change." [salesforce.com](https://www.salesforce.com/blog/center-of-excellence-ai-governance/)
+
+[^5]: Salesforce Architects. "Operational Excellence," Well-Architected Framework. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/well-architected/guide/operational-excellence.html)
+
+[^6]: Salesforce Architects. "Operational Excellence: DevOps Patterns," Well-Architected Framework. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/well-architected/guide/operational-excellence-devops-patterns.html)
+
+[^7]: Salesforce Help. "Change Sets." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.changesets.htm&type=5)
+
+[^8]: Salesforce Help. "Outbound Change Sets." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.changesets_about_outbound.htm&type=5)
+
+[^9]: Salesforce Help. "Change Sets Best Practices" and "Change Sets Implementation Tips." [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.changesets_best_practices.htm&language=en_US&type=5)
+
+[^10]: DORA. "DORA's software delivery performance metrics." [dora.dev](https://dora.dev/guides/dora-metrics-four-keys/)
