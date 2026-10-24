@@ -218,6 +218,33 @@ export function decideCourseAccessFromInput(
   return { kind: "paywall" };
 }
 
+/**
+ * True when a LOGGED-OUT visitor can resolve this course's public surface.
+ *
+ * This is the guest projection of `decideCourseAccessFromInput` reduced to the
+ * one thing a public/prerendered surface may ask: "does this series exist for
+ * someone with no session, no entitlements and no subscriptions?" — expressed
+ * as a pure check so sitemaps, search indexes and post funnels can filter a
+ * `courses` row without reconstructing the decision matrix.
+ *
+ *  - `pending` / `archived` → false (`not-launched` for a guest).
+ *  - live + `granted`      → false. This is the "stealth-granted (v4)" branch
+ *    above: a granted-model course resolves to `not-launched` for anyone
+ *    without a matching grant, so a guest would 404 — it must never appear in
+ *    any guest-visible list (t_018620c9 / ADR-218).
+ *  - live + any other model → true. `free` grants outright, and
+ *    `subscription` / `one-time` / `sub-or-one-time` still RENDER for a guest
+ *    (as a paywall) rather than 404, so the series exists publicly.
+ *
+ * Single source of the stealth rule: never re-derive it per surface and never
+ * keep a second hardcoded slug list.
+ */
+export function isGuestVisibleCourse(
+  course: Pick<CourseRow, "status" | "access_model">,
+): boolean {
+  return course.status === "live" && course.access_model !== "granted";
+}
+
 /** Pure catalog build: visibility + access per course row the caller can see. */
 export function buildCatalogEntries(
   input: AccessInput,

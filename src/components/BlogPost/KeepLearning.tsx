@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { BlogPost } from "@/data/types";
-import { learnSeries } from "@/data/learn";
 import { toLearnCardSeries } from "@/lib/learn";
+import { getGuestVisibleSeries } from "@/lib/learn-visibility";
 import {
   getRelatedPosts,
   resolveRecommendedSeries,
@@ -23,11 +23,16 @@ interface KeepLearningProps {
  *     "why this fits" reason.
  *  2. A lightweight related-posts row (same category, 3 cards).
  *
- * Server component: resolves the recommendation from the static learn dataset
- * and renders the same card component the /atlas hub uses (no divergence).
+ * Server component. ADR-217: the series list comes from the guest-visibility
+ * seam (`getGuestVisibleSeries`), NEVER straight from `@/data/learn` — a
+ * stealth series must not reach `toLearnCardSeries` or the RSC flight payload
+ * of a publicly prerendered post (S1). When the mapped series is not
+ * guest-visible, `resolveRecommendedSeries` simply returns undefined and the
+ * existing `rec &&` guard renders no funnel block.
  */
-export default function KeepLearning({ post, allPosts }: KeepLearningProps) {
-  const rec = resolveRecommendedSeries(post, learnSeries);
+export default async function KeepLearning({ post, allPosts }: KeepLearningProps) {
+  const visibleSeries = await getGuestVisibleSeries();
+  const rec = resolveRecommendedSeries(post, visibleSeries);
   const related = getRelatedPosts(post, allPosts);
 
   return (
