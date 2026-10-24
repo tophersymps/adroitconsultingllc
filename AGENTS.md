@@ -19,3 +19,12 @@ section, restored later by PR #367). A fragment path is unique per change, so it
 
 `node scripts/compose-changelog.js` merges fragments into `CHANGELOG.md` at release time and moves
 them to `changelog.d/.shipped/`. See `changelog.d/README.md` for the entry shape and rules.
+
+## Every PR requests a review from @tophersymps
+
+`main` requires one approving human review. Open a PR with the owner requested as reviewer every time
+(`gh pr create --reviewer tophersymps`), and never leave a PR sitting green but unreviewed while reporting
+the work as done. `.github/CODEOWNERS` requests it automatically on PR creation.
+
+Work is not "done" until its commit is on `main` and deployed. Until then the honest state is
+"awaiting review" or "awaiting merge".
