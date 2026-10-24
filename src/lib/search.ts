@@ -8,7 +8,8 @@
  * Pure functions only — mirrors the learn-client.ts convention.
  */
 
-import type { BlogPost, LearnLesson, LearningSeries } from "@/data/types";
+import type { BlogPost } from "@/data/types";
+import type { SearchLessonSource, SearchSeriesSource } from "@/lib/search-source";
 
 export interface SearchHit {
   type: "post" | "series" | "lesson";
@@ -52,8 +53,8 @@ function matches(query: string, ...fields: string[]): boolean {
  */
 export function buildSearchIndex(
   allPosts: BlogPost[],
-  allSeries: LearningSeries[],
-  allLessons: LearnLesson[],
+  allSeries: SearchSeriesSource[],
+  allLessons: SearchLessonSource[],
 ): (query: string) => SearchResults {
   return function search(query: string): SearchResults {
     const q = normalize(query);

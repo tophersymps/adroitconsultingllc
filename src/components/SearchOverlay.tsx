@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { posts } from "@/data/posts";
-import { learnSeries, learnLessons } from "@/data/learn";
 import { buildSearchIndex, type SearchResults } from "@/lib/search";
+import { useSearchData } from "@/components/SearchDataProvider";
 
 const EMPTY: SearchResults = { posts: [], series: [], lessons: [], total: 0 };
 
@@ -16,7 +16,15 @@ const FOCUSABLE_SELECTOR =
  * trigger button (a search icon) and, when opened, a full-screen overlay with
  * a live input whose results are grouped by post / series / lesson.
  *
- * Client-side over the static datasets (`posts.ts` + `learn.ts`) — no backend.
+ * Client-side over the static datasets (`posts.ts` + the learn payload from
+ * `SearchDataProvider`) — no backend.
+ *
+ * SECURITY (t_a6b7630b / CWE-200): this component must NEVER import
+ * `@/data/learn`. That module carries every stealth (unpublished) series and
+ * would be compiled into a client chunk served from every route. The learn
+ * arrays arrive already filtered to `isPubliclyLaunchedSeries` and projected
+ * to search-only fields, from the server component that renders
+ * `SearchDataProvider` (see `src/lib/learn-public.ts`).
  *
  * A11y (t_754b2240 / B-21 fixes):
  *  - Focus trap: Tab/Shift+Tab wrap between first & last focusable element
@@ -37,9 +45,13 @@ export default function SearchOverlay() {
   const hasOpenedRef = useRef(false);
   const router = useRouter();
 
+  // Publicly launched learn content only — filtered on the server before it
+  // crossed into the client graph (t_a6b7630b).
+  const { series, lessons } = useSearchData();
+
   const search = useMemo(
-    () => buildSearchIndex(posts, learnSeries, learnLessons),
-    [],
+    () => buildSearchIndex(posts, series, lessons),
+    [series, lessons],
   );
   const results = useMemo(
     () => (query.trim() ? search(query) : EMPTY),

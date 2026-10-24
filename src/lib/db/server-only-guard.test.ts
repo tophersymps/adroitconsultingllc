@@ -36,6 +36,10 @@ const PRIVILEGED = [
   "src/lib/db/anonymous-token.ts",
   // R2-5: the classified token-unavailable client (Data API seam).
   "src/lib/db/degraded-client.ts",
+  // t_a6b7630b (F-2/CWE-200): imports the FULL learn dataset (12 series, 8
+  // stealth). Server-only so a client import fails the build instead of
+  // shipping the unpublished catalogue to the browser.
+  "src/lib/learn-public.ts",
 ];
 
 function walk(dir: string, out: string[] = []): string[] {

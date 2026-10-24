@@ -5,7 +5,8 @@ import SearchOverlay from "./SearchOverlay";
 
 // Mock the heavy static datasets + search so the test is deterministic.
 vi.mock("@/data/posts", () => ({ posts: [] }));
-vi.mock("@/data/learn", () => ({ learnSeries: [], learnLessons: [] }));
+// NOTE (t_a6b7630b): SearchOverlay no longer imports @/data/learn — the learn
+// arrays arrive filtered via SearchDataProvider (default: empty).
 vi.mock("@/lib/search", () => ({
   buildSearchIndex: () => (q: string) => {
     if (!q.trim()) return { posts: [], series: [], lessons: [], total: 0 };
