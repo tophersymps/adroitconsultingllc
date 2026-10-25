@@ -14,6 +14,8 @@
 
 import { useEffect, useRef } from "react";
 import { trackCertificateViewed } from "@/lib/analytics";
+import type { ExamKind } from "@/data/types";
+import { examLabels } from "@/lib/exam-labels";
 
 interface CertificateProps {
   /** Recipient display name (user full_name / name / email). */
@@ -28,6 +30,13 @@ interface CertificateProps {
   totalLessons: number;
   /** Series slug — used for progress-funnel analytics (backlog B-06). */
   series?: string;
+  /**
+   * The series' exam kind — every exam name on this certificate comes from
+   * `examLabels(kind)` (deliverables/learn-ux-exam-naming §B4). Required so a
+   * caller cannot ship a certificate that silently says "cert prep exam" for a
+   * course-completion course.
+   */
+  kind: ExamKind;
 }
 
 export default function Certificate({
@@ -37,7 +46,9 @@ export default function Certificate({
   examScore,
   totalLessons,
   series,
+  kind,
 }: CertificateProps) {
+  const labels = examLabels(kind);
   const certFiredRef = useRef(false);
   // Progress-funnel analytics (B-06): certificate is the terminal event of the
   // lesson → quiz → exam → certificate funnel. Fire once on mount — the page
@@ -63,8 +74,8 @@ export default function Certificate({
             Your certificate
           </p>
           <p className="text-[14px] text-gray-500 max-w-[640px] mt-2 leading-relaxed">
-            Issued by Adroit Consulting when all {totalLessons} lessons are completed and the
-            cert prep exam is passed at 72% or higher.
+            Issued by Adroit Consulting when all {totalLessons} lessons are completed and the{" "}
+            {labels.phrase} is passed at 72% or higher.
           </p>
         </div>
         <button
@@ -100,7 +111,7 @@ export default function Certificate({
             <div className="cert-recipient">{recipientName}</div>
             <p className="cert-body">
               has successfully completed the <b>{courseName}</b> curriculum — all {totalLessons}{" "}
-              lessons and the timed certification exam.
+              lessons and the timed {labels.phrase}.
             </p>
             <div className="cert-meta">
               <div className="m">

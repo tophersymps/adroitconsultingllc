@@ -28,6 +28,7 @@ import {
   scoreQuizAttemptsByQuiz,
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
+import { examLabels } from "@/lib/exam-labels";
 import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
@@ -44,7 +45,6 @@ import {
 } from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
 import { getLessonsForSeries } from "@/lib/learn";
-import { examLabels } from "@/lib/exam-labels";
 import {
   CERT_CHECK_PASS_PCT,
   CERT_EXAM_MINUTES,
@@ -68,12 +68,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const exam = getCertExam(series);
   const s = getSeriesBySlug(series);
   if (!exam || !s) return {};
+  // ADR-309: the head is composed from the kind's labels, never from
+  // exam.json `title` (that field is the exam document's own heading).
+  const labels = examLabels(s.examKind);
   return buildMetadata({
-    title: `${exam.title} | Adroit Learn`,
-    // Kind-aware fallback — never describe a Tracks course with cert-prep wording.
-    // (Full head composition from labels is the B4 card; this keeps the file
-    // free of the old wording in the meantime.)
-    description: exam.description ?? examLabels(s.examKind).seoDescription(s.name),
+    title: labels.seoTitle(s.name),
+    description: labels.seoDescription(s.name),
     path: `/atlas/${series}/exam`,
   });
 }

@@ -159,8 +159,30 @@ describe("chronicleLabel / chronicleDay", () => {
     expect(chronicleLabel(ev({ event_type: "lesson" }), { courseName: "AI" })).toBe("AI");
     expect(chronicleLabel(ev({ event_type: "course" }), { courseName: "AI" })).toBe("AI completed");
     expect(chronicleLabel(ev({ event_type: "quiz" }), { courseName: "AI" })).toBe("AI · knowledge check");
-    expect(chronicleLabel(ev({ event_type: "exam" }), { courseName: "AI" })).toBe("AI · cert prep exam passed");
+    // No kind supplied → the NEUTRAL label. Never "cert prep exam" by default.
+    expect(chronicleLabel(ev({ event_type: "exam" }), { courseName: "AI" })).toBe("AI · exam passed");
     expect(chronicleLabel(ev({ event_type: "certificate" }), { courseName: "AI" })).toBe("AI · certificate earned");
+  });
+
+  it("names the exam from the kind, for BOTH kinds (§B4)", () => {
+    expect(
+      chronicleLabel(ev({ event_type: "exam" }), {
+        courseName: "Agentic AI Foundations",
+        examKind: "course-completion",
+      }),
+    ).toBe("Agentic AI Foundations · course completion exam passed");
+    expect(
+      chronicleLabel(ev({ event_type: "exam" }), {
+        courseName: "OmniStudio Developer Certification",
+        examKind: "certification-prep",
+      }),
+    ).toBe("OmniStudio Developer Certification · cert prep exam passed");
+  });
+
+  it("never labels a kind-less event as cert prep (neutral fallback)", () => {
+    const lbl = chronicleLabel(ev({ event_type: "exam" }), { courseName: "AI at Work" });
+    expect(lbl).toBe("AI at Work · exam passed");
+    expect(lbl).not.toMatch(/cert prep|certification/i);
   });
 
   it("prefers the lesson label for lesson rows", () => {
@@ -200,6 +222,31 @@ describe("buildChronicle", () => {
     expect(entries[0].label).toBe("Agentic AI Foundations · certificate earned");
     expect(entries[1].score).toBe(8);
     expect(entries[1].courseName).toBe("Agentic AI Foundations");
+  });
+
+  it("resolves each exam row's kind through the course_id map (§B4)", () => {
+    const rows: CompletionEventRow[] = [
+      ev({ id: 2, event_type: "exam", course_id: "c-course", completed_at: "2026-09-01T10:00:00.000Z" }),
+      ev({ id: 1, event_type: "exam", course_id: "c-cert", completed_at: "2026-09-02T10:00:00.000Z" }),
+    ];
+    const entries = buildChronicle({
+      events: rows,
+      courseNameById: { "c-course": "Agentic AI", "c-cert": "Platform Data Architect" },
+      examKindByCourseId: { "c-course": "course-completion", "c-cert": "certification-prep" },
+    });
+    expect(entries.map((e) => e.label)).toEqual([
+      "Platform Data Architect · cert prep exam passed",
+      "Agentic AI · course completion exam passed",
+    ]);
+  });
+
+  it("degrades an exam row with no resolvable kind to the neutral label", () => {
+    const entries = buildChronicle({
+      events: [ev({ event_type: "exam", course_id: "unknown" })],
+      courseNameById: { unknown: "Mystery Course" },
+    });
+    expect(entries[0]?.label).toBe("Mystery Course · exam passed");
+    expect(entries[0]?.label).not.toMatch(/cert prep/i);
   });
 });
 
