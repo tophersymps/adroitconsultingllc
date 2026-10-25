@@ -77,7 +77,7 @@ Four waves. Each opens **only after the previous wave is merged to `main`**. Car
 | Wave | Name | Cards | Assignees | Parallelism | Why this wave is one unit |
 |---|---|---|---|---|---|
 | **W0** | Blueprint | (docs PR **#408**) | brainiac | — | Every card cites the contracts. Wave 1 opens when #408 is merged. If Chris wants to move sooner, **B1 and B2 only** may start in parallel: both are additive, touch no shared surface, and are reversible by deleting a field |
-| **W1** | Exam naming (Item 3) | B1 → B2 → {B3, B4, B5} → B6 | steel | 3 at the end | One workstream, one seam (`exam-labels.ts`), no shared file with the lesson work. Ships independently: AI at Work stops calling its exam a certification prep exam |
+| **W1** | Exam naming (Item 3) | B1 → B2 → {B3, B4, B5} → B6 | steel | 3 at the end | One workstream, one seam (`exam-labels.ts`), no shared file with the lesson work. Ships independently: every non-certification course stops calling its exam a certification prep exam |
 | **W2** | Design + foundations | K1, K2, K3 · A1, A3, A4 | kara · steel | 6 parallel | Design specs must exist before A5/A8 can be built; A1/A3/A4 change no surface (blog output byte-identical, A3 is a pure module, A4 keeps rendering identical). A4 also rewires `ExamCard`, `CertReadiness` and `CheckCardList` — the same files W1's B3 edits — so it must not run beside W1 |
 | **W3** | Surfaces (Items 1, 2, 4) | A2, A5, A6, A7, A8 | steel | 5 parallel | Every card has all its parents in W1/W2. This is the only wave where a learner-visible surface changes, so with mobile and desktop evidence it is one reviewable unit |
 | **W4** | Integration + evidence | A9, C1 | steel · kara | 2 parallel | A9 needs all five W3 cards merged; C1 annotates the design references once the check node and the bar control are real |
@@ -122,6 +122,47 @@ W4  A9 (needs A2 + A5 + A6 + A7 + A8)
 certification series keep today's wording; one label source replaces three hardcoded strings.
 **Story coverage:** US-009, US-010, US-011, US-012.
 
+### 3.0 Scope — every non-certification course, not just AI at Work
+
+Chris, reviewing this plan: *"I want to make sure this isn't the scope of just the AI at Work
+course, but all courses that are not actual certification courses."* AI at Work is the smoke
+example in the acceptance lines below; it is **not** the scope. The scope is the whole
+`course-completion` set, and B6's 12-series matrix is the proof.
+
+Seeded classification (B1 writes this field for all 12 series; verify against the content, do not
+infer from the `group` label alone):
+
+| Series | Series name | Kind | Evidence |
+|---|---|---|---|
+| `ai-at-work` | AI at Work | `course-completion` | exam.json: "earn the course completion certificate" |
+| `ai-adoption` | AI Adoption | `course-completion` | same |
+| `ai-power-user` | AI Power User | `course-completion` | same |
+| `hermes-consultant` | Hermes Agent Consultant | `course-completion` | same |
+| `hermes-consultant-intermediate` | Hermes Agent Consultant · Intermediate | `course-completion` | same |
+| `hermes-consultant-advanced` | Hermes Agent Consultant · Advanced | `course-completion` | same |
+| `agentic-ai` | Agentic AI Implementation Path | `course-completion` **(confirm)** | group says `Certifications`, but it is Adroit-authored and its exam.json says "course completion certificate" |
+| `salesforce-architect` | Salesforce System Architect Primer | `course-completion` **(confirm)** | group says `Certifications`, exam.json says "course completion certificate" with no blueprint weights |
+| `omni-studio-cert` | OmniStudio Developer Certification | `certification-prep` | exam.json mirrors "the official Spring '26 OmniStudio Developer blueprint domain weights" |
+| `salesforce-data-architect` | Platform Data Architect Certification | `certification-prep` | same |
+| `salesforce-sharing-visibility-architect` | Platform Sharing and Visibility Architect Certification | `certification-prep` | same |
+| `sf-omni-consultant` | Salesforce OmniStudio Consultant Certification | `certification-prep` | same |
+
+Two flags for Chris, both set to `course-completion` in this plan and both one content field to
+change if he disagrees:
+
+- **`agentic-ai`** — `group: Certifications` but Adroit-authored, and its own exam says course
+  completion. Classified course-completion.
+- **`salesforce-architect`** — "Salesforce System Architect Primer". Salesforce does run a System
+  Architect credential programme, so this one could legitimately be prep; its exam content says
+  course completion with no blueprint weights. Classified course-completion, flagged because the
+  group label disagrees with the content.
+
+**Rule for the implementers:** the kind is decided per series from content evidence, and the label
+follows the kind. Do not key the label off `group` (it is stale and wrong for `agentic-ai`), and do
+not special-case AI at Work. The `exam.json` description is an additional consistency signal: a
+`course-completion` series must not describe itself against an official exam blueprint.
+
+
 ### B1 — `examKind` field + build validation
 - **assignee:** steel · **parents:** none · **est:** 45 min · **no surface change**
 - **Body:** verbatim from `cards.md` §B1. Seed per `architecture.md` §5.1; `agentic-ai` =
@@ -144,18 +185,20 @@ certification series keep today's wording; one label source replaces three hardc
 - **Body:** verbatim from `cards.md` §B3, plus the amendment: the exam card must render the correct
   label in the R2-5 degraded path (token route rate-limited) on a Tracks series (`US-012`).
 - **Acceptance — desktop (1280×800 and 1440×900):**
-  - Given AI at Work, when the series page and the exam page render, then the exam card kicker and
-    heading read "Course Exam" / "Course Completion Exam", the exam page header, meta, guest CTA and
-    locked panel use the same wording, and no element on either page says "Certification Prep",
-    "Cert Prep" or "cert prep".
+  - Given **every course-completion series** (`ai-at-work`, `ai-adoption`, `ai-power-user`,
+    `hermes-consultant`, `hermes-consultant-intermediate`, `hermes-consultant-advanced`,
+    `agentic-ai`, `salesforce-architect`), when the series page and the exam page render, then the
+    exam card kicker and heading read "Course Exam" / "Course Completion Exam", the exam page
+    header, meta, guest CTA and locked panel use the same wording, and no element on either page
+    says "Certification Prep", "Cert Prep" or "cert prep". AI at Work alone does not satisfy this.
   - Given any certification series, when the same surfaces render, then the wording is identical to
     today, character for character.
   - Given either series, when I compare the card and page header against the pre-change build, then
     no layout box moved (screenshot pair, same viewport).
 - **Acceptance — mobile (390×844 and 360×800, plus 768×1024 portrait):**
-  - Given AI at Work at 360 px, when the exam card renders, then "Course Completion Exam" wraps
-    without clipping or ellipsis, the card grows in height rather than width, and the page has no
-    horizontal scroll.
+  - Given each course-completion series at 360 px (AI at Work as the smoke case), when the exam card
+    renders, then "Course Completion Exam" wraps without clipping or ellipsis, the card grows in
+    height rather than width, and the page has no horizontal scroll.
   - Given the exam page at 360 px, when the header and kicker render, then both are legible at the
     existing type scale and the guest CTA keeps its full-width button.
   - Given 768×1024 landscape, then the card and header keep the desktop arrangement with no reflow
@@ -167,8 +210,9 @@ certification series keep today's wording; one label source replaces three hardc
 - **assignee:** steel · **parents:** [B2] · **est:** 30 min · **changes a surface**
 - **Body:** verbatim from `cards.md` §B4.
 - **Acceptance — desktop (1280×800):**
-  - Given a learner who completed AI at Work, when the certificate page renders, then the copy says
-    "course completion exam" and the page `<title>` and description say "Course Completion Exam".
+  - Given a learner who completed **any course-completion series**, when the certificate page renders,
+    then the copy says "course completion exam" and the page `<title>` and description say "Course
+    Completion Exam". AI at Work is the smoke case; the other seven are covered by the B6 matrix.
   - Given the same certificate printed to PDF, then no page of it contains "cert prep".
   - Given a certification series, then the certificate, chronicle and head are unchanged.
 - **Acceptance — mobile (360×800 and 390×844):**
@@ -182,9 +226,9 @@ certification series keep today's wording; one label source replaces three hardc
 - **assignee:** steel · **parents:** [B2] · **est:** 30 min · **changes content (title surface)**
 - **Body:** verbatim from `cards.md` §B5. Track series → `<series name>: Course Completion Exam`;
   certification series keep their certification title.
-- **Acceptance — desktop (1280×800):** given AI at Work, when the exam page loads, then the browser
-  tab reads "<series>: Course Completion Exam | Adroit Learn"; given OmniStudio, the tab is
-  unchanged.
+- **Acceptance — desktop (1280×800):** given **each course-completion series**, when the exam page
+  loads, then the browser tab reads "<series>: Course Completion Exam | Adroit Learn"; given
+  OmniStudio, the tab is unchanged.
 - **Acceptance — mobile (360×800):** the head is server-rendered and viewport-independent, so
   evidence is the same title read from a 360 px user agent, plus a check that no visible title block
   on the page changed state.
@@ -200,10 +244,20 @@ certification series keep today's wording; one label source replaces three hardc
 - **Done means:** matrix over all 12 series passes; grep test finds no hardcoded label outside the
   allow-list; the wave's changelog fragment exists.
 
-**Wave 1 exit criteria:** AI at Work says "Course Completion Exam" on the card, the exam page, the
-certificate, the chronicle and the tab, at desktop and mobile widths; OmniStudio is untouched; the
-matrix and the grep test are green; the degraded exam card is correct; the PR is merged and
-deployed.
+**Wave 1 exit criteria — the whole course-completion set, not AI at Work:**
+
+- Every one of the eight `course-completion` series (`ai-at-work`, `ai-adoption`, `ai-power-user`,
+  `hermes-consultant`, `hermes-consultant-intermediate`, `hermes-consultant-advanced`, `agentic-ai`,
+  `salesforce-architect`) says "Course Completion Exam" on the exam card, the exam page header, the
+  certificate, the chronicle and the browser tab, at desktop and mobile widths. AI at Work passing on
+  its own does **not** satisfy this criterion.
+- Every one of the four `certification-prep` series (`omni-studio-cert`, `salesforce-data-architect`,
+  `salesforce-sharing-visibility-architect`, `sf-omni-consultant`) keeps its current wording, character
+  for character.
+- The B6 matrix and the repo-wide grep test are green over all 12 series, and the matrix table in the
+  PR body lists series → rendered label so a reviewer can see every row.
+- The degraded exam card (R2-5 token route rate-limited) renders the correct label on a Tracks series.
+- The PR is merged and deployed.
 
 ---
 
