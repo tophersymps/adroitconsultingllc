@@ -1,6 +1,6 @@
 # Adroit Consulting Site
 
-The **Adroit Consulting site** is a [Next.js](https://nextjs.org) (App Router) application hosting the Adroit Consulting **Field Notes** blog and **The Atlas** learning platform (learning paths and certification-prep courses). Published content is authored as MDX and generated into static data at build time; user accounts, progress, and quizzes are backed by [Supabase](https://supabase.com).
+The **Adroit Consulting site** is a [Next.js](https://nextjs.org) (App Router) application hosting the Adroit Consulting **Field Notes** blog and **The Atlas** learning platform (learning paths and certification-prep courses). Published content is authored as MDX and generated into static data at build time; user accounts, progress, and quizzes are backed by [Neon](https://neon.tech) (Managed Better Auth + Data API).
 
 - **Production:** https://adroit.io (Vercel project `adroitconsultingllc`, team `adroit-consulting`; auto-deploys on push to `main`)
 - **Documentation:** [Wiki](https://github.com/tophersymps/adroitconsultingllc/wiki)
@@ -8,7 +8,11 @@ The **Adroit Consulting site** is a [Next.js](https://nextjs.org) (App Router) a
 
 ## What's New
 
-Release history for the site lives on the wiki: [Changelog](https://github.com/tophersymps/adroitconsultingllc/wiki/Changelog). The most recent release is v1.0.0 (2026-09-02), Omni Content and Constellation Enhancement, which aggregates six builds.
+Release history for the site lives on the wiki: [Changelog](https://github.com/tophersymps/adroitconsultingllc/wiki/Changelog). The most recent release is **v1.1.0** (2026-10-25), Neon-Migration-R2-Hardening, which aggregates 23 builds.
+
+### v1.1.0 - Neon-Migration-R2-Hardening (2026-10-25)
+
+The site now runs its accounts, course progress and quiz results on **Neon** instead of Supabase: Managed Better Auth and the Data API replaced the Supabase clients, RLS policies were ported and verified table by table (119 assertions in the isolation check), and the three legacy Supabase keys stay on the Vercel project only as a rollback bridge until 2026-11-22. Sign-in, sign-up, email verification and password reset were rebuilt on the new auth stack with Resend delivery; an unverified sign-in returns the designed 403 instead of a generic 401, reset links work end to end and are valid for 30 minutes, and a double submit can no longer send two verification emails. The Atlas is faster and steadier when signed in (batched progress reads, no duplicate summary fetches, no card-footer layout shift), degrades instead of returning 500 when the data layer is unavailable, and tells guests when progress is temporarily unavailable. Security: privileged DB modules are server-only, the client JWT cache is cleared on sign-out, and admin guards answer 403 rather than 500 on a token outage.
 
 ## Stack
 
@@ -17,7 +21,7 @@ Release history for the site lives on the wiki: [Changelog](https://github.com/t
 | **Framework** | Next.js 16 (App Router), React 19 |
 | **Styling** | Tailwind CSS v4 with semantic design tokens |
 | **Content** | MDX (blog + learn) → generated static data |
-| **Backend** | Supabase (auth, progress, quizzes, course catalog) |
+| **Backend** | Neon (Managed Better Auth, Data API, RLS-enforced Postgres) for auth, progress, quizzes and the course catalog |
 | **Testing** | Vitest + React Testing Library |
 | **Deployment** | Vercel (auto-deploy on push to `main`) |
 
@@ -28,7 +32,7 @@ npm install          # install dependencies
 npm run dev          # development server (default :3000)
 ```
 
-Requires the Supabase env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
+Requires the Neon env vars (`NEON_AUTH_BASE_URL`, `NEON_DATA_API_URL`, `NEXT_PUBLIC_NEON_DATA_API_URL`, `NEON_AUTH_COOKIE_SECRET`) - see `.env.example` for names and shapes.
 
 Production build:
 
@@ -49,7 +53,7 @@ scripts/
 src/
   app/                     # App Router pages + API routes
   components/              # React components (Blog, Learn, Progress, MDX)
-  lib/                     # helpers, Supabase clients, access seam, mdx
+  lib/                     # helpers, Neon clients, access seam, mdx
   data/                    # GENERATED static data (do not hand-edit)
   shared/                  # contracts + types
 docs/                      # architecture, plans, audit reports
