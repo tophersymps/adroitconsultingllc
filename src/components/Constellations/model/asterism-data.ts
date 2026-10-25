@@ -1,8 +1,17 @@
 /**
  * asterism-data.ts — PURE real-asterism data (no three/r3f imports).
  *
- * 3D-only. The leftover WebGL stack (`star-model`, `SeriesConstellation3D`,
- * `labAsterismFor`) still keys a figure by `seriesSlug` and still requires
+ * **NOT CLIENT-SAFE (t_af115dd1 / t_5fdeb918).** Every key in this file is a
+ * real `seriesSlug`, several of them unpublished, so it must never be imported
+ * by a Client Component — a `.next/static` chunk is a public artifact and
+ * would publish the stealth catalogue. Nothing in production imports it today
+ * (the WebGL studies were removed in the Phase 5 cleanup), and
+ * `src/lib/db/server-only-guard.test.ts` fails CI if a non-test module starts
+ * importing it. If a 3D view ever comes back, load this behind a
+ * `server-only` module and pass the data across the RSC boundary as props.
+ *
+ * 3D-only. The leftover WebGL stack (`star-model`, `SeriesConstellation3D`)
+ * still keys a figure by `seriesSlug` and still requires
  * lesson count to equal member-star count. The production star chart does
  * **not** read this file: it assigns from `chart/figure-catalog.ts` by the
  * curriculum's final lesson count, because a slug→constellation map cannot

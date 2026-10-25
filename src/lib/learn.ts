@@ -3,6 +3,7 @@ import path from "path";
 import { learnLessons, learnSeries } from "@/data/learn";
 import { LearnLesson, LearnCardSeries, LearningSeries } from "@/data/types";
 import { sortLessonsByLessonNumber } from "@/lib/lesson-sort";
+import { humanizeSeriesSlug } from "@/lib/learn-client";
 
 /**
  * Learn tab data-access seam (ADR-002, superseded for lesson listings by
@@ -54,6 +55,9 @@ export function toLearnCardSeries(
     name: s.name,
     description: s.description,
     gradient: s.gradient,
+    // ADR-221: the display label is part of the (server-built) projection, so
+    // the client never needs a slug→label map.
+    shortLabel: seriesShortLabel(s.slug),
     lessonCount: s.lessons.length,
     totalLessons: s.totalLessons,
     curriculumLessons: s.curriculumLessons,
@@ -246,19 +250,31 @@ export function getSeriesProgress(series: LearningSeries): {
   };
 }
 
-/** Short display label for a series (band tag pill). */
+/**
+ * THE slug → short-label map (ADR-221). Server-side only: naming a stealth
+ * series here is harmless because a stealth series never reaches a guest
+ * projection — the seam (`src/lib/learn-visibility.ts`) filters first, and the
+ * label travels to the client as `LearnCardSeries.shortLabel`.
+ *
+ * Before ADR-221 a second copy of this map lived in `learn-client.ts`, so
+ * "AI Power User" / "AI Adoption" / "Sharing & Visibility" were compiled into
+ * a client chunk on every page (S4). Do not re-introduce a client-side copy.
+ */
+const SERIES_SHORT_LABELS: Record<string, string> = {
+  "salesforce-architect": "Salesforce",
+  "agentic-ai": "Agentic AI",
+  "omni-studio-cert": "OmniStudio",
+  "ai-at-work": "AI at Work",
+  "ai-power-user": "AI Power User",
+  "ai-adoption": "AI Adoption",
+  "salesforce-sharing-visibility-architect": "Sharing & Visibility",
+  "salesforce-data-architect": "Data Architect",
+  "sf-omni-consultant": "OmniStudio Consultant",
+};
+
+/** Short display label for a series (band tag pill), humanized when unmapped. */
 export function seriesShortLabel(slug: string): string {
-  const map: Record<string, string> = {
-    "salesforce-architect": "Salesforce",
-    "agentic-ai": "Agentic AI",
-    "omni-studio-cert": "OmniStudio",
-    "ai-at-work": "AI at Work",
-  };
-  if (map[slug]) return map[slug];
-  return slug
-    .split(/[-_]/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  return SERIES_SHORT_LABELS[slug] ?? humanizeSeriesSlug(slug);
 }
 
 /** Avatar initials from an author name ("Adroit Consulting" → "AC"). */

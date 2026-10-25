@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { LearnCardSeries } from "@/data/types";
-import { seriesShortLabel } from "@/lib/learn-client";
+import { humanizeSeriesSlug } from "@/lib/learn-client";
 import SeriesProgress from "@/components/Progress/SeriesProgress";
 import QuizStats from "@/components/Progress/QuizStats";
 import DifficultyPill from "./DifficultyPill";
@@ -44,7 +44,8 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
           </div>
         )}
         <span className="absolute bottom-3.5 left-5 bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full text-xs font-bold text-white uppercase tracking-[0.06em] z-10">
-          {seriesShortLabel(series.slug)}
+          {/* ADR-221: server-resolved label; humanize only as a fallback. */}
+          {series.shortLabel ?? humanizeSeriesSlug(series.slug)}
         </span>
         {/* Learn v2 profile (ADR-208): track Level N pill + difficulty. */}
         {series.level != null ? (
@@ -96,7 +97,7 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
           </span>
         ) : isGuest ? (
           /* Guest-locked state: name + description visible, non-clickable, CTA */
-          <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
+          <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] min-h-[96px]">
             <div className="flex items-center gap-2 text-xs text-[var(--ink-muted)] mb-[11px]">
               <svg
                 viewBox="0 0 24 24"
@@ -119,7 +120,14 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
             </Link>
           </div>
         ) : (
-          <div className="mt-4 pt-3 border-t border-[var(--border-subtle)]">
+          /* PERF-M2 (t_c54f6999): reserve the footer height so the post-hydration
+             guest→signed-in swap cannot reflow the card — and with it every row
+             below in the 2-column grid. The guest footer is ~95px (line + 11px
+             gap + 44px CTA); the signed-in footer is smaller, so without a floor
+             it SHRANK the tallest card per row after hydration. The quiz row is
+             reserved for the same reason: QuizStats renders nothing until it has
+             attempts. */
+          <div className="mt-4 pt-3 border-t border-[var(--border-subtle)] min-h-[96px]">
             {/* Real per-series completion for signed-in users (client island). */}
             <SeriesProgress
               lessonSlugs={series.lessonSlugs}
@@ -127,7 +135,7 @@ export default function PathCard({ series, gate, loginNext }: PathCardProps) {
             />
             {/* Quiz average + attempt count — informational only; the whole card
                 links to the series, so the strip must not be a nested anchor. */}
-            <div className="mt-2.5">
+            <div className="mt-2.5 min-h-[16px]">
               <QuizStats seriesSlug={series.slug} as="span" />
             </div>
             {/* Signed-in but locked: subtle "Preview first lesson →" affordance

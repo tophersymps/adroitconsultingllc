@@ -8,7 +8,7 @@
  */
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { notifyAuthChanged } from "@/lib/hooks/useAuth";
 import { invalidateDbToken } from "@/lib/db/token-cache";
+import { invalidateProgressSummary } from "@/lib/hooks/useProgressSummary";
 import { sanitizeRedirectPath } from "@/lib/redirect";
 
 function LoginForm() {
@@ -32,9 +33,15 @@ function LoginForm() {
   const [info, setInfo] = useState<string | null>(null);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // `isPending` only flips on the next render, so a fast double submit (double
+  // click, Enter + click, an automated retry) can fire two POSTs — and two
+  // verification emails (t_9690dda0). Reserve the in-flight slot synchronously.
+  const inFlight = useRef(false);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError(null);
     setInfo(null);
     setUnconfirmed(false);
@@ -74,16 +81,22 @@ function LoginForm() {
         // Identity changed: the cached token (guest null or the previous
         // user's JWT) must not survive the transition (QA F2, t_51f9ebfb).
         invalidateDbToken();
+        // The progress summary is per-session as well (PERF-P1, t_e786efe2).
+        invalidateProgressSummary();
         notifyAuthChanged();
         router.push(next);
         router.refresh();
       } catch {
         setError("Network error. Please try again.");
+      } finally {
+        inFlight.current = false;
       }
     });
   }
 
   function handleResend() {
+    if (inFlight.current) return;
+    inFlight.current = true;
     startTransition(async () => {
       try {
         await fetch("/api/auth/resend-confirmation", {
@@ -96,6 +109,8 @@ function LoginForm() {
         setError(null);
       } catch {
         setError("Network error. Please try again.");
+      } finally {
+        inFlight.current = false;
       }
     });
   }

@@ -24,14 +24,14 @@ import type { CardGateState } from "@/shared/contracts-account";
  * `dynamic = "force-static"` is what actually guarantees that, and it has to
  * be explicit: the catalogue reads below go through the cookie-bound data
  * client (`getSupabaseServerClient` → `cookies()`), a dynamic API, so ANY
- * build in which the Supabase env vars are set — i.e. every production build —
+ * build in which the data-layer env is set — i.e. every production build —
  * would otherwise emit `ƒ /atlas` (QA F1 on t_3a3d6595: appearing static only
- * because this workspace's `.env.local` lacks NEXT_PUBLIC_SUPABASE_URL, which
- * makes the client throw before `cookies()` is reached). Under force-static the
- * request APIs resolve to empty during the build, which is exactly the
- * projection this hub publishes: the visitor is the anonymous RLS scope, and
- * per-user identity is deliberately NOT resolved here (a cookie read would
- * flip the route back to ƒ and cost the hub its CDN cache).
+ * because this workspace's `.env.local` lacks NEXT_PUBLIC_NEON_DATA_API_URL,
+ * which makes the client throw before `cookies()` is reached). Under
+ * force-static the request APIs resolve to empty during the build, which is
+ * exactly the projection this hub publishes: the visitor is the anonymous RLS
+ * scope, and per-user identity is deliberately NOT resolved here (a cookie read
+ * would flip the route back to ƒ and cost the hub its CDN cache).
  */
 export const dynamic = "force-static";
 
@@ -69,13 +69,18 @@ function describeError(err: unknown): string {
  * `next start` / `next dev`, which is exactly the "prerender vs runtime"
  * distinction we need.
  *
- * Only armed when the Supabase env is configured: a build environment without
- * it cannot resolve a catalogue by definition (see the env check in
- * `lib/supabase/server.ts`), and failing there would break every CI/local build
- * that intentionally runs without data credentials.
+ * Only armed when the CATALOGUE's data layer is configured — the Neon Data API
+ * (`lib/db/server.ts`, R2-2), never the retired Supabase env vars: those were
+ * removed from the Vercel project on 2026-11-22 (rollback bridge retired,
+ * t_4b1c9124), and keying the guard off them would have silently disarmed it
+ * the moment they went, publishing an empty CDN-cached hub. A build
+ * environment without a Data API endpoint cannot resolve a catalogue by
+ * definition (see the env check in `lib/db/server.ts`), and failing there
+ * would break every CI/local build that intentionally runs without data
+ * credentials.
  *
  * Scope (SEO-H1, t_b5e0b4bf): the guard is a PRODUCTION-only refusal. Vercel
- * sets the Supabase vars on every environment, so phase+env alone armed it on
+ * sets the data-layer vars on every environment, so phase+env alone armed it on
  * Preview deployments too — a preview with an unreachable/RLS-restricted
  * catalogue then could not build at all, turning a "publish an empty hub" risk
  * into "cannot ship". Previews fall back to the graceful empty hub; only a
@@ -92,10 +97,29 @@ function isProdCatalogueBuild(): boolean {
   }
   return (
     process.env.NEXT_PHASE === "phase-production-build" &&
-    Boolean(
-      process.env.NEXT_PUBLIC_SUPABASE_URL &&
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    )
+    neonCatalogueConfigured()
+  );
+}
+
+/**
+ * Is the /atlas catalogue's data layer configured for this build?
+ *
+ * The hub reads its catalogue through `lib/db/server.ts` (Neon Data API), so
+ * THAT endpoint is what arms the guard (t_4b1c9124) — the retired Supabase
+ * keys say nothing about whether a catalogue read can succeed.
+ *
+ * `NEXT_PUBLIC_NEON_DATA_API_URL` is the value exported to every build
+ * environment and inlined for the browser client (`next.config.ts` reads the
+ * same var for CSP `connect-src`); the server-only `NEON_DATA_API_URL` is
+ * accepted too so a server-only export still arms the guard. Neither is
+ * required to be present for the build to succeed — a missing endpoint means
+ * the read throws, which lands in the "warn, don't throw" branch, exactly as
+ * before.
+ */
+function neonCatalogueConfigured(): boolean {
+  return Boolean(
+    process.env.NEXT_PUBLIC_NEON_DATA_API_URL ||
+      process.env.NEON_DATA_API_URL,
   );
 }
 
@@ -116,8 +140,14 @@ export default async function LearnLandingPage() {
   let catalogueError: unknown = null;
 
   try {
-    const catalog = await getCatalogForUserV2(userId);
-    const org = await getCatalogOrg();
+    // PERF-L2 (t_c54f6999): the user catalogue and the org tree are independent
+    // reads — run them concurrently. This render runs on every build and on
+    // every hourly ISR revalidation, so a serial pair of round trips is paid
+    // twice over for no ordering benefit.
+    const [catalog, org] = await Promise.all([
+      getCatalogForUserV2(userId),
+      getCatalogOrg(),
+    ]);
 
     courses = toLearnHubCards(catalog.courses, {
       // Prerendered guest projection: per-lesson slugs never ship from here.

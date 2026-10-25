@@ -5,8 +5,13 @@
  * assign to a new course." It derives state from two existing sources so they
  * can never drift apart:
  *
- *  - `FIGURE_PINS` (figure-assignment.ts) is the assignment registry — a pinned
- *    course moves its constellation to "used."
+ *  - `FIGURE_PINS_ALL` (figure-pins.server.ts) is the FULL assignment registry —
+ *    a pinned course moves its constellation to "used." The client map
+ *    (`FIGURE_PINS`) is only the *published* projection (four series), so using
+ *    it here would offer a stealth course's reserved constellation to a new
+ *    launch. This module is therefore server/test-side only: importing it from a
+ *    Client Component fails the build via `import "server-only"` in
+ *    `figure-pins.server.ts`.
  *  - `CONSTELLATION_FIGURES` (figure-catalog.ts) is the set of authorable
  *    figures (those with real star coordinates). A course can only draw a
  *    figure that has coordinates, so only these are "alignable."
@@ -19,17 +24,17 @@
  * Pure and deterministic, like the rest of the chart layer. No React, no DOM.
  */
 import { CONSTELLATION_FIGURES } from "./figure-catalog";
-import { FIGURE_PINS } from "./figure-assignment";
+import { FIGURE_PINS_ALL } from "./figure-pins.server";
 import type { ConstellationFigure } from "./figure-catalog";
 
 /** The figure names a course currently owns (pinned). */
-export function usedConstellationNames(pins: Readonly<Record<string, string>> = FIGURE_PINS): Set<string> {
+export function usedConstellationNames(pins: Readonly<Record<string, string>> = FIGURE_PINS_ALL): Set<string> {
   return new Set(Object.values(pins));
 }
 
 /** The authorable figures that are NOT currently assigned to any course. */
 export function availableFigures(
-  pins: Readonly<Record<string, string>> = FIGURE_PINS,
+  pins: Readonly<Record<string, string>> = FIGURE_PINS_ALL,
 ): ConstellationFigure[] {
   const used = usedConstellationNames(pins);
   return CONSTELLATION_FIGURES.filter((f) => !used.has(f.name));
@@ -54,7 +59,7 @@ export function poolCapacity(): { authorable: number; artOnly: number; total: nu
  */
 export function recommendForLessonCount(
   lessonCount: number,
-  pins: Readonly<Record<string, string>> = FIGURE_PINS,
+  pins: Readonly<Record<string, string>> = FIGURE_PINS_ALL,
 ): ConstellationFigure | null {
   const pool = availableFigures(pins);
   if (pool.length === 0) return null;

@@ -94,7 +94,7 @@ describe("GET /api/atlas/cards", () => {
   it("is never cached (per-session payload)", async () => {
     mocks.getSessionUser.mockResolvedValue({ id: "u1", email: "jane@adroit.io", name: null });
     const res = await GET();
-    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
   });
 
   it("returns 503 (guest baseline, no false upgrade) when the catalogue read fails", async () => {
@@ -112,5 +112,41 @@ describe("GET /api/atlas/cards", () => {
     const res = await GET();
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ gate: "guest-locked", series: [] });
+  });
+});
+
+/**
+ * SEC-L2 (t_15a53bb8) — every return path carries the per-user payload, so no
+ * browser or shared intermediary may store it. The guest path returned no
+ * header at all before this task.
+ */
+describe("GET /api/atlas/cards — cache headers (SEC-L2 t_15a53bb8)", () => {
+  const noStore = "private, no-store";
+
+  it("marks the guest projection private and no-store", async () => {
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe(noStore);
+  });
+
+  it("marks the broken-auth guest fallback private and no-store", async () => {
+    mocks.getSessionUser.mockRejectedValue(new Error("auth unreachable"));
+    const res = await GET();
+    expect(res.headers.get("cache-control")).toBe(noStore);
+  });
+
+  it("marks the signed-in projection private and no-store", async () => {
+    mocks.getSessionUser.mockResolvedValue({ id: "u1", email: "jane@adroit.io", name: null });
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe(noStore);
+  });
+
+  it("marks the 503 fail-closed payload private and no-store", async () => {
+    mocks.getSessionUser.mockResolvedValue({ id: "u1", email: "jane@adroit.io", name: null });
+    mocks.getCatalogForUserV2.mockRejectedValue(new Error("db down"));
+    const res = await GET();
+    expect(res.status).toBe(503);
+    expect(res.headers.get("cache-control")).toBe(noStore);
   });
 });

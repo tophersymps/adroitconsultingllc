@@ -32,6 +32,8 @@ import SeriesStarChart from "@/components/Constellations/chart/SeriesStarChart";
 import { loadSeriesConstellation, loadExamPassedBySeries } from "@/lib/sky-server";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 
 interface Props {
   params: Promise<{ series: string }>;
@@ -55,6 +57,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { series } = await params;
   const s = getSeriesBySlug(series);
   if (!s) return {};
+  // LOW (t_91a3e30b, CWE-200): metadata is generated BEFORE the page's
+  // notFound(), so an unpublished ("stealth") series used to publish its name
+  // and description in the 404 document head. Only a publicly launched series
+  // may appear here.
+  //
+  // MEDIUM (t_b4c0da5f, CWE-200): the mirror alone is not enough. A series
+  // still listed there but set pending/archived in `courses` 404s on the DB
+  // seam while this head kept naming it. Gate on the two-source rule from
+  // `mayDiscloseSeries`: mirror AND (DB unreadable OR DB live). On a credential
+  // outage `isSeriesDbLive` returns null and we fall back to the mirror, so a
+  // launched series' metadata never regresses to the generic head.
+  // `getCourseRowBySlug` is per-request cached, so the page body's own row read
+  // is shared rather than adding a second round trip.
+  if (!(await mayDiscloseSeriesLive(series))) {
+    return buildMetadata({
+      title: "Atlas | Adroit Learn",
+      description: "Course catalogue for Salesforce and AI practitioners.",
+      path: `/atlas/${series}`,
+      noindex: true,
+    });
+  }
   return buildMetadata({
     title: `${s.name} | Adroit Learn`,
     description: s.description,
@@ -85,6 +108,12 @@ export default async function SeriesPage({ params }: Props) {
     if (!isDbTokenUnavailable(err)) throw err;
     degraded = true;
   }
+  // F-2 (t_c4eafa3b MEDIUM, CWE-200): the degraded path cannot prove the
+  // series is publicly launched — the static catalogue also carries stealth
+  // slugs — so fail CLOSED on EXISTENCE. An unpublished series 404s during an
+  // outage exactly as the healthy seam does. Availability for the four seeded
+  // live series is unchanged (R2-5).
+  if (degraded && !isPubliclyLaunchedSeries(series)) notFound();
   const courseRow = degraded ? null : await getCourseRowBySlug(series);
 
   // Learn v2 profile (ADR-208/209/210): the unified CatalogCourse for this

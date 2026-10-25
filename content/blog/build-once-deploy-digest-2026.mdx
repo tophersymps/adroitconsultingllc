@@ -1,0 +1,165 @@
+---
+title: "Your Staging Passed. Production Ran Something Else."
+slug: build-once-deploy-digest-2026
+excerpt: "If production rebuilds the commit, you promoted a hash and a hope. Deploy the digest, keep the tag for humans, and make the registry enforce it."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 24, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [DevOps, CI/CD, Supply Chain, Kubernetes, Containers, Platform Engineering]
+bannerImage: "/banners/build-once-deploy-digest-2026.webp"
+ogImage: "/banners/build-once-deploy-digest-2026-og.jpg"
+---
+
+A release goes to production on a Tuesday afternoon. Staging has been running the same change for four days without a complaint. Production returns an error staging has never produced, and the stack trace names a driver version nobody on the team recognizes.
+
+The commit is identical. The image tag is identical. The bytes are not.
+
+That is the entire failure in one sentence. If the production pipeline runs a build, you did not promote a release. You promoted a commit hash and a hope that the second build would behave like the first. This article is about closing that gap: building one artifact, naming it by its digest, and letting everything downstream deploy that exact object.
+
+## A tag is a name. A digest is the software.
+
+A container tag is a pointer held in a registry. When you deploy `app:1.4.2`, the registry resolves that string to whatever manifest it currently associates with it. Nothing about the string promises the bytes behind it are stable, and the Kubernetes documentation is direct about the distinction: digests are hashes of the image content and are immutable, while tags can be moved to point at different images.[^1]
+
+A digest looks like `sha256:9f2a...` and is computed from the content itself, so it cannot be moved. Deploy `registry.example.com/app@sha256:9f2a...` and you have named one exact artifact. Deploy `app:1.4.2` and you have named a lookup, executed at pull time, against a registry that is free to have changed its answer.
+
+The docs describe the consequence in plain language. If a registry changes what a tag represents, a cluster can end up with a mix of Pods running old and new code. Half your replicas serving yesterday's binary and half serving today's is not a partial rollout. It is an inconsistent product, and no dashboard separates the two populations for you.
+
+Kubernetes makes this worse in a quiet way. The default `imagePullPolicy` is derived from the image reference at the moment the object is created: a digest sets `IfNotPresent`, `:latest` sets `Always`, a non-latest tag sets `IfNotPresent`. That field is not recomputed later, even if you edit the tag in the Deployment spec. A node that already holds an image under that name will not re-pull, so you get the fleet mix again, this time with the registry behaving perfectly.[^1]
+
+The same reasoning applies at build time. `FROM ubuntu:24.04` in a Dockerfile is a mutable input, resolved fresh on every build. Pinning the base to a digest freezes it, which is the point and also the cost: Docker's own reference notes that a digest pin stops the platform from pulling updates, including security updates, so the pin has to be paired with a deliberate process that moves it.[^9]
+
+![Two panels: a mutable tag pointing at different image bytes over time, beside a digest that always resolves to one artifact](</diagrams/build-once-deploy-digest-2026/1-tag-versus-digest.png>)
+
+## Four ways a rebuild drifts before anyone attacks you
+
+Teams usually assume a rebuild only diverges if something malicious happens. It does not need a villain. It needs elapsed time between the two builds, which a release calendar supplies for free.
+
+**The base image tag moves.** `node:24-alpine` today and `node:24-alpine` next Wednesday are different images. The maintainer rebuilt the base to patch a package, the tag now points at a new layer set, and your application code never changed. Your staging image and your production image are now built on different operating system packages.
+
+**Dependency resolution runs again.** `npm install` without `npm ci`, `pip install` without hashes, `go get` without a vendor directory: each one is an unpinned transaction against a live registry. A transitive dependency published between the two builds lands in the second artifact. Nobody reviewed it, because nobody knew a decision was being made.
+
+**The runner and toolchain drift.** `ubuntu-latest` is a rolling alias. Compiler patch levels, SDK versions, and system libraries change on the platform's schedule. A binary rebuilt against a different glibc is still built from the same commit, and it is still a different binary.
+
+**The build is not deterministic.** Image layers carry timestamps. Filesystem ordering varies. Absolute build paths get embedded. Generated code fetched from a live endpoint changes with the endpoint. Reproducible builds are an engineering effort, not a default, so two builds of one commit are not guaranteed to be byte-identical even on the same runner.
+
+Add a cache and the divergence hides better. Staging almost always has a warm dependency cache; a fresh production runner does not. The cache is itself infrastructure with a storage budget and a trust boundary, which we covered in [the CI cache piece](/field-notes/ci-cache-infrastructure-2026). The two environments resolve the dependency tree along different paths, against different upstream state, and are not obliged to land on the same result. The artifact that passed staging is simply not the artifact production made, and the pipeline reported success both times.
+
+![Four rebuild inputs, the base image tag, dependency resolution, the runner toolchain, and build nondeterminism, converging on the same tag with different bytes](</diagrams/build-once-deploy-digest-2026/2-rebuild-divergence.png>)
+
+## The registry can also move the tag on purpose
+
+On March 14 and 15, 2025, an attacker repointed existing version tags of `tj-actions/changed-files`, a GitHub Action used by more than 23,000 repositories, at a malicious commit. Projects referencing `v44.5.1` or `v35.7.7-sec`, tags they had used for months, pulled the new code on their next workflow run. The injected step read the Runner Worker process memory, base64-encoded what it found, and printed it into the workflow log, which on a public repository is public. The advisory rates it CVSS 8.6 and records the patch in version 46.0.1.[^3]
+
+Three conclusions follow, and none of them are about GitHub specifically.
+
+First, any mutable reference inside a build is an input you did not review. That covers base image tags, Helm chart versions, lockfile-less installs, and Action tags that look like version numbers. Pin Actions to a full commit SHA. Pin base images to a digest and update them on a schedule you control.
+
+Second, the damage profile of this class of attack is credential exposure, not code corruption. The payload here was a memory scrape into a log. That means the incident response is rotation of every secret the runner could reach, and the window is measured in hours, because the log was already public.
+
+Third, the trustworthiness of a tag is exactly what made it useful to the attacker. The tag was trusted, so it was not re-examined. Digest pinning does not make supply chains safe, but it removes this specific lever: a name that can be re-aimed after you approved it.
+
+## The promotion chain
+
+The alternative is not complicated, it is just stricter. Build once, and from that moment on, move identity rather than content.
+
+The sequence that holds up under audit:
+
+- **Build one candidate from one commit** and publish it to a registry with tag immutability enabled. Record the digest.
+- **Test the artifact, not the source.** Integration and acceptance suites pull the digest and run against it. A test that rebuilds produces evidence about a different object, and that evidence is worthless the moment the build is not reproducible.
+- **Scan and inventory the same object.** The SBOM and the vulnerability scan have to describe the bytes you will deploy. A scan of a rebuild tells you about an artifact that will never run.
+- **Sign and attest it.** Signature, provenance, and SBOM attestation all attach to the digest, which is why they survive the promotion.
+- **Deploy the digest to staging.** Configuration comes from the environment: config maps, secrets, feature flags, environment variables. Content does not.
+- **Approve, then deploy the identical digest to production.** Promotion itself is a metadata operation: copy or retag the digest into the production repository, record who approved it, point the deployment at the digest. Retagging does not change the digest, which is the entire trick.
+
+This is the same promotion logic we described for [model registries](/field-notes/model-registry-promotion-pipeline-2026), applied to the container artifact instead of the weights. There is a quick diagnostic for whether a pipeline actually does this. Read the deploy job. If it checks out source and runs a build, it rebuilds, regardless of what the architecture diagram says. Deployment jobs should accept a digest as a required input and do nothing else: no checkout, no toolchain install, no `docker build`. A deploy job that cannot build cannot rebuild by accident.
+
+![The promotion chain: one build, tests and scans against the digest, signature and attestation attached, staging approval, then the same digest deployed to production](</diagrams/build-once-deploy-digest-2026/3-promotion-chain.png>)
+
+## Provenance, sized honestly
+
+Once you deploy by digest, the next question is how a cluster knows the digest came from your pipeline and your source, rather than from someone who pushed to the same repository. That is what attestations and the SLSA build track are for.
+
+The SLSA specification is currently at version 1.2, organized into tracks so a team can improve one aspect without blocking on another.[^4] The build track runs from L0 to L3:
+
+- **Build L1** requires provenance that describes how the artifact was built. It catches mistakes, and it is trivial to forge.
+- **Build L2** requires signed provenance generated by a hosted build platform. That prevents tampering after the build.
+- **Build L3** requires a hardened platform: runs isolated from each other, and signing material not reachable from user-defined build steps. That prevents tampering during the build.[^5]
+
+The ordering matters because L3 is a property of the build platform, not a flag. Most teams can reach L1 and L2 with the CI they already pay for. L3 is where the work moves into platform engineering: separating the step that builds from the step that signs, and proving that a compromised build step cannot reach the key.
+
+On GitHub, provenance generation is a few lines. Grant `id-token: write`, `contents: read`, `attestations: write`, and `packages: write`, then call `actions/attest@v4` with the image name and the digest produced by the build step, and set `push-to-registry` so the attestation travels with the image. The same action covers SBOM attestations with either SPDX or CycloneDX predicates.[^6]
+
+Verification is a command, not a project:
+
+`gh attestation verify oci://ghcr.io/ORG/IMAGE:TAG -R ORG/REPO`
+
+For a non-GitHub verifier, Sigstore's `cosign verify` with `--certificate-identity` and `--certificate-oidc-issuer` checks a keyless signature against the CI's OIDC identity, and cosign validates that the signed payload's digest claim matches the image by default.[^7] That default is the important part. A signature that does not bind to the artifact is a signature on a claim.
+
+A signature without a policy is decoration, though. The value arrives when something refuses to run an image that is unsigned, signed by the wrong identity, built from a branch other than main, or missing an SBOM predicate. Buyers and regulators have been moving transparency requirements onto build outputs exactly because a policy document asserts nothing about what actually ran.[^10]
+
+![The SLSA build track as four rungs, from no provenance at L0 through forgeable provenance, signed provenance, and a hardened platform at L3](</diagrams/build-once-deploy-digest-2026/4-slsa-build-track.png>)
+
+## Enforcement beats convention
+
+Every one of these controls fails the same way: as a documented convention that the next urgent fix bypasses. Three layers make it structural, and they are cheap to add in order.
+
+**Registry immutability.** Amazon ECR supports an immutable tag setting on a repository, and a second push to an existing tag returns `ImageTagAlreadyExistsException`. The setting applies to all tags unless you configure exclusions, so it is a blunt control, and blunt is what you want at the registry.[^2] It costs nothing, it stops accidental overwrites, and it makes any retagging visible in an audit trail instead of invisible.
+
+**Render the digest into the workload.** Have the build job emit the digest as a job output, pass it to the deploy job as a required input, and write `image: repo@sha256:...` into the manifest. Nothing downstream should ever see a tag. This single change eliminates the rebuild class, because there is no name left to resolve differently.
+
+**Admission policy.** Kyverno's `verifyImages` rules can mutate tags to digests and require them, plus check attestations against conditions on the signed JSON payload. `mutateDigest` defaults to true, `verifyDigest` defaults to true, and `attestations.conditions` is where you encode "signed by our CI, with this predicate."[^8] One limitation worth knowing before you rely on it: verification results are cached for 60 minutes by default, so a revoked signature is not refused instantly, and a policy change takes time to propagate as the cache expires.
+
+![Three enforcement layers stacked by effort: registry tag immutability, digest rendered into manifests, and admission policy verifying signatures and attestations](</diagrams/build-once-deploy-digest-2026/5-enforcement-layers.png>)
+
+## What promotion does not fix
+
+Promotion by digest is a real improvement and it is not a cure. Six honest limits:
+
+**A base image CVE requires a new build.** Promotion is about identity, not permanence. When the base needs a patch, you build again, get a new digest, and run the whole chain including staging. What is forbidden is rebuilding the same version for a later environment, not rebuilding when the inputs genuinely change.
+
+**Multi-architecture images complicate the identity.** A multi-platform image is an index whose digest covers several platform-specific images. The digest you promote is the index, and the children still need testing on the architectures you actually run. If CI builds amd64 and production runs a mix that includes arm64, you tested half of your fleet.
+
+**Rollback means rolling back to a digest.** Rolling back to the previous tag can land you on the release you are trying to escape, if that tag was retagged in place. Rollback targets belong in the release record as digests.
+
+**The hotfix path needs the same gate.** A separate emergency pipeline that skips staging is the rebuild problem with a justification attached. If the emergency process is genuinely faster, make it the normal process and keep the gate.
+
+**The registry becomes a production dependency.** A registry outage now blocks deploys and can block scale-ups that need a cold pull. Mirror or pre-pull the images on the path you cannot afford to lose, and treat registry availability as part of your own availability.
+
+**Signing keys are a lifecycle problem.** Keyless signing ties identity to the CI's OIDC issuer and removes a long-lived key from the picture, at the price of requiring the verifier to trust that issuer. Either way, the verification side needs its own rotation story.
+
+## The Monday checklist
+
+Six steps, in the order that produces evidence fastest.
+
+1. **Find out what is actually running.** Read the `imageID` from each production Pod's container status and compare it to the digest your pipeline recorded for that release. Any mismatch is a rebuild you did not know about, and it is the evidence you need to get the work funded.
+2. **Turn on tag immutability** for application repositories. Accidental overwrites stop immediately, and deliberate ones start leaving a trail.
+3. **Emit the digest from the build job** and pass it to deploy as a required input. Delete the tag from the manifest templates once the digest path works.
+4. **Remove build steps from deploy jobs.** No checkout, no toolchain, no `docker build`. If a deploy job must build, the artifact identity is already lost.
+5. **Pin what you consume.** Actions to commit SHAs, base images to digests, Helm charts to versions, with a scheduled process that moves the pins deliberately rather than on whatever day the upstream maintainer pushed.
+6. **Add one admission rule** that rejects tag-only references in production namespaces, then extend it to signature and attestation checks when the evidence is attached in CI.
+
+The digest is not a platform-team detail. It is the name of what you shipped, and it is the only name that cannot be quietly re-aimed. Tags, version numbers, and release notes are labels for humans, and labels get reused. The bytes that ran in production should be the same bytes that passed staging, and that is a property you can verify rather than assume.
+
+[^1]: Kubernetes Documentation, "Images": image names and digests as immutable content hashes, mutable tags, `imagePullPolicy` defaulting and its behavior across a mixed fleet, and the guidance against `:latest` in production: [kubernetes.io](https://kubernetes.io/docs/concepts/containers/images/)
+
+[^2]: Amazon Elastic Container Registry User Guide, "Preventing image tags from being overwritten in Amazon ECR": repository tag immutability, the `ImageTagAlreadyExistsException` on repush, and the all-tags scope with optional exclusions: [docs.aws.amazon.com](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-tag-mutability.html)
+
+[^3]: GitHub Advisory Database, GHSA-mrrh-fwg8-r2c3 (CVE-2025-30066): the `tj-actions/changed-files` tag repointing, the affected 23,000+ repositories, the memory-scrape payload that printed base64-encoded secrets into workflow logs, the March 14 to 15, 2025 active window, CVSS 8.6, and the fix in version 46.0.1: [github.com](https://github.com/advisories/GHSA-mrrh-fwg8-r2c3)
+
+[^4]: SLSA Specification, version 1.2: the current revision of the supply chain security specification, its build and source tracks, and its attestation formats: [slsa.dev](https://slsa.dev/spec/v1.2/)
+
+[^5]: SLSA Specification, "Security levels": the build track definitions, L1 provenance that is trivial to forge, L2 signed provenance from a hosted build platform, and L3 a hardened platform that isolates runs and keeps signing material away from user-defined build steps: [slsa.dev](https://slsa.dev/spec/v1.1/levels)
+
+[^6]: GitHub Docs, "Using artifact attestations to establish provenance for builds": the required workflow permissions, `actions/attest@v4` with `subject-digest` and `push-to-registry`, SBOM attestations with SPDX or CycloneDX predicates, and verification with `gh attestation verify`: [docs.github.com](https://docs.github.com/en/actions/how-tos/secure-your-work/use-artifact-attestations/use-artifact-attestations)
+
+[^7]: Sigstore Documentation, "Verifying Signatures": keyless verification with `--certificate-identity` and `--certificate-oidc-issuer`, and the default check that a cosign payload's digest claim matches the image: [docs.sigstore.dev](https://docs.sigstore.dev/cosign/verifying/verify/)
+
+[^8]: Kyverno Documentation, "Verify Images: Overview": `mutateDigest` and `verifyDigest` defaults, attestation conditions, required verification, and the 60-minute default verification cache: [kyverno.io](https://kyverno.io/docs/policy-types/cluster-policy/verify-images/overview/)
+
+[^9]: Docker Documentation, "docker image pull": pulling by digest as an immutable identifier, digest use in a Dockerfile `FROM` line, and the note that a digest pin stops the platform from delivering updates: [docs.docker.com](https://docs.docker.com/reference/cli/docker/image/pull/)
+
+[^10]: Sonatype, "2026 State of the Software Supply Chain": transparency requirements shifting from policy documents to build outputs, including SBOMs, attestations, and provenance expectations, plus the strain automated CI/CD builds place on registries: [sonatype.com](https://www.sonatype.com/state-of-the-software-supply-chain/introduction)

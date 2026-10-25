@@ -33,6 +33,11 @@ import {
   lessonsPerStar,
 } from "@/components/Constellations/chart/figure-assignment";
 import {
+  FIGURE_PINS_ALL,
+  publicPins,
+} from "@/components/Constellations/chart/figure-pins.server";
+import { PUBLICLY_LAUNCHED_SERIES } from "./atlas-launch";
+import {
   availableFigures,
   poolCapacity,
   recommendForLessonCount,
@@ -427,12 +432,22 @@ describe("buildChartFigures", () => {
       expect(f.stars.length).toBeGreaterThan(0);
     }
     // Real courses are pinned (the course→constellation contract): the figure is
-    // the one the course owns, regardless of what size-matching would pick.
-    const bySlug = new Map(figures.map((f) => [f.seriesSlug, f]));
+    // the one the course owns, regardless of what size-matching would pick. The
+    // client map is the published projection only, so the registry used here is
+    // the full server-side one.
+    const figuresAll = buildChartFigures(
+      sky({
+        constellations: real.map(([slug, n]) =>
+          constellation({ seriesSlug: slug, totalStars: n }),
+        ),
+      }),
+      { pins: FIGURE_PINS_ALL },
+    );
+    const bySlug = new Map(figuresAll.map((f) => [f.seriesSlug, f]));
     for (const [slug] of real) {
       const f = bySlug.get(slug)!;
-      expect(f.figureName, `${slug} lost its pin`).toBe(FIGURE_PINS[slug]);
-      expect(f.stars.length).toBe(figureByName(FIGURE_PINS[slug]!)!.stars.length);
+      expect(f.figureName, `${slug} lost its pin`).toBe(FIGURE_PINS_ALL[slug]);
+      expect(f.stars.length).toBe(figureByName(FIGURE_PINS_ALL[slug]!)!.stars.length);
     }
   });
 
@@ -440,7 +455,7 @@ describe("buildChartFigures", () => {
     const { labProfileSky } = await import(
       "@/components/Constellations/lab/field-fixtures"
     );
-    const figures = buildChartFigures(labProfileSky());
+    const figures = buildChartFigures(labProfileSky(), { pins: FIGURE_PINS_ALL });
     const agentic = figures.find((f) => f.seriesSlug === "agentic-ai");
     expect(agentic).toBeDefined();
     expect(agentic!.curriculumLessons).toBe(40);
@@ -518,54 +533,129 @@ describe("assignFigures", () => {
 });
 
 /*
+ * Real courses (slug, final curriculum). Source of truth mirrors the scheduler
+ * counts in learn-curriculum.test.ts.
+ */
+const REAL_COURSES: ReadonlyArray<readonly [string, number]> = [
+  ["salesforce-architect", 90],
+  ["agentic-ai", 90],
+  ["omni-studio-cert", 46],
+  ["ai-at-work", 30],
+  ["ai-power-user", 30],
+  ["ai-adoption", 40],
+  ["hermes-consultant", 30],
+  ["hermes-consultant-intermediate", 25],
+  ["hermes-consultant-advanced", 20],
+];
+
+/*
+ * Two maps, one contract (t_af115dd1 / t_5fdeb918).
+ *
+ *  - `FIGURE_PINS` (client, figure-assignment.ts) is the PUBLISHED projection:
+ *    it ships inside a client chunk (`/atlas/[series]`, `/profile`), so it may
+ *    only name series the site names publicly.
+ *  - `FIGURE_PINS_ALL` (server, figure-pins.server.ts) is the editorial
+ *    registry, used by the lab, the constellation pool and these tests.
+ *
+ * These invariants fail in BOTH drift directions: a stealth pin added to the
+ * client map, and a launch that forgets its client pin.
+ */
+describe("published projection vs full registry", () => {
+  it("ships exactly the launched series in the client map", () => {
+    expect(Object.keys(FIGURE_PINS).sort()).toEqual(
+      [...PUBLICLY_LAUNCHED_SERIES].sort(),
+    );
+  });
+
+  it("keeps FIGURE_PINS deep-equal to publicPins()", () => {
+    expect(FIGURE_PINS).toEqual(publicPins());
+  });
+
+  it("carries no unpublished slug in the client map", () => {
+    for (const slug of Object.keys(FIGURE_PINS)) {
+      expect(PUBLICLY_LAUNCHED_SERIES).toContain(slug);
+    }
+  });
+
+  it("keeps the full registry complete — 12 pins over every authored course", () => {
+    expect(Object.keys(FIGURE_PINS_ALL)).toHaveLength(12);
+    for (const [slug] of REAL_COURSES) {
+      expect(FIGURE_PINS_ALL[slug], `${slug} is unpinned in the registry`).toBeTypeOf(
+        "string",
+      );
+    }
+  });
+
+  /*
+   * The published-surface regression: a sky containing only the four launched
+   * courses resolves through the default (published) map, with no server data
+   * and no size-match stealing a pinned figure.
+   */
+  it("draws the four launched courses on the released figures", () => {
+    const figures = buildChartFigures({
+      stats: {
+        streakDays: 0,
+        longestStreakDays: 0,
+        rank: null,
+        coursesCompleted: 0,
+        tracksCompleted: 0,
+      },
+      constellations: PUBLICLY_LAUNCHED_SERIES.map((slug) =>
+        constellation({ seriesSlug: slug, curriculumLessons: 30, totalStars: 30 }),
+      ),
+      chronicle: [],
+      isGuest: true,
+    });
+    expect(figures.map((f) => f.figureName).sort()).toEqual(
+      ["Centaurus", "Cetus", "Hydra", "Virgo"],
+    );
+    for (const f of figures) {
+      expect(f.figureName, `${f.seriesSlug} lost its published pin`).toBe(
+        FIGURE_PINS[f.seriesSlug],
+      );
+    }
+  });
+});
+
+/*
  * The course→constellation contract (baked in from Phase 4): every real course
  * is defined by exactly one constellation, exclusive to that course, and the
  * on-course tracker `/atlas/[series]` and the whole-sky profile must resolve to
  * the SAME figure. Before pins, the course page ran an isolated size-match that
  * ignored the rest of the sky and could hand a course a figure the profile had
  * already given to another course.
+ *
+ * This suite runs against `FIGURE_PINS_ALL` — the full registry, which the lab
+ * and the pool use. The published four are covered by the suite above.
  */
-describe("course → constellation pins (exclusivity + surface consistency)", () => {
-  // Real courses (slug, final curriculum). Source of truth mirrors the
-  // scheduler counts in learn-curriculum.test.ts.
-  const REAL_COURSES: ReadonlyArray<readonly [string, number]> = [
-    ["salesforce-architect", 90],
-    ["agentic-ai", 90],
-    ["omni-studio-cert", 46],
-    ["ai-at-work", 30],
-    ["ai-power-user", 30],
-    ["ai-adoption", 40],
-    ["hermes-consultant", 30],
-    ["hermes-consultant-intermediate", 25],
-    ["hermes-consultant-advanced", 20],
-  ];
-
+describe("course → constellation pins (full registry: exclusivity + surface consistency)", () => {
   it("pins every real course, so none can silently drift to another figure", () => {
     for (const [slug] of REAL_COURSES) {
       expect(
-        FIGURE_PINS[slug],
-        `${slug} must be pinned in FIGURE_PINS — every course owns exactly one constellation`,
+        FIGURE_PINS_ALL[slug],
+        `${slug} must be pinned in FIGURE_PINS_ALL — every course owns exactly one constellation`,
       ).toBeTypeOf("string");
     }
   });
 
   it("names only constellations that exist in the catalog", () => {
-    for (const name of Object.values(FIGURE_PINS)) {
+    for (const name of Object.values(FIGURE_PINS_ALL)) {
       expect(figureByName(name), `pin "${name}" is not an authorable figure`).not.toBeNull();
     }
   });
 
   it("never pins two courses to the same constellation (exclusivity)", () => {
-    const names = Object.values(FIGURE_PINS);
+    const names = Object.values(FIGURE_PINS_ALL);
     expect(new Set(names).size).toBe(names.length);
   });
 
   it("every catalog course resolves to its pinned figure, never another course's", () => {
     const map = assignFigures(
       REAL_COURSES.map(([slug, c]) => ({ seriesSlug: slug, curriculumLessons: c })),
+      FIGURE_PINS_ALL,
     );
     for (const [slug] of REAL_COURSES) {
-      expect(map.get(slug)!.name, `${slug} did not keep its pin`).toBe(FIGURE_PINS[slug]);
+      expect(map.get(slug)!.name, `${slug} did not keep its pin`).toBe(FIGURE_PINS_ALL[slug]);
     }
   });
 
@@ -573,7 +663,8 @@ describe("course → constellation pins (exclusivity + surface consistency)", ()
    * The regression this fixes: the on-course tracker uses `buildChartFigure`
    * (one course, isolated assign) while the profile uses `buildChartFigures`
    * (whole sky, claiming figures). Without pins these could disagree. With the
-   * contract, both must give every real course the same constellation.
+   * contract — and the full registry passed through the `pins` seam on both
+   * sides — both must give every real course the same constellation.
    */
   it("makes the course page and the profile agree on every course's constellation", () => {
     const sky: ProfileSky = {
@@ -584,28 +675,32 @@ describe("course → constellation pins (exclusivity + surface consistency)", ()
       chronicle: [],
       isGuest: false,
     };
-    const profile = buildChartFigures(sky);
+    const profile = buildChartFigures(sky, { pins: FIGURE_PINS_ALL });
 
     for (const [slug, n] of REAL_COURSES) {
       const fromProfile = profile.find((f) => f.seriesSlug === slug)!.figureName;
       // The course page's path: a single course handed to buildChartFigure.
       const fromCoursePage = buildChartFigure(
         constellation({ seriesSlug: slug, curriculumLessons: n, totalStars: n }),
+        { pins: FIGURE_PINS_ALL },
       ).figureName;
       expect(
         fromCoursePage,
         `${slug}: course page resolved "${fromCoursePage}" but the profile shows "${fromProfile}"`,
       ).toBe(fromProfile);
-      expect(fromCoursePage, `${slug} must be its pinned figure`).toBe(FIGURE_PINS[slug]);
+      expect(fromCoursePage, `${slug} must be its pinned figure`).toBe(FIGURE_PINS_ALL[slug]);
     }
   });
 });
 
 /* Phase 4 — the used/available pool that backs a new-course launch. */
 describe("constellation pool (used vs available)", () => {
-  it("marks every pinned figure as used", () => {
+  it("marks every pinned figure in the FULL registry as used", () => {
+    // The default pin map here must be the registry, not the four-series
+    // published projection — otherwise a stealth course's reserved figure is
+    // offered to a new launch (t_5fdeb918).
     expect([...usedConstellationNames()].sort()).toEqual(
-      Object.values(FIGURE_PINS).sort(),
+      Object.values(FIGURE_PINS_ALL).sort(),
     );
   });
 

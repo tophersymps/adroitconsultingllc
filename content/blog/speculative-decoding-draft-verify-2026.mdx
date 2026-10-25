@@ -1,0 +1,147 @@
+---
+title: "The Draft Is Cheap: Speculative Decoding in Production"
+slug: speculative-decoding-draft-verify-2026
+excerpt: "Speculative decoding trades spare compute for fewer weight reads. The speedup lives or dies on one number you measure on your own traffic: acceptance rate."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 24, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [AI Infrastructure, Speculative Decoding, LLM Serving, vLLM, Inference Optimization]
+bannerImage: /banners/speculative-decoding-draft-verify-2026.webp
+ogImage: /banners/speculative-decoding-draft-verify-2026-og.jpg
+---
+
+A 70B model in FP8 is about 70 GB of weights. At batch size one, generating a single token requires streaming most of that 70 GB through the memory bus. On an H100 SXM with 3.35 TB/s of memory bandwidth, that is roughly 21 milliseconds of pure memory traffic per token before any arithmetic is counted.[^13] The tensor cores sit mostly idle. The decode loop is not compute-bound; it is a bandwidth tax paid once per token.
+
+That is the setup behind every speculative decoding claim you have read. The technique does not make the model smaller or the math cheaper. It changes what you do with each expensive trip to memory: instead of verifying one token per weight read, you verify a block of candidates. When the candidates are good, you collect several tokens for the price of one. When they are bad, you paid for a wider forward pass and got one token anyway.
+
+The interesting part for anyone running inference is not the speedup headline. It is the acceptance rate, because that single number decides whether the arbitrage pays or costs you. This article walks the mechanism, the arithmetic, the three families of drafters, the production numbers published in 2026, and the places where speculative decoding quietly loses money.
+
+## The loop you are trying to escape
+
+Autoregressive decoding is sequential by construction. Token n+1 depends on token n, so the model cannot batch future tokens the way it batches the prompt. At high batch size this stops mattering, because the GPU has many independent requests to keep busy. At batch size one, or at low queries per second, there is nothing else to fill the memory bus with, so each token pays the full weight-read cost.
+
+The arithmetic intensity of decode makes this concrete. A dense 70B model needs about 2 floating point operations per parameter per token, so roughly 140 GFLOP per token against 70 GB of weights. That is about 2 FLOP per byte. An H100 SXM in FP8 has a ridge point near 600 FLOP per byte, which puts decode at batch one roughly 300 times on the memory-bound side of the roofline.[^13] Adding compute does not help. Reducing memory traffic per token does.
+
+Speculative decoding is one way to do that. The other familiar levers, quantization and batching, reduce bytes per weight or amortize bytes across requests. Speculative decoding amortizes the weight read across several candidate tokens. It is a bandwidth play wearing a compute costume.
+
+## Draft, verify, accept, repeat
+
+The protocol has two models and one guarantee. A small draft model proposes the next gamma tokens. The target model then runs one forward pass over the prompt plus those candidates and checks them in parallel. It accepts the longest prefix that matches what it would have produced, then emits one additional token from its own distribution, the bonus token. The loop repeats from the new position.[^1]
+
+The guarantee is the reason this technique spread. With rejection sampling, the accepted output is distributed exactly as if the target model had sampled every token itself. Leviathan, Kalman, and Matias showed 2x to 3x speedups on T5-XXL with identical outputs, not approximate ones.[^1] That property separates speculative decoding from quantization or distillation: you are not trading quality for latency. You are trading spare compute and some VRAM for fewer sequential weight reads.
+
+That distinction matters when a client asks whether the model got dumber. It did not. The verifier is the same model, and the acceptance rule is constructed so the final distribution is unchanged. What changed is how many candidate tokens the verifier looked at in one pass.
+
+![Sequential decoding reads the full weight set once per token, while speculative decoding reads it once per draft block and verifies several candidate tokens in a single forward pass.](</diagrams/speculative-decoding-draft-verify-2026/1-sequential-vs-speculative.png>)
+
+The draft model is where the engineering sits. It has to be small enough that its own forward passes are cheap, and accurate enough that its proposals survive the verifier. Those two requirements pull in opposite directions, which is why drafter design has become its own research lane.
+
+![The draft, verify, accept loop: the drafter proposes a block of tokens, the target model verifies the block in one pass, accepts the longest matching prefix, adds a bonus token, and the loop continues from the accepted position.](</diagrams/speculative-decoding-draft-verify-2026/2-draft-verify-loop.png>)
+
+## The acceptance rate is the business case
+
+If the draft model proposes gamma tokens and each is accepted with probability alpha, the expected number of tokens emitted per verification step, including the bonus token, is 1 + alpha times gamma. vLLM computes it exactly this way: mean acceptance length equals one plus accepted draft tokens divided by speculation steps.[^3] A measured acceptance rate and a configured draft count are enough to predict the payout before you run a benchmark.
+
+The numbers are unforgiving. At alpha of 0.80 and three drafts, a step returns 3.40 tokens. At alpha of 0.35 and three drafts, the same step returns 2.07 tokens. At alpha of 0.28 and four drafts, it returns 2.13. The draft count is not a free multiplier; every extra candidate is another chance to be wrong, and acceptance falls as the block grows. Red Hat's gpt-oss-120B benchmark shows the shape precisely: 45.4 percent acceptance at two draft tokens, 35.6 percent at three, 28.3 percent at four, with mean acceptance lengths of 1.91, 2.07, and 2.13.[^7]
+
+Those measured lengths match 1 + alpha times gamma to two decimal places. That is not a coincidence, it is the definition. It also means you can instrument one number and forecast the rest.
+
+The break-even condition is equally simple. Verification costs more than a single-token pass, because the target model now processes gamma plus one positions. If verification overhead is c times the cost of one normal token step, speedup is roughly 1 + alpha times gamma, divided by c. At three drafts and 0.8 acceptance the numerator is 3.40. If verification costs 1.2 normal steps, you get about 2.8x. If acceptance collapses to 0.2, the numerator is 1.6 and the same overhead leaves you at 1.33x, before counting the drafter's own compute. That is how a technique sold as a 3x win becomes a rounding error.
+
+This is also why "more draft tokens" is the wrong default. Red Hat measured peak output throughput at 2,574 tokens per second with three drafts, 2,480 with two, and 2,240 with four. Going from three to four cut throughput 8 percent and regressed inter-token latency 7.6 percent, because the fourth proposal was rejected more often than accepted.[^7] The extra candidate added verification cost without adding accepted tokens.
+
+![Measured acceptance rate, mean acceptance length, and peak throughput across draft counts of two, three, and four. Mean acceptance length keeps rising while throughput peaks at three drafts.](</diagrams/speculative-decoding-draft-verify-2026/3-acceptance-arithmetic.png>)
+
+## Three ways to get a draft
+
+The draft mechanism is where implementations diverge, and the choice drives both acceptance and memory cost.
+
+**A separate draft model.** The original approach, and still the easiest to reason about. llama.cpp exposes it as `--spec-type draft` with `-md` pointing at a smaller model from the same family; vLLM exposes it as the draft model method.[^9][^2] The draft model runs its own weights, so it costs VRAM and its own forward passes. A 1B to 3B draft against a 70B target is the classic ratio. Acceptance depends on how closely the small model tracks the large one, which is why same-family pairs beat cross-family pairs.
+
+**Feature-level draft heads.** EAGLE and its successors attach a very small head to the target model and let it read the target's internal hidden states rather than starting from tokens alone. Google's Vertex AI writeup describes the head as 2 to 5 percent of the target model's size.[^11] EAGLE-3 replaced EAGLE's feature-prediction objective with direct token prediction and multi-layer feature fusion through a training-time test, which let the drafter benefit from more training data. The paper reports speedups up to 6.5x and about 1.4x over EAGLE-2.[^5]
+
+EAGLE 3.1 addressed a subtler failure. The team traced fragility across chat templates, long context, and out-of-distribution system prompts to attention drift: as speculation depth grows, the drafter shifts attention away from sink tokens toward its own generated tokens, and the fused input becomes imbalanced as higher-layer hidden states dominate. The fix adds normalization after each target hidden state and feeds post-norm states into the next decoding step. In long-context workloads, EAGLE 3.1 reports up to 2x longer acceptance length than EAGLE 3.[^6]
+
+**Model-free drafting.** N-gram and suffix methods need no draft weights at all. They look up continuations in the token history or a suffix cache and propose the tokens that followed a matching pattern last time. vLLM lists n-gram and suffix decoding as lighter methods with modest gains; llama.cpp ships several variants (`ngram-simple`, `ngram-map-k`, `ngram-map-k4v`) and notes the obvious use case: rewriting source code or any task where the model is reproducing text already in context.[^2][^9] The trade is narrowness. On copy-heavy work acceptance can be high because the answer is literally in the prompt. On novel prose there is nothing to look up, and the drafter contributes nothing but overhead.
+
+llama.cpp has also moved past one-token-at-a-time drafting. DFlash emits a whole block of draft tokens in a single forward pass using block diffusion and injects the target's hidden states into the draft attention. DSpark extends that with a semi-autoregressive Markov head so each position's logits are biased by the previous token, recovering some left-to-right signal. Both require a draft checkpoint trained for the specific target, and both clamp the draft count to the trained block size.[^9] The direction is clear: the draft is becoming a specialized head, not a second general model.
+
+## What the production numbers show
+
+The 2026 published benchmarks are more useful than launch claims because they include the boring conditions.
+
+PayPal's Commerce Agent runs a fine-tuned Nemotron nano 8B. Across 40 configurations on identical 2xH100 hardware, EAGLE3 at three draft tokens delivered 22 to 49 percent throughput improvement and 18 to 33 percent latency reduction at zero additional hardware cost. Acceptance stayed near 35.5 percent across conditions. At five draft tokens, acceptance dropped to about 25 percent and returns diminished. An LLM-as-judge check found output quality preserved. The headline for a capacity planner: speculative decoding on a single H100 matched or exceeded NVIDIA NIM on two H100s, which is a 50 percent GPU cost reduction.[^8]
+
+Red Hat's gpt-oss-120B study is the one to read for the caveats. On ShareGPT, speculative decoding produced 20.7 percent higher output throughput and 20.3 percent lower median request latency. P95 time to first token fell from 12.3 to 10.0 seconds at concurrency 100. P95 inter-token latency fell from 13.7 to 12.0 milliseconds. Those are serving improvements, not only decode-loop wins. But on MLPerf, where average prompts run about 5,011 tokens against 122 for ShareGPT, the gain compressed to 9.5 percent output throughput at TP=1, because a larger share of total time sits in prefill, where speculation does nothing. At TP=2 the throughput gain rose to 16 percent but P95 time to first token regressed 9.3 percent, because the draft model's compute competed with the target during prefill.[^7]
+
+That last number is the one teams miss. Speculative decoding is not free compute. The draft model consumes GPU cycles that the target could have used for prefill or for other requests. At low concurrency there is idle compute to spend. At high concurrency on a saturated GPU you are taking cycles from paying work.
+
+The vendor numbers bracket the same range. GMI Cloud reports 3.0 to 3.4x decode speedup for EAGLE-3 on Llama-3.3-70B at batch size one on H100 SXM with FP8, with acceptance of 0.80 to 0.88 on coding and instruction-following tasks.[^10] A Hugging Face practitioner benchmark on MT-Bench with SGLang found 1.39x faster time per output token at batch one but 1.70x higher throughput at batch 32, with 40 percent acceptance and 2.4 accepted draft tokens per verification step at six drafts proposed.[^12] Across all of them the pattern holds: latency gains peak at low concurrency, throughput gains can persist or grow at higher concurrency, and prefill-heavy workloads see the least.
+
+## Where the arbitrage dies
+
+Four conditions turn speculative decoding from a win into a tax.
+
+**Prefill dominates.** If most of your wall time is prompt processing, there is no decode loop to accelerate. Long-document RAG, large codebases stuffed into context, and multi-turn agents carrying big histories all sit in this bucket. Red Hat's MLPerf result is the clean demonstration: same technique, same model, gain cut roughly in half because prompts grew 40x.[^7]
+
+**The GPU is already saturated.** Speculative decoding buys tokens with spare compute. At high batch size the batching already amortizes weight reads, so the marginal value of drafting falls while its compute cost stays. The draft model also competes for KV cache memory. On a node already at its memory ceiling, adding a drafter means cutting concurrency or context for the target.
+
+**Acceptance is distribution-sensitive.** Chat template changes, system prompt shifts, temperature changes, and unusual output formats all move acceptance. EAGLE 3.1's attention-drift work exists precisely because acceptance degraded when the deployment looked different from training.[^6] A drafter tuned on ShareGPT-style chat can underperform on your actual traffic. The average acceptance rate hides this, which is why per-position metrics matter.
+
+**You enabled a lossy verifier.** vLLM lists rejection sampling variants including a lossy FLy verification method, with `rejection_sample_method` options for standard, synthetic, block, and fly.[^2] The exactness guarantee belongs to standard rejection sampling. If you select a lossy verifier for extra speed, you have chosen an approximation and should say so in your model card. Teams inherit a flag from a benchmark config and never notice which verifier they got.
+
+There is also a cost that does not show up in throughput charts: the drafter's weights and KV cache. A separate draft model adds its own memory footprint, and its tensor-parallel size has to be set deliberately through `draft_tensor_parallel_size` in vLLM.[^2] On a tight node this is the difference between running the feature and running fewer concurrent requests. Head-based approaches avoid a second full model, but they still add parameters and verification state.
+
+## Instrument the acceptance curve, not the average
+
+The average acceptance rate is a summary that hides the thing you need. Acceptance decays by position: the first draft token is far more likely to be accepted than the fourth. vLLM exposes a per-position vector for exactly this reason, computed as accepted tokens per position divided by the number of drafts.[^4] A flat average of 35 percent can mean 70 percent at position one and 10 percent at position four, or it can mean a uniform 35 percent everywhere. Those two systems need different fixes. The first should keep drafting but shorten the block. The second should question the drafter itself.
+
+The metric definitions are worth pinning down because vendor writeups quote them differently. vLLM's mean acceptance length includes the bonus token: one plus accepted draft tokens divided by speculation steps. The per-request field `draft_acceptance_rate` is accepted draft tokens divided by draft tokens proposed, and the response object sits under `metrics.speculative_decoding`, which the docs mark experimental with a shape that may change.[^3] A vendor quoting 2.4 accepted tokens per verification step may be excluding the bonus token, so its mean acceptance length is 3.4 in vLLM's terms. Getting that convention wrong inflates or deflates a speedup forecast by a full token per step.
+
+The PromQL is short enough for a dashboard. Acceptance rate is the rate of accepted tokens over the rate of draft tokens. Mean acceptance length is one plus the rate of accepted tokens over the rate of drafts. The per-position vector is the rate of accepted tokens at each position over the rate of drafts.[^4] If you already run vLLM with Prometheus, you have the data. The only failure mode is not looking.
+
+Two more signals belong next to acceptance. Draft throughput in tokens per second tells you how much work the drafter does to produce the accepted tokens. Verification overhead shows up as the gap between total step time and target-only step time. The standard serving metrics, P95 inter-token latency, P95 time to first token, and queue wait, tell you whether the improvement reached users or only the decode loop.
+
+One caveat on the win in shared serving. When a single model serves several agents from a fixed slot pool, a faster decode does not only shorten each answer. It returns the slot sooner, so the next queued job starts earlier ([we mapped that slot accounting separately](/field-notes/local-llm-concurrency-slots-2026)). The gain lands in queue wait, which is the metric nobody graphs. That is the shape we run internally, and it is why throughput numbers from batch-32 benchmarks matter more than single-stream latency numbers when agents share a server.
+
+## A sizing and rollout checklist
+
+Start with the workload, not the model. Measure the split between prefill and decode time on your real traffic. If prefill is more than roughly half of total serving time, fix batching and caching first; speculation will not move the number much.
+
+Then measure acceptance on your own prompts. Enable the method in a staging deployment, log acceptance rate and mean acceptance length, and compare against the vendor's claimed conditions. A drafter that hit 0.88 acceptance on coding benchmarks may land at 0.5 on your support transcripts. That is not a failure of the technique; it is a mismatch between the drafter's training distribution and your traffic.
+
+Sweep the draft count. Two, three, and four are the usual candidates. Pick the count with the best throughput at your operating concurrency, not the best mean acceptance length. Red Hat's data shows those can disagree: four drafts had the highest mean acceptance length and the lowest throughput.[^7]
+
+Check the memory bill. A separate draft model needs its own weights and KV cache. Head-based drafters need less, but not zero. On a node near its memory ceiling, decide up front whether you are buying latency with headroom or with concurrency.
+
+Keep the exactness check. Run a sample of prompts through the speculative and baseline paths and compare outputs at the distribution level. If you enabled a lossy verifier, document it and treat the comparison as a quality gate, not a formality.
+
+Plan the rollback. A configuration flag that disables speculation without redeploying the model server is the difference between a tuning experiment and an incident. vLLM's speculative config is per-server, so a second deployment with the flag off is a cheap safety net.
+
+Budget the drafter like a real component. A draft head at 2 to 5 percent of target size sounds negligible until you run four replicas per node.[^11] The memory and the compute both show up on the bill.
+
+![A decision tree for speculative decoding: skip it when prefill dominates or the GPU is saturated, question the drafter when acceptance is low on real traffic, and sweep the draft count when the workload is decode-heavy and acceptance holds.](</diagrams/speculative-decoding-draft-verify-2026/4-decision-tree.png>)
+
+## The number to remember
+
+Speculative decoding is a bandwidth arbitrage with an acceptance-rate denominator. The draft model is cheap and the verifier is exact, but the ratio between them decides the outcome. At 0.8 acceptance and three drafts, a step returns 3.4 tokens and the technique earns its keep. At 0.25 acceptance and five drafts, it returns 2.25 tokens while paying verification and drafter overhead, and the win evaporates.
+
+The teams that get value from this are not the ones that turn on the flag. They are the ones that log acceptance by position, sweep the draft count against their own concurrency, and keep a baseline deployment to compare against. The rest inherit a benchmark number that described someone else's traffic.
+
+[^1]: Leviathan, Kalman, and Matias, "Fast Inference from Transformers via Speculative Decoding," arXiv 2211.17192. [arxiv.org/abs/2211.17192](https://arxiv.org/abs/2211.17192)
+[^2]: vLLM documentation, "Speculative Decoding." [docs.vllm.ai](https://docs.vllm.ai/en/latest/features/speculative_decoding/)
+[^3]: vLLM documentation, "Per-Request Acceptance Metrics." [docs.vllm.ai](https://docs.vllm.ai/en/latest/features/speculative_decoding/acceptance_metrics/)
+[^4]: vLLM API documentation v0.18.2, "vllm.v1.spec_decode.metrics." [docs.vllm.ai](https://docs.vllm.ai/en/v0.18.2/api/vllm/v1/spec_decode/metrics/)
+[^5]: Li et al., "EAGLE-3: Scaling up Inference Acceleration of Large Language Models via Training-Time Test," arXiv 2503.01840. [arxiv.org/abs/2503.01840](https://arxiv.org/abs/2503.01840)
+[^6]: vLLM blog, "EAGLE 3.1: Advancing Speculative Decoding Through Collaboration Between the EAGLE Team, vLLM, and TorchSpec," May 26, 2026. [vllm.ai](https://vllm.ai/blog/2026-05-26-eagle-3-1)
+[^7]: Harshith U. et al., "Performance improvements with speculative decoding in vLLM for gpt-oss," Red Hat Developer, April 16, 2026. [developers.redhat.com](https://developers.redhat.com/articles/2026/04/16/performance-improvements-speculative-decoding-vllm-gpt-oss)
+[^8]: Qin et al., "Accelerating PayPal's Commerce Agent with Speculative Decoding: An Empirical Study on EAGLE3 with Fine-Tuned Nemotron Models," arXiv 2604.19767. [arxiv.org/abs/2604.19767](https://arxiv.org/abs/2604.19767)
+[^9]: llama.cpp documentation, "Speculative Decoding." [github.com/ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md)
+[^10]: GMI Cloud, "Speculative Decoding for Faster LLM Inference." [gmicloud.ai](https://www.gmicloud.ai/en/blog/speculative-decoding-for-llm-inference-how-draft-models-cut-latency-without-quality-loss)
+[^11]: Google Cloud, "From research to production: accelerate OSS LLM with EAGLE-3 on Vertex." [docs.cloud.google.com](https://docs.cloud.google.com/gemini-enterprise-agent-platform/blog/posts/from-research-to-production-accelerate-oss-llm-with-eagle-3-on-vertex)
+[^12]: Hugging Face blog, "Speculative Decoding in Practice: How EAGLE3 Makes LLMs Faster." [huggingface.co](https://huggingface.co/blog/lujangusface/tw-eagle3-gpu)
+[^13]: NVIDIA, "H100 GPU" product specifications (3.35 TB/s memory bandwidth, 1,979 TFLOPS dense FP8, 3,958 with sparsity). [nvidia.com](https://www.nvidia.com/en-us/data-center/h100/)
