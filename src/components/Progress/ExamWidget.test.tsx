@@ -32,6 +32,8 @@ const PROPS = {
   questions: QUESTIONS,
   seriesSlug: "test-series",
   seriesName: "Test Series",
+  // Certification kind keeps the widget's pre-B3 wording (string assertions below).
+  kind: "certification-prep" as const,
 };
 
 function mockSubmitResponse() {

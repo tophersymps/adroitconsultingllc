@@ -189,7 +189,7 @@ export default async function CertificatePage({ params }: Props) {
           <main id="main" className="flex-1">
             <div className="max-w-[720px] mx-auto px-6 pt-10 pb-24">
               {completionHead}
-              <GuestCTA tier="certificate" ariaLabel="Completion record locked" />
+              <GuestCTA tier="certificate" ariaLabel="Completion record locked" kind={s.examKind} />
             </div>
           </main>
           <Footer />
@@ -311,7 +311,7 @@ export default async function CertificatePage({ params }: Props) {
         <main id="main" className="flex-1">
           <div className="max-w-[720px] mx-auto px-6 pt-10 pb-24">
             {pageHead}
-            <GuestCTA tier="certificate" ariaLabel="Certificate locked" />
+            <GuestCTA tier="certificate" ariaLabel="Certificate locked" kind={s.examKind} />
           </div>
         </main>
         <Footer />
