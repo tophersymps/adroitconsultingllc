@@ -12,6 +12,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
     "gradient": "from-amber to-yellow-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "what-is-an-agent",
@@ -1427,6 +1428,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Salesforce System Architect Primer",
     "description": "A practical deep dive into Flow design, Apex patterns, and platform architecture for teams scaling on Salesforce.",
     "gradient": "from-sky to-blue-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "what-salesforce-system-architect-does",
@@ -2795,6 +2797,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "AI Adoption",
     "description": "The Level 3 capstone of the AI at Work arc, for the person who owns AI in an organization. Lead, govern, and scale a company's AI use: adoption metrics, change management, policy, data safety, vendor evaluation, security and privacy ownership, budgeting, ROI, and the ongoing program. Vendor-agnostic for a non-technical owner.",
     "gradient": "from-emerald-500 to-purple-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "the-adoption-owners-job-from-rollout-to-running-program",
@@ -3361,6 +3364,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "AI Power User",
     "description": "The Level 2 follow-on to AI at Work for professionals who use AI daily and want to build and own their own automations: designing repeatable workflows, making them reliable, and sustaining them. Vendor-agnostic and buildable without code.",
     "gradient": "from-cyan-500 to-purple-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "from-user-to-power-user-owning-your-workflow",
@@ -3887,6 +3891,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Platform Data Architect Certification",
     "description": "A one-stop prep course for the Salesforce Certified Platform Data Architect exam. All 21 official objectives split into 42 focused lessons, with data-modeling design patterns, LDV and MDM trade-offs, exam traps, and practice questions.",
     "gradient": "from-teal to-cyan-600",
+    "examKind": "certification-prep",
     "lessons": [
       {
         "slug": "day-01-dm-1a-data-modeling-fundamentals-objects-fields-relation",
@@ -4691,6 +4696,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Platform Sharing and Visibility Architect Certification",
     "description": "A one-stop prep course for the Salesforce Certified Platform Sharing and Visibility Architect exam. All 18 official objectives split into 36 focused lessons, with config walkthroughs, sharing-model trade-offs, exam traps, and practice questions.",
     "gradient": "from-violet to-purple-600",
+    "examKind": "certification-prep",
     "lessons": [
       {
         "slug": "day-01-p-1a-object-permissions-crud-system-vs-object-profiles",
@@ -5363,6 +5369,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Salesforce OmniStudio Consultant Certification",
     "description": "A one-stop prep course for the Salesforce Certified OmniStudio Consultant exam. All 31 official objectives split into 62 focused lessons across 6 domains, with config walkthroughs, architect-tier design trade-offs, exam traps, and practice questions.",
     "gradient": "from-sky to-indigo-600",
+    "examKind": "certification-prep",
     "lessons": [
       {
         "slug": "day-01-r-1a-omnistudio-solution-overview-the-omnistudio-toolse",
@@ -6428,6 +6435,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Hermes Agent Consultant",
     "description": "A path to becoming an agent-implementation consultant: scoping, implementation craft, delivery practice, and the business of consulting. Platform-agnostic skills with Hermes Agent as the working example.",
     "gradient": "from-teal to-emerald-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "what-an-agent-implementation-consultant-does",
@@ -6918,6 +6926,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "OmniStudio Developer Certification",
     "description": "A deep dive for the Salesforce Certified OmniStudio Developer exam. One official exam-guide requirement per day, with config walkthroughs, exam traps, and practice questions.",
     "gradient": "from-red to-rose-600",
+    "examKind": "certification-prep",
     "lessons": [
       {
         "slug": "day-01-f1-omnistudio-solution-and-industry-use-cases",
@@ -7597,6 +7606,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Hermes Agent Consultant · Intermediate",
     "description": "Level 2 of the Hermes Consultant track: Applied Delivery. For the working practitioner — running full engagements, complex client environments, multi-week estimation, team delivery, incident discipline, pricing, and case studies. Builds on Level 1.",
     "gradient": "from-teal to-emerald-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "running-a-full-engagement",
@@ -8008,6 +8018,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "AI at Work",
     "description": "A vendor-agnostic primer for using AI in day-to-day work: foundations, prompting, productivity, small automations, and team adoption. Company-wide training that works for any team and any AI tool.",
     "gradient": "from-fuchsia to-purple-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "what-ai-actually-is",
@@ -8502,6 +8513,7 @@ export const learnSeries: LearningSeries[] = [
     "name": "Hermes Agent Consultant · Advanced",
     "description": "Level 3 of the Hermes Consultant track: Practice & Scale. For the principal — building a consulting practice, org-scale architecture, delivery operations and margins, value-based pricing, hiring, and a go-to-market plan. Builds on Levels 1 and 2.",
     "gradient": "from-teal to-emerald-600",
+    "examKind": "course-completion",
     "lessons": [
       {
         "slug": "from-consultant-to-principal",

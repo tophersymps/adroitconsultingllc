@@ -53,6 +53,7 @@ function series(slug: string, name: string): LearningSeries {
     slug,
     name,
     description: `${name} description`,
+    examKind: "course-completion",
     gradient: "from-navy to-navy-light",
     lessons: [],
     totalLessons: 12,

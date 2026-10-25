@@ -14,8 +14,11 @@
 const fs = require("fs");
 const path = require("path");
 
-const LEARN_DIR = path.join(__dirname, "..", "content", "learn");
-const OUT_PATH = path.join(__dirname, "..", "src", "data", "learn.ts");
+const LEARN_DIR =
+  process.env.LEARN_DIR || path.join(__dirname, "..", "content", "learn");
+const OUT_PATH =
+  process.env.LEARN_OUT ||
+  path.join(__dirname, "..", "src", "data", "learn.ts");
 
 // Fallback identity for the two known tracks (ADR-003 / data contract).
 // Adding a new series requires NO code change — drop a folder (+ optional series.json).
@@ -109,6 +112,39 @@ function readSeriesJson(dir) {
 }
 
 /**
+ * The only two exam kinds. `course-completion` = Adroit-authored course whose
+ * exam earns a course completion certificate; `certification-prep` = prep for
+ * an official vendor certification exam.
+ *
+ * The kind is authored per series in `series.json` from CONTENT evidence (does
+ * the exam mirror an official vendor blueprint?). It is deliberately NOT
+ * derived from `group` — that label is display-only and has been stale for
+ * agentic-ai / salesforce-architect. See deliverables/learn-ux-exam-naming/.
+ */
+const EXAM_KINDS = ["course-completion", "certification-prep"];
+
+/**
+ * Read + validate a series' `examKind`. Throws when the field is absent or not
+ * one of EXAM_KINDS, so a new series cannot ship without classifying its exam.
+ */
+function validateExamKind(cfg, seriesSlug) {
+  const kind = cfg && cfg.examKind;
+  if (kind === undefined || kind === null || kind === "") {
+    throw new Error(
+      `[examKind] content/learn/${seriesSlug}/series.json is missing "examKind". ` +
+        `Add "examKind": one of ${EXAM_KINDS.map((k) => `"${k}"`).join(" | ")}.`,
+    );
+  }
+  if (typeof kind !== "string" || !EXAM_KINDS.includes(kind)) {
+    throw new Error(
+      `[examKind] content/learn/${seriesSlug}/series.json has invalid "examKind": ` +
+        `${JSON.stringify(kind)}. Must be one of ${EXAM_KINDS.map((k) => `"${k}"`).join(" | ")}.`,
+    );
+  }
+  return kind;
+}
+
+/**
  * B-04 lint guard: fail the build if any lesson-count claim in a series
  * description or lesson excerpt exceeds the number of PUBLISHED lessons.
  *
@@ -160,6 +196,7 @@ function assertNoLessonCountOverpromise(series) {
 function buildSeries(seriesSlug, dir) {
   const cfg = readSeriesJson(dir) || {};
   const known = KNOWN_SERIES[seriesSlug] || {};
+  const examKind = validateExamKind(cfg, seriesSlug);
 
   const lessons = [];
   let files = [];
@@ -237,6 +274,10 @@ function buildSeries(seriesSlug, dir) {
     // columns, migration 009, ADR-206/207). series.json is display-only:
     // name/description/gradient. The Learn hub buckets from DB rows.
     gradient: cfg.gradient || known.gradient || FALLBACK_GRADIENT,
+    // Exam kind — validated above, so it is always one of the two ExamKind
+    // values (scripts/build-learn.js throws otherwise). Display-only in
+    // series.json; the label copy lives in src/lib/exam-labels.ts (B2).
+    examKind,
     lessons: sorted,
     totalLessons,
     curriculumLessons,
@@ -299,5 +340,9 @@ export const learnLessons: LearnLesson[] = ${JSON.stringify(flat, null, 2)};
   console.log(`Generated learn.ts: ${series.length} series (${counts}) — ${flat.length} lessons total`);
 }
 
-build();
+module.exports = { build, buildSeries, validateExamKind, EXAM_KINDS };
+
+// Only run when invoked as a script (`node scripts/build-learn.js`), so tests
+// can require() this module to exercise the validators without a full build.
+if (require.main === module) build();
 

@@ -48,6 +48,17 @@ export interface LearnLesson {
   status?: "draft" | "published";
 }
 
+/**
+ * What kind of exam a series ends in. Decided per series from content evidence
+ * (does the exam mirror an official vendor blueprint?), never inferred from the
+ * series' catalog `group` label — see `deliverables/learn-ux-exam-naming/`.
+ *
+ * - `course-completion`   — Adroit-authored course; the exam earns a course
+ *                           completion certificate.
+ * - `certification-prep`  — prep for an official vendor certification exam.
+ */
+export type ExamKind = "course-completion" | "certification-prep";
+
 /** A learning track — one directory under content/learn/ */
 export interface LearningSeries {
   /** Series slug — equals content/learn/<series>/ dir name */
@@ -56,6 +67,12 @@ export interface LearningSeries {
   name: string;
   /** One-line description from series.json; fallback: "" */
   description: string;
+  /**
+   * Exam kind from `series.json` — REQUIRED. `scripts/build-learn.js` fails the
+   * build when it is missing or not one of the two `ExamKind` values, so every
+   * generated series carries it and consumers can rely on it being present.
+   */
+  examKind: ExamKind;
   /** Tailwind gradient classes for card headers, e.g. "from-sky to-blue-600"; fallback: "from-navy to-navy-light" */
   gradient: string;
   /** Lessons sorted NEWEST FIRST (date desc) — enforced by build-learn.js AND lib/learn.ts */
