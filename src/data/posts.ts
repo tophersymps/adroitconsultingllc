@@ -2,6 +2,51 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "motion-design-system-2026",
+    "title": "Motion Belongs in the Design System",
+    "excerpt": "Most products ship animation without a motion system. Timing, easing, reduced motion, and the rendering budget belong in tokens, not in every component.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "October 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "Accessibility",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/motion-design-system-2026.webp",
+    "ogImage": "/banners/motion-design-system-2026-og.jpg",
+    "status": "published"
+  },
+  {
+    "slug": "percent-complete-status-reporting-2026",
+    "title": "Why Ninety Percent Done Means Half the Work Is Left",
+    "excerpt": "Percent complete is the most common progress number in project management, and the one NASA calls least desirable. What to report instead.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Status Reporting",
+      "Earned Value",
+      "Governance"
+    ],
+    "bannerImage": "/banners/percent-complete-status-reporting-2026.webp",
+    "ogImage": "/banners/percent-complete-status-reporting-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "build-once-deploy-digest-2026",
     "title": "Your Staging Passed. Production Ran Something Else.",
     "excerpt": "If production rebuilds the commit, you promoted a hash and a hope. Deploy the digest, keep the tag for humans, and make the registry enforce it.",
@@ -851,6 +896,8 @@ export const posts: BlogPost[] = [
       "CDP",
       "Strategy"
     ],
+    "bannerImage": "/banners/salesforce-data-cloud-strategy-guide.webp",
+    "ogImage": "/banners/salesforce-data-cloud-strategy-guide-og.jpg",
     "status": "published"
   },
   {
@@ -1087,6 +1134,8 @@ export const posts: BlogPost[] = [
       "Sales",
       "Generative AI"
     ],
+    "bannerImage": "/banners/einstein-gpt-practical-use-cases-for-sales-teams.webp",
+    "ogImage": "/banners/einstein-gpt-practical-use-cases-for-sales-teams-og.jpg",
     "status": "published"
   },
   {

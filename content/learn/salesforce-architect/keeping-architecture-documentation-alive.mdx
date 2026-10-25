@@ -1,0 +1,245 @@
+---
+title: "Lesson 79: Keeping Architecture Documentation Alive: Living Docs and ADRs"
+slug: keeping-architecture-documentation-alive
+series: "salesforce-architect"
+lesson: 79
+excerpt: "Architecture documents rarely die because nobody wrote them. They die because the writing happened once, in a wiki, and the system kept changing. This lesson covers the decision record format that survives its author, the review loop that keeps a decision log honest, and the arithmetic of deciding how often to revisit old choices."
+date: "October 25, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Salesforce, Architecture, Documentation, ADR, Governance]
+---
+
+# Lesson 79: Keeping Architecture Documentation Alive: Living Docs and ADRs
+
+A Salesforce program I reviewed last year had a 74 page solution design document. It was excellent on the day it was signed off. It described the data model, the integration topology, the sharing model, and the deployment process in careful prose. Fourteen months later, three of its five integrations had been replaced, the sharing model had been rebuilt around a new role hierarchy, and the document still said the old things with total confidence.
+
+Nobody was lazy. The document rotted because it was built as one large artifact with no owner and no trigger to update it. The team changed one decision at a time. The document changed only when someone remembered it existed, which was roughly never.
+
+This is the normal failure mode of architecture documentation, and it is structural rather than personal. A design document describes a moment. A system keeps producing new moments. Unless the documentation is organized around the unit that actually changes, which is a single decision, it drifts out of date faster than anyone can maintain it.
+
+This lesson covers the practice that fixes this: architecture decision records kept as small, versioned, individually owned documents, reviewed on a schedule and linked from the larger design document that describes the system as a whole. There is a worked example with real arithmetic, a review model you can run with one architect, and a set of exercises for your own program.
+
+## Define the terms first
+
+Documentation arguments go sideways when people use the same word for different artifacts. Start with definitions you can defend.
+
+- **Architectural decision**: a design choice that addresses a functional or non-functional requirement and has a measurable effect on the structure or quality of the system. Choosing Platform Events over polling for an integration is an architectural decision. Renaming a custom field is not. [^9]
+- **Architecturally significant requirement (ASR)**: a requirement whose satisfaction measurably changes the architecture. A target of 99.95 percent availability for order processing is an ASR. "The page should feel fast" is not. [^9]
+- **Architecture decision record (ADR)**: a short document that captures one architectural decision, the forces acting on it, the choice made, and the consequences that follow. It records why, not just what. [^2]
+- **Decision log**: the collection of ADRs for a system, read as a history. The log answers "what have we committed to, and in what order" without requiring anyone to read every record end to end. [^2]
+- **Status**: the lifecycle position of a record. Proposed means under review. Accepted means the team committed. Superseded means a later record replaced it. Deprecated means it no longer applies but nothing replaced it. [^2]
+- **Superseded versus deprecated**: a superseded record points at its replacement. A deprecated record has no replacement and should say why the decision stopped applying. Mixing the two destroys the value of the log, because readers can no longer tell whether a current answer exists.
+- **ADR owner**: the named person who maintains the record, answers questions about it, and approves changes before acceptance. Ownership is a role, not a courtesy. [^4]
+- **Revisit trigger**: the condition that tells a future team the decision should be re-examined. A volume threshold, a date, a vendor change, or a cost ceiling. Without a trigger, every decision is reviewed forever or never. [^5]
+- **Living documentation**: documentation that is maintained through the same workflow as the system it describes, so that a change to the system produces a change to the document in the same review. [^8]
+- **Docs as code**: the practice of writing documentation with the same tools as code, including version control, plain text markup, code review, and automated checks. [^8]
+- **Decision debt**: decisions that were made and acted on but never recorded. Like technical debt, it accrues interest in the form of repeated debates and risky reversals.
+- **ADR theater**: writing records after the fact to satisfy a process, with the context and alternatives stripped out. The document exists, the knowledge does not.
+
+## Why the large design document fails after launch
+
+Michael Nygard made the argument in 2011 and it has not aged. Agile projects do not make all their decisions at once, and they do not make them at the beginning. Architecture emerges across the life of the project. A document that assumes a single decision point will be wrong almost immediately. [^1]
+
+His second observation is the one that matters for maintenance: large documents are never kept up to date, while small modular documents at least have a chance. Large documents are also rarely read. Most developers have seen a specification larger in bytes than the source code it describes, and most of them did not read it. [^1]
+
+The third observation is about motivation. The hardest thing to track over the life of a project is why a decision was made. A new person encountering a strange design has two bad options: accept it without understanding, or change it without understanding. The first accumulates fear and the project becomes afraid to move. The second can damage a system by reversing a decision that was protecting a requirement nobody remembers. [^1]
+
+Both failures are expensive in the same currency: time spent rediscovering context that existed once and was thrown away. An ADR is a cheap insurance policy against that cost. It does not prevent bad decisions. It prevents a team from losing the reasoning behind a decision, which is the part that takes longest to reconstruct.
+
+The practical distinction is between a snapshot and a ledger. A solution design document is a snapshot of the system at a point in time. It should exist, and it should be accurate when written. An ADR is a ledger entry for one decision. The ledger accumulates and stays readable because each entry is small. When the two are linked, the design document tells you what the system looks like now, and the ledger tells you how it got that way.
+
+![Two panels comparing a single large design document that decays after launch with a stack of small decision records that stays current. The document describes one moment, the ledger accumulates.](</diagrams/keeping-architecture-documentation-alive/1-snapshot-vs-ledger.png>)
+
+## The five fields that make an ADR useful
+
+Nygard's format has five parts, and each one earns its place. [^1] AWS Prescriptive Guidance adds alternatives considered and a compliance or notes section to the minimum set. [^2] [^3] A workable template looks like this:
+
+```text
+ADR-014: Use Platform Events for order-to-inventory synchronization
+
+Status: Accepted
+Date: 2026-03-04
+Owner: Integration architect, Commerce platform
+
+Context
+What forces are at play. Business drivers, volumes, constraints, and the
+options considered. Neutral language. Facts, not advocacy.
+
+Decision
+What we will do, in active voice. "We use..." or "We will...". No "should".
+
+Consequences
+What changes as a result. Positive, negative, and neutral. Include the
+cost we accepted and the risk we took on.
+
+Revisit trigger
+The condition that reopens this decision. A threshold, date, or event.
+
+Compliance and notes
+How the decision is enforced, and who owns the change.
+```
+
+Three rules make the difference between a useful record and a filing exercise.
+
+**Write the decision in the imperative.** "We use Platform Events" is a decision. "We should probably consider events" is a meeting note. AWS guidance is explicit that the decision should state in imperative language what the team has decided to adopt, and that hedging words such as "should" undermine it. [^4]
+
+**Name the alternatives and why they lost.** This is the field most teams skip, and it is the field future readers need most. A record that says "we chose events" invites a future architect to suggest events as if it were a new idea. A record that says "we chose events over direct callouts because direct callouts consumed 80 percent of the daily API allocation at peak, and over nightly batch because inventory staleness beyond 15 minutes caused oversell" closes the loop. [^5]
+
+**List consequences honestly, including the bad ones.** An ADR that lists only benefits is marketing. The consequences section should name the new operational burden, the latency the business accepted, the technical debt created, and the conditions under which the decision will be revisited. [^2]
+
+Keep each record to one or two pages. Nygard's standard is that the document should read as a conversation with a future developer, in full sentences and paragraphs, with bullets allowed only for visual style rather than as an excuse for sentence fragments. [^1]
+
+## Worked example: ADR-014, order-to-inventory synchronization
+
+Consider a commerce program on Salesforce with an ERP system holding inventory. Every order creates a reservation in the ERP and updates a status field back in Salesforce. The team expects 40,000 orders on a peak day. Each order requires two ERP interactions, one to reserve stock and one to confirm the result.
+
+The first proposal is a direct callout from an Apex trigger. The arithmetic is simple and uncomfortable. Forty thousand orders times two calls equals 80,000 callouts in a 24 hour period. Against a 100,000 daily API request allocation, that is 80 percent of the limit consumed by one integration on an ordinary peak day. [^5] The remaining 20,000 calls have to absorb retries, backfills, support tooling, marketing sync, and every other integration in the org. At 10,000 orders of headroom, a single bad retry storm exhausts the allocation and takes down unrelated integrations. That is not a scaling risk in the abstract. It is a shared failure mode created by one design choice.
+
+![A bar chart showing 80,000 of a 100,000 daily API allocation consumed by direct order callouts, leaving only 20,000 calls for retries, backfills, and every other integration.](</diagrams/keeping-architecture-documentation-alive/4-api-allocation.png>)
+
+The second proposal is a nightly batch. It removes the API pressure, but it makes inventory stale by up to 24 hours. For a commerce business, stale inventory produces oversell, cancellations, and support cost. The business rejects it for good reason.
+
+The third proposal is Platform Events. The order transaction publishes an event and commits without waiting for the ERP. A subscriber consumes events and calls the ERP asynchronously, with retry and a dead letter path. The decision record captures the trade: near real time behavior, decoupling from ERP availability, and a replayable event history, in exchange for eventual consistency and a new operational surface that someone must monitor. [^2]
+
+Here is the decision as it would appear in the log, condensed:
+
+```text
+ADR-014: Use Platform Events for order-to-inventory synchronization
+
+Status: Accepted
+Date: 2026-03-04
+Owner: Integration architect, Commerce platform
+
+Context
+Peak volume of 40,000 orders per day requires two ERP interactions per
+order, or 80,000 API calls against a 100,000 daily allocation. Direct
+callouts from the order trigger would consume 80 percent of the allocation
+and couple order commit to ERP availability. Nightly batch removes the API
+pressure but allows up to 24 hours of inventory staleness, which the
+business rejects due to oversell risk. A middleware subscriber with retry
+and dead letter handling is already operated by the integration team.
+
+Decision
+We publish order events to Platform Events and let the integration
+subscriber call the ERP asynchronously. The order transaction does not
+wait for ERP confirmation.
+
+Consequences
+Positive: order commit no longer depends on ERP availability; retries and
+replays are handled outside the user transaction; the event history
+supports reconciliation.
+Negative: inventory is eventually consistent, with a target window of two
+minutes at peak; the team must monitor consumer lag and dead letter
+volume; a failed subscriber delays reservation without blocking the order.
+
+Revisit trigger
+Review if peak volume exceeds 60,000 orders per day, if consumer lag
+exceeds five minutes on three consecutive days, or if the ERP vendor
+changes its rate limit or contract terms.
+```
+
+The revisit trigger is the part that keeps the record alive. It converts a static document into an instrument that reports when its own assumptions have expired. Without it, the decision stays "accepted" forever, including after the conditions that justified it have vanished.
+
+## Status is a lifecycle, not a checkbox
+
+An ADR is not a form you fill in once. It moves through states, and the rules governing those states are what make the log trustworthy. [^2]
+
+A record starts as **Proposed** and is reviewed at least once before acceptance. [^4] Review is where the alternatives get pressure tested. If the reviewer cannot find the rejected options and the reason each lost, the record is not ready.
+
+When the team accepts a record, the owner records the timestamp, version, and stakeholders, and the status changes to **Accepted**. [^2] From that point the record is immutable. This is the rule teams most often break, and breaking it destroys the log's value.
+
+Immutability means you do not edit an accepted ADR when circumstances change. You write a new ADR that supersedes it. The new record explains the new forces and the new decision. The old record stays in place with its status changed to **Superseded** and a pointer to its replacement. [^2] If a decision stops applying without a replacement, mark it **Deprecated** and say why.
+
+The reason is historical integrity. An auditor asking "why did the system handle consent this way in 2024" needs the record as it stood in 2024, not a version rewritten in 2026 to match current practice. A decision log that gets edited to stay current is no longer a log. It is a wiki with extra steps, and it loses the one property that made it valuable: the ability to answer what the team believed at a specific time.
+
+![A state diagram showing Proposed moving to Accepted, then either to Superseded when a new record replaces it or to Deprecated when it stops applying without a replacement.](</diagrams/keeping-architecture-documentation-alive/2-adr-lifecycle.png>)
+
+Every record should carry a changelog with the change date and the person responsible. [^4] Before acceptance, the owner approves changes. After acceptance, changes happen only through a superseding record. Two fields, a date and a name, are enough to make the history auditable.
+
+## Living docs: what "alive" actually means
+
+"Living documentation" is often used to mean "documentation we promise to update." That promise fails for the same reason New Year's resolutions fail. A better definition is mechanical: documentation is alive when a change to the system cannot merge without a corresponding change to the document, because both travel through the same review.
+
+That is the docs as code model. Documentation is written in plain text markup and lives in version control. It goes through the same issue tracker, the same review, and the same automated checks as code. Write the Docs describes the benefits in practical terms: writers integrate with the delivery team, developers produce the first draft while the work is fresh, and a merge can be blocked when a feature arrives without its documentation. [^8]
+
+![Seven ADR fields on the left and the delivery flow on the right, where a pull request asks for the ADR number and reviewers read the alternatives and consequences.](</diagrams/keeping-architecture-documentation-alive/3-fields-and-gate.png>)
+
+On a Salesforce program this translates into specific mechanics:
+
+1. **Decisions live beside the metadata.** Put the decision log in the same repository as the source-tracked metadata, in a directory such as `docs/decisions`. A decision that constrains deployment belongs near the deployment scripts, not in a separate tool that nobody opens during a release.
+2. **The pull request carries the record.** For architecturally significant changes, the template asks for the ADR number. A reviewer can reject a change that alters the integration topology without a record explaining why. This is the merge gate that makes the practice real. [^8]
+3. **The index is generated, not hand maintained.** A short `README.md` listing ADR number, title, status, and date gives readers the four page summary that makes a 96 record log usable. Generate it from the record headers so it cannot drift.
+4. **Every record names a revisit trigger.** A time based trigger (review in 12 months) or a condition based trigger (volume threshold, vendor change). The trigger is what turns a passive archive into an active instrument.
+
+Salesforce's Well-Architected guidance treats this as a pattern rather than an option. Significant architectural decisions should be documented in ADRs stored in version control, capturing context including business drivers and technical constraints, the decision itself, the alternatives considered and why they were rejected, and consequences including trade-offs, technical debt, and revisit triggers. The matching anti-pattern is "undocumented decisions": choices made in meetings without capturing context, rationale, alternatives, and consequences. [^5]
+
+The same guidance shows up in specific pillars. For reliability, availability targets should be recorded in an ADR with the business downtime impact analysis that produced them, so that a 99 percent target for internal batch reporting and a 99.95 percent target for revenue critical order processing can be defended rather than asserted. [^7] For fairness, Flow decision logic and the fairness considerations behind consequential automation should be documented in decision records, because hidden logic cannot be reviewed. [^6] These are not separate documentation programs. They are the same log, used by different reviewers for different questions.
+
+## The arithmetic of keeping a log current
+
+The objection to decision logs is always maintenance cost. The objection is reasonable, and the arithmetic usually answers it.
+
+Take a program that produced 96 ADRs over 18 months. A full manual audit at 25 minutes per record costs 2,400 minutes, or 40 hours. Doing that every quarter costs 160 hours a year. No single architect has that budget, which is why full audits do not happen and the log drifts.
+
+Now stagger it. Review every record once a year, spread across 48 working weeks. That is two records per week at 25 minutes each, or 2,400 minutes across the year, which is 40 hours. Add trigger based reviews: suppose 30 percent of records have a condition that fired during the year, so 29 records at 20 minutes each, roughly 9.7 hours. New record writing at 45 minutes each, four per month, is another 36 hours. The total is around 86 hours a year for a log covering 96 decisions, a little over half the 160 hours a quarterly audit demands, and it arrives in 50 minute slices instead of a five day block nobody schedules. [^2]
+
+Compare that to the cost of one avoidable incident caused by an unknown decision. Six people in a war room for four hours is 24 person hours before any customer impact is counted. At 86 hours, the log pays for itself once it prevents about four of those in a year, and that is before the customer impact, the rework, or the second incident caused by the same missing record. The arithmetic does not require optimistic assumptions. It requires only that decisions be written small enough to review and owned by someone who will notice when a trigger fires.
+
+![Three bars drawn to the same scale: a full quarterly audit of 96 decisions costs 160 hours a year, while staggered reviews plus trigger based reviews plus new record writing come to around 86 hours, and the 24 person-hours of one avoidable incident are shown for reference.](</diagrams/keeping-architecture-documentation-alive/5-review-cost.png>)
+
+There is a second number worth tracking: the ratio of decisions made to decisions recorded. Pull the decision list from a quarter of architecture meeting notes. If 31 decisions were made and 9 appear in the log, 22 decisions are invisible, which is 71 percent decision debt. That ratio is a better health metric than document count, because it measures whether the practice is actually being used or merely provisioned.
+
+## The failure modes that kill documentation programs
+
+Most documentation programs fail in predictable ways. Recognizing the pattern is more useful than adding process.
+
+- **Undocumented decisions.** The Salesforce anti-pattern. The decision happens in a meeting, the meeting ends, and the reasoning leaves with the attendees. [^5] The fix is a merge gate and an owner, not a reminder email.
+- **ADR theater.** Records written after approval to satisfy a checklist, with the alternatives and the disagreement removed. The document exists and the knowledge does not. The fix is to require the record before the decision is final, while the alternatives are still live.
+- **The giant ADR.** Four pages of background and a decision buried in section six. The fix is one or two pages and a title that states the decision. [^1]
+- **No owner.** A record with no named person is nobody's job. When the trigger fires, nothing happens. The fix is an owner field that is enforced at review. [^4]
+- **The wiki graveyard.** Records stored in a tool that is separate from the code, not linked from the design document, and not searched during reviews. The fix is storage in version control plus an index. [^5]
+- **Retroactive editing.** An accepted record rewritten to match current reality. The fix is a new record that supersedes the old one. [^2]
+- **Recording trivia.** Twenty ADRs about field naming and none about the integration topology. The fix is a scope test: does this decision affect structure, non-functional requirements, dependencies, interfaces, or construction techniques? If not, it does not need a record. [^2]
+- **No revisit trigger.** Every decision stays accepted forever, including the ones whose assumptions expired two years ago. The fix is a mandatory trigger field. [^5]
+- **The ADR as design document.** A log of 96 decisions cannot replace a document that explains the system as a whole. The fix is both, linked.
+
+The pattern behind all of these is the same: the documentation process was designed for the convenience of the writer rather than the needs of the reader six months later. An ADR that takes 45 minutes to write and 4 minutes to read is a good trade. A 74 page document that takes three weeks to write and is never read is not.
+
+## Put it in the design document
+
+The design document does not disappear in this model. It changes job. The solution design document remains the snapshot that explains the system as a whole: the data model, the integration topology, the sharing model, the deployment process. It gains a Decisions section that lists ADR identifiers and statuses instead of restating the reasoning.
+
+That split keeps each artifact doing what it is good at. The design document is read once by people who need the whole picture. The decision records are read selectively, by people asking why a specific choice was made. When a decision changes, the ADR ledger gets a new entry and the design document updates the affected section. The ledger carries the history; the document carries the current state.
+
+The merge gate closes the loop. A pull request that changes an integration, a sharing rule, or an automation pattern includes an ADR number or explains why no record is needed. Reviewers check the record, not just the code. The decision log becomes a byproduct of delivery rather than a separate documentation project, which is the only version of this practice that survives a busy quarter.
+
+## Try it
+
+1. Pick one decision your team made in the last 90 days that a new hire would find puzzling. Write the Context section in neutral language, naming at least two forces in tension. If you cannot name the tension, you may be looking at a decision that was never really made. *(Answer: a useful Context names the forces and the options considered. "We chose X because it was better" is a conclusion, not a context. [^2])*
+2. Write the Decision section in active voice starting with "We use" or "We will". Remove every "should", "could", and "might". *(Answer: hedging language signals that the decision is not actually settled. If the sentence needs "should", the record is still Proposed. [^4])*
+3. Take the ADR you just drafted and list three consequences: one positive, one negative, one neutral. Name the technical debt and the revisit trigger. *(Answer: an ADR that lists only benefits is marketing. The negative consequence and the trigger are what make the record usable in a review two years later. [^2] [^5])*
+4. Count the decisions in one quarter of your architecture meeting notes and the records in your log. Compute the ratio. *(Answer: divide recorded decisions by total decisions. A ratio below 0.5 means the practice is provisioned but not used. [^5])*
+5. Open your solution design document and find one statement that is now false. Decide whether the fix belongs in the document, in a new ADR, or both. *(Answer: if the system changed, update the document section. If a decision changed, write a superseding ADR and update the document's Decisions list. [^2])*
+
+## What's next
+
+You can now define an ADR, write one in the five field format, run a status lifecycle that preserves history, keep the log in version control with a merge gate, and budget the review time with arithmetic rather than optimism. The next lesson takes this discipline to a newer class of system: documenting AI systems, where model cards, system cards, and decision records describe models whose behavior is learned rather than coded. The record format stays. The fields change, because a model has properties that an integration does not.
+
+[^1]: Michael Nygard. "Documenting Architecture Decisions." Cognitect, November 15, 2011. [cognitect.com](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+
+[^2]: AWS Prescriptive Guidance. "Architectural decision record process." [docs.aws.amazon.com](https://docs.aws.amazon.com/prescriptive-guidance/latest/architectural-decision-records/adr-process.html)
+
+[^3]: AWS Prescriptive Guidance. "Appendix: Example ADR." [docs.aws.amazon.com](https://docs.aws.amazon.com/prescriptive-guidance/latest/architectural-decision-records/appendix.html)
+
+[^4]: AWS Prescriptive Guidance. "FAQ about architectural decision records." [docs.aws.amazon.com](https://docs.aws.amazon.com/prescriptive-guidance/latest/architectural-decision-records/faq.html)
+
+[^5]: Salesforce Architects. "Architecture Strategy and Planning," Resource and Cost Optimization: Architecture Patterns, Well-Architected Framework. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/well-architected/guide/resource-and-cost-optimization-architecture-patterns.html)
+
+[^6]: Salesforce Architects. "Fairness," Well-Architected Framework. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/well-architected/guide/fairness.html)
+
+[^7]: Salesforce Architects. "Availability and Performance Patterns," Well-Architected Framework. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/well-architected/guide/reliability-availability-performance-patterns)
+
+[^8]: Write the Docs. "Docs as code." [writethedocs.org](https://www.writethedocs.org/guide/docs-as-code/)
+
+[^9]: adr.github.io. "Architectural Decision Records (ADRs)." [adr.github.io](https://adr.github.io/)
