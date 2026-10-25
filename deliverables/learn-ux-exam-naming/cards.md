@@ -26,6 +26,11 @@ Lane B (exam naming) is independent of lane A and can start immediately.
   - Constraints: row height ≥ 44 px at every width; badge must not be colour-only (text + icon); no
     fixed `min-width` (the syllabus must not gain horizontal scroll at 360 px); long range labels must
     not truncate the state badge.
+  - **Discoverability drives the design:** the node is visible on **first view**, in sequence between
+    lesson 5 and lesson 6, for a learner with **zero completed lessons** (default state `Available`).
+    Mock it with no progress at all — that is the primary state, not the edge case. It must not read as
+    a reveal, a collapsed item or something that appears only at range completion, and it replaces the
+    bottom "Milestone checks" section entirely.
   - Show it **between** lesson 5 and lesson 6 at: 360×800, 390×844 (portrait), 768×1024 (portrait +
     landscape), 1280×800.
   - Deliver `design/check-timeline-node.md` + `design/mockup-check-node.html`.
@@ -119,17 +124,21 @@ Lane B (exam naming) is independent of lane A and can start immediately.
 ### A5 — Timeline node + syllabus interleaving
 - **assignee:** steel · **parents:** [A3, A4, K1] · **est:** 45 min
 - **Done means:** the series page shows each check as a node between its range end and the next lesson,
-  the separate "Milestone checks" section is gone, sort and hide-completed still work.
+  the separate "Milestone checks" section is gone, sort and hide-completed still work, and **a learner
+  with zero completed lessons sees check 1 as `Available` on first render** (node presence is not
+  conditional on progress or on the tiers response).
 - **Body:** `CheckTimelineNode` per `api-contracts.md` §B.5 and K1's spec; `SeriesSyllabus` takes
   `checks` + `series` + `kind` and interleaves via `buildTimeline`; hide rule = `hiddenByFilter`
-  (D-5 recommended rule); `?sort=desc` reverses nodes with their position; first paint shows "Available"
-  (hydration-gated, same as today). Delete `src/components/Progress/CheckCardList.tsx`, its
+  (D-5 recommended rule); `?sort=desc` reverses nodes with their position; first paint emits **every**
+  check node and shows "Available" — the node list is a pure function of lessons + checks, and only the
+  Passed badge waits for the tiers response. Delete `src/components/Progress/CheckCardList.tsx`, its
   `<CheckCardList>` usage on the series page and its import (`page.tsx:21`), and the now-dangling
   `vi.mock("@/components/Progress/CheckCardList", …)` stub at
   `src/app/atlas/[series]/page.degraded.test.tsx:120` — that test file is in this card's scope.
   Keep `ExamCard`. No fixed `min-w` on the node.
-- **Evidence:** component tests (interleaving, desc, hide, aria-label per state); 360/390/768/1280
-  screenshots; extend `page.overflow.test.ts` for the new node; `page.degraded.test.tsx` still
+- **Evidence:** component tests (interleaving, desc, hide, aria-label per state, **zero-progress learner
+  sees K1 between L5 and L6 as Available before any tiers response**); 360/390/768/1280 screenshots of
+  the no-progress state; extend `page.overflow.test.ts` for the new node; `page.degraded.test.tsx` still
   passes with no reference to the deleted module.
 
 ### A6 — Server check scores + routing into the check
@@ -141,7 +150,8 @@ Lane B (exam naming) is independent of lane A and can start immediately.
   `LessonNavigation`; add `MilestonePanel` between the practice questions and the sources. **No gate
   call, no `blocked`/`mode` prop, no locked branch:** the lesson body renders unconditionally whether or
   not the preceding check is passed (architecture.md §4). Guests: no query, no panel state.
-- **Evidence:** page tests (lesson 5 → check 1; passed → lesson 6; guest → no pass state); exam page and
+- **Evidence:** page tests (lesson 5 → check 1 with `nextOverride` and the panel rendered on first paint
+  for a learner with **zero progress**; passed → lesson 6; guest → no pass state); exam page and
   certificate tests still green.
 
 ### A7 — Continue after a pass

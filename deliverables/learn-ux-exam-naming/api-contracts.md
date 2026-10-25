@@ -103,6 +103,8 @@ export function nextLessonAfter(
  * Interleave checks into lesson order. A check renders immediately AFTER the last
  * PUBLISHED lesson of its range; checks past the published tail render at the end,
  * in n order. Total: lessons.length + checks.length nodes.
+ * Progress-independent: no completed-lesson / passed-check input exists, so every
+ * check node is emitted on the first render (discoverability, architecture.md §3.2).
  */
 export function buildTimeline(
   lessons: readonly LearnLesson[],
@@ -209,6 +211,9 @@ type CheckTimelineNodeProps = {
   state: `"Knowledge Check 1, lessons 1 to 5, passed 87 percent"` / `"…, available"`. There is no
   locked variant of this name — the check is always a link (architecture.md §4).
 - Badge is text + icon (never colour-only). Row height ≥ 44 px at every width. No fixed `min-w`.
+- **Rendered for every check on first view**, independent of progress: the prop is the check's state,
+  and a learner with zero completed lessons gets `state: "available"` — the node exists before its range
+  is reached (discoverability requirement, architecture.md §3.2).
 - Visually distinct from `LessonCard`: milestone treatment (K{n} marker + emphasis), not a lesson row.
 
 ### `MilestonePanel` (new, server-rendered presentational)

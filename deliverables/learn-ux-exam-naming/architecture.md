@@ -214,16 +214,33 @@ Rules baked in (each gets a unit test):
 - A check before lesson 1 or after the last published lesson renders at that end; no crash.
 - Series with no checks → no nodes, no empty section.
 - `buildTimeline` is total: it returns exactly `lessons.length + checks.length` nodes.
+- **Visibility is progress-independent.** Every check produces its node on the first render, before the
+  learner has reached — let alone completed — its range. No progress row, pass state or tiers response
+  is required for a node to exist.
+
+**Discoverability is the acceptance bar for Item 2 (Chris, 2026-10-25).** Today the checks sit in a
+separate section at the bottom of the course page, so a learner does not learn a check exists until they
+have finished every lesson. The fix is placement and visibility, not a reveal: a check node is visible
+in the timeline **on first view** — for a guest and for a signed-in learner with **zero completed
+lessons** — so the learner sees the milestone coming before they reach its range. Concretely: a learner
+with no progress opens `/atlas/ai-at-work` and sees `K1 Knowledge Check 1 · Lessons 1–5 — Available`
+between lesson 5 and lesson 6, in sequence, without opening anything or scrolling to a trailing section.
+That separate section is removed entirely (ADR-310). A node that only appears at range completion does
+not satisfy this requirement.
 
 **Syllabus (`SeriesSyllabus.tsx`).** The page passes `checks` alongside `lessons`. The client:
 
-1. `sortLessonsByLessonNumber` as today, then interleave with `buildTimeline`.
+1. `sortLessonsByLessonNumber` as today, then interleave with `buildTimeline`. The interleave is
+   unconditional — every check node is emitted on the first render, at its range end, whatever the
+   learner's progress.
 2. Reverse the whole node list for `?sort=desc` (check nodes travel with their position).
 3. Hide-completed applies to lesson nodes as today; a **check** node is hidden only when it is passed
    **and** every lesson in its range is hidden (D-5 recommended rule, implemented as a pure predicate
-   `hiddenByFilter(node, hiddenSlugs, passed)` so flipping the rule is one function).
-4. First paint is identical for guests and returning users: check state renders "available" until the
-   tiers fetch resolves, exactly like the current check rows' "Not taken".
+   `hiddenByFilter(node, hiddenSlugs, passed)` so flipping the rule is one function). An unpassed or
+   not-yet-reached check is **never** hidden by that filter.
+4. First paint is identical for guests and returning users: the node is present and its badge reads
+   "Available" until the tiers fetch resolves, exactly like the current check rows' "Not taken". The
+   tiers response only upgrades a badge to "Passed · N%"; it never decides whether a node exists.
 
 **One fetch, not three.** `CertReadiness` (`page.tsx:284`), `CheckCardList` (`page.tsx:401`) and
 `ExamCard` (`page.tsx:404`) currently each GET `/api/progress/quiz/tiers?series=…` — three identical
@@ -244,6 +261,22 @@ the row is at least 44 px tall at every width. Mobile-first: it is a normal list
 presentation is the same node, not a shrunken table — the syllabus is already single-column at all
 widths (`grid-cols-[minmax(0,1fr)]`, see `page.overflow.test.ts`), so no separate mobile component is
 needed.
+
+**Acceptance for Item 2 (updated 2026-10-25 — discoverability first).**
+
+1. A signed-in learner with **zero completed lessons** opens the series page and sees check 1 as a node
+   **in the timeline** between lesson 5 and lesson 6, badge `Available`, on first view — no trailing
+   section to scroll to, no completion required for the node to appear.
+2. A guest sees the same node (badge `Available`); node presence never depends on a progress response.
+3. The learner finishes the last lesson of the range → Next and the milestone panel route them into the
+   check, in sequence.
+4. Passing continues the flow to the next lesson ("Continue to Lesson N"); failing keeps them on the
+   check with retake primary.
+5. No lesson is ever locked; the following lesson is reachable before the check is passed.
+6. The old "Milestone checks" bottom section is gone.
+
+Items 3–5 are the A6/A7 routing and panel work; nothing may be deferred to a node-visible-only-on-
+completion behaviour.
 
 **Routing into the check (US-005).** On the lesson page, server-side:
 
@@ -561,6 +594,7 @@ check node only when passed and its whole range is hidden.
 | component | `MarkCompleteCompact` | incomplete → mark; complete → static status, no toggle; toggling the hero control updates the bar (shared hook + `PROGRESS_CHANGED_EVENT`); guest render has no bar control |
 | component | `LessonNavigation` | `nextOverride` renders the check link with its sublabel; absent → unchanged |
 | component | `QuizWidget` | `continueHref` primary only on pass; retake primary on fail; no continue on lesson quizzes |
+| page | series page, zero-progress learner | check 1 is present in the timeline between lesson 5 and lesson 6 on first render with **no** completion rows and **before** any tiers response, badge `Available`; the trailing "Milestone checks" section is absent |
 | page | lesson page | DOM order body → quiz → milestone panel → sources → nav; Next targets check 1 on a range end; no sources double-render |
 | page | exam page / certificate page | head + copy per kind; no cert-prep string on a Tracks series |
 | tailwind-lock | extend `page.overflow.test.ts` | syllabus grid wrapper still `grid-cols-[minmax(0,1fr)]`; check node has no fixed `min-w` (360 px no horizontal scroll) |
