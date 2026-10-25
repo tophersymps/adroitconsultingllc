@@ -7,6 +7,7 @@ const fullSeries: LearningSeries = {
   slug: "salesforce-architect",
   name: "Salesforce Architect Path",
   description: "A structured path to the Salesforce Architect certification.",
+  examKind: "certification-prep",
   gradient: "from-sky to-blue-600",
   totalLessons: 42,
   curriculumLessons: 60,

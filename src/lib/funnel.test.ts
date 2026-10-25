@@ -28,6 +28,7 @@ const series = (over: Partial<LearningSeries> = {}): LearningSeries => ({
   slug: "salesforce-architect",
   name: "Salesforce System Architect Primer",
   description: "desc",
+  examKind: "course-completion",
   gradient: "from-sky to-blue-600",
   lessons: [],
   totalLessons: 28,

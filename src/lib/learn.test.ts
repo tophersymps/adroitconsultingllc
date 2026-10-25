@@ -53,6 +53,7 @@ describe("getSeriesProgress (Phase 1 curriculum vs published)", () => {
     slug: "agentic-ai",
     name: "Agentic AI Path",
     description: "",
+    examKind: "course-completion",
     gradient: "",
     lessons: [],
     totalLessons: 33, // highest published lesson number
