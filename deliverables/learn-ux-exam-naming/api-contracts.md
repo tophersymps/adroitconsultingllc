@@ -14,7 +14,7 @@ export function hasFootnoteDefinitions(mdx: string): boolean;
 ```
 
 Rules: a definition is a line matching `/^\[\^[^\]]+\]:/m`. Used to skip the second render on lessons
-with no sources (all 510 lessons currently return `true`).
+with no sources (all 511 lessons currently return `true`).
 
 ---
 
@@ -194,7 +194,11 @@ export function useTierProgress(series: string): {
   data?: TierProgress }>` keyed by series: N consumers on one page render share **one**
   `GET /api/progress/quiz/tiers?series=…` (`cache: "no-store"`).
 - Guest / error → `tiers: null` (every consumer renders its unavailable state, as today).
-- Consumers: `SeriesSyllabus` (check node state), `ExamCard`. `CheckCardList` is deleted.
+- Consumers: `SeriesSyllabus` (check node state), `ExamCard`, `CertReadiness`. That is every
+  `/api/progress/quiz/tiers` caller on `/atlas/[series]` today, so the series page drops from
+  **three** requests to **one**. `CheckCardList` is deleted.
+- `CertReadiness` keeps its contract: `tiers === null` → render nothing (guest, error, or still
+  loading) — it must not gain a skeleton or shift the hero layout.
 - Must not fire for series with zero checks (guard at the call site).
 
 ---
@@ -369,7 +373,9 @@ export function chronicleLabel(
 ### `src/lib/exam-config.ts` (new)
 
 ```ts
-/** Exam duration (minutes). Single home for the value currently hardcoded on 4 surfaces. */
+/** Exam duration (minutes). Single home for the value currently hardcoded on five surfaces
+ *  (ExamWidget.tsx:29 + :432, ExamLocked.tsx:39, GuestCTA.tsx:40, ExamCard.tsx:75,
+ *   app/atlas/[series]/exam/page.tsx:142). */
 export const CERT_EXAM_MINUTES = 105;
 ```
 

@@ -28,11 +28,11 @@ default assumed. D-2 and D-3 are content/product answers, not architecture.
 | Citations are GFM footnotes, not a component | ✅ | `remark-gfm` emits `<section data-footnotes>` as a sibling of the body; `MDXArticle` only renames its `<h2>` to "Sources" |
 | The footnote block can be split out of the MDX render | ⚠️ partially | A definitions-only MDX document renders **nothing** — the section is emitted only when the document *also* contains references. The split needs both passes to render the whole document with a rehype filter. See §3.1 |
 | `group` in `series.json` is not a runtime value | ✅ | `build-learn.js:236`, `src/data/learn.ts` has no `group`, `lib/learn.ts:69-70` sets `group: null` |
-| Milestone check ranges come from each check file's title | ✅ | `lib/quiz.ts:112-142` (`/Lessons\s+(\d+)\s*[–-]\s*(\d+)/`), never `5n` |
+| Milestone check ranges come from each check file's title | ✅ | `lib/quiz.ts:112-142` derives the range from the title (`/Lessons\s+(\d+)\s*[–-]\s*(\d+)/`). A `5n` fallback is still in the code at `quiz.ts:121` (it applies only when the title does not match — 0 of 90 check files today); see the residual risk in §9 |
 | No lesson-level gating exists | ✅ | `LessonNavigation` links next unconditionally; only the exam and certificate are gated |
-| Two exam surfaces already fetch `/api/progress/quiz/tiers` | ✅ (new) | `CheckCardList` and `ExamCard` each issue the **same** GET on `/atlas/[series]` — two identical requests per series page |
-| Every lesson has sources | ✅ (new) | 510 of 510 `content/learn/*/*.mdx` files carry `[^n]:` definitions |
-| No duration field in `exam.json` | ✅ (new) | 105 minutes is hardcoded in 4 surfaces; question count is `exam.questions.length` |
+| Three clients already fetch `/api/progress/quiz/tiers` | ✅ (new) | `CertReadiness` (`page.tsx:284`), `CheckCardList` (`page.tsx:401`) and `ExamCard` (`page.tsx:404`) each issue the **same** GET on `/atlas/[series]` — three identical requests per series page |
+| Every lesson has sources | ✅ (new) | 511 of 511 `content/learn/*/*.mdx` files carry `[^n]:` definitions |
+| No duration field in `exam.json` | ✅ (new) | 105 minutes is hardcoded on five surfaces — `ExamWidget.tsx:29` (+ copy at `:432`), `ExamLocked.tsx:39`, `GuestCTA.tsx:40`, `ExamCard.tsx:75`, `app/atlas/[series]/exam/page.tsx:142`; question count is `exam.questions.length` |
 
 ---
 
@@ -71,7 +71,7 @@ src/app/atlas/[series]/check/[n]/page.tsx EDIT pass continue target; use check-s
 ```
 
 Retired: `src/components/Progress/CheckCardList.tsx` (its section is exactly what Item 2 removes; the
-row visual moves into `CheckTimelineNode`). Nothing else imports it — verified by grep.
+row visual moves into `CheckTimelineNode`). Its two remaining references — the import at `src/app/atlas/[series]/page.tsx:21` and the `vi.mock("@/components/Progress/CheckCardList", …)` stub at `src/app/atlas/[series]/page.degraded.test.tsx:120` — are removed in the same card (A5).
 
 ### 2.2 New / changed modules (Workstream B)
 
@@ -218,13 +218,15 @@ Rules baked in (each gets a unit test):
 4. First paint is identical for guests and returning users: check state renders "available" until the
    tiers fetch resolves, exactly like the current check rows' "Not taken".
 
-**One fetch, not two.** `CheckCardList` and `ExamCard` currently each GET
-`/api/progress/quiz/tiers?series=…`. Since the check nodes now need the same payload, add
+**One fetch, not three.** `CertReadiness` (`page.tsx:284`), `CheckCardList` (`page.tsx:401`) and
+`ExamCard` (`page.tsx:404`) currently each GET `/api/progress/quiz/tiers?series=…` — three identical
+requests on one series page. Since the check nodes now need the same payload, add
 `src/lib/hooks/useTierProgress.ts`: a module-level `Map<series, Promise<TierProgress>>` cache +
 `useSyncExternalStore`-free simple state, so every consumer in one page render shares a single request.
-`ExamCard` and the syllabus both consume it; `CheckCardList` is deleted. Net effect: **2 requests → 1**
-on every series page, which pays for the check nodes' data need without a perf regression (NFR:
-"must not add a second progress fetch per check row").
+All three consume it (`CertReadiness` keeps its "render nothing until there is data" behaviour:
+`tiers === null` is exactly its current unavailable state); `CheckCardList` is deleted. Net effect:
+**3 requests → 1** on every series page, which pays for the check nodes' data need without a perf
+regression (NFR: "must not add a second progress fetch per check row").
 
 **Node component.** `CheckTimelineNode` renders the check as a node that stands out from a lesson row:
 distinct marker (`K1`), a state badge (Passed · 87% / Available / Locked), the range ("Lessons 1–5"),
@@ -551,7 +553,7 @@ check node only when passed and its whole range is hidden.
 | unit | `lib/lesson-checks.test.ts` | timeline interleaving incl. non-5n cadence, overlapping ranges, unpublished range end, no-checks series, `checkEndingAt`/`nextLessonAfter` edges |
 | unit | `lib/learn-gate.test.ts` | advisory never blocks; gated blocks lesson after an unpassed range; both modes via the `mode` parameter (no module mutation) |
 | unit | `lib/exam-labels.test.ts` | 12-series matrix: every series resolves the expected label; no cert-prep string for course-completion; `lockHeading(n)` uses `n` not 9 |
-| unit | `lib/lesson-sources.test.ts` | `hasFootnoteDefinitions` true for all 510 lessons, false for a source-literal-only lesson |
+| unit | `lib/lesson-sources.test.ts` | `hasFootnoteDefinitions` true for all 511 lessons, false for a source-literal-only lesson |
 | component | `MDXArticle`/`MDXSources` split | body has refs and **no** `section[data-footnotes]`; sources has exactly one `li#user-content-fn-1`; every body `fnref` id has a matching backref href; blog path (default prop) byte-identical output |
 | component | `SeriesSyllabus` | nodes interleave between range ends; `?sort=desc` reverses; hide-completed rule; check node reachable/44px/aria-label with state |
 | component | `MarkCompleteCompact` | incomplete → mark; complete → static status, no toggle; toggling the hero control updates the bar (shared hook + `PROGRESS_CHANGED_EVENT`); guest render has no bar control |
@@ -573,9 +575,10 @@ width is not evidence.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Footnote section rendered twice (body + sources) | duplicate `user-content-fn-*` ids, broken back-refs | body render always uses `dropFootnoteSection`; a component test asserts exactly one section and zero duplicate ids |
-| Two MDX compiles per lesson page | +~3–5 ms render on 510 lessons | measured; only lessons with footnote definitions take the second pass (all 510 today) — accepted against a force-dynamic page already doing DB round trips; revisit if p75 TTFB moves |
+| Two MDX compiles per lesson page | +~3–5 ms render on 511 lessons | measured; only lessons with footnote definitions take the second pass (all 511 today) — accepted against a force-dynamic page already doing DB round trips; revisit if p75 TTFB moves |
 | Footnote anchor lands under the sticky bar | a11y/UX defect at every width | `scroll-margin-top` on footnote targets and headings; QA checks the ref → source → ↩ round trip |
 | `quiz_run` vs `quiz_attempt` disagree on the check page | nav/panel could claim "passed" while the check page says "not passed" | new code reads `quiz_attempt` only (same as the exam gate); the pre-existing check-page read is flagged as a separate card, not changed here |
+| A future check file's title does not match `Lessons A–B` | `quiz.ts` silently falls back to `[5n-4, 5n]` (`quiz.ts:121`, dormant today: all 90 check files match), so `buildTimeline` would misplace that milestone instead of failing | accepted for this release: `buildTimeline` reads only the resolved `check.lessons` and never does `5n` arithmetic itself; a test pins the 90-file conformance so a non-matching title fails CI rather than moving a node. Removing the fallback outright is a pre-existing-code change and is out of scope for this plan |
 | Sticky control crowds the player on a 360 px screen | unusable control or shrunken audio | `trailing` slot + wrap layout, 44 px target, Kara mockup at 360/390/844×390 |
 | Slot appears only after hydration (`next/dynamic ssr:false`) | a brief window with no bar control | allowed by US-014 ("or immediately after hydration"); the hero control is the first-paint path |
 | `examKind` missing on a 13th series added later | silent wrong label | generator throws; new-series CI fails |
@@ -612,10 +615,10 @@ Client-facing HTML report: `docs/architecture-learn-ux-exam-naming.html`
 |---|---|---|---|
 | ADR-301 | Split MDX sources with two filtered renders | Render the same MDX document twice: body with the footnotes section dropped, sources with only the section kept | Fidelity preserved, overflow ids match by construction; +3–5 ms per lesson render |
 | ADR-302 | Citation order is opt-in per route | `MDXArticle sources` defaults to `inline`; only the lesson route opts into `split` | Blog, both previews and the paywall peek are untouched (zero regression surface) |
-| ADR-303 | Milestone position derives from the check file's range | `buildTimeline` places each node at `check.lessons[1]` | Correct for any cadence (4–12 checks) and for short-tail merges; no `5n` arithmetic anywhere |
+| ADR-303 | Milestone position derives from the check file's range | `buildTimeline` places each node at `check.lessons[1]`, the range end resolved by `getKnowledgeChecks` | Correct for any cadence (4–12 checks) and for short-tail merges. `lesson-checks.ts` does no `5n` arithmetic; the residual `5n` fallback inside `quiz.ts:121` is dormant (all 90 check files carry a `Lessons A–B` title) and is pinned by a conformance test (§9) |
 | ADR-304 | The D-1 gate is one constant | `LESSON_GATE_MODE = "advisory"` read only by `resolveLessonGate`, which takes `mode` for tests | Flipping to "gated" is a constant + one panel design, no re-layout of routing |
 | ADR-305 | Sticky completion reuses `useLessonProgress` | Compact display component, same hook, same write path, static chip when complete | One state owner; hero and bar cannot disagree; no new API surface |
-| ADR-306 | One tiers fetch per series page | `useTierProgress` module-level cache shared by the syllabus and the exam card | 2 → 1 request per series page, which funds the check nodes' data need |
+| ADR-306 | One tiers fetch per series page | `useTierProgress` module-level cache shared by `SeriesSyllabus`, `ExamCard` and `CertReadiness` | 3 → 1 request per series page, which funds the check nodes' data need |
 | ADR-307 | `examKind` is explicit and required | New `series.json` field validated at build, surfaced through the generated module | Label survives the degraded path; a missing value fails CI instead of defaulting to cert prep |
 | ADR-308 | One client-safe label source, kind passed as a prop | `lib/exam-labels.ts` holds copy only; server resolves the kind | No second client-side map (ADR-221 rule); no `fs` in the client graph |
 | ADR-309 | The exam head is composed from labels, not content | `title`/`description` built from `examLabels(kind)` + series name | The page title can never drift from the UI label; `exam.json` titles are corrected separately and pinned by a test |

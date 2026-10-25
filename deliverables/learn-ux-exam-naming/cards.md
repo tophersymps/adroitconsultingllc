@@ -89,21 +89,31 @@ Lane B (exam naming) is independent of lane A and can start immediately.
 ### A3 — Lesson↔check mapping module
 - **assignee:** steel · **parents:** none · **est:** 45 min
 - **Done means:** `src/lib/lesson-checks.ts` + `lesson-checks.test.ts` pass with the full edge-case set.
-- **Body:** implement `api-contracts.md` §B.1. Position from `check.lessons[1]`, never `5n`. Cover:
+- **Body:** implement `api-contracts.md` §B.1. Position from `check.lessons[1]` (the range end
+  `getKnowledgeChecks` resolved from the check title), never `5n`. If a check arrives without a
+  resolved range, fail loudly — do not recompute `5n`. Cover:
   non-5 cadence (`sf-omni-consultant` 12 checks, `ai-at-work` 6), touching/overlapping ranges, range end
   unpublished, check before lesson 1 / after the last, series with no checks, `desc` reversal.
   **No GateMode import cycle:** `LessonGateMode` type lives in `learn-gate.ts`; import the type only.
+  Also pin the input conformance: all 90 `check-*.json` titles match `Lessons A–B`, so `quiz.ts:121`'s
+  dormant `5n` fallback can never move a node today (architecture.md §9, ADR-303).
 - **Evidence:** vitest output.
 
 ### A4 — D-1 gate switch + one tiers fetch
-- **assignee:** steel · **parents:** [A3] · **est:** 30 min
+- **assignee:** steel · **parents:** [A3] · **est:** 45 min
 - **Done means:** `src/lib/learn-gate.ts` (mode `"advisory"`, both modes unit-tested) and
-  `src/lib/hooks/useTierProgress.ts` exist; `ExamCard` uses the hook; the series page issues **one**
-  `/api/progress/quiz/tiers` request.
+  `src/lib/hooks/useTierProgress.ts` exist; **all three** `/api/progress/quiz/tiers` callers on the
+  series page use the hook (`CertReadiness`, `ExamCard`, and `CheckCardList` while it still exists,
+  or `SeriesSyllabus` after A5 lands); a series page with three consumers issues **one**
+  `/api/progress/quiz/tiers` request (today: three).
 - **Body:** `api-contracts.md` §B.2 + §B.4. Do **not** decide D-1 — ship the constant as `"advisory"`.
   `resolveLessonGate` takes `mode` so tests exercise both branches without mutating module state.
+  Convert `CertReadiness` (`src/components/Progress/CertReadiness.tsx:27`, rendered on the series page
+  at `page.tsx:284`) onto the hook as well — it is the third identical GET, and the "one request"
+  criterion below is unreachable without it. It must keep rendering nothing while `tiers === null`.
   Do not delete `CheckCardList` yet (A5 does that).
-- **Evidence:** unit tests for both modes; a test that two hook consumers in one render produce one fetch.
+- **Evidence:** unit tests for both modes; a test that two hook consumers in one render produce one fetch;
+  a component test that `CertReadiness` renders nothing on `null` and its stats on data.
 
 ### A5 — Timeline node + syllabus interleaving
 - **assignee:** steel · **parents:** [A3, A4, K1] · **est:** 45 min
@@ -112,10 +122,14 @@ Lane B (exam naming) is independent of lane A and can start immediately.
 - **Body:** `CheckTimelineNode` per `api-contracts.md` §B.5 and K1's spec; `SeriesSyllabus` takes
   `checks` + `series` + `kind` and interleaves via `buildTimeline`; hide rule = `hiddenByFilter`
   (D-5 recommended rule); `?sort=desc` reverses nodes with their position; first paint shows "Available"
-  (hydration-gated, same as today). Delete `src/components/Progress/CheckCardList.tsx` and its
-  `<CheckCardList>` usage on the series page (keep `ExamCard`). No fixed `min-w` on the node.
+  (hydration-gated, same as today). Delete `src/components/Progress/CheckCardList.tsx`, its
+  `<CheckCardList>` usage on the series page and its import (`page.tsx:21`), and the now-dangling
+  `vi.mock("@/components/Progress/CheckCardList", …)` stub at
+  `src/app/atlas/[series]/page.degraded.test.tsx:120` — that test file is in this card's scope.
+  Keep `ExamCard`. No fixed `min-w` on the node.
 - **Evidence:** component tests (interleaving, desc, hide, aria-label per state); 360/390/768/1280
-  screenshots; extend `page.overflow.test.ts` for the new node.
+  screenshots; extend `page.overflow.test.ts` for the new node; `page.degraded.test.tsx` still
+  passes with no reference to the deleted module.
 
 ### A6 — Server check scores + routing into the check
 - **assignee:** steel · **parents:** [A3] · **est:** 45 min
