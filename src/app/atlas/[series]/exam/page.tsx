@@ -45,7 +45,6 @@ import {
 } from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
 import { getLessonsForSeries } from "@/lib/learn";
-import { examLabels } from "@/lib/exam-labels";
 import {
   CERT_CHECK_PASS_PCT,
   CERT_EXAM_MINUTES,

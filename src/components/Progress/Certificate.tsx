@@ -16,6 +16,7 @@ import { useEffect, useRef } from "react";
 import { trackCertificateViewed } from "@/lib/analytics";
 import type { ExamKind } from "@/data/types";
 import { examLabels } from "@/lib/exam-labels";
+import { CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 
 interface CertificateProps {
   /** Recipient display name (user full_name / name / email). */
@@ -75,7 +76,7 @@ export default function Certificate({
           </p>
           <p className="text-[14px] text-gray-500 max-w-[640px] mt-2 leading-relaxed">
             Issued by Adroit Consulting when all {totalLessons} lessons are completed and the{" "}
-            {labels.phrase} is passed at 72% or higher.
+            {labels.phrase} is passed at {CERT_EXAM_PASS_PCT}% or higher.
           </p>
         </div>
         <button

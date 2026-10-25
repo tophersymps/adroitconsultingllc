@@ -12,6 +12,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import ExamWidget from "./ExamWidget";
+import { EXAM_LABELS } from "@/lib/exam-labels";
+import type { ExamKind } from "@/data/types";
 import type { QuizQuestion } from "@/shared/contracts";
 
 const QUESTIONS: QuizQuestion[] = [
@@ -167,4 +169,29 @@ describe("ExamWidget a11y (t_5664453e)", () => {
       expect(seg.className).toContain("sm:min-w-[6px]");
     }
   });
+});
+
+/**
+ * B6: the widget's own exam naming. B3 plumbed `kind` in; this pins the two
+ * branches so the timed run can never show the other kind's exam name.
+ */
+describe("ExamWidget — exam naming follows the series kind (B6)", () => {
+  const KINDS: ExamKind[] = ["course-completion", "certification-prep"];
+
+  for (const kind of KINDS) {
+    it(`renders the ${kind} label and never the other kind's`, () => {
+      const { container } = render(<ExamWidget {...PROPS} kind={kind} />);
+      const text = container.textContent ?? "";
+      const own = EXAM_LABELS[kind];
+      const other = EXAM_LABELS[kind === "course-completion" ? "certification-prep" : "course-completion"];
+
+      // Header sub + h1 both come from the label source.
+      expect(text).toContain(`${own.short} · ${PROPS.seriesName}`);
+      expect(text).toContain(own.full);
+
+      for (const forbidden of [other.full, other.short, other.phrase]) {
+        expect(text.toLowerCase()).not.toContain(forbidden.toLowerCase());
+      }
+    });
+  }
 });
