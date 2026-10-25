@@ -140,22 +140,21 @@ infer from the `group` label alone):
 | `hermes-consultant` | Hermes Agent Consultant | `course-completion` | same |
 | `hermes-consultant-intermediate` | Hermes Agent Consultant · Intermediate | `course-completion` | same |
 | `hermes-consultant-advanced` | Hermes Agent Consultant · Advanced | `course-completion` | same |
-| `agentic-ai` | Agentic AI Implementation Path | `course-completion` **(confirm)** | group says `Certifications`, but it is Adroit-authored and its exam.json says "course completion certificate" |
-| `salesforce-architect` | Salesforce System Architect Primer | `course-completion` **(confirm)** | group says `Certifications`, exam.json says "course completion certificate" with no blueprint weights |
+| `agentic-ai` | Agentic AI Implementation Path | `course-completion` | **Chris confirmed 2026-10-25:** "Agentic-AI is not a certification course." It is Adroit-authored and its exam.json says "course completion certificate" |
+| `salesforce-architect` | Salesforce System Architect Primer | `course-completion` | **Chris confirmed 2026-10-25:** "The architect primer is also not. It was just something I did before we even started doing certification courses." exam.json says course completion, no blueprint weights |
 | `omni-studio-cert` | OmniStudio Developer Certification | `certification-prep` | exam.json mirrors "the official Spring '26 OmniStudio Developer blueprint domain weights" |
 | `salesforce-data-architect` | Platform Data Architect Certification | `certification-prep` | same |
 | `salesforce-sharing-visibility-architect` | Platform Sharing and Visibility Architect Certification | `certification-prep` | same |
 | `sf-omni-consultant` | Salesforce OmniStudio Consultant Certification | `certification-prep` | same |
 
-Two flags for Chris, both set to `course-completion` in this plan and both one content field to
-change if he disagrees:
+Both previously-ambiguous rows are now settled by Chris (2026-10-25). No open classification
+question remains:
 
-- **`agentic-ai`** — `group: Certifications` but Adroit-authored, and its own exam says course
-  completion. Classified course-completion.
-- **`salesforce-architect`** — "Salesforce System Architect Primer". Salesforce does run a System
-  Architect credential programme, so this one could legitimately be prep; its exam content says
-  course completion with no blueprint weights. Classified course-completion, flagged because the
-  group label disagrees with the content.
+- **`agentic-ai`** — "Agentic-AI is not a certification course." `course-completion`, final.
+- **`salesforce-architect`** — "The architect primer is also not. It was just something I did
+  before we even started doing certification courses." `course-completion`, final. Its `group`
+  label of `Certifications` is stale metadata from that pre-certification era and should be
+  corrected to `Tracks` when B1 touches the file, so the label stops misleading readers.
 
 **Rule for the implementers:** the kind is decided per series from content evidence, and the label
 follows the kind. Do not key the label off `group` (it is stale and wrong for `agentic-ai`), and do
