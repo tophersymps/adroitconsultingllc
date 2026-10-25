@@ -21,7 +21,7 @@ import type {
   CompletionEventRow,
   ProfileSky,
 } from "@/shared/contracts-constellations";
-import type { LearnCardSeries } from "@/data/types";
+import type { ExamKind, LearnCardSeries } from "@/data/types";
 
 /** Load all of a user's completion events (best-effort, never throws). */
 export async function getCompletionEvents(
@@ -170,10 +170,17 @@ export async function getSkyCourseMaps(): Promise<{
   courseNameById: Record<string, string>;
   seriesNameBySlug: Record<string, string>;
   courseIdBySlug: Record<string, string>;
+  /** course_id → examKind, resolved from the course's `series_slug`. */
+  examKindByCourseId: Record<string, ExamKind>;
 }> {
   const courseNameById: Record<string, string> = {};
   const seriesNameBySlug: Record<string, string> = {};
   const courseIdBySlug: Record<string, string> = {};
+  const examKindByCourseId: Record<string, ExamKind> = {};
+  const rememberKind = (courseId: string, slug: string | null) => {
+    const kind = slug ? getSeriesBySlug(slug)?.examKind : undefined;
+    if (kind) examKindByCourseId[courseId] = kind;
+  };
   for (const slug of getAllSeriesSlugs()) {
     const s = getSeriesBySlug(slug);
     if (s) seriesNameBySlug[slug] = s.name;
@@ -191,11 +198,14 @@ export async function getSkyCourseMaps(): Promise<{
       courseNameById[id] = name;
       if (r.series_slug) seriesNameBySlug[slug] = name;
       courseIdBySlug[slug] = id;
+      // Kind comes from content (series.json), never from the course row or the
+      // group label — the chronicle must not guess (deliverables §B4).
+      rememberKind(id, (r.series_slug as string) ?? null);
     }
   } catch {
     // maps stay content-only — chronicle falls back to event fields
   }
-  return { courseNameById, seriesNameBySlug, courseIdBySlug };
+  return { courseNameById, seriesNameBySlug, courseIdBySlug, examKindByCourseId };
 }
 
 /**
@@ -290,6 +300,7 @@ export async function loadProfileSky(
     courseNameById: maps.courseNameById,
     seriesNameBySlug: maps.seriesNameBySlug,
     lessonLabelBySlug: lessonLabels,
+    examKindByCourseId: maps.examKindByCourseId,
     rank: progress.rank,
     streakDays: progress.streakDays,
     longestStreakDays: progress.longestStreakDays,
