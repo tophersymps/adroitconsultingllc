@@ -20,6 +20,8 @@ import type {
   ProfileSky,
 } from "@/shared/contracts-constellations";
 import type { Rank } from "@/shared/contracts-constellations";
+import type { ExamKind } from "@/data/types";
+import { examLabels } from "@/lib/exam-labels";
 
 /** Inputs needed to build one course's constellation (visual star field). */
 export interface ConstellationBuildInput {
@@ -60,6 +62,13 @@ export interface ChronicleBuildInput {
   seriesNameBySlug?: Record<string, string>;
   /** slug → lesson display label for lesson rows. */
   lessonLabelBySlug?: Record<string, string>;
+  /**
+   * course_id → examKind. The caller (sky-server) resolves this from each
+   * course's `series_slug`; the builder never infers a kind. An exam event whose
+   * course is missing from the map degrades to the neutral "exam passed" label
+   * (NEVER "cert prep exam" — that is the bug this release fixes).
+   */
+  examKindByCourseId?: Record<string, ExamKind>;
 }
 
 /** Inputs for the profile full-sky aggregate. */
@@ -74,6 +83,8 @@ export interface ProfileSkyBuildInput {
   seriesNameBySlug?: Record<string, string>;
   /** slug → lesson label for chronicle lesson rows. */
   lessonLabelBySlug?: Record<string, string>;
+  /** course_id → examKind for the chronicle's exam rows (see ChronicleBuildInput). */
+  examKindByCourseId?: Record<string, ExamKind>;
   /** Derived rank (from completion.ts deriveProgress / deriveRank). */
   rank: Rank;
   /** Live streak as-of now. */
@@ -126,10 +137,19 @@ export function chronicleDay(iso: string): string {
   return iso.slice(0, 10) || iso;
 }
 
-/** Human label for one Chronicle row (copy-deck §7). */
+/**
+ * Human label for one Chronicle row (copy-deck §7).
+ *
+ * Exam rows are KIND-AWARE (deliverables/learn-ux-exam-naming §B4): the caller
+ * passes `examKind` resolved from the series slug, and the sentence uses the
+ * kind's `phrase` ("cert prep exam" / "course completion exam"). When the kind
+ * is absent the label degrades to the NEUTRAL "exam passed" — never cert prep,
+ * because a course-completion exam mislabelled as certification prep is the
+ * exact defect US-009 fixes.
+ */
 export function chronicleLabel(
   event: CompletionEventRow,
-  ctx: { courseName?: string | null; lessonLabel?: string | null },
+  ctx: { courseName?: string | null; lessonLabel?: string | null; examKind?: ExamKind },
 ): string {
   const { courseName, lessonLabel } = ctx;
   switch (event.event_type) {
@@ -140,7 +160,9 @@ export function chronicleLabel(
     case "quiz":
       return `${courseName ?? "Quiz"} · knowledge check`;
     case "exam":
-      return `${courseName ?? "Course"} · cert prep exam passed`;
+      return `${courseName ?? "Course"} · ${
+        ctx.examKind ? `${examLabels(ctx.examKind).phrase} passed` : "exam passed"
+      }`;
     case "certificate":
       return `${courseName ?? "Course"} · certificate earned`;
     default:
@@ -153,6 +175,7 @@ export function buildChronicle(input: ChronicleBuildInput): ChronicleEntry[] {
   const nameById = input.courseNameById ?? {};
   const nameBySlug = input.seriesNameBySlug ?? {};
   const labelBySlug = input.lessonLabelBySlug ?? {};
+  const kindByCourseId = input.examKindByCourseId ?? {};
 
   const rows = [...input.events].sort(
     (a, b) =>
@@ -178,6 +201,7 @@ export function buildChronicle(input: ChronicleBuildInput): ChronicleEntry[] {
     const label = chronicleLabel(event, {
       courseName,
       lessonLabel: event.lesson_slug ? labelBySlug[event.lesson_slug] ?? null : null,
+      examKind: event.course_id ? kindByCourseId[event.course_id] : undefined,
     });
 
     entries.push({
@@ -227,6 +251,7 @@ export function buildProfileSky(input: ProfileSkyBuildInput): ProfileSky {
       courseNameById: input.courseNameById,
       seriesNameBySlug: input.seriesNameBySlug,
       lessonLabelBySlug: input.lessonLabelBySlug,
+      examKindByCourseId: input.examKindByCourseId,
     }),
     isGuest: false,
   };

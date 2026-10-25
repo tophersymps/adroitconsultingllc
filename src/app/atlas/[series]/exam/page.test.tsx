@@ -80,15 +80,20 @@ vi.mock("@/components/Progress/ExamWidget", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/ExamLocked", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/GuestCTA", () => ({ default: () => <div /> }));
 
-import Page from "./page";
+import Page, { generateMetadata } from "./page";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
 
-const seriesInfo = (slug: string, name: string) => ({
+const seriesInfo = (
+  slug: string,
+  name: string,
+  examKind: "course-completion" | "certification-prep" = "course-completion",
+) => ({
   slug,
   name,
   description: "d",
   gradient: "g",
   totalLessons: 1,
+  examKind,
   lessons: [{ slug: "day-01", title: "Day 1" }],
 });
 
@@ -137,5 +142,55 @@ describe("/atlas/[series]/exam degraded existence gate (F-2)", () => {
 
     await expect(render("ai-adoption")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The exam page head (ADR-309, deliverables/learn-ux-exam-naming §B4).
+ *
+ * The <title>/description used to be `${exam.title}` from exam.json — which for
+ * every non-certification course still said "certification", and was the exam
+ * document's own heading, not a page title. It is now composed from
+ * `examLabels(kind)`, so neither kind can leak the other's wording.
+ */
+describe("/atlas/[series]/exam — kind-aware SEO head (ADR-309)", () => {
+  const meta = (series: string) => generateMetadata({ params: Promise.resolve({ series }) });
+
+  it("a course-completion series titles itself 'Course Completion Exam'", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(seriesInfo("ai-at-work", "AI at Work", "course-completion"));
+    mocks.getCertExam.mockReturnValue({
+      series: "ai-at-work",
+      title: "AI at Work: Certification Prep Bootcamp",
+      description: "Mirrors the official certification blueprint.",
+      questions: [{ question: "q" }],
+    });
+
+    const m = (await meta("ai-at-work")) as { title: string; description: string };
+    expect(m.title).toBe("AI at Work: Course Completion Exam | Adroit Learn");
+    expect(m.description).toBe("Timed course completion exam for AI at Work.");
+    // Neither exam.json's title nor its description may reach the head.
+    expect(JSON.stringify(m)).not.toMatch(/certification|bootcamp|blueprint/i);
+  });
+
+  it("a certification-prep series keeps the certification naming", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      seriesInfo("salesforce-data-architect", "Platform Data Architect Certification", "certification-prep"),
+    );
+    mocks.getCertExam.mockReturnValue({ series: "salesforce-data-architect", title: "x", questions: [{ question: "q" }] });
+
+    const m = (await meta("salesforce-data-architect")) as { title: string; description: string };
+    expect(m.title).toBe(
+      "Platform Data Architect Certification: Certification Prep Exam | Adroit Learn",
+    );
+    expect(m.description).toBe(
+      "Timed certification prep exam for Platform Data Architect Certification.",
+    );
+    expect(m.title).not.toMatch(/course completion/i);
+  });
+
+  it("returns an empty head when the series has no exam", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(seriesInfo("ai-at-work", "AI at Work"));
+    mocks.getCertExam.mockReturnValue(null);
+    expect(await meta("ai-at-work")).toEqual({});
   });
 });

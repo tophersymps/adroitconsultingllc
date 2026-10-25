@@ -23,6 +23,7 @@ import {
   scoreQuizAttemptsByQuiz,
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
+import { examLabels } from "@/lib/exam-labels";
 import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
@@ -57,9 +58,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const exam = getCertExam(series);
   const s = getSeriesBySlug(series);
   if (!exam || !s) return {};
+  // ADR-309: the head is composed from the kind's labels, never from
+  // exam.json `title` (that field is the exam document's own heading).
+  const labels = examLabels(s.examKind);
   return buildMetadata({
-    title: `${exam.title} | Adroit Learn`,
-    description: exam.description ?? `Certification prep exam for ${s.name}.`,
+    title: labels.seoTitle(s.name),
+    description: labels.seoDescription(s.name),
     path: `/atlas/${series}/exam`,
   });
 }

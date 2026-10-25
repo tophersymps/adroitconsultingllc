@@ -16,6 +16,7 @@ const PROPS = {
   completedAt: "Aug 10, 2026",
   examScore: 78,
   totalLessons: 46,
+  kind: "certification-prep" as const,
 };
 
 describe("Certificate", () => {
@@ -89,5 +90,51 @@ describe("Certificate", () => {
     const style = container.querySelector("style");
     expect(style?.textContent).not.toContain("#9CA3AF");
     expect(style?.textContent).toContain("#6B7280");
+  });
+});
+
+/**
+ * Exam naming on the certificate (deliverables/learn-ux-exam-naming §B4).
+ *
+ * The certificate used to say "the timed certification exam" and "the cert prep
+ * exam is passed" for EVERY course — including the eight course-completion ones
+ * that are not certification prep at all. Both strings now come from
+ * `examLabels(kind)`, so each kind must name only its own exam.
+ */
+describe("Certificate — exam naming is kind-aware", () => {
+  const renderKind = (kind: "certification-prep" | "course-completion") => {
+    const { container } = render(
+      <Certificate {...PROPS} courseName="Agentic AI Foundations" kind={kind} />,
+    );
+    // Whitespace-normalise so JSX line breaks don't split a phrase.
+    const text = (container.textContent ?? "").replace(/\s+/g, " ");
+    return { container, text };
+  };
+
+  it("a course-completion certificate names the course completion exam", () => {
+    const { text } = renderKind("course-completion");
+    expect(text).toContain("the course completion exam is passed at 72% or higher");
+    expect(text).toContain("all 46 lessons and the timed course completion exam.");
+    // The old blanket phrase must be gone for a non-certification course.
+    expect(text).not.toMatch(/certification exam/i);
+    expect(text).not.toMatch(/cert prep exam/i);
+  });
+
+  it("a certification-prep certificate names the cert prep exam", () => {
+    const { text } = renderKind("certification-prep");
+    expect(text).toContain("the cert prep exam is passed at 72% or higher");
+    expect(text).toContain("all 46 lessons and the timed cert prep exam.");
+    expect(text).not.toMatch(/course completion exam/i);
+  });
+
+  it("keeps the printable document free of the old generic phrase (print CSS + body)", () => {
+    const { container } = renderKind("course-completion");
+    const style = container.querySelector("style")?.textContent ?? "";
+    // The print stylesheet must not carry copy at all, and the printed document
+    // (.certificate-print is what @media print renders) must name the kind.
+    expect(style).not.toMatch(/certification prep/i);
+    const doc = container.querySelector(".certificate-print");
+    expect(doc?.textContent).toContain("course completion exam");
+    expect(doc?.textContent).not.toMatch(/certification exam/i);
   });
 });

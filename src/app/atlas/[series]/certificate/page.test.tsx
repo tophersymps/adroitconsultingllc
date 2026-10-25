@@ -112,7 +112,7 @@ vi.mock("@/components/Constellations/CertificateCelebration", () => ({
   default: () => <div data-testid="certificate-celebration" />,
 }));
 
-import Page from "./page";
+import Page, { generateMetadata } from "./page";
 import { DEGRADED_PAYWALL_MESSAGE } from "@/components/Catalog/Paywall";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
 
@@ -123,6 +123,8 @@ const series = (over: Record<string, unknown> = {}) => ({
   gradient: "g",
   totalLessons: 8,
   lessons: [],
+  // Every series carries an examKind (B1 made it required in series.json).
+  examKind: "certification-prep",
   ...over,
 });
 
@@ -259,5 +261,74 @@ describe("/atlas/[series]/certificate — degraded paywall announces itself (A11
     expect(html).toContain("Members-only content");
     expect(html).not.toMatch(/role="status"/);
     expect(html).not.toContain(DEGRADED_PAYWALL_MESSAGE);
+  });
+});
+
+/**
+ * SEO head is KIND-AWARE (deliverables/learn-ux-exam-naming §B4, ADR-309).
+ *
+ * generateMetadata used to spell out "cert prep exam" in the certificate
+ * description for every series — including the eight course-completion ones.
+ * The description is now composed from `examLabels(s.examKind)`, so each kind
+ * may only name its own exam, in both the certificate and the completion-record
+ * (exam-not-authored) states.
+ */
+describe("/atlas/[series]/certificate — SEO head is kind-aware (B4)", () => {
+  const meta = (slug: string) =>
+    generateMetadata({ params: Promise.resolve({ series: slug }) });
+
+  it("uses the course-completion labels for a course-completion series", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "agentic-ai", name: "Agentic AI", examKind: "course-completion" }),
+    );
+    mocks.getCertExam.mockReturnValue({ questions: [{ id: "q1" }] });
+
+    const m = await meta("agentic-ai");
+
+    expect(m.title).toBe("Certificate of Completion | Agentic AI | Adroit Learn");
+    expect(m.description).toBe(
+      "Printable certificate of completion for the Agentic AI course: all lessons completed and the course completion exam passed at 72% or higher.",
+    );
+    // The old blanket phrase must not leak into a non-certification course.
+    expect(m.description).not.toMatch(/cert prep|certification prep/i);
+  });
+
+  it("uses the certification-prep labels for a certification-prep series", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({
+        slug: "omni-studio-cert",
+        name: "OmniStudio Developer Certification",
+        examKind: "certification-prep",
+      }),
+    );
+    mocks.getCertExam.mockReturnValue({ questions: [{ id: "q1" }] });
+
+    const m = await meta("omni-studio-cert");
+
+    expect(m.title).toBe(
+      "Certificate of Completion | OmniStudio Developer Certification | Adroit Learn",
+    );
+    expect(m.description).toContain("cert prep exam passed at 72% or higher");
+    expect(m.description).not.toMatch(/course completion exam/i);
+  });
+
+  it("uses the series' kind in the completion-record description when no exam is authored", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "agentic-ai", name: "Agentic AI", examKind: "course-completion" }),
+    );
+    mocks.getCertExam.mockReturnValue(null);
+
+    const m = await meta("agentic-ai");
+
+    expect(m.title).toBe("Completion Record | Agentic AI | Adroit Learn");
+    expect(m.description).toContain(
+      "The course completion exam for this path is being authored",
+    );
+    expect(m.description).not.toMatch(/cert prep|certification prep/i);
+  });
+
+  it("returns an empty head for an unknown series", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(undefined);
+    expect(await meta("no-such-series")).toEqual({});
   });
 });

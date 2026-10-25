@@ -30,6 +30,7 @@ import {
   scoreQuizAttemptRows,
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
+import { examLabels } from "@/lib/exam-labels";
 import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
@@ -84,13 +85,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     });
   }
   const hasExam = getCertExam(series) !== null;
+  const labels = examLabels(s.examKind);
   return buildMetadata({
     title: hasExam
       ? `Certificate of Completion | ${s.name} | Adroit Learn`
       : `Completion Record | ${s.name} | Adroit Learn`,
     description: hasExam
-      ? `Printable certificate of completion for the ${s.name} course: all lessons completed and the cert prep exam passed at 72% or higher.`
-      : `Course completion record for ${s.name}: track the lessons you've completed. The certificate prep exam for this path is being authored and will unlock a printable certificate.`,
+      ? `Printable certificate of completion for the ${s.name} course: all lessons completed and the ${labels.phrase} passed at 72% or higher.`
+      : `Course completion record for ${s.name}: track the lessons you've completed. The ${labels.phrase} for this path is being authored and will unlock a printable certificate.`,
     path: `/atlas/${series}/certificate`,
   });
 }
@@ -104,6 +106,8 @@ export default async function CertificatePage({ params }: Props) {
   // B-07 / D2): they render an interim "completion record / exam coming soon"
   // state while the prep exam is authored. Only a missing series 404s.
   const hasExam = getCertExam(series) !== null;
+  // Exam naming is a function of the series' examKind (§B4) — never a literal.
+  const labels = examLabels(s.examKind);
 
   // Access seam gate (ADR-201): DB-backed status + entitlements. not-launched →
   // 404; paywall → locked-content page (never the cert, never 404).
@@ -171,9 +175,9 @@ export default async function CertificatePage({ params }: Props) {
           {s.name} — your progress
         </h1>
         <p className="text-[15px] text-gray-500 max-w-[600px] leading-relaxed mb-7">
-          This learning path tracks every lesson you complete. The certificate prep
-          exam is being authored — once it ships, passing it at 72%+ earns your
-          printable certificate of completion.
+          This learning path tracks every lesson you complete. The {labels.phrase} is being
+          authored — once it ships, passing it at 72%+ earns your printable certificate of
+          completion.
         </p>
       </>
     );
@@ -224,8 +228,8 @@ export default async function CertificatePage({ params }: Props) {
               </h2>
               <p className="text-[13.5px] text-gray-600 leading-relaxed mb-[18px]">
                 {allDone
-                  ? "You've finished every lesson in this path. Your certificate unlocks once the cert prep exam is published — check back soon."
-                  : "Finish the remaining lessons to complete this path. Your certificate unlocks once the cert prep exam is published."}
+                  ? `You've finished every lesson in this path. Your certificate unlocks once the ${labels.phrase} is published — check back soon.`
+                  : `Finish the remaining lessons to complete this path. Your certificate unlocks once the ${labels.phrase} is published.`}
               </p>
               <div className="flex items-center gap-2.5 text-[13px] text-gray-600">
                 <span
@@ -256,7 +260,7 @@ export default async function CertificatePage({ params }: Props) {
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </span>
-                <span>Cert prep exam (coming soon)</span>
+                <span>{labels.short} (coming soon)</span>
                 <span className="font-mono text-[11px] text-gray-500 ml-auto">Not available</span>
               </div>
             </div>
@@ -293,8 +297,8 @@ export default async function CertificatePage({ params }: Props) {
         Your certificate
       </h1>
       <p className="text-[15px] text-gray-500 max-w-[600px] leading-relaxed mb-7">
-        Issued by Adroit Consulting when all {totalLessons} lessons are completed and the cert
-        prep exam is passed at 72% or higher.
+        Issued by Adroit Consulting when all {totalLessons} lessons are completed and the{" "}
+        {labels.phrase} is passed at 72% or higher.
       </p>
     </>
   );
@@ -538,6 +542,7 @@ export default async function CertificatePage({ params }: Props) {
           examScore={eligibility.examBest}
           totalLessons={eligibility.lessonsTotal}
           series={s.slug}
+          kind={s.examKind}
         />
       </main>
       <div className="print:hidden">
