@@ -24,6 +24,29 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "percent-complete-status-reporting-2026",
+    "title": "Why Ninety Percent Done Means Half the Work Is Left",
+    "excerpt": "Percent complete is the most common progress number in project management, and the one NASA calls least desirable. What to report instead.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Status Reporting",
+      "Earned Value",
+      "Governance"
+    ],
+    "bannerImage": "/banners/percent-complete-status-reporting-2026.webp",
+    "ogImage": "/banners/percent-complete-status-reporting-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "build-once-deploy-digest-2026",
     "title": "Your Staging Passed. Production Ran Something Else.",
     "excerpt": "If production rebuilds the commit, you promoted a hash and a hope. Deploy the digest, keep the tag for humans, and make the registry enforce it.",
