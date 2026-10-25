@@ -1,6 +1,7 @@
 # Architecture — Learn lesson IA (citations, milestone timeline, sticky completion) + exam naming kind
 
 **Task:** t_47db5c5e (brainiac, architect)
+**Deliverables:** `architecture.md` (this file), `api-contracts.md`, `cards.md` (19 cards)
 **Requirements:** `Fortress-of-Solitude/requirements/adroit-site-learn-ux-exam-naming-2026-10-25.md`
 (Part 1 Chris brief, Part 2 BA analysis, Amendment 1 desktop **and** mobile)
 **Repo:** `/Users/kelex/Documents/Projects/adroit-code` @ `93198b82` (origin/main), tenant `adroit`
