@@ -873,6 +873,8 @@ export const posts: BlogPost[] = [
       "CDP",
       "Strategy"
     ],
+    "bannerImage": "/banners/salesforce-data-cloud-strategy-guide.webp",
+    "ogImage": "/banners/salesforce-data-cloud-strategy-guide-og.jpg",
     "status": "published"
   },
   {
@@ -1109,6 +1111,8 @@ export const posts: BlogPost[] = [
       "Sales",
       "Generative AI"
     ],
+    "bannerImage": "/banners/einstein-gpt-practical-use-cases-for-sales-teams.webp",
+    "ogImage": "/banners/einstein-gpt-practical-use-cases-for-sales-teams-og.jpg",
     "status": "published"
   },
   {
