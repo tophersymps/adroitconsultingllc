@@ -20,7 +20,8 @@ import QuizStats from "@/components/Progress/QuizStats";
 import CertReadiness from "@/components/Progress/CertReadiness";
 import CheckCardList from "@/components/Progress/CheckCardList";
 import ExamCard from "@/components/Progress/ExamCard";
-import { getKnowledgeChecks } from "@/lib/quiz";
+import { getCertExam, getKnowledgeChecks } from "@/lib/quiz";
+import { CERT_EXAM_MINUTES, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 import { accessSeam, getAccessUserId, getCourseRowBySlug } from "@/lib/access";
 import { getCatalogForUserV2, prerequisitesMet } from "@/lib/catalog";
 import { getCompletedCourseIds, getCompletedLessonSlugs } from "@/lib/completion";
@@ -159,6 +160,11 @@ export default async function SeriesPage({ params }: Props) {
   // series (sfarch, agentic) keep the legacy quiz behaviour.
   const checksMeta = getKnowledgeChecks(series);
   const hasTiers = checksMeta.length > 0;
+  // Exam metadata for the tier card. Static content, so it is readable even on
+  // the R2-5 degraded path (no DB involved) — the card keeps its kind-correct
+  // label when the tiers route is unavailable (US-012).
+  const certExam = hasTiers ? getCertExam(series) : null;
+  const examQuestionCount = certExam?.questions.length ?? 0;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -399,7 +405,14 @@ export default async function SeriesPage({ params }: Props) {
         {hasTiers && (
           <>
             <CheckCardList series={series} checksMeta={checksMeta} />
-            <ExamCard series={series} totalChecks={checksMeta.length} />
+            <ExamCard
+              series={series}
+              totalChecks={checksMeta.length}
+              kind={s.examKind}
+              questionCount={examQuestionCount}
+              passPct={CERT_EXAM_PASS_PCT}
+              minutes={CERT_EXAM_MINUTES}
+            />
           </>
         )}
 

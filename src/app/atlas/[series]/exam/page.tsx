@@ -1,11 +1,16 @@
 /**
- * /atlas/[series]/exam — cert prep exam page (server component).
+ * /atlas/[series]/exam — exam page (server component).
+ *
+ * Every exam string is kind-aware (B3): the kicker, heading, meta line, locked
+ * panel and guest CTA read `examLabels(s.examKind)`; counts come from the
+ * series' exam.json and the duration / pass mark from `exam-config.ts`.
  *
  * Gating (ADR-104 + Decision 9):
  *  - Guest → GuestCTA (zero question text in HTML).
- *  - Authed, any check best < 80 or missing → ExamLocked with per-check
- *    progress (rows link to the check pages).
- *  - Authed, all 9 checks ≥ 80 → ExamWidget (timed, auto-submit, ≥72% pass).
+ *  - Authed, any check best < CERT_CHECK_PASS_PCT or missing → ExamLocked with
+ *    per-check progress (rows link to the check pages).
+ *  - Authed, every check ≥ CERT_CHECK_PASS_PCT → ExamWidget (timed, auto-submit,
+ *    ≥ CERT_EXAM_PASS_PCT pass).
  */
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -39,6 +44,12 @@ import {
 } from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
 import { getLessonsForSeries } from "@/lib/learn";
+import { examLabels } from "@/lib/exam-labels";
+import {
+  CERT_CHECK_PASS_PCT,
+  CERT_EXAM_MINUTES,
+  CERT_EXAM_PASS_PCT,
+} from "@/lib/exam-config";
 
 interface Props {
   params: Promise<{ series: string }>;
@@ -59,12 +70,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!exam || !s) return {};
   return buildMetadata({
     title: `${exam.title} | Adroit Learn`,
-    description: exam.description ?? `Certification prep exam for ${s.name}.`,
+    // Kind-aware fallback — never describe a Tracks course with cert-prep wording.
+    // (Full head composition from labels is the B4 card; this keeps the file
+    // free of the old wording in the meantime.)
+    description: exam.description ?? examLabels(s.examKind).seoDescription(s.name),
     path: `/atlas/${series}/exam`,
   });
 }
-
-const CHECK_PASS_PCT = 80;
 
 export default async function ExamPage({ params }: Props) {
   const { series } = await params;
@@ -118,6 +130,11 @@ export default async function ExamPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser();
   const isAuthed = Boolean(user);
 
+  // Kind-aware labels + real counts for every surface on this page.
+  const labels = examLabels(s.examKind);
+  const checkMetas = getKnowledgeChecks(series);
+  const questionCount = exam.questions.length;
+
   // Guest → CTA placeholder.
   if (!isAuthed) {
     return (
@@ -133,15 +150,21 @@ export default async function ExamPage({ params }: Props) {
             </Link>
             <div className="flex items-center gap-2 font-mono text-[11.5px] font-bold text-navy uppercase tracking-[0.08em] mb-[14px]">
               <span className="w-[3px] h-3 rounded-sm bg-navy" />
-              Cert Prep Exam
+              {labels.short}
             </div>
             <h1 className="text-[clamp(1.75rem,4vw,2.25rem)] font-extrabold text-navy tracking-[-0.02em] leading-tight mb-3">
-              Certification Prep Exam
+              {labels.full}
             </h1>
             <p className="text-[15px] text-gray-500 max-w-[600px] leading-relaxed mb-7">
-              60 questions · 105 minutes · pass ≥ 72%
+              {questionCount} questions · {CERT_EXAM_MINUTES} minutes · pass ≥ {CERT_EXAM_PASS_PCT}%
             </p>
-            <GuestCTA tier="exam" ariaLabel="Cert prep exam locked" />
+            <GuestCTA
+              tier="exam"
+              kind={s.examKind}
+              checkCount={checkMetas.length}
+              questionCount={questionCount}
+              minutes={CERT_EXAM_MINUTES}
+            />
           </div>
         </main>
         <Footer />
@@ -152,7 +175,6 @@ export default async function ExamPage({ params }: Props) {
   // Authed — derive per-check scores from server-graded quiz_attempt rows
   // (security t_7469e31d F2: quiz_run is client-writable history, so the
   // unlock decision must never depend on it).
-  const checkMetas = getKnowledgeChecks(series);
   const quizNames = checkMetas.map((c) => `${series}:check:${c.n}`);
   const { data } = await supabase
     .from("quiz_attempt")
@@ -179,7 +201,7 @@ export default async function ExamPage({ params }: Props) {
 
   const checks: CheckProgress[] = checkMetas.map((c) => {
     const bestScore = scoresByQuiz.get(`${series}:check:${c.n}`)?.score ?? 0;
-    return { n: c.n, bestScore, attempts: 0, passed: bestScore >= CHECK_PASS_PCT };
+    return { n: c.n, bestScore, attempts: 0, passed: bestScore >= CERT_CHECK_PASS_PCT };
   });
   const allChecksPassed = checks.every((c) => c.passed);
 
@@ -199,6 +221,7 @@ export default async function ExamPage({ params }: Props) {
             }))}
             seriesSlug={series}
             seriesName={s.name}
+            kind={s.examKind}
           />
         ) : (
           <div className="pt-6">
@@ -208,7 +231,13 @@ export default async function ExamPage({ params }: Props) {
             >
               &larr; Back to {s.name}
             </Link>
-            <ExamLocked series={series} checks={checks} seriesName={s.name} />
+            <ExamLocked
+              series={series}
+              checks={checks}
+              seriesName={s.name}
+              kind={s.examKind}
+              minutes={CERT_EXAM_MINUTES}
+            />
           </div>
         )}
       </main>

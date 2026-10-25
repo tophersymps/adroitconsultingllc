@@ -1,24 +1,51 @@
 /**
- * ExamCard — cert prep exam card on the series page (copy deck §6).
+ * ExamCard — the exam card on the series page (copy deck §6).
+ *
+ * Kind-aware naming (Learn UX exam naming, B3): the kicker and heading come
+ * from `examLabels(kind)` — a Tracks series says "Course Exam" /
+ * "Course Completion Exam", a certification series keeps its cert-prep wording.
+ * Counts, pass marks and duration arrive as props so nothing here can drift
+ * from the content or silently fall back to certification-prep copy.
  *
  * Locked: "Locked — checks passed X/9 · 80% required" + disabled
  * "Complete checks to unlock". Unlocked: "Unlocked — all 9 checks passed" +
  * "Take the exam →". Hydration-gated client fetch of /api/progress/quiz/tiers
  * so the state reflects real per-user progress after mount; the server render
- * (locked, 0/9) matches first paint for guests and returning users.
+ * (locked, 0/9) matches first paint for guests and returning users. When the
+ * tiers route is unavailable (degraded / R2-5) the card keeps the locked state
+ * and still renders the kind-correct label from props (US-012).
  */
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TierProgress } from "@/shared/contracts";
+import type { ExamKind } from "@/data/types";
+import { examLabels } from "@/lib/exam-labels";
+import { CERT_CHECK_PASS_PCT } from "@/lib/exam-config";
 
 interface ExamCardProps {
   series: string;
   totalChecks: number;
+  /** Drives every label on the card. Required — a surface cannot forget it. */
+  kind: ExamKind;
+  /** Question count from the series' exam.json (`exam.questions.length`). */
+  questionCount: number;
+  /** Exam pass mark, from CERT_EXAM_PASS_PCT. */
+  passPct: number;
+  /** Exam duration in minutes, from CERT_EXAM_MINUTES. */
+  minutes: number;
 }
 
-export default function ExamCard({ series, totalChecks }: ExamCardProps) {
+export default function ExamCard({
+  series,
+  totalChecks,
+  kind,
+  questionCount,
+  passPct,
+  minutes,
+}: ExamCardProps) {
+  const labels = examLabels(kind);
   const [tiers, setTiers] = useState<TierProgress | null>(null);
 
   useEffect(() => {
@@ -33,7 +60,7 @@ export default function ExamCard({ series, totalChecks }: ExamCardProps) {
         const data = (await res.json()) as TierProgress;
         if (!cancelled) setTiers(data);
       } catch {
-        // guests / no data — locked state with 0 passed
+        // guests / no data / degraded route — locked state with 0 passed
       }
     })();
     return () => {
@@ -46,7 +73,7 @@ export default function ExamCard({ series, totalChecks }: ExamCardProps) {
   const examBest = tiers?.exam.bestScore ?? 0;
 
   return (
-    <section aria-label="Cert prep exam card" className="max-w-[760px] mx-auto px-6 pb-14">
+    <section aria-label={`${labels.full} card`} className="max-w-[760px] mx-auto px-6 pb-14">
       <div
         className={`rounded-2xl border bg-white p-5 dark:bg-[var(--surface-card)] dark:border-[var(--border-default)] ${
           unlocked ? "border-emerald/40 shadow-sm" : "border-gray-200"
@@ -55,10 +82,10 @@ export default function ExamCard({ series, totalChecks }: ExamCardProps) {
         <div className="flex items-start justify-between gap-4 mb-2.5">
           <div>
             <div className="font-mono text-[10.5px] font-bold text-navy uppercase tracking-[0.09em] mb-1 dark:text-[var(--ink-muted)]">
-              Cert Prep Exam
+              {labels.short}
             </div>
             <h3 className="text-[1.15rem] font-extrabold text-navy tracking-[-0.02em] dark:text-[var(--ink-primary)]">
-              Certification Prep Exam
+              {labels.full}
             </h3>
           </div>
           <span
@@ -72,7 +99,7 @@ export default function ExamCard({ series, totalChecks }: ExamCardProps) {
           </span>
         </div>
         <p className="text-[12.5px] text-gray-500 dark:text-[var(--ink-muted)] mb-4">
-          60 questions · 105 minutes · pass ≥ 72%
+          {questionCount} questions · {minutes} minutes · pass ≥ {passPct}%
           {examBest > 0 && (
             <span className="font-mono text-emerald-800 font-bold"> · best {examBest}%</span>
           )}
@@ -94,7 +121,7 @@ export default function ExamCard({ series, totalChecks }: ExamCardProps) {
                 <path d="M8 11V7a4 4 0 0 1 8 0v4" />
               </svg>
               <span>
-                Locked — checks passed <b className="text-navy dark:text-[var(--ink-primary)]">{passedCount}/{totalChecks}</b> · 80% required
+                Locked — checks passed <b className="text-navy dark:text-[var(--ink-primary)]">{passedCount}/{totalChecks}</b> · {CERT_CHECK_PASS_PCT}% required
               </span>
             </>
           )}

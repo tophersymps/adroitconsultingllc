@@ -5,58 +5,122 @@
  * identical across all tiers; only the kicker, benefit line, and body change.
  * Semantics: container is a <section aria-label="...locked"> — ZERO question
  * text appears in the HTML for guests.
+ *
+ * Kind-aware (B3): the `exam`, `check` and `certificate` tiers name the exam
+ * through `examLabels(kind)`; counts and duration arrive as props and the pass
+ * mark from `exam-config.ts`. `kind` stays optional on the type so non-series
+ * callers still compile, but every exam/certificate caller passes it — a test
+ * pins that (api-contracts.md §C). Without a kind the wording degrades to a
+ * neutral "exam": it NEVER falls back to certification-prep copy (US-009).
  */
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ExamKind } from "@/data/types";
+import { examLabels } from "@/lib/exam-labels";
+import { CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 
 export type GuestCtaTier = "lesson" | "check" | "exam" | "certificate";
 
-const COPY: Record<
-  GuestCtaTier,
-  {
-    ariaLabel: string;
-    kicker: string;
-    benefit: string;
-    body: string;
-  }
-> = {
-  lesson: {
-    ariaLabel: "Practice questions locked",
-    kicker: "Quiz · locked for guests",
-    benefit: "3 questions per lesson · knowledge checks · timed exam · certificate",
-    body: "Your answers, best scores, and lesson progress are saved to your account so you can pick up right where you left off — on any device.",
-  },
-  check: {
-    ariaLabel: "Knowledge check locked",
-    kicker: "Knowledge Check · locked for guests",
-    benefit: "15 questions per check · 9 checks · 80% to pass",
-    body: "Pass each 15-question check with 80%+ to work toward unlocking the timed cert prep exam.",
-  },
-  exam: {
-    ariaLabel: "Cert prep exam locked",
-    kicker: "Cert Prep Exam · locked for guests",
-    benefit: "60 questions · 105 minutes · pass ≥ 72% · certificate",
-    body: "Take the timed 60-question exam when all 9 knowledge checks are passed, and earn your printable certificate of completion.",
-  },
-  certificate: {
-    ariaLabel: "Certificate locked",
-    kicker: "Certificate · locked for guests",
-    benefit: "complete all 46 lessons · pass the exam",
-    body: "Earn your printable certificate of completion by finishing every lesson and passing the timed cert prep exam.",
-  },
+interface GuestCtaCopy {
+  ariaLabel: string;
+  kicker: string;
+  benefit: string;
+  body: string;
+}
+
+const LESSON_COPY: GuestCtaCopy = {
+  ariaLabel: "Practice questions locked",
+  kicker: "Quiz · locked for guests",
+  benefit: "3 questions per lesson · knowledge checks · timed exam · certificate",
+  body: "Your answers, best scores, and lesson progress are saved to your account so you can pick up right where you left off — on any device.",
 };
 
 interface GuestCTAProps {
   tier: GuestCtaTier;
   /** The full headline, e.g. "Practice questions locked" — used for the aria-label. */
   ariaLabel?: string;
+  /** Required for the `exam` and `certificate` tiers (asserted by a test). */
+  kind?: ExamKind;
+  /** Check count — exam tier body copy. */
+  checkCount?: number;
+  /** Exam question count (`exam.questions.length`) — exam tier body copy. */
+  questionCount?: number;
+  /** Exam duration in minutes, from CERT_EXAM_MINUTES. */
+  minutes?: number;
 }
 
-export default function GuestCTA({ tier, ariaLabel }: GuestCTAProps) {
+/** The exam's display name from the label source, or a neutral fallback. */
+function examName(kind?: ExamKind): string {
+  return kind ? examLabels(kind).short : "Exam";
+}
+
+/** The lower-case in-sentence exam name from the label source. */
+function examPhrase(kind?: ExamKind): string {
+  return kind ? examLabels(kind).phrase : "exam";
+}
+
+function examCtaCopy({
+  kind,
+  checkCount,
+  questionCount,
+  minutes,
+}: Pick<GuestCTAProps, "kind" | "checkCount" | "questionCount" | "minutes">): GuestCtaCopy {
+  const name = examName(kind);
+  const benefitParts = [
+    questionCount !== undefined ? `${questionCount} questions` : null,
+    minutes !== undefined ? `${minutes} minutes` : null,
+    `pass ≥ ${CERT_EXAM_PASS_PCT}%`,
+    "certificate",
+  ].filter((part): part is string => part !== null);
+
+  return {
+    ariaLabel: `${name} locked`,
+    kicker: `${name} · locked for guests`,
+    benefit: benefitParts.join(" · "),
+    body:
+      questionCount !== undefined && checkCount !== undefined
+        ? `Take the timed ${questionCount}-question exam when all ${checkCount} knowledge checks are passed, and earn your printable certificate of completion.`
+        : "Take the timed exam once every knowledge check is passed, and earn your printable certificate of completion.",
+  };
+}
+
+function checkCtaCopy({ kind }: Pick<GuestCTAProps, "kind">): GuestCtaCopy {
+  return {
+    ariaLabel: "Knowledge check locked",
+    kicker: "Knowledge Check · locked for guests",
+    benefit: "15 questions per check · 9 checks · 80% to pass",
+    body: `Pass each 15-question check with 80%+ to work toward unlocking the timed ${examPhrase(kind)}.`,
+  };
+}
+
+function certificateCtaCopy({ kind }: Pick<GuestCTAProps, "kind">): GuestCtaCopy {
+  return {
+    ariaLabel: "Certificate locked",
+    kicker: "Certificate · locked for guests",
+    benefit: "complete all lessons · pass the exam",
+    body: `Earn your printable certificate of completion by finishing every lesson and passing the timed ${examPhrase(kind)}.`,
+  };
+}
+
+export default function GuestCTA({
+  tier,
+  ariaLabel,
+  kind,
+  checkCount,
+  questionCount,
+  minutes,
+}: GuestCTAProps) {
   const pathname = usePathname();
-  const copy = COPY[tier];
+  const copy: GuestCtaCopy =
+    tier === "exam"
+      ? examCtaCopy({ kind, checkCount, questionCount, minutes })
+      : tier === "check"
+        ? checkCtaCopy({ kind })
+        : tier === "certificate"
+          ? certificateCtaCopy({ kind })
+          : LESSON_COPY;
   const next = encodeURIComponent(pathname ?? "/atlas");
   const loginHref = `/login?next=${next}`;
 

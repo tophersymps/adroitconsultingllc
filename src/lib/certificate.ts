@@ -13,12 +13,12 @@ import fs from "fs";
 import path from "path";
 
 import type { CertificateEligibility } from "@/shared/contracts";
+// The thresholds live in the client-safe `exam-config` module (B3) so exam
+// widgets can read them too. Re-exported here to keep this module's existing
+// public API (sky-server imports CERT_EXAM_PASS_PCT from here).
+import { CERT_CHECK_PASS_PCT, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 
-/** Exam pass threshold — a real cert attempt at 72% or higher counts. */
-export const CERT_EXAM_PASS_PCT = 72;
-
-/** Knowledge-check pass threshold (course progression pattern). */
-export const CERT_CHECK_PASS_PCT = 80;
+export { CERT_CHECK_PASS_PCT, CERT_EXAM_PASS_PCT };
 
 /** Copy-deck course name for the flagship series (exact string, §7). */
 const OMNI_COURSE_NAME = "OmniStudio Developer Certification Prep";

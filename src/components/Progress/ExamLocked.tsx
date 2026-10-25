@@ -5,17 +5,35 @@
  * Server-renderable (no client state): receives per-check progress and renders
  * the unlock panel + row list. Rows link to each check page so the user can go
  * fix a failed check. Guests see GuestCTA instead (exam page server component).
+ *
+ * Kind-aware (B3): kicker, heading and explanatory line come from
+ * `examLabels(kind)`; the check count and pass mark are props/constants — the
+ * old hardcoded "all 9 knowledge checks" is gone.
  */
 import Link from "next/link";
 import type { CheckProgress } from "@/shared/contracts";
+import type { ExamKind } from "@/data/types";
+import { examLabels } from "@/lib/exam-labels";
+import { CERT_CHECK_PASS_PCT } from "@/lib/exam-config";
 
 interface ExamLockedProps {
   series: string;
   checks: CheckProgress[];
   seriesName: string;
+  /** Drives every label on the panel. Required. */
+  kind: ExamKind;
+  /** Exam duration in minutes, from CERT_EXAM_MINUTES. */
+  minutes: number;
 }
 
-export default function ExamLocked({ series, checks, seriesName }: ExamLockedProps) {
+export default function ExamLocked({
+  series,
+  checks,
+  seriesName,
+  kind,
+  minutes,
+}: ExamLockedProps) {
+  const labels = examLabels(kind);
   const passedCount = checks.filter((c) => c.passed).length;
   const total = checks.length;
   const pct = total > 0 ? Math.round((passedCount / total) * 100) : 0;
@@ -29,14 +47,15 @@ export default function ExamLocked({ series, checks, seriesName }: ExamLockedPro
             <rect x="5" y="11" width="14" height="9" rx="2" />
             <path d="M8 11V7a4 4 0 0 1 8 0v4" />
           </svg>
-          Cert Prep Exam · locked
+          {labels.short} · locked
         </div>
 
         <h1 className="text-[clamp(1.5rem,3vw,2rem)] font-extrabold text-navy tracking-[-0.02em] leading-tight mb-3">
-          Unlock: complete all 9 knowledge checks with 80%+
+          {labels.lockHeading(total)}
         </h1>
         <p className="text-[14px] text-gray-500 max-w-[600px] leading-relaxed mb-6">
-          The timed cert prep exam opens once every knowledge check is passed at 80% or higher. Pass each check, then come back to start your 105-minute run.
+          {labels.unlockNote(CERT_CHECK_PASS_PCT)} Pass each check, then come back to start your{" "}
+          {minutes}-minute run.
         </p>
 
         {/* Summary */}
@@ -46,7 +65,7 @@ export default function ExamLocked({ series, checks, seriesName }: ExamLockedPro
               Checks passed {passedCount}/{total}
             </span>
             <span className="font-mono text-[10.5px] text-gray-500">
-              80% required per check
+              {CERT_CHECK_PASS_PCT}% required per check
             </span>
           </div>
           <div className="h-[5px] rounded-full bg-gray-200 overflow-hidden mt-3">
@@ -85,11 +104,11 @@ export default function ExamLocked({ series, checks, seriesName }: ExamLockedPro
                 </span>
               ) : check.attempts > 0 ? (
                 <span className="font-mono text-[10.5px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                  {check.bestScore}% · 80% required
+                  {check.bestScore}% · {CERT_CHECK_PASS_PCT}% required
                 </span>
               ) : (
                 <span className="font-mono text-[10.5px] font-bold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                  80% required
+                  {CERT_CHECK_PASS_PCT}% required
                 </span>
               )}
               <span aria-hidden="true" className="text-gray-300 text-sm group-hover:text-red group-hover:translate-x-0.5 transition-all duration-200">

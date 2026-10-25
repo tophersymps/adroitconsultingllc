@@ -1,18 +1,22 @@
 /**
- * ExamWidget — timed cert prep exam (copy deck §4, mockup-exam.html).
+ * ExamWidget — timed exam (copy deck §4, mockup-exam.html).
+ *
+ * Kind-aware naming (B3): every exam string comes from `examLabels(kind)`, and
+ * the duration / pass mark come from `exam-config.ts` — no literal values here.
  *
  * Differs from QuizWidget:
  *  - NO per-question feedback during the run (no correct/wrong styling, no
  *    "Why" panel, no explanations).
- *  - Flag-for-review, 60-segment navigator, "{n} answered" counter.
- *  - 105:00 deadline countdown (deadline-based, drift-proof under tab
- *    throttling), AUTO-SUBMIT at 00:00 (interval + visibilitychange).
+ *  - Flag-for-review, one segment per question, "{n} answered" counter.
+ *  - CERT_EXAM_MINUTES:00 deadline countdown (deadline-based, drift-proof under
+ *    tab throttling), AUTO-SUBMIT at 00:00 (interval + visibilitychange).
  *  - Submit → POST /api/progress/quiz/batch → results: score ring, pass/fail
- *    verdict (≥72%), answer review with flagged items, Retake + Back.
+ *    verdict (≥ CERT_EXAM_PASS_PCT), answer review with flagged items, Retake + Back.
  *
  * Timer trust (ADR-103): client countdown + server-side elapsed bound
- * [0, 105*60 + 60]. prefers-reduced-motion is CSS-driven (pulse classes are
- * transitions/animations neutralised by the global reduced-motion block).
+ * [0, CERT_EXAM_MINUTES*60 + 60]. prefers-reduced-motion is CSS-driven (pulse
+ * classes are transitions/animations neutralised by the global reduced-motion
+ * block).
  */
 "use client";
 
@@ -25,9 +29,11 @@ import type {
   QuizQuestion,
 } from "@/shared/contracts";
 import { trackExamComplete } from "@/lib/analytics";
+import type { ExamKind } from "@/data/types";
+import { examLabels } from "@/lib/exam-labels";
+import { CERT_EXAM_MINUTES, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 
-const EXAM_MINUTES = 105;
-const EXAM_SECONDS = EXAM_MINUTES * 60;
+const EXAM_SECONDS = CERT_EXAM_MINUTES * 60;
 
 /**
  * Question shape shipped to the client — deliberately stripped of the answer
@@ -44,6 +50,8 @@ interface ExamWidgetProps {
   seriesSlug: string;
   /** Series display name (for the header sub). */
   seriesName: string;
+  /** Drives every exam label. Required — a surface cannot forget it. */
+  kind: ExamKind;
 }
 
 type Phase = "run" | "submitting" | "results";
@@ -59,7 +67,9 @@ export default function ExamWidget({
   questions,
   seriesSlug,
   seriesName,
+  kind,
 }: ExamWidgetProps) {
+  const labels = examLabels(kind);
   const total = questions.length;
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
@@ -123,8 +133,12 @@ export default function ExamWidget({
       if (!res.ok) throw new Error(`batch submit ${res.status}`);
       const data = (await res.json()) as ExamSubmitResult;
       // Progress-funnel analytics (B-06): exam → certificate. Pass verdict is
-      // derived from the server response score (>=72% per exam page header).
-      trackExamComplete({ quizName, score: data.score ?? 0, passed: (data.score ?? 0) >= 72 });
+      // derived from the server response score (>= CERT_EXAM_PASS_PCT).
+      trackExamComplete({
+        quizName,
+        score: data.score ?? 0,
+        passed: (data.score ?? 0) >= CERT_EXAM_PASS_PCT,
+      });
       // Double-submit guard: ignore duplicate responses (client disables the
       // button while in flight, but a stray response must not clobber state).
       if (submittedRef.current && phase !== "results") {
@@ -255,7 +269,7 @@ export default function ExamWidget({
         <h2 ref={resultsHeadingRef} tabIndex={-1} className="sr-only">Exam results</h2>
         <div className="rounded-[20px] border border-gray-200 bg-white p-8 text-center shadow-sm">
           <div className="font-mono text-[11px] font-bold text-navy uppercase tracking-[0.09em] mb-4">
-            Cert Prep Exam · Results
+            {labels.short} · Results
           </div>
 
           {/* Score ring */}
@@ -296,7 +310,9 @@ export default function ExamWidget({
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             )}
-            {pass ? "Passed · 72% required" : "Not passed · 72% required"}
+            {pass
+              ? `Passed · ${CERT_EXAM_PASS_PCT}% required`
+              : `Not passed · ${CERT_EXAM_PASS_PCT}% required`}
           </div>
 
           <p className="text-[13px] text-gray-500 mb-6">
@@ -387,7 +403,7 @@ export default function ExamWidget({
           <div className="flex items-center gap-2 min-w-0">
             <span aria-hidden="true" className="w-2 h-2 rounded-full bg-red-light" />
             <span className="font-mono text-[12px] font-bold tracking-[0.04em] truncate">
-              Cert Prep Exam
+              {labels.short}
               <span className="text-white/70"> · {total} questions</span>
             </span>
           </div>
@@ -420,18 +436,18 @@ export default function ExamWidget({
           <div>
             <div className="flex items-center gap-2 font-mono text-[11px] font-bold text-navy uppercase tracking-[0.09em] mb-1">
               <span className="w-[3px] h-3 rounded-sm bg-navy" />
-              Cert Prep Exam · {seriesName}
+              {labels.short} · {seriesName}
             </div>
             <h1 className="text-[clamp(1.5rem,3vw,1.9rem)] font-extrabold text-navy tracking-[-0.02em] leading-tight">
-              Certification Prep Exam
+              {labels.full}
             </h1>
           </div>
           <div className="font-mono text-[11px] text-gray-500 text-right">
             <b className="text-navy">{total} questions</b>
             <br />
-            105 minutes · no feedback
+            {CERT_EXAM_MINUTES} minutes · no feedback
             <br />
-            pass ≥ 72%
+            pass ≥ {CERT_EXAM_PASS_PCT}%
           </div>
         </div>
 
