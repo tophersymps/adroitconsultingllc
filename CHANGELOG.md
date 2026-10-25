@@ -691,6 +691,11 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 **Verified** - `npx tsc --noEmit` exit 0; `npx vitest run src/lib/db src/config` 36/36 green (client.test.ts unchanged); the new bundle guard was proven to bite by reverting `Header.tsx` to `@/lib/db/client` (1 failure) and restoring it. `origin/main` merged in so PR #361 is mergeable; only `CHANGELOG.md` conflicted (both sections kept).
 
 **Known Issues** - None functional; CSP (`next.config.ts`) untouched. The Neon SDK still ships on routes that actually query the Data API (`useReadProgress`, `useLessonProgress`), which is intended.
+## [v1.1.0] — 2026-10-25
+
+### Neon-Migration-R2-Hardening
+
+Neon migration R1/R2 for adroit.io: Managed Better Auth + Data API cutover from Supabase, RLS port and isolation verification, /atlas and auth-route hardening, and the R2 review fix cycle. Opened 2026-10-23 to give the whole migration line a named release; builds auto-attach from here.
 
 ## [Unreleased]
 
