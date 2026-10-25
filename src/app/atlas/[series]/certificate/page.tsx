@@ -31,6 +31,7 @@ import {
 } from "@/lib/quiz";
 import { getSeriesBySlug } from "@/lib/learn";
 import { examLabels } from "@/lib/exam-labels";
+import { CERT_CHECK_PASS_PCT, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
@@ -463,7 +464,9 @@ export default async function CertificatePage({ params }: Props) {
                   >
                     {eligibility.examPassed ? OkIcon : NoIcon}
                   </span>
-                  <span>Cert prep exam passed (≥ 72%)</span>
+                  <span>
+                    {labels.short} passed (≥ {CERT_EXAM_PASS_PCT}%)
+                  </span>
                   <span className="font-mono text-[11px] text-gray-500 ml-auto">{examStatus}</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-[13px] text-gray-600">
@@ -476,7 +479,7 @@ export default async function CertificatePage({ params }: Props) {
                   </span>
                   <span>
                     <b className="text-gray-800">Exam unlocked</b> — all {eligibility.checksTotal}{" "}
-                    knowledge checks ≥ 80%
+                    knowledge checks ≥ {CERT_CHECK_PASS_PCT}%
                   </span>
                   <span className="font-mono text-[11px] text-gray-500 ml-auto">
                     {eligibility.checksPassed}/{eligibility.checksTotal} checks

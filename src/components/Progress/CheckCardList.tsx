@@ -11,13 +11,24 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { CheckProgress, KnowledgeCheckMeta, TierProgress } from "@/shared/contracts";
+import type { ExamKind } from "@/data/types";
+import { examLabels } from "@/lib/exam-labels";
+import { CERT_CHECK_PASS_PCT } from "@/lib/exam-config";
 
 interface CheckCardListProps {
   series: string;
   checksMeta: KnowledgeCheckMeta[];
+  /**
+   * The series' exam kind — the explanatory line names the exam the checks
+   * unlock. Required: this list renders on every tiered series page, so a
+   * missing kind would put "cert prep exam" on a Tracks course (US-009).
+   * Required by api-contracts.md §C kind plumbing.
+   */
+  kind: ExamKind;
 }
 
-export default function CheckCardList({ series, checksMeta }: CheckCardListProps) {
+export default function CheckCardList({ series, checksMeta, kind }: CheckCardListProps) {
+  const labels = examLabels(kind);
   const [tiers, setTiers] = useState<TierProgress | null>(null);
 
   useEffect(() => {
@@ -54,7 +65,9 @@ export default function CheckCardList({ series, checksMeta }: CheckCardListProps
         Milestone checks
       </h2>
       <p className="text-[13px] text-gray-500 dark:text-[var(--ink-muted)] max-w-[640px] leading-relaxed mb-5">
-        One 15-question check every five lessons. Pass each with 80%+ to unlock the cert prep exam. Rows link to each check page — guests see the same list, and each page shows the sign-up CTA.
+        One 15-question check every five lessons. Pass each with {CERT_CHECK_PASS_PCT}%+ to unlock
+        the {labels.phrase}. Rows link to each check page — guests see the same list, and each page
+        shows the sign-up CTA.
       </p>
 
       <div className="border border-gray-200 rounded-2xl bg-white overflow-hidden dark:border-[var(--border-default)] dark:bg-[var(--surface-card)]">

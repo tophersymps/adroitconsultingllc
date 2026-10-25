@@ -404,7 +404,7 @@ export default async function SeriesPage({ params }: Props) {
         {/* Tier sections — checks + exam card (only for tiered courses) */}
         {hasTiers && (
           <>
-            <CheckCardList series={series} checksMeta={checksMeta} />
+            <CheckCardList series={series} checksMeta={checksMeta} kind={s.examKind} />
             <ExamCard
               series={series}
               totalChecks={checksMeta.length}
