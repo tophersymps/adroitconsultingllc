@@ -181,7 +181,7 @@ export default async function KnowledgeCheckPage({ params }: Props) {
           )}
 
           {!isAuthed ? (
-            <GuestCTA tier="check" ariaLabel="Knowledge check locked" />
+            <GuestCTA tier="check" ariaLabel="Knowledge check locked" kind={s.examKind} />
           ) : (
             <QuizWidget
               quizName={check.quizName}
