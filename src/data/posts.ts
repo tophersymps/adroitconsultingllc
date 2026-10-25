@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "motion-design-system-2026",
+    "title": "Motion Belongs in the Design System",
+    "excerpt": "Most products ship animation without a motion system. Timing, easing, reduced motion, and the rendering budget belong in tokens, not in every component.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "October 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "Accessibility",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/motion-design-system-2026.webp",
+    "ogImage": "/banners/motion-design-system-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "build-once-deploy-digest-2026",
     "title": "Your Staging Passed. Production Ran Something Else.",
     "excerpt": "If production rebuilds the commit, you promoted a hash and a hope. Deploy the digest, keep the tag for humans, and make the registry enforce it.",
