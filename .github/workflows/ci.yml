@@ -28,3 +28,25 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  changelog-guard:
+    # CHANGELOG.md is composed by scripts/compose-changelog.js from changelog.d/
+    # fragments; a PR that edits it directly re-creates the append-target that
+    # produced 50 resolution merges in a day and silently dropped a release body
+    # (PR #361). This job reports that as a failure. It is NOT in the ruleset's
+    # required checks yet, so it informs without blocking.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: No CHANGELOG.md edits in pull requests
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          echo "$changed"
+          if echo "$changed" | grep -qx "CHANGELOG.md"; then
+            echo "::error file=CHANGELOG.md::Do not edit CHANGELOG.md in a pull request. Add changelog.d/<ticket>.md instead (changelog.d/README.md); scripts/compose-changelog.js is the only writer of CHANGELOG.md."
+            exit 1
+          fi
