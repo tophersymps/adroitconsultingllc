@@ -74,7 +74,8 @@ export default async function MDXSources({ mdx }: { mdx: string }): Promise<JSX.
 import type { LearnLesson } from "@/data/types";
 import type { KnowledgeCheckMeta } from "@/shared/contracts";
 
-export type CheckState = "passed" | "available" | "locked";
+/** No "locked": there is no lesson gating (architecture.md §4). */
+export type CheckState = "passed" | "available";
 
 export type TimelineNode =
   | { kind: "lesson"; lesson: LearnLesson }
@@ -111,8 +112,7 @@ export function buildTimeline(
 export function checkState(
   check: KnowledgeCheckMeta,
   passedCheckNumbers: ReadonlySet<number>,
-  mode: LessonGateMode,
-): CheckState;   // "passed" wins in both modes; "locked" only when mode === "gated"
+): CheckState;   // "passed" when the set contains check.n, else "available"; never "locked"
 
 /** D-5 rule: hide a check node only when passed AND every lesson in its range is hidden. */
 export function hiddenByFilter(
@@ -124,31 +124,19 @@ export function hiddenByFilter(
 
 ---
 
-## B.2 `src/lib/learn-gate.ts` (new, pure)
+## B.2 No gate module (withdrawn — D-1 decided: no lesson gating)
 
-```ts
-export type LessonGateMode = "advisory" | "gated";
+This section previously specified `src/lib/learn-gate.ts` (`LESSON_GATE_MODE`, `resolveLessonGate`,
+`LessonGateMode`). **It is withdrawn.** Chris decided on 2026-10-25 that there is no lesson gating
+(architecture.md §4). Nothing in this release creates that file, that type, that constant or any
+`blocked`/`mode` prop, and no `locked` value exists in `CheckState`.
 
-/** D-1. Default assumed by this blueprint: advisory (no new lesson lock). */
-export const LESSON_GATE_MODE: LessonGateMode = "advisory";
+What replaces it is routing only, delivered by B.1 + B.3 + B.5:
 
-export type LessonGateVerdict =
-  | { blocked: false }
-  | { blocked: true; check: KnowledgeCheckMeta };
-
-export function resolveLessonGate(input: {
-  lessonNumber: number;
-  checks: readonly KnowledgeCheckMeta[];
-  passedCheckNumbers: ReadonlySet<number>;
-  /** Tests pass this explicitly; production omits it and gets LESSON_GATE_MODE. */
-  mode?: LessonGateMode;
-}): LessonGateVerdict;
-```
-Contract:
-- `advisory` → always `{ blocked: false }`.
-- `gated` → blocked when `checkEndingAt(checks, n)` is undefined but some check with
-  `check.lessons[1] < n` is unpassed → `{ blocked: true, check: <highest such check> }`.
-- Never throws; unknown lesson numbers are unblocked (defensive).
+- a check node is placed after the last lesson of its range (`buildTimeline`);
+- on that lesson, Next and `MilestonePanel` point **into** the check when it is not passed;
+- on a pass, the check's results offer "Continue to Lesson N";
+- the following lesson always renders, whether or not the check is passed.
 
 ---
 
@@ -211,15 +199,15 @@ export function useTierProgress(series: string): {
 type CheckTimelineNodeProps = {
   series: string;
   check: KnowledgeCheckMeta;          // { n, lessons: [a, b] }
-  state: CheckState;                  // "passed" | "available" | "locked"
+  state: CheckState;                  // "passed" | "available"  (no "locked")
   bestScore?: number;                 // present only when passed
   /** Copy line from the label source ("Pass each check with 80%+ to unlock the …"). */
   unlockNote?: string;
 };
 ```
 - Renders `<Link href={/atlas/<series>/check/<n>}>` with an accessible name covering number, range and
-  state: `"Knowledge Check 1, lessons 1 to 5, passed 87 percent"` /
-  `"…, available"` / `"…, locked until earlier checks are passed"`.
+  state: `"Knowledge Check 1, lessons 1 to 5, passed 87 percent"` / `"…, available"`. There is no
+  locked variant of this name — the check is always a link (architecture.md §4).
 - Badge is text + icon (never colour-only). Row height ≥ 44 px at every width. No fixed `min-w`.
 - Visually distinct from `LessonCard`: milestone treatment (K{n} marker + emphasis), not a lesson row.
 
@@ -231,14 +219,13 @@ type MilestonePanelProps = {
   check: KnowledgeCheckMeta;
   nextLesson: LearnLesson | undefined;
   passed: boolean;                    // check passed → offer "Continue to Lesson N"
-  mode: LessonGateMode;               // advisory | gated
 };
 ```
-- Advisory + `passed: false` → "You've finished lessons a–b" + primary
+- `passed: false` → "You've finished lessons a–b" + primary
   `→ /atlas/<series>/check/<n>` ("Take Knowledge Check <n>").
 - `passed: true` → primary `→ /atlas/<series>/<next.slug>` ("Continue to Lesson <next.lesson>").
-- Under `gated` and `passed: false` on a lesson beyond the range, the lesson page renders this panel
-  **instead of** the body (the only D-1-follows-on change).
+- No `mode`/`blocked` prop: the panel is always additive, never a substitute for the lesson body, and
+  it never renders on a lesson that does not end a range.
 - No client state, no fetch: it must render on first paint.
 
 ### `LessonNavigation` (edit — additive)

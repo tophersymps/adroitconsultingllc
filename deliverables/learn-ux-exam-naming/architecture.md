@@ -13,13 +13,20 @@
 
 The BA left five decisions for the architect (section 6 of the requirements: label source location and
 `examKind` plumbing for Workstream B; MDX body/sources split and lesson→check mapping helper for
-Workstream A). Everything below answers those, plus the two things the requirements did not settle:
-how the D-1 gate is switched without rework, and how the series page stops issuing a second progress
-fetch.
+Workstream A). Everything below answers those, plus how the series page stops issuing a second progress
+fetch and how the lesson→check→lesson flow is routed with no lesson lock.
 
-**Not decided here (and deliberately):** D-1 (lesson gating semantics), D-2 (`agentic-ai` kind),
-D-3 (pass mark for course-completion exams). Section 4 designs a single switch for D-1 and states the
-default assumed. D-2 and D-3 are content/product answers, not architecture.
+**D-1 is DECIDED (Chris, 2026-10-25): there is NO lesson gating.** No `LESSON_GATE_MODE`, no
+`learn-gate.ts`, no `resolveLessonGate`, no `Locked` badge state, no locked copy branch. Finishing the
+last lesson of a milestone range routes the learner into that knowledge check as the next step; the
+following lesson stays reachable — via Next when the check is already passed, and always via its
+syllabus row and direct URL. Passing the check continues the flow through the results view's
+"Continue to Lesson N" action. The knowledge checks already exist and are already part of the courses,
+so this release changes **delivery and presentation only**: no new check artifacts and no new
+completion signal. §4 records the decision and the one thing it forbids.
+
+**Still product answers, not architecture:** D-2 (`agentic-ai` kind) and D-3 (pass mark for
+course-completion exams).
 
 **Verified before designing** (probes run against the real repo, outputs in §3.1 and §7.3):
 
@@ -29,7 +36,7 @@ default assumed. D-2 and D-3 are content/product answers, not architecture.
 | The footnote block can be split out of the MDX render | ⚠️ partially | A definitions-only MDX document renders **nothing** — the section is emitted only when the document *also* contains references. The split needs both passes to render the whole document with a rehype filter. See §3.1 |
 | `group` in `series.json` is not a runtime value | ✅ | `build-learn.js:236`, `src/data/learn.ts` has no `group`, `lib/learn.ts:69-70` sets `group: null` |
 | Milestone check ranges come from each check file's title | ✅ | `lib/quiz.ts:112-142` derives the range from the title (`/Lessons\s+(\d+)\s*[–-]\s*(\d+)/`). A `5n` fallback is still in the code at `quiz.ts:121` (it applies only when the title does not match — 0 of 90 check files today); see the residual risk in §9 |
-| No lesson-level gating exists | ✅ | `LessonNavigation` links next unconditionally; only the exam and certificate are gated |
+| No lesson-level gating exists | ✅ | `LessonNavigation` links next unconditionally; only the exam and certificate are gated (by checks). D-1 keeps it that way — no lesson lock is added |
 | Three clients already fetch `/api/progress/quiz/tiers` | ✅ (new) | `CertReadiness` (`page.tsx:284`), `CheckCardList` (`page.tsx:401`) and `ExamCard` (`page.tsx:404`) each issue the **same** GET on `/atlas/[series]` — three identical requests per series page |
 | Every lesson has sources | ✅ (new) | 511 of 511 `content/learn/*/*.mdx` files carry `[^n]:` definitions |
 | No duration field in `exam.json` | ✅ (new) | 105 minutes is hardcoded on five surfaces — `ExamWidget.tsx:29` (+ copy at `:432`), `ExamLocked.tsx:39`, `GuestCTA.tsx:40`, `ExamCard.tsx:75`, `app/atlas/[series]/exam/page.tsx:142`; question count is `exam.questions.length` |
@@ -43,7 +50,8 @@ surface, Tailwind with CSS-variable tokens in dark mode, vitest + testing-librar
 tests, `scripts/build-learn.js` as the content→module generator.
 
 This release adds **no** new runtime, service, data store, or write path. Two new lib modules, one new
-client hook, four new components, one retirement. That is the whole surface.
+client hook, four new components, one retirement. That is the whole surface. It also adds **no
+authorization surface**: no lesson lock, no gate module, no access check (see §4).
 
 ---
 
@@ -57,7 +65,6 @@ src/components/MDX/footnote-plugins.ts    NEW  shared rehype: rename Footnote->S
 src/components/MDX/MDXArticle.tsx         EDIT optional sources={ "inline" | "split" } (default "inline")
 src/components/MDX/MDXSources.tsx         NEW  renders ONLY the sources section; null when none
 src/lib/lesson-checks.ts                  NEW  pure: timeline builder + lesson<->check mapping + check state
-src/lib/learn-gate.ts                     NEW  pure: LESSON_GATE_MODE switch + resolveLessonGate()
 src/lib/check-scores.ts                   NEW  server: quiz_attempt -> per-check scores (extracted from exam page)
 src/lib/hooks/useTierProgress.ts          NEW  client: ONE /api/progress/quiz/tiers request per series
 src/components/Progress/CheckTimelineNode.tsx  NEW  milestone row in the syllabus (state badge + 44px target)
@@ -183,7 +190,7 @@ the bottom of the page.
 
 **The mapping helper.** New pure module `src/lib/lesson-checks.ts` — no `fs`, no React, importable by
 both the server page and the client syllabus. It owns every lesson↔check relationship so the syllabus,
-the navigation, the panel and the gate all agree:
+the navigation and the milestone panel all agree:
 
 ```ts
 export type TimelineNode =
@@ -194,7 +201,7 @@ buildTimeline(lessons: LearnLesson[], checks: KnowledgeCheckMeta[]): TimelineNod
 checkEndingAt(checks, lessonNumber): KnowledgeCheckMeta | undefined   // lessons[1] === n
 checkCovering(checks, lessonNumber): KnowledgeCheckMeta | undefined   // a <= n <= b
 nextLessonAfter(lessons, lessonNumber): LearnLesson | undefined
-checkState(check, passedCheckNumbers, mode): "passed" | "available" | "locked"
+checkState(check, passedCheckNumbers): "passed" | "available"   // no "locked": no gating (§4)
 ```
 
 Rules baked in (each gets a unit test):
@@ -229,7 +236,8 @@ All three consume it (`CertReadiness` keeps its "render nothing until there is d
 regression (NFR: "must not add a second progress fetch per check row").
 
 **Node component.** `CheckTimelineNode` renders the check as a node that stands out from a lesson row:
-distinct marker (`K1`), a state badge (Passed · 87% / Available / Locked), the range ("Lessons 1–5"),
+distinct marker (`K1`), a state badge (Passed · 87% / Available — there is no Locked state, §4), the
+range ("Lessons 1–5"),
 and a full-row link to `/atlas/[series]/check/1`. Accessibility: it is a link with an accessible name
 that includes number, range and state (`aria-label`), the badge is not colour-only (text + icon), and
 the row is at least 44 px tall at every width. Mobile-first: it is a normal list row, so the 360/390 px
@@ -328,41 +336,37 @@ behaviour). The hero control remains the way to mark complete. Stated so QA does
 
 ---
 
-## 4. The D-1 switch (no decision made here)
+## 4. No lesson gating (D-1 decided by Chris, 2026-10-25)
 
-D-1 asks whether lesson 6 locks until check 1 passes. Nothing gates lessons today. The design must let
-either answer land without rework.
+**Decision: there is no lesson gating.** A lesson is never locked by a knowledge check, before or after
+the check is passed. What exists instead:
 
-```ts
-// src/lib/learn-gate.ts — the ONLY place the mode is read
-export type LessonGateMode = "advisory" | "gated";
-export const LESSON_GATE_MODE: LessonGateMode = "advisory";   // ← default assumed by this blueprint
+- **Placement** — each check node sits in the syllabus immediately after the last lesson of its range
+  (§3.2). It is a milestone in the timeline, not a gate.
+- **Routing in** — on the last lesson of a range whose check is not passed, Next and the milestone panel
+  route **into** the check ("Knowledge Check 1 · Lessons 1–5").
+- **Routing out** — after a pass, the check's results view offers "Continue to Lesson N" (the first
+  lesson after the range) as the primary action. A fail keeps retake primary and leaves the learner on
+  the check.
+- **Reachability** — the following lesson is always reachable. Next routes there directly once the check
+  is passed; before that, its syllabus row and direct URL work unchanged, exactly as today.
 
-export function resolveLessonGate(input: {
-  lessonNumber: number;
-  checks: KnowledgeCheckMeta[];
-  passedCheckNumbers: ReadonlySet<number>;
-  mode?: LessonGateMode;              // default: LESSON_GATE_MODE (tests pass it explicitly)
-}): { blocked: false } | { blocked: true; check: KnowledgeCheckMeta };
-```
+The knowledge checks already exist and are already part of the courses. This release changes delivery
+and presentation only: **no new check artifacts and no new completion signal.**
 
-- `"advisory"` (assumed default, Reading A): never blocks. Next and the milestone panel route into the
-  check; lesson 6 stays reachable by direct URL and by its own syllabus row. No new authorization
-  surface, no stranded learner.
-- `"gated"` (Reading B): a lesson whose preceding range's check is unpassed returns `blocked: true`.
-  The two call sites already exist in this design — the lesson page renders `<MilestonePanel
-  blocked/>` instead of the body, and the syllabus renders the check node as `Locked` — so flipping is:
-  set the constant, plus a decision on whether the *write* route should also refuse completion for
-  gated lessons (recommended: no; gating is a read concern).
+**Explicitly NOT in this release — do not build, do not stub, do not leave a "for later" switch:**
+`LESSON_GATE_MODE`, `src/lib/learn-gate.ts`, `resolveLessonGate()`, a `LessonGateMode` type, a `"locked"`
+value in `checkState()`, a `Locked` badge or branch in `CheckTimelineNode`, a `blocked`/`mode` prop on
+`MilestonePanel`, any locked-lesson copy, any redirect or challenge panel, and any write-route refusal.
+A dormant mode constant is exactly what this change removes: it is dead code plus a second behaviour to
+test, and it invites reintroducing the lock the product rejected.
 
-**Two call sites, one constant.** `checkState()` receives `mode` so unit tests exercise both modes in
-one run without mutating module state. `resolveLessonGate()` is called once per lesson render. Nothing
-else in the codebase may branch on the mode.
+**Do not confuse this with the exam gate.** The end-of-course exam and the certificate stay gated on
+checks exactly as today (`ExamLocked`, `lib/certificate.ts`). That is unchanged and out of scope here.
 
-**What would still need work if D-1 resolves to "gated":** a redirect/challenge panel design from
-kara, a copy deck line from Lois ("Pass Knowledge Check 1 to continue"), and a QA pass on the
-returning-learner path (someone mid-course who is now blocked by a check they never took). Estimate:
-one extra steel card. The routing, mapping and state code do not change.
+**If gating is ever requested again** it is a new product decision with its own requirement doc, a
+design pass (blocked-state panel + locked copy) and a QA pass on the returning-learner path — not a
+constant flip. Nothing in this blueprint reserves a seam for it.
 
 **D-2 and D-3.** D-2 (`agentic-ai`) is a content value in `series.json`; the proposed
 `course-completion` is seeded in the B1 card and can be changed by editing one field plus one test
@@ -483,10 +487,8 @@ flowchart TB
   MDX -->|getLearnMDXContent| LP
   LP -->|"checkEndingAt / nextLessonAfter"| MAP["lib/lesson-checks.ts"]
   SP -->|buildTimeline| MAP
-  GATE["lib/learn-gate.ts<br/>LESSON_GATE_MODE (D-1)"] --> MAP
   LP -->|"quiz_attempt + canonical coverage"| SC["lib/check-scores.ts"]
   XP --> SC
-  SC --> GATE
   SP --> SYL["SeriesSyllabus (client)"]
   MAP --> SYL
   SYL --> TP["useTierProgress (ONE GET)"]
@@ -529,8 +531,8 @@ flowchart TB
                                 └── failed → primary = retake, stays on the check     (US-007)
 ```
 
-Under `LESSON_GATE_MODE = "gated"` the only change is that lesson 6's own render returns the block
-panel instead of the body, and the timeline node reads `Locked`.
+There is no second branch: lesson 6 renders normally whether or not check 1 is passed. The route into
+the check is an offer (Next + panel), never a condition on lesson 6 (§4).
 
 ### 7.2 Syllabus node order (`ai-at-work`: 6 checks)
 
@@ -550,8 +552,8 @@ check node only when passed and its whole range is hidden.
 
 | Layer | Test | Pins |
 |---|---|---|
-| unit | `lib/lesson-checks.test.ts` | timeline interleaving incl. non-5n cadence, overlapping ranges, unpublished range end, no-checks series, `checkEndingAt`/`nextLessonAfter` edges |
-| unit | `lib/learn-gate.test.ts` | advisory never blocks; gated blocks lesson after an unpassed range; both modes via the `mode` parameter (no module mutation) |
+| unit | `lib/lesson-checks.test.ts` | timeline interleaving incl. non-5n cadence, overlapping ranges, unpublished range end, no-checks series, `checkEndingAt`/`nextLessonAfter` edges; `checkState` returns only `passed`/`available` |
+| unit | module surface | no `learn-gate` module exists and no `LessonGateMode`/`resolveLessonGate`/`LESSON_GATE_MODE` symbol is exported or imported anywhere (§4); a lesson page renders its body identically whether or not its preceding check is passed |
 | unit | `lib/exam-labels.test.ts` | 12-series matrix: every series resolves the expected label; no cert-prep string for course-completion; `lockHeading(n)` uses `n` not 9 |
 | unit | `lib/lesson-sources.test.ts` | `hasFootnoteDefinitions` true for all 511 lessons, false for a source-literal-only lesson |
 | component | `MDXArticle`/`MDXSources` split | body has refs and **no** `section[data-footnotes]`; sources has exactly one `li#user-content-fn-1`; every body `fnref` id has a matching backref href; blog path (default prop) byte-identical output |
@@ -582,7 +584,7 @@ width is not evidence.
 | Sticky control crowds the player on a 360 px screen | unusable control or shrunken audio | `trailing` slot + wrap layout, 44 px target, Kara mockup at 360/390/844×390 |
 | Slot appears only after hydration (`next/dynamic ssr:false`) | a brief window with no bar control | allowed by US-014 ("or immediately after hydration"); the hero control is the first-paint path |
 | `examKind` missing on a 13th series added later | silent wrong label | generator throws; new-series CI fails |
-| D-1 resolves to "gated" after A6 lands | extra work | `resolveLessonGate` + `mode` parameter exist from day one; flip = 1 constant + copy + panel design (≈1 card) |
+| Gating creeps back in as a "somebody added a locked state" | the delivery Chris rejected returns as dead code or a second untested branch | §4 lists the banned symbols; A4/A6 bodies forbid a gate module; the module-surface test in §8 fails if one appears; the `Locked` state is absent from K1's design spec |
 | Exam copy sweep misses a surface | the defect Chris reported survives | grep test + 12-series matrix test + the BA inventory table as the checklist |
 | Design reference files still show the old label | future design work copies it | annotation note in `design/copy-deck-quiz-tiers.md` + the two mockups (Kara card, 15 min) |
 | Emails (D-4) | out-of-repo surface may still say "Certification Prep" | out of scope; flagged for the marketing owner in the handoff |
@@ -594,7 +596,8 @@ width is not evidence.
 1. **B1 → B2** (kind plumbing + label source) — unblocks all of B and touches nothing in A.
 2. **K1 → K2 → K3** (Kara) — the check node, the sticky control, the lesson-bottom sources treatment.
 3. **A1 → A2** (sources split + lesson composition) — smallest, unblocks nothing else, ships first.
-4. **A3 → A4** (mapping + gate switch + single tiers fetch) — pure logic, fully unit-testable.
+4. **A3 + A4** (mapping module; single tiers fetch) — A4 is independent of A3, both pure/unit-testable.
+   No gate module in either: §4.
 5. **A5** (timeline node + syllabus) — depends on A3, A4, K1.
 6. **A6 → A7** (routing into and out of the check) — depends on A3.
 7. **A8** (sticky completion) — depends on K2, independent of A5–A7.
@@ -616,7 +619,7 @@ Client-facing HTML report: `docs/architecture-learn-ux-exam-naming.html`
 | ADR-301 | Split MDX sources with two filtered renders | Render the same MDX document twice: body with the footnotes section dropped, sources with only the section kept | Fidelity preserved, overflow ids match by construction; +3–5 ms per lesson render |
 | ADR-302 | Citation order is opt-in per route | `MDXArticle sources` defaults to `inline`; only the lesson route opts into `split` | Blog, both previews and the paywall peek are untouched (zero regression surface) |
 | ADR-303 | Milestone position derives from the check file's range | `buildTimeline` places each node at `check.lessons[1]`, the range end resolved by `getKnowledgeChecks` | Correct for any cadence (4–12 checks) and for short-tail merges. `lesson-checks.ts` does no `5n` arithmetic; the residual `5n` fallback inside `quiz.ts:121` is dormant (all 90 check files carry a `Lessons A–B` title) and is pinned by a conformance test (§9) |
-| ADR-304 | The D-1 gate is one constant | `LESSON_GATE_MODE = "advisory"` read only by `resolveLessonGate`, which takes `mode` for tests | Flipping to "gated" is a constant + one panel design, no re-layout of routing |
+| ADR-304 | There is no lesson gating (supersedes the D-1 switch design) | No gate module, no mode constant, no `Locked` state, no locked copy. Checks are placed and routed to; the following lesson always renders | Auth surface unchanged (exam/cert stay gated as today); one behaviour to test instead of two; re-introducing a lock is a new requirement, not a constant flip |
 | ADR-305 | Sticky completion reuses `useLessonProgress` | Compact display component, same hook, same write path, static chip when complete | One state owner; hero and bar cannot disagree; no new API surface |
 | ADR-306 | One tiers fetch per series page | `useTierProgress` module-level cache shared by `SeriesSyllabus`, `ExamCard` and `CertReadiness` | 3 → 1 request per series page, which funds the check nodes' data need |
 | ADR-307 | `examKind` is explicit and required | New `series.json` field validated at build, surfaced through the generated module | Label survives the degraded path; a missing value fails CI instead of defaulting to cert prep |

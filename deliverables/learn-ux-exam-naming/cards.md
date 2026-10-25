@@ -20,8 +20,9 @@ Lane B (exam naming) is independent of lane A and can start immediately.
 - **Body:**
   - Design `Knowledge Check N · Lessons A–B` as a **node in the lesson list**, not a card in its own
     section. It must read as a milestone: distinct marker (`K1`), milestone emphasis, and a state badge.
-  - States: `Passed · 87%`, `Available`, `Locked` (locked only exists if D-1 becomes "gated" — design it
-    anyway so the state is ready).
+  - States: `Passed · 87%` and `Available` only. **There is no `Locked` state** — D-1 is decided: no
+    lesson gating (architecture.md §4). Do not design a locked badge, a locked row treatment or locked
+    copy; a check is a milestone, never a door.
   - Constraints: row height ≥ 44 px at every width; badge must not be colour-only (text + icon); no
     fixed `min-width` (the syllabus must not gain horizontal scroll at 360 px); long range labels must
     not truncate the state badge.
@@ -94,26 +95,26 @@ Lane B (exam naming) is independent of lane A and can start immediately.
   resolved range, fail loudly — do not recompute `5n`. Cover:
   non-5 cadence (`sf-omni-consultant` 12 checks, `ai-at-work` 6), touching/overlapping ranges, range end
   unpublished, check before lesson 1 / after the last, series with no checks, `desc` reversal.
-  **No GateMode import cycle:** `LessonGateMode` type lives in `learn-gate.ts`; import the type only.
-  Also pin the input conformance: all 90 `check-*.json` titles match `Lessons A–B`, so `quiz.ts:121`'s
+  `checkState` returns `"passed" | "available"` only — **no `"locked"` value and no `mode` parameter**
+  (no gating; architecture.md §4). Also pin the input conformance: all 90 `check-*.json` titles match `Lessons A–B`, so `quiz.ts:121`'s
   dormant `5n` fallback can never move a node today (architecture.md §9, ADR-303).
 - **Evidence:** vitest output.
 
-### A4 — D-1 gate switch + one tiers fetch
-- **assignee:** steel · **parents:** [A3] · **est:** 45 min
-- **Done means:** `src/lib/learn-gate.ts` (mode `"advisory"`, both modes unit-tested) and
-  `src/lib/hooks/useTierProgress.ts` exist; **all three** `/api/progress/quiz/tiers` callers on the
-  series page use the hook (`CertReadiness`, `ExamCard`, and `CheckCardList` while it still exists,
-  or `SeriesSyllabus` after A5 lands); a series page with three consumers issues **one**
-  `/api/progress/quiz/tiers` request (today: three).
-- **Body:** `api-contracts.md` §B.2 + §B.4. Do **not** decide D-1 — ship the constant as `"advisory"`.
-  `resolveLessonGate` takes `mode` so tests exercise both branches without mutating module state.
-  Convert `CertReadiness` (`src/components/Progress/CertReadiness.tsx:27`, rendered on the series page
-  at `page.tsx:284`) onto the hook as well — it is the third identical GET, and the "one request"
-  criterion below is unreachable without it. It must keep rendering nothing while `tiers === null`.
+### A4 — One `/api/progress/quiz/tiers` fetch per series page
+- **assignee:** steel · **parents:** none · **est:** 45 min
+- **Done means:** `src/lib/hooks/useTierProgress.ts` exists; **all three**
+  `/api/progress/quiz/tiers` callers on the series page use it (`CertReadiness`, `ExamCard`, and
+  `CheckCardList` while it still exists, or `SeriesSyllabus` after A5 lands); a series page with three
+  consumers issues **one** `/api/progress/quiz/tiers` request (today: three).
+- **Body:** `api-contracts.md` §B.4 only. **No gate module:** do not create `src/lib/learn-gate.ts`,
+  `LESSON_GATE_MODE`, `resolveLessonGate` or a `LessonGateMode` type, and do not add a `mode`/`blocked`
+  prop anywhere — there is no lesson gating (architecture.md §4). Convert `CertReadiness`
+  (`src/components/Progress/CertReadiness.tsx:27`, rendered on the series page at `page.tsx:284`) onto
+  the hook as well — it is the third identical GET, and the "one request" criterion below is
+  unreachable without it. It must keep rendering nothing while `tiers === null`.
   Do not delete `CheckCardList` yet (A5 does that).
-- **Evidence:** unit tests for both modes; a test that two hook consumers in one render produce one fetch;
-  a component test that `CertReadiness` renders nothing on `null` and its stats on data.
+- **Evidence:** a test that two hook consumers in one render produce one fetch; a component test that
+  `CertReadiness` renders nothing on `null` and its stats on data; `grep -r "learn-gate\|LESSON_GATE_MODE\|resolveLessonGate" src/` returns nothing.
 
 ### A5 — Timeline node + syllabus interleaving
 - **assignee:** steel · **parents:** [A3, A4, K1] · **est:** 45 min
@@ -137,8 +138,9 @@ Lane B (exam naming) is independent of lane A and can start immediately.
   (or to lesson 6 when it is already passed), using authoritative `quiz_attempt` state.
 - **Body:** extract `loadCheckScores`/`loadCheckScore` into `src/lib/check-scores.ts` and use it from
   `exam/page.tsx` (behaviour must not change) and the lesson page; pass `nextOverride` to
-  `LessonNavigation`; add `MilestonePanel` between the practice questions and the sources;
-  call `resolveLessonGate` (advisory → never blocks). Guests: no query, no panel state.
+  `LessonNavigation`; add `MilestonePanel` between the practice questions and the sources. **No gate
+  call, no `blocked`/`mode` prop, no locked branch:** the lesson body renders unconditionally whether or
+  not the preceding check is passed (architecture.md §4). Guests: no query, no panel state.
 - **Evidence:** page tests (lesson 5 → check 1; passed → lesson 6; guest → no pass state); exam page and
   certificate tests still green.
 
@@ -251,18 +253,18 @@ Lane B (exam naming) is independent of lane A and can start immediately.
 ## Dependency graph (file in this order)
 
 ```
-K1 ─┐
-K2 ─┼──────────────┐
-K3 ─┘              │
-A1 → A2            │
-A3 ─┬→ A4 ─┬→ A5 ──┼→ A9
-    ├→ A6 ─┤       │
-    └→ A7 ─┘       │
-        A8 ────────┘        (A8 parents: K2)
-B1 → B2 → B3 ─┐
-         ├ B4 ─┼→ B6
-         └ B5 ─┘
-K1,K2,K3 → C1
+A1 → A2
+A3 → A5, A6, A7
+A4 → A5
+K1 → A5
+K2 → A8
+A2, A5, A6, A7, A8 → A9
+
+B1 → B2
+B2 → B3, B4, B5
+B3, B4, B5 → B6
+
+K1, K2, K3 → C1
 ```
 
 **Integration cards:** A9 (lane A) and B6 (lane B) — the two places parallel workstreams reconnect.
@@ -277,9 +279,11 @@ scale and the mobile decision on the bar's header row. Copy strings come from `e
 Lois's — propose changes, do not edit the strings in code.
 
 **To Steel:** the contracts in `api-contracts.md` are the seam. If a signature must change, update that
-file in the same PR. Two hard rules: no new write path for completion (only `/api/progress/lesson` via
-`useLessonProgress`), and do not decide D-1/D-2/D-3 — ship `LESSON_GATE_MODE = "advisory"` and
-`agentic-ai = course-completion` as seeded, both flagged in the PR body.
+file in the same PR. Three hard rules: (1) no new write path for completion — only
+`/api/progress/lesson` via `useLessonProgress`; (2) **no lesson gating of any kind** — no
+`learn-gate.ts`, no `LESSON_GATE_MODE`, no `locked` state, no locked copy (architecture.md §4); a check
+is placed in the timeline and routed to, never enforced; (3) do not decide D-2/D-3 — ship
+`agentic-ai = course-completion` as seeded, flagged in the PR body.
 
 **To Zod (QA):** acceptance requires desktop **and** mobile evidence per Amendment 1 (A2 viewport list).
 An item with one viewport class is unfinished.
