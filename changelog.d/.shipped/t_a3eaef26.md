@@ -1,4 +1,4 @@
-# Learn UX — lesson/check mapping module (A3)
+### Learn UX — lesson/check mapping module (A3)
 
 **What:** New pure module `src/lib/lesson-checks.ts` (contract
 `deliverables/learn-ux-exam-naming/api-contracts.md` §B.1) owning every

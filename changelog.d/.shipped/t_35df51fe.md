@@ -1,4 +1,4 @@
-# Learn UX — exam naming matrix + no-hardcoded-label guard (B6)
+### Learn UX — exam naming matrix + no-hardcoded-label guard (B6)
 
 **What:** Workstream B integration. Two guards now cover the whole lane:
 
