@@ -32,6 +32,8 @@ import {
 
 const SESSION_VALUE = "signed-session-cookie-value";
 const SESSION_JWT = "session.jwt.token";
+/** Distinct from SESSION_JWT so a guest-role token can never pass as a session one. */
+const ANON_JWT = "anonymous.role.jwt.token";
 const TOKEN_CACHE_CONTROL = "private, no-store, no-cache, must-revalidate";
 
 let captured: CapturedRequest[] = [];
@@ -63,7 +65,14 @@ function stubMint(
       });
       if (url === `${AUTH_BASE}/token`) return reply(url);
       if (url === `${AUTH_BASE}/token/anonymous`) {
-        return jsonResponse({ error: "unexpected anonymous mint" }, 500);
+        // Deliberately HEALTHY. `/token` and `/token/anonymous` share a bucket
+        // but not a fate: in production the guest mint can be answering fine
+        // while the session mint is throttled. If this stub failed, a
+        // regression that fell back to the guest role would still be answered
+        // 503 by accident and the suite would go green over the exact defect
+        // it exists to catch. It succeeds, and the tests assert it is never
+        // asked for and never returned.
+        return jsonResponse({ token: ANON_JWT });
       }
       if (url === `${AUTH_BASE}/get-session`) {
         return jsonResponse({ user: { id: "user-1", email: "learner@test.dev" } });
@@ -76,6 +85,15 @@ function stubMint(
 
 function mintRequests(requests: CapturedRequest[], path = "/token") {
   return requests.filter((r) => r.url === `${AUTH_BASE}${path}`);
+}
+
+/**
+ * Guest-role mints. A credential-bearing request must never produce one: the
+ * guest role is a LOWER privilege than the caller's own session, so serving it
+ * to a signed-in user is the same class of bug as answering `{token:null}`.
+ */
+function anonymousMints(requests: CapturedRequest[]) {
+  return mintRequests(requests, "/token/anonymous");
 }
 
 /** Assertions every branch must satisfy (§6). */
@@ -335,5 +353,77 @@ describe("GET /api/db/token — signed in", () => {
       status: 429,
       retryAfterSeconds: 12,
     });
+  });
+
+  it("R1: a failed mint neither mints nor returns the guest role (no guest degradation)", async () => {
+    // Every failure mode, one assertion set: a signed-in caller whose own mint
+    // failed must not be served the LOWER-privilege guest role either. This is
+    // the `mintSessionJwt() ?? getAnonymousJwt()` shape the change removed —
+    // and the stub's /token/anonymous ANSWERS 200 here, so a regression that
+    // reintroduces the fallback would be observed, not masked.
+    const replies: Array<() => Response | Promise<Response>> = [
+      () => jsonResponse({ message: "unauthorized" }, 401),
+      () => jsonResponse({ message: "forbidden" }, 403),
+      () => jsonResponse({ message: "slow down" }, 429, { "x-retry-after": "5" }),
+      () => jsonResponse({ message: "boom" }, 500),
+      () => jsonResponse({ message: "boom" }, 503),
+      () => jsonResponse({}, 200),
+      () => jsonResponse({ token: "" }, 200),
+      () => {
+        throw new TypeError("network down");
+      },
+    ];
+
+    for (const reply of replies) {
+      __resetMintCooldown();
+      captured = stubMint(reply);
+
+      const res = await GET();
+      const body = await res.json();
+
+      expect(anonymousMints(captured)).toHaveLength(0);
+      expect(JSON.stringify(body)).not.toContain(ANON_JWT);
+      expect(body.token).toBeUndefined();
+      expect([401, 503]).toContain(res.status);
+    }
+  });
+
+  it("R2: a signed-in mint failure is distinguishable from the guest answer", async () => {
+    // The defect, stated as a test: the old route answered a signed-in caller
+    // whose mint failed with the byte-identical body a guest gets. Compare the
+    // two branches directly so a future collapse to "guest" cannot pass.
+    cookiesMock.mockResolvedValue(guestCookieStore());
+    captured = stubMint(() => jsonResponse({ message: "boom" }, 500));
+    const guest = await GET();
+    const guestBody = await guest.json();
+
+    __resetMintCooldown();
+    cookiesMock.mockResolvedValue(sessionCookieStore(SESSION_VALUE));
+    captured = stubMint(() => jsonResponse({ message: "boom" }, 500));
+    const signedInFailure = await GET();
+    const signedInBody = await signedInFailure.json();
+
+    expect(guest.status).toBe(200);
+    expect(guestBody).toEqual({ token: null });
+
+    expect(signedInFailure.status).toBe(503);
+    expect(signedInBody).not.toEqual(guestBody);
+    expect(signedInBody.code).toBe("AUTH_MINT_UNAVAILABLE");
+    expect(signedInBody.token).toBeUndefined();
+    expectTokenHeaders(signedInFailure);
+  });
+
+  it("R3: an invalid session advertises no Retry-After and no token field", async () => {
+    captured = stubMint(() => jsonResponse({ message: "unauthorized" }, 401));
+
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(401);
+    // Re-signing in is the fix; waiting is not. Advertising a wait would be a lie.
+    expect(res.headers.get("retry-after")).toBeNull();
+    expect(body.retryAfterSeconds).toBeUndefined();
+    expect(body.token).toBeUndefined();
+    expectTokenHeaders(res);
   });
 });

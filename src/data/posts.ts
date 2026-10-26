@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-permission-model-migration-2026",
+    "title": "The Deadline Is Gone. The Permission Sprawl Is Not.",
+    "excerpt": "Salesforce cancelled the profile-permission deadline in June 2026. The access risk, the sprawl, and the migration work are still yours.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 26, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "14 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Permissions",
+      "Agentforce",
+      "Administration"
+    ],
+    "bannerImage": "/banners/salesforce-permission-model-migration-2026.webp",
+    "ogImage": "/banners/salesforce-permission-model-migration-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "motion-design-system-2026",
     "title": "Motion Belongs in the Design System",
     "excerpt": "Most products ship animation without a motion system. Timing, easing, reduced motion, and the rendering budget belong in tokens, not in every component.",
