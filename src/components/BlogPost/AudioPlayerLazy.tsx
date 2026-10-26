@@ -23,8 +23,10 @@ export interface AudioPlayerLazyProps {
   hasAudio?: boolean;
   /** Passed through to AudioPlayer — see AudioPlayerProps.label. */
   label?: string;
+  /** Passed through to AudioPlayer — see AudioPlayerProps.lessonSlug. */
+  lessonSlug?: string;
 }
 
-export function AudioPlayerLazy({ slug, hasAudio, label }: AudioPlayerLazyProps) {
-  return <AudioPlayer slug={slug} hasAudio={hasAudio} label={label} />;
+export function AudioPlayerLazy({ slug, hasAudio, label, lessonSlug }: AudioPlayerLazyProps) {
+  return <AudioPlayer slug={slug} hasAudio={hasAudio} label={label} lessonSlug={lessonSlug} />;
 }
