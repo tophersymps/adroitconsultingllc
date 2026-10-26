@@ -10,43 +10,36 @@
  * defaults to "Footnotes", so a rehype plugin renames it to "Sources" (the
  * CSS reveals it as the visible heading). Both blog AND learn apply the
  * rename since 2026-08-16 (Chris: Learn sources must match article convention).
+ *
+ * `sources` is additive and defaults to `"inline"` — today's behaviour, byte
+ * identical for every existing caller (blog, both previews, paywall peek).
+ * Learn lesson pages pass `sources="split"` to drop the footnote section from
+ * the body render so the page can place the sources list itself (as the last
+ * content block, after the knowledge-check block).
  */
 import type { ComponentProps } from "react";
+import {
+  dropFootnoteSection,
+  renameFootnoteHeading,
+} from "@/components/MDX/footnote-plugins";
 
-type MDXArticleProps = {
+export type MDXArticleProps = {
   /** MDX body (frontmatter already stripped + citations linkified). */
   mdx: string;
+  /**
+   * `"inline"` (default) = sources render inside the body, exactly as today.
+   * `"split"` = the body render drops the GFM footnotes section so the caller
+   * can render it separately with `<MDXSources />`.
+   */
+  sources?: "inline" | "split";
 };
-
-type FootnoteNode = {
-  type: string;
-  tagName?: string;
-  properties?: { id?: unknown };
-  children?: FootnoteNode[];
-  value?: string;
-};
-
-/** Rename the auto-generated footnote section heading from "Footnotes" to "Sources". */
-function renameFootnoteHeading() {
-  return (tree: FootnoteNode) => {
-    const walk = (node: FootnoteNode) => {
-      if (
-        node.type === "element" &&
-        node.tagName === "h2" &&
-        node.properties?.id === "footnote-label"
-      ) {
-        node.children = [{ type: "text", value: "Sources" }];
-      }
-      node.children?.forEach(walk);
-    };
-    walk(tree);
-    return tree;
-  };
-}
 
 type MDXRemoteProps = ComponentProps<typeof import("next-mdx-remote/rsc").MDXRemote>;
 
-export default async function MDXArticle({ mdx }: MDXArticleProps) {
+export default async function MDXArticle({
+  mdx,
+  sources = "inline",
+}: MDXArticleProps) {
   const [{ MDXRemote }, remarkGfm, Figure] = await Promise.all([
     import("next-mdx-remote/rsc"),
     import("remark-gfm"),
@@ -56,7 +49,10 @@ export default async function MDXArticle({ mdx }: MDXArticleProps) {
   const options: MDXRemoteProps["options"] = {
     mdxOptions: {
       remarkPlugins: [remarkGfm.default],
-      rehypePlugins: [renameFootnoteHeading],
+      rehypePlugins:
+        sources === "split"
+          ? [renameFootnoteHeading, dropFootnoteSection]
+          : [renameFootnoteHeading],
     },
   };
 
