@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { useLessonProgress } from "@/lib/hooks/useLessonProgress";
 import {
   alignSegmentsToBlocks,
   activeSegmentIndex,
@@ -46,6 +47,13 @@ export interface AudioPlayerProps {
    * so its player reads "Listen to this lesson".
    */
   label?: string;
+  /**
+   * Present only on the Learn lesson page. Enables the "Mark complete"
+   * control in the bar's header row (K2, design t_239eb3ed). Article
+   * (field-notes) usage omits it and keeps today's bar exactly — no
+   * completion slot is rendered.
+   */
+  lessonSlug?: string;
 }
 
 const SPEEDS = [1, 1.25, 1.5] as const;
@@ -85,7 +93,78 @@ function nowMs(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-export default function AudioPlayer({ slug, hasAudio, label = "article" }: AudioPlayerProps) {
+/**
+ * LessonCompleteControl — the "Mark complete" / "Completed" control in the
+ * lesson audio bar's header row (K2, design t_239eb3ed). A fixed 144×44
+ * action slot that swaps a 143×44 "Mark complete" button for a static
+ * 113×30 "Completed" chip WITHOUT resizing the slot, so the <audio> element
+ * never moves or reflows on completion.
+ *
+ * One write path (useLessonProgress → POST /api/progress/lesson); un-marking
+ * stays on the hero MarkComplete control. The chip is a `role="status"` live
+ * region and takes focus after the swap so keyboard/SR users are not dropped
+ * to <body>. No toggle, no spinner, no second live region.
+ */
+function LessonCompleteControl({ lessonSlug }: { lessonSlug: string }) {
+  const { isCompleted, markComplete, isLoading } = useLessonProgress(lessonSlug);
+  const chipRef = useRef<HTMLSpanElement>(null);
+
+  // Move focus to the chip when the button→chip swap removes the pressed
+  // button from the DOM. tabindex="-1" keeps it out of the tab order.
+  useEffect(() => {
+    if (isCompleted) chipRef.current?.focus();
+  }, [isCompleted]);
+
+  return (
+    <div className="ab-complete">
+      {isCompleted ? (
+        <span ref={chipRef} className="mc-chip" role="status" tabIndex={-1}>
+          <svg
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Completed
+          <span className="sr-only"> — change this in the lesson header</span>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="mc-btn"
+          onClick={markComplete}
+          disabled={isLoading}
+          aria-disabled={isLoading}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <polyline points="8 12.2 11 15.2 16.2 9.4" />
+          </svg>
+          <span>Mark complete</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+export default function AudioPlayer({ slug, hasAudio, label = "article", lessonSlug }: AudioPlayerProps) {
   const { user, isLoading } = useAuth();
   const audioRef = useRef<HTMLAudioElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -492,51 +571,50 @@ export default function AudioPlayer({ slug, hasAudio, label = "article" }: Audio
     <div
       ref={wrapperRef}
       data-audio-scroll=""
-      className={`my-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[var(--border-default)] dark:bg-[var(--surface-card)] ${
+      className={`audio-card my-6 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-[var(--border-default)] dark:bg-[var(--surface-card)] ${
         pinned
           ? "shadow-[0_8px_24px_rgba(11,29,58,0.16)] ring-1 ring-gray-300 dark:shadow-[0_8px_24px_rgba(0,0,0,0.5)] dark:ring-[var(--border-default)] transition-shadow duration-300"
           : "transition-shadow duration-300"
-      }`}
+      }${lessonSlug ? " has-complete" : ""}`}
     >
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-[var(--ink-muted)]">
+      <div className="ab-head">
+        <span className="ab-label text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-[var(--ink-muted)]">
           Listen to this {label}
         </span>
-        <div className="flex items-center gap-3">
-          {timings && timings.length > 0 && (
-            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-xs text-gray-500 dark:text-[var(--ink-muted)]">
-              <input
-                type="checkbox"
-                checked={following}
-                onChange={(e) => setFollowing(e.target.checked)}
-                aria-label="Follow along"
-                className="h-3.5 w-3.5 rounded-sm border border-gray-300 accent-navy dark:border-[var(--border-default)]"
-              />
-              <span>Follow along</span>
-            </label>
-          )}
-          <label className="flex items-center gap-2 text-xs text-gray-500 dark:text-[var(--ink-muted)]">
-            <span>Speed</span>
-            <select
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-              aria-label="Playback speed"
-              className="rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs dark:border-[var(--border-default)] dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-primary)]"
-            >
-              {SPEEDS.map((s) => (
-                <option value={s} key={s}>
-                  {s === 1 ? "1x" : `${s}x`}
-                </option>
-              ))}
-            </select>
+        {timings && timings.length > 0 && (
+          <label className="ab-follow flex min-h-11 cursor-pointer items-center gap-2 text-xs text-gray-500 dark:text-[var(--ink-muted)]">
+            <input
+              type="checkbox"
+              checked={following}
+              onChange={(e) => setFollowing(e.target.checked)}
+              aria-label="Follow along"
+              className="h-3.5 w-3.5 rounded-sm border border-gray-300 accent-navy dark:border-[var(--border-default)]"
+            />
+            <span>Follow along</span>
           </label>
-        </div>
+        )}
+        <label className="ab-speed flex items-center gap-2 text-xs text-gray-500 dark:text-[var(--ink-muted)]">
+          <span className="sfl">Speed</span>
+          <select
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+            aria-label="Playback speed"
+            className="rounded-md border border-gray-300 bg-white px-2 py-0.5 text-xs dark:border-[var(--border-default)] dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-primary)]"
+          >
+            {SPEEDS.map((s) => (
+              <option value={s} key={s}>
+                {s === 1 ? "1x" : `${s}x`}
+              </option>
+            ))}
+          </select>
+        </label>
+        {lessonSlug && <LessonCompleteControl lessonSlug={lessonSlug} />}
       </div>
       <audio
         ref={audioRef}
         controls
         preload="none"
-        className="w-full"
+        className="ab-audio"
         aria-label={`${label.charAt(0).toUpperCase()}${label.slice(1)} audio player`}
         src={`/api/audio/${slug}`}
         onTimeUpdate={handleTimeUpdate}
