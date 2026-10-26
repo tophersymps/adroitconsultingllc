@@ -195,6 +195,10 @@ export default async function KnowledgeCheckPage({ params }: Props) {
                 options,
               }))}
               serverGraded
+              // Freshness (t_499542c6): a graded answer invalidates this
+              // series' cached tier rollup so the "Back to series" Link cannot
+              // render the pre-submit state.
+              seriesSlug={series}
               kicker={`Knowledge Check ${n} · 15 questions`}
               passThreshold={80}
               retakeLabel="Retake check"

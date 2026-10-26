@@ -16,8 +16,13 @@
  * - Hydration-safe: state starts `null` on both the server and the client's
  *   first render and only fills in from a post-mount effect, so the hook can
  *   never cause a hydration mismatch even when the cache is warm.
- * - `refresh()` drops the cached entry and refetches (used after an exam or a
- *   check is submitted).
+ * - Freshness: the cache outlives a mount, so anything that MUTATES the rollup
+ *   must drop this series' entry. `invalidateTierProgress(series)` does exactly
+ *   that and re-reads it in every consumer mounted right now (a no-op when the
+ *   series page is not on screen). Submit flows call it (t_499542c6):
+ *   `QuizWidget` after a graded knowledge-check answer, `ExamWidget` after the
+ *   batch submit, `MarkComplete` after a lesson-completion toggle. The hook's
+ *   own `refresh()` is the same operation scoped to its instance.
  *
  * Not to be confused with lesson gating — there is none (architecture.md §4).
  */
@@ -36,6 +41,14 @@ interface TierProgressEntry {
 
 /** Module-level cache: series slug → shared request/result. */
 const CACHE = new Map<string, TierProgressEntry>();
+
+/**
+ * Per-series subscriber set: every mounted hook instance registers one
+ * re-read callback. Invalidation fires them all, so N consumers on screen
+ * collapse back into ONE request (they re-arm the same deduped `loadTiers`).
+ * Keyed by series so invalidating one series never refetches another.
+ */
+const SUBSCRIBERS = new Map<string, Set<() => void>>();
 
 export function tierProgressUrl(series: string): string {
   return `/api/progress/quiz/tiers?series=${encodeURIComponent(series)}`;
@@ -76,6 +89,41 @@ function loadTiers(series: string): Promise<TierProgress | null> {
   return request;
 }
 
+/**
+ * Drop the cached rollup for `series` and re-read it in every consumer that is
+ * mounted right now. Call this from anything that mutates the series' progress
+ * (quiz/check submit, exam batch submit, lesson-complete toggle) so a following
+ * client-side navigation back to the series page cannot serve the pre-mutation
+ * rollup.
+ *
+ * Safe from anywhere: with no consumer mounted for that series (the usual case
+ * — the submit happened on the quiz/exam/lesson page) the entry is simply
+ * dropped and the next mount fetches. Other series are untouched.
+ */
+export function invalidateTierProgress(series: string): void {
+  CACHE.delete(series);
+  const listeners = SUBSCRIBERS.get(series);
+  if (!listeners) return;
+  for (const listener of listeners) listener();
+}
+
+/**
+ * Drop EVERY cached rollup and re-read in every mounted consumer.
+ *
+ * Use when the write has no series context — a lesson-completion toggle
+ * (`useLessonProgress.markComplete`) changes the lessons-completed input of
+ * whichever series the lesson belongs to, but the hook only knows the lesson
+ * slug. Over-invalidating is cheap here: the next mount issues one request.
+ */
+export function invalidateAllTierProgress(): void {
+  CACHE.clear();
+  for (const series of [...SUBSCRIBERS.keys()]) {
+    const listeners = SUBSCRIBERS.get(series);
+    if (!listeners) continue;
+    for (const listener of listeners) listener();
+  }
+}
+
 export interface UseTierProgressReturn {
   /** `null` until the shared request lands, and for guest/error responses. */
   tiers: TierProgress | null;
@@ -104,9 +152,31 @@ export function useTierProgress(series: string): UseTierProgressReturn {
     };
   }, [series, nonce]);
 
+  /*
+   * Re-read on invalidation: `invalidateTierProgress(series)` drops the cache
+   * entry and pings every mounted consumer (including this one, through the
+   * subscription below), which re-arms the load effect. N consumers pinged at
+   * once still share ONE request — `loadTiers` dedupes on the entry's in-flight
+   * promise.
+   */
+  useEffect(() => {
+    const reread = () => setNonce((n) => n + 1);
+    let listeners = SUBSCRIBERS.get(series);
+    if (!listeners) {
+      listeners = new Set();
+      SUBSCRIBERS.set(series, listeners);
+    }
+    const set = listeners;
+    set.add(reread);
+    return () => {
+      set.delete(reread);
+      if (set.size === 0) SUBSCRIBERS.delete(series);
+    };
+  }, [series]);
+
+  /** Drop this series' cached entry and fetch again (invalidates every consumer). */
   const refresh = useCallback(() => {
-    CACHE.delete(series);
-    setNonce((n) => n + 1);
+    invalidateTierProgress(series);
   }, [series]);
 
   /*

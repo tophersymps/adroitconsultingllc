@@ -13,6 +13,8 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import type { TierProgress } from "@/shared/contracts";
 import { AUTH_CHANGED_EVENT } from "@/lib/auth-events";
 import {
+  invalidateAllTierProgress,
+  invalidateTierProgress,
   resetTierProgressCache,
   tierProgressUrl,
   useTierProgress,
@@ -195,5 +197,146 @@ describe("useTierProgress", () => {
 
     await waitFor(() => expect(screen.getByTestId("p")).toHaveTextContent("2/10"));
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+/*
+ * Freshness regression (t_499542c6) — the module cache outlives a mount, so
+ * without invalidation the series page served the PRE-submit rollup after a
+ * quiz/check/exam submit (the submit pages stay mounted, then a client-side
+ * Link returns to the series page without a document reload). The A4 cache is
+ * only correct if every rollup-mutating flow drops the series entry.
+ */
+describe("useTierProgress cache freshness (t_499542c6)", () => {
+  beforeEach(() => {
+    resetTierProgressCache();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("drops the entry for the invalidated series only (a submit affects one series)", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () => ({
+        ...TIERS,
+        lessons: { completed: url.includes("series-a") ? 3 : 9, total: 10 },
+        // Post-submit rollup for series-a: a fresh best score and unlock.
+        ...(url.includes("series-a")
+          ? { checks: [{ n: 1, bestScore: 93, attempts: 2, passed: true }], unlocked: true }
+          : {}),
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = render(
+      <>
+        <Probe testId="a" series="series-a" />
+        <Probe testId="b" series="series-b" />
+      </>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("a")).toHaveTextContent("3/10");
+      expect(screen.getByTestId("b")).toHaveTextContent("9/10");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    first.unmount();
+
+    // A check/exam submit on another page invalidates its own series.
+    invalidateTierProgress("series-a");
+
+    render(
+      <>
+        <Probe testId="a2" series="series-a" />
+        <Probe testId="b2" series="series-b" />
+      </>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("a2")).toHaveTextContent("3/10");
+      expect(screen.getByTestId("b2")).toHaveTextContent("9/10");
+    });
+
+    // series-a refetched; series-b was served from cache (still 2 requests total).
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([url]) => url as string)).toEqual([
+      tierProgressUrl("series-a"),
+      tierProgressUrl("series-b"),
+      tierProgressUrl("series-a"),
+    ]);
+  });
+
+  it("re-reads every mounted consumer of the series in ONE shared request", async () => {
+    let call = 0;
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      call += 1;
+      return { ok: true, json: async () => ({ ...TIERS, lessons: { completed: call, total: 10 } }) };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <>
+        <Probe testId="a" />
+        <Probe testId="b" />
+        <Probe testId="c" />
+      </>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("a")).toHaveTextContent("1/10");
+      expect(screen.getByTestId("c")).toHaveTextContent("1/10");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Invalidate while all three are on screen (e.g. MarkComplete on the
+    // series page): all three re-read, still sharing one request.
+    await act(async () => {
+      invalidateTierProgress(SERIES);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("a")).toHaveTextContent("2/10");
+      expect(screen.getByTestId("b")).toHaveTextContent("2/10");
+      expect(screen.getByTestId("c")).toHaveTextContent("2/10");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidateAllTierProgress drops every series (lesson-complete has no series slug)", async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () => ({
+        ...TIERS,
+        lessons: { completed: url.includes("series-a") ? 3 : 9, total: 10 },
+      }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = render(
+      <>
+        <Probe testId="a" series="series-a" />
+        <Probe testId="b" series="series-b" />
+      </>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("a")).toHaveTextContent("3/10");
+      expect(screen.getByTestId("b")).toHaveTextContent("9/10");
+    });
+    first.unmount();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    invalidateAllTierProgress();
+
+    const second = render(
+      <>
+        <Probe testId="a2" series="series-a" />
+        <Probe testId="b2" series="series-b" />
+      </>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("a2")).toHaveTextContent("3/10");
+      expect(screen.getByTestId("b2")).toHaveTextContent("9/10");
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    second.unmount();
   });
 });

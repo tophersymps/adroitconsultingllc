@@ -29,6 +29,7 @@ import type {
   QuizQuestion,
 } from "@/shared/contracts";
 import { trackExamComplete } from "@/lib/analytics";
+import { invalidateTierProgress } from "@/lib/hooks/useTierProgress";
 import type { ExamKind } from "@/data/types";
 import { examLabels } from "@/lib/exam-labels";
 import { CERT_EXAM_MINUTES, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
@@ -132,6 +133,12 @@ export default function ExamWidget({
       });
       if (!res.ok) throw new Error(`batch submit ${res.status}`);
       const data = (await res.json()) as ExamSubmitResult;
+      // Freshness (t_499542c6): the batch submit just wrote exam attempts, so
+      // the series' cached tier rollup (best exam score, passed, unlocked) is
+      // now the PRE-submit value. Drop it before the results view offers its
+      // client-side "Back to series" Link — otherwise that navigation lands on
+      // the stale rollup with no document reload to reset the module cache.
+      invalidateTierProgress(seriesSlug);
       // Progress-funnel analytics (B-06): exam → certificate. Pass verdict is
       // derived from the server response score (>= CERT_EXAM_PASS_PCT).
       trackExamComplete({
@@ -150,7 +157,7 @@ export default function ExamWidget({
       setPhase("run");
       setSubmitError(true);
     }
-  }, [quizName, phase]);
+  }, [quizName, phase, seriesSlug]);
 
   // Countdown + auto-submit at zero.
   useEffect(() => {

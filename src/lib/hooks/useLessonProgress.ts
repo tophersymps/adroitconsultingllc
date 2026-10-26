@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/db/client";
 import { notifyProgressChanged, PROGRESS_CHANGED_EVENT } from "@/lib/progress";
+import { invalidateAllTierProgress } from "@/lib/hooks/useTierProgress";
 import { trackLessonComplete } from "@/lib/analytics";
 
 const STORAGE_KEY_PREFIX = "adroit-blog:lesson:";
@@ -133,6 +134,12 @@ export function useLessonProgress(lessonSlug: string): UseLessonProgressReturn {
     setIsCompleted(newState);
     setCompletedInStorage(lessonSlug, newState);
     notifyProgressChanged();
+    // Freshness (t_499542c6): lesson completion is an input to the tier
+    // rollup's lessons-completed count. This hook only knows the lesson slug,
+    // so drop every series entry — a lesson belongs to one series and the
+    // cache is a handful of entries, so over-invalidating costs at most one
+    // refetch on the next mount.
+    invalidateAllTierProgress();
 
     if (newState) {
       markCompleteAPI(lessonSlug);
