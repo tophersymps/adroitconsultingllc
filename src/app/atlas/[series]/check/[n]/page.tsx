@@ -36,6 +36,7 @@ import {
 } from "@/lib/paywall";
 import { LockedContentPage } from "@/components/Catalog/LockedContentPage";
 import { getLessonsForSeries } from "@/lib/learn";
+import { nextLessonAfter } from "@/lib/lesson-checks";
 
 interface Props {
   params: Promise<{ series: string; n: string }>;
@@ -136,6 +137,13 @@ export default async function KnowledgeCheckPage({ params }: Props) {
   }
   const passed = bestScore >= 80;
 
+  // A7 (api-contracts.md §B.5 / B.2): routing after a pass. The target is the
+  // first lesson strictly AFTER this check's range end, computed by the pure
+  // `nextLessonAfter` — the widget never decides it. A check at the tail with
+  // no following lesson passes no continue prop, so the results keep Retake as
+  // the primary action.
+  const nextLesson = nextLessonAfter(getLessonsForSeries(series), lessonEnd);
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -183,6 +191,9 @@ export default async function KnowledgeCheckPage({ params }: Props) {
           {!isAuthed ? (
             <GuestCTA tier="check" ariaLabel="Knowledge check locked" kind={s.examKind} />
           ) : (
+            // A7 (A7 evidence): Continue is the PRIMARY results action on a
+            // pass. Href + label come from the server-computed next lesson via
+            // `nextLessonAfter`; the widget only renders them.
             <QuizWidget
               quizName={check.quizName}
               // F2 (CWE-200, t_79a92b83): strip the answer key server-side —
@@ -204,6 +215,15 @@ export default async function KnowledgeCheckPage({ params }: Props) {
               retakeLabel="Retake check"
               backHref={`/atlas/${series}`}
               backLabel="Back to series"
+              /* A7: on a pass, Continue is the primary results action. Href and
+                 label come from the server-computed next lesson, so the widget
+                 renders them without any routing knowledge. */
+              continueHref={
+                nextLesson ? `/atlas/${series}/${nextLesson.slug}` : undefined
+              }
+              continueLabel={
+                nextLesson ? `Continue to Lesson ${nextLesson.lesson}` : undefined
+              }
             />
           )}
         </div>

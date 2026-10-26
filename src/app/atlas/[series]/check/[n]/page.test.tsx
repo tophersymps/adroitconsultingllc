@@ -18,13 +18,15 @@ const { mocks } = vi.hoisted(() => ({
       throw new Error("NEXT_NOT_FOUND");
     }),
     getSeriesBySlug: vi.fn(),
-    getLessonsForSeries: vi.fn(() => []),
+    getLessonsForSeries: vi.fn((): { slug: string; lesson: number }[] => []),
     getKnowledgeCheck: vi.fn(),
     getKnowledgeChecks: vi.fn(),
     decideCourseAccess: vi.fn(),
     getAccessUserId: vi.fn(),
     getCourseRowBySlug: vi.fn(),
     getUser: vi.fn(),
+    quizRunRows: [] as { score: number }[],
+    quizProps: null as Record<string, unknown> | null,
   },
 }));
 
@@ -64,7 +66,17 @@ vi.mock("@/lib/paywall", () => ({
 }));
 
 vi.mock("@/lib/db/server", () => ({
-  getSupabaseServerClient: async () => ({ auth: { getUser: mocks.getUser } }),
+  getSupabaseServerClient: async () => ({
+    auth: { getUser: mocks.getUser },
+    // quiz_run best-score read: .from().select().eq().eq()
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: async () => ({ data: mocks.quizRunRows, error: null }),
+        }),
+      }),
+    }),
+  }),
 }));
 
 vi.mock("@/components/Catalog/LockedContentPage", () => ({
@@ -75,7 +87,14 @@ vi.mock("@/components/Catalog/LockedContentPage", () => ({
 
 vi.mock("@/components/Header", () => ({ default: () => <header /> }));
 vi.mock("@/components/Footer", () => ({ default: () => <footer /> }));
-vi.mock("@/components/Progress/QuizWidget", () => ({ default: () => <div /> }));
+vi.mock("@/components/Progress/QuizWidget", () => ({
+  // Capture the props the page hands the widget (A7): the page owns the
+  // continue target, the widget only renders it.
+  default: (props: Record<string, unknown>) => {
+    mocks.quizProps = props;
+    return <div data-testid="quiz" />;
+  },
+}));
 vi.mock("@/components/Progress/GuestCTA", () => ({ default: () => <div /> }));
 
 import Page from "./page";
@@ -144,5 +163,78 @@ describe("/atlas/[series]/check/[n] degraded existence gate (F-2)", () => {
     await expect(render("ai-adoption")).rejects.toThrow("NEXT_NOT_FOUND");
     // Fail-closed before any DB read.
     expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A7 — "Continue after a pass" (api-contracts.md §B.5).
+ *
+ * The PAGE owns the routing: it computes the target with `nextLessonAfter` and
+ * hands `continueHref`/`continueLabel` to QuizWidget, which renders them as the
+ * primary results action only when the run passed. The widget never decides
+ * where "continue" goes, so this seam is asserted here.
+ */
+const lesson = (n: number) => ({
+  slug: `lesson-${String(n).padStart(2, "0")}`,
+  title: `Lesson ${n}`,
+  series: "omni-studio-cert",
+  lesson: n,
+  excerpt: "e",
+  date: "Date unknown",
+  author: "Adroit Consulting",
+  readTime: "5 min read",
+});
+
+/** Read the captured QuizWidget props (avoids TS assignment-narrowing). */
+function quizProps(): Record<string, unknown> {
+  return (mocks.quizProps ?? {}) as Record<string, unknown>;
+}
+
+async function renderAuthed() {
+  mocks.getSeriesBySlug.mockReturnValue(
+    seriesInfo("omni-studio-cert", "OmniStudio Developer Certification"),
+  );
+  mocks.decideCourseAccess.mockResolvedValue({ kind: "granted" });
+  mocks.getUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+  mocks.quizRunRows = [{ score: 90 }];
+  const html = await render("omni-studio-cert");
+  return html;
+}
+
+describe("/atlas/[series]/check/[n] — continue after a pass (A7)", () => {
+  beforeEach(() => {
+    mocks.getKnowledgeChecks.mockReturnValue([{ n: 1, lessons: [1, 5] }]);
+    mocks.getKnowledgeCheck.mockImplementation((series: string) => ({
+      ...checkFor(series),
+      lessons: [1, 5],
+    }));
+    mocks.getLessonsForSeries.mockReturnValue([1, 2, 3, 4, 5, 6].map(lesson));
+  });
+
+  it("hands the widget the lesson AFTER the check's range end", async () => {
+    mocks.quizProps = null;
+    await renderAuthed();
+
+    expect(mocks.quizProps).not.toBeNull();
+    // Range ends at lesson 5 → the next lesson is 6 (never the range end).
+    expect(quizProps().continueHref).toBe("/atlas/omni-studio-cert/lesson-06");
+    expect(quizProps().continueLabel).toBe("Continue to Lesson 6");
+    // The page still owns the pass rule + the audit-friendly verdict row.
+    expect(quizProps().passThreshold).toBe(80);
+  });
+
+  it("passes no continue target when the check ends at the series tail", async () => {
+    mocks.quizProps = null;
+    // Same route (check 1) but its range now ends at the last published lesson.
+    mocks.getKnowledgeChecks.mockReturnValue([{ n: 1, lessons: [4, 6] }]);
+    mocks.getKnowledgeCheck.mockImplementation((series: string) => ({
+      ...checkFor(series),
+      lessons: [4, 6],
+    }));
+
+    await renderAuthed();
+
+    expect(quizProps().continueHref).toBeUndefined();
+    expect(quizProps().continueLabel).toBeUndefined();
   });
 });

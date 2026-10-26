@@ -93,6 +93,17 @@ interface QuizWidgetProps {
    * and reloads of an already-perfect quiz never fire it (session-scoped).
    */
   onPerfectScore?: () => void;
+  /**
+   * A7 (api-contracts.md §B.5): where "next" goes after a PASSED run — the
+   * check page computes it with `nextLessonAfter` and passes
+   * `/atlas/<series>/<next.slug>`. Rendered as the PRIMARY results action only
+   * when `passThreshold` is set AND the run passed AND this prop is present.
+   * Retake stays primary on a fail; lesson-tier callers pass neither and are
+   * unchanged. The widget never decides pass/fail routing itself.
+   */
+  continueHref?: string;
+  /** Label for the pass action (default "Continue"). */
+  continueLabel?: string;
 }
 
 export default function QuizWidget({
@@ -106,6 +117,8 @@ export default function QuizWidget({
   serverGraded = false,
   seriesSlug,
   onPerfectScore,
+  continueHref,
+  continueLabel = "Continue",
 }: QuizWidgetProps) {
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -359,6 +372,10 @@ export default function QuizWidget({
 
   const runScore = progress.total > 0 ? Math.round((progress.correct / progress.total) * 100) : 0;
   const passed = typeof passThreshold === "number" && runScore >= passThreshold;
+  // A7 (api-contracts.md §B.5): the pass action renders only for a threshold
+  // quiz that PASSED and whose caller supplied a target. Routing stays in the
+  // page — the widget adds no pass logic of its own beyond `passed` above.
+  const showContinue = typeof passThreshold === "number" && passed && Boolean(continueHref);
   // Lesson quiz ring: emerald at ≥60% (mockup-lesson-quiz.html JS); check:
   // emerald on pass (≥ threshold), red otherwise (mockup-check.html).
   const ringColor =
@@ -493,33 +510,53 @@ export default function QuizWidget({
             })}
           </div>
 
-          <div className="flex gap-2.5">
-            {backHref && (
+          {/* Results actions (A7, api-contracts.md §B.5). A PASSED run with a
+              `continueHref` promotes Continue to the primary action and demotes
+              Retake to the secondary (outline) treatment. A fail — or a caller
+              that passes no `continueHref` (every lesson-tier quiz) — keeps
+              Retake primary, byte-identical to before. */}
+          <div className="flex flex-col gap-2.5">
+            {showContinue && continueHref && (
               <Link
-                href={backHref}
-                className="flex-1 h-11 rounded-xl border-[1.5px] border-gray-200 bg-white text-gray-600 text-[13.5px] font-bold no-underline flex items-center justify-center cursor-pointer hover:border-navy hover:text-navy active:scale-[0.98] transition-all duration-150 dark:border-[var(--border-default)] dark:bg-[var(--surface-card)] dark:hover:border-[var(--ink-primary)] dark:hover:text-[var(--ink-primary)]"
+                href={continueHref}
+                data-primary-action="continue"
+                className="w-full h-11 rounded-xl bg-navy text-white text-sm font-bold no-underline flex items-center justify-center cursor-pointer hover:bg-navy-light active:scale-[0.98] transition-all duration-150"
               >
-                {backLabel}
+                {continueLabel}
               </Link>
             )}
-            <button
-              onClick={() => {
-                if (gradingTimeoutRef.current !== null) {
-                  window.clearTimeout(gradingTimeoutRef.current);
-                  gradingTimeoutRef.current = null;
-                }
-                setGrading(false);
-                setCompletedThisSession(false);
-                resetQuiz();
-                setCurrentQ(0);
-                setSelected(null);
-                setShowExplanation(false);
-                setRingFilled(false); // re-arm so the next completion re-animates
-              }}
-              className={`${backHref ? "flex-1" : "w-full"} h-11 rounded-xl bg-navy text-white text-sm font-bold cursor-pointer hover:bg-navy-light active:scale-[0.98] transition-all duration-150`}
-            >
-              {retakeLabel}
-            </button>
+            <div className="flex gap-2.5">
+              {backHref && (
+                <Link
+                  href={backHref}
+                  className="flex-1 h-11 rounded-xl border-[1.5px] border-gray-200 bg-white text-gray-600 text-[13.5px] font-bold no-underline flex items-center justify-center cursor-pointer hover:border-navy hover:text-navy active:scale-[0.98] transition-all duration-150 dark:border-[var(--border-default)] dark:bg-[var(--surface-card)] dark:hover:border-[var(--ink-primary)] dark:hover:text-[var(--ink-primary)]"
+                >
+                  {backLabel}
+                </Link>
+              )}
+              <button
+                onClick={() => {
+                  if (gradingTimeoutRef.current !== null) {
+                    window.clearTimeout(gradingTimeoutRef.current);
+                    gradingTimeoutRef.current = null;
+                  }
+                  setGrading(false);
+                  setCompletedThisSession(false);
+                  resetQuiz();
+                  setCurrentQ(0);
+                  setSelected(null);
+                  setShowExplanation(false);
+                  setRingFilled(false); // re-arm so the next completion re-animates
+                }}
+                className={`${backHref ? "flex-1" : "w-full"} h-11 rounded-xl text-sm font-bold cursor-pointer active:scale-[0.98] transition-all duration-150 ${
+                  showContinue
+                    ? "border-[1.5px] border-gray-200 bg-white text-gray-600 hover:border-navy hover:text-navy dark:border-[var(--border-default)] dark:bg-[var(--surface-card)] dark:hover:border-[var(--ink-primary)] dark:hover:text-[var(--ink-primary)]"
+                    : "bg-navy text-white hover:bg-navy-light"
+                }`}
+              >
+                {retakeLabel}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -643,3 +643,102 @@ describe("QuizWidget server-graded mode (t_79a92b83)", () => {
     expect(gradeCalls).toHaveLength(3);
   });
 });
+
+/**
+ * A7 (api-contracts.md §B.5) — "Continue after a pass".
+ *
+ * The widget adds NO pass logic of its own: it renders the caller-supplied
+ * continueHref as the PRIMARY results action only when passThreshold is set,
+ * the run passed, and a href exists. Fail keeps Retake primary; callers that
+ * pass neither prop (every lesson-tier quiz) are unchanged.
+ */
+describe("QuizWidget — continue after a pass (A7)", () => {
+  /** Seed a completed run with `correct` of QUESTIONS answered correctly. */
+  function seedRun(correct: number) {
+    const attempts = QUESTIONS.map((q, i) => ({
+      quizName: "test-quiz",
+      questionIndex: i,
+      userAnswer: i < correct ? q.correct_answer_index : (q.correct_answer_index + 1) % 4,
+      correctAnswer: q.correct_answer_index,
+      isCorrect: i < correct,
+      attemptedAt: "2026-08-01T00:00:00.000Z",
+    }));
+    localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        attempts,
+        total: attempts.length,
+        correct,
+        bestScore: Math.round((correct / attempts.length) * 100),
+        attemptCount: 1,
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("passed run: Continue is the primary action and Retake is demoted", async () => {
+    seedRun(3); // 100% ≥ 80
+    render(
+      <QuizWidget
+        quizName="test-quiz"
+        questions={QUESTIONS}
+        passThreshold={80}
+        retakeLabel="Retake check"
+        backHref="/atlas/series"
+        backLabel="Back to series"
+        continueHref="/atlas/series/lesson-06"
+        continueLabel="Continue to Lesson 6"
+      />,
+    );
+
+    expect(await screen.findByText(/Passed · 80% required/)).toBeInTheDocument();
+
+    const cont = screen.getByRole("link", { name: "Continue to Lesson 6" });
+    expect(cont).toHaveAttribute("href", "/atlas/series/lesson-06");
+    expect(cont).toHaveAttribute("data-primary-action", "continue");
+    expect(cont.className).toContain("bg-navy");
+
+    const retake = screen.getByRole("button", { name: "Retake check" });
+    expect(retake.className).not.toContain("bg-navy");
+    expect(screen.getByRole("link", { name: "Back to series" })).toHaveAttribute(
+      "href",
+      "/atlas/series",
+    );
+  });
+
+  it("failed run: Retake stays primary and no Continue renders", async () => {
+    seedRun(1); // 33% < 80
+    render(
+      <QuizWidget
+        quizName="test-quiz"
+        questions={QUESTIONS}
+        passThreshold={80}
+        retakeLabel="Retake check"
+        continueHref="/atlas/series/lesson-06"
+        continueLabel="Continue to Lesson 6"
+      />,
+    );
+
+    expect(await screen.findByText(/Keep going — 80% required/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Continue to Lesson 6" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retake check" }).className).toContain(
+      "bg-navy",
+    );
+  });
+
+  it("no-props caller (lesson quiz): unchanged results actions", async () => {
+    seedRun(3);
+    render(<QuizWidget quizName="test-quiz" questions={QUESTIONS} />);
+
+    expect(await screen.findByText(/Best score · 1 attempt/)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Continue/i })).not.toBeInTheDocument();
+    const retake = screen.getByRole("button", { name: "Retake quiz" });
+    expect(retake.className).toContain("bg-navy");
+    expect(retake.className).toContain("w-full");
+  });
+});
