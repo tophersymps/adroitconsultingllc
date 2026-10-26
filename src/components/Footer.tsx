@@ -3,6 +3,12 @@ import Image from "next/image";
 import { NAV } from "@/lib/nav";
 import type { SiteRoute } from "@/shared/contracts";
 
+/** Compact mark shown inside each social pill, keyed by the NAV.footer.social title. */
+const SOCIAL_GLYPH: Record<string, string> = {
+  LinkedIn: "in",
+  "X / Twitter": "𝕏",
+};
+
 /**
  * Unified site footer (merger B1). Repoints the stale external adroit.io
  * /about /services /careers links to real local destinations (/ , the three
@@ -93,7 +99,7 @@ export default function Footer() {
                 aria-label={s.title}
                 className="w-7 h-7 rounded-full bg-[var(--surface-band-elev)] flex items-center justify-center text-[var(--ink-band-muted)] text-[0.65rem] select-none hover:bg-[var(--surface-band-elev)] hover:text-[var(--ink-band)] transition-colors duration-150"
               >
-                {s.title === "LinkedIn" ? "in" : s.title === "X / Twitter" ? "𝕏" : s.title}
+                {SOCIAL_GLYPH[s.title] ?? s.title}
               </a>
             ))}
           </div>
