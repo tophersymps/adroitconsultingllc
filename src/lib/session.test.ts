@@ -41,6 +41,8 @@ vi.mock("next/headers", () => ({
 import {
   getSessionUser,
   getSessionUserId,
+  hasSessionCredential,
+  readSessionUser,
   PLAIN_SESSION_COOKIE_NAME,
   SESSION_COOKIE_NAME,
 } from "./session";
@@ -64,6 +66,10 @@ function setSessionCookie(present: boolean): void {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  /* Also drop any queued `mockResolvedValueOnce` implementations: a guest case
+   * that short-circuits never consumes its queue, and the leftover would be
+   * served to the next test's strict read. */
+  mocks.getSession.mockReset();
   /* Default: a signed-in https request. Guest tests opt out explicitly. */
   mocks.requestHeaders.set("x-forwarded-proto", "https");
   setSessionCookie(true);
@@ -164,5 +170,197 @@ describe("getSessionUserId", () => {
     setSessionCookie(false);
     mocks.getSession.mockResolvedValueOnce({ data: null });
     await expect(getSessionUserId()).resolves.toBeNull();
+  });
+});
+
+describe("hasSessionCredential", () => {
+  it("is true for a transport-correct session cookie", async () => {
+    setSessionCookie(true);
+    await expect(hasSessionCredential()).resolves.toBe(true);
+  });
+
+  it("is true for the plain-http cookie name on plain http", async () => {
+    mocks.requestHeaders.set("x-forwarded-proto", "http");
+    setSessionCookie(false);
+    mocks.cookies.add(PLAIN_SESSION_COOKIE_NAME);
+    await expect(hasSessionCredential()).resolves.toBe(true);
+  });
+
+  it("is false when no session cookie is present", async () => {
+    setSessionCookie(false);
+    await expect(hasSessionCredential()).resolves.toBe(false);
+  });
+
+  it("is false for a planted plain cookie on https", async () => {
+    setSessionCookie(false);
+    mocks.cookies.add(PLAIN_SESSION_COOKIE_NAME);
+    await expect(hasSessionCredential()).resolves.toBe(false);
+  });
+
+  it("never drives the auth SDK", async () => {
+    setSessionCookie(true);
+    await hasSessionCredential();
+    expect(mocks.getAuthServer).not.toHaveBeenCalled();
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * readSessionUser — the STRICT reader added for t_8101e74f.
+ *
+ * `ok: true, user: null` is a definitive "signed out" answer. Anything the
+ * backend could not answer — network, timeout, 429, 5xx — must come back as
+ * `{ ok: false, failure }` so the route can answer 503 SESSION_UNAVAILABLE
+ * instead of telling a signed-in user they are signed out.
+ */
+describe("readSessionUser", () => {
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  /** Every logged argument, flattened to JSON for leak assertions. */
+  function logged(): string {
+    return JSON.stringify(consoleSpy.mock.calls);
+  }
+
+  it("returns the user when the backend answers", async () => {
+    mocks.getSession.mockResolvedValue(SESSION);
+    await expect(readSessionUser()).resolves.toEqual({
+      ok: true,
+      user: { id: "u1", email: "a@adroit.io", name: "A" },
+    });
+    expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("coerces a missing name/email on the strict path too", async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { id: "s1" }, user: { id: "u1" } },
+      error: null,
+    });
+    await expect(readSessionUser()).resolves.toEqual({
+      ok: true,
+      user: { id: "u1", email: "", name: null },
+    });
+  });
+
+  it("treats a null session as a definitive signed-out answer", async () => {
+    mocks.getSession.mockResolvedValue({ data: null, error: null });
+    await expect(readSessionUser()).resolves.toEqual({ ok: true, user: null });
+    expect(consoleSpy).not.toHaveBeenCalled();
+  });
+
+  it("treats an upstream 401/403 as signed out, not as an outage", async () => {
+    for (const status of [401, 403]) {
+      consoleSpy.mockClear();
+      mocks.getSession.mockResolvedValue({
+        data: null,
+        error: { status, message: "session revoked" },
+      });
+      await expect(readSessionUser()).resolves.toEqual({ ok: true, user: null });
+      expect(consoleSpy).not.toHaveBeenCalled();
+    }
+  });
+
+  it("classifies an upstream 429 with its Retry-After hint", async () => {
+    mocks.getSession.mockResolvedValue({
+      data: null,
+      error: {
+        status: 429,
+        message: "slow down",
+        headers: new Headers({ "x-retry-after": "60" }),
+      },
+    });
+
+    await expect(readSessionUser()).resolves.toEqual({
+      ok: false,
+      failure: { errorClass: "http", status: 429, retryAfterSeconds: 60 },
+    });
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "session_read_failed",
+      errorClass: "http",
+      status: 429,
+    });
+  });
+
+  it("classifies an upstream 5xx as an availability failure", async () => {
+    mocks.getSession.mockResolvedValue({
+      data: null,
+      error: { status: 503, message: "auth backend down" },
+    });
+
+    await expect(readSessionUser()).resolves.toEqual({
+      ok: false,
+      failure: { errorClass: "http", status: 503 },
+    });
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "session_read_failed",
+      errorClass: "http",
+      status: 503,
+    });
+  });
+
+  it("classifies a network error as an availability failure", async () => {
+    mocks.getSession.mockRejectedValue(new Error("ECONNREFUSED 127.0.0.1:443"));
+
+    await expect(readSessionUser()).resolves.toEqual({
+      ok: false,
+      failure: { errorClass: "network" },
+    });
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    expect(consoleSpy).toHaveBeenCalledWith({
+      event: "session_read_failed",
+      errorClass: "network",
+    });
+  });
+
+  it("clamps an absurd Retry-After to the contract range", async () => {
+    mocks.getSession.mockResolvedValue({
+      data: null,
+      error: { status: 429, retryAfterSeconds: 100000 },
+    });
+    const result = await readSessionUser();
+    expect(result).toEqual({
+      ok: false,
+      failure: { errorClass: "http", status: 429, retryAfterSeconds: 120 },
+    });
+  });
+
+  it("logs exactly one structured line with no identity material", async () => {
+    mocks.getSession.mockResolvedValue({
+      data: null,
+      error: {
+        status: 429,
+        message: "rate limited for a@adroit.io",
+        headers: new Headers({ "x-retry-after": "30" }),
+      },
+    });
+
+    await readSessionUser();
+
+    expect(consoleSpy).toHaveBeenCalledTimes(1);
+    const payload = logged();
+    // The single log line is the structured event — no upstream text, host,
+    // cookie, token or email may ride along.
+    expect(payload).not.toContain("a@adroit.io");
+    expect(payload).not.toContain("rate limited");
+    expect(payload).not.toContain("token");
+    expect(payload).not.toContain("cookie");
+    expect(payload).not.toContain("127.0.0.1");
+    const [first] = consoleSpy.mock.calls[0];
+    expect(Object.keys(first as object).sort()).toEqual([
+      "errorClass",
+      "event",
+      "status",
+    ]);
+  });
+
+  it("logs nothing on a successful read", async () => {
+    mocks.getSession.mockResolvedValue(SESSION);
+    await readSessionUser();
+    expect(consoleSpy).not.toHaveBeenCalled();
   });
 });

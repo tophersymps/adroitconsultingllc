@@ -23,7 +23,7 @@ export default function Header() {
   const router = useRouter();
   const isLearnActive = pathname === "/atlas" || pathname.startsWith("/atlas/");
   const isHome = pathname === "/";
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, unavailable } = useAuth();
   const [isSigningOut, startTransition] = useTransition();
 
   function handleSignOut() {
@@ -52,7 +52,7 @@ export default function Header() {
 
   const authControl = isLoading ? null : user ? (
     <AvatarMenu user={user} onSignOut={handleSignOut} isSigningOut={isSigningOut} />
-  ) : (
+  ) : unavailable ? null : (
     <Link
       href={`/login${pathname && pathname !== "/login" ? `?next=${encodeURIComponent(pathname)}` : ""}`}
       className="text-[var(--ink-muted)] text-sm font-medium hover:text-[var(--ink-primary)] transition-colors duration-150 no-underline"
@@ -235,7 +235,7 @@ export default function Header() {
             <SearchOverlay />
             <ThemeToggle authed={!!user} compact />
           </div>
-          {!isLoading && !user && (
+          {!isLoading && !user && !unavailable && (
             <Link
               href={`/login${pathname && pathname !== "/login" ? `?next=${encodeURIComponent(pathname)}` : ""}`}
               className="text-[var(--ink-body)] text-sm font-medium py-2 border-b border-[var(--border-subtle)] no-underline"

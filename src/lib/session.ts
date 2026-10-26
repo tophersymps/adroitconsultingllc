@@ -75,8 +75,8 @@ function sessionCookieNameForRequest(headers: HeaderReader | null): string {
  * NO network call, so it answers in microseconds even while the auth backend
  * is throttling every mint. Presence is not validity — an expired or revoked
  * cookie is still a credential, and a caller that presented one must never be
- * answered as an anonymous guest (fail-closed contract for GET /api/db/token;
- * docs/decisions/2026-10-26-db-token-fail-closed-contract.md).
+ * answered as an anonymous guest (fail-closed contract for GET
+ * /api/db/token; docs/decisions/2026-10-26-db-token-fail-closed-contract.md).
  *
  * Do NOT replace this with `getNeonSessionUser()`/`getSessionUser()`: those
  * return null for guests AND for an unreachable `/get-session`, which is the
@@ -114,6 +114,168 @@ async function readRequestHeaders(
   }
 }
 
+/** How a failed session read failed. Values go to logs, never to a response. */
+export type SessionReadErrorClass = "network" | "http" | "malformed";
+
+export interface SessionReadFailure {
+  errorClass: SessionReadErrorClass;
+  /** Upstream HTTP status when there was one. Absent for transport failures. */
+  status?: number;
+  /** Seconds from an upstream retry hint (`x-retry-after`/`Retry-After`). */
+  retryAfterSeconds?: number;
+}
+
+/**
+ * Strict read outcome.
+ *
+ * `ok: true, user: null` means "the auth backend answered, and this request is
+ * signed out" — a definitive identity fact. `ok: false` means "we could not
+ * find out"; callers must NOT translate that into a signed-out state.
+ */
+export type SessionReadResult =
+  | { ok: true; user: SessionUser | null }
+  | { ok: false; failure: SessionReadFailure };
+
+/** Pull a numeric HTTP status out of whatever the SDK threw/returned. */
+function statusOf(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as {
+    status?: unknown;
+    cause?: { status?: unknown };
+    response?: { status?: unknown };
+  };
+  for (const value of [
+    candidate.status,
+    candidate.cause?.status,
+    candidate.response?.status,
+  ]) {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
+/**
+ * Pull an upstream retry hint out of the error, if the SDK surfaced one.
+ *
+ * The bundled `getSession()` collapses the upstream response into
+ * `{ data, error }` and does NOT retain the raw `x-retry-after` header. This
+ * helper honours the hint when an error carries one (a future SDK release, a
+ * custom adapter, or a test seam); when it cannot be observed the route simply
+ * omits `Retry-After` rather than inventing a value. The clamp matches the
+ * token contract's reader (1–120 s).
+ */
+function retryAfterOf(error: unknown): number | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const candidate = error as {
+    retryAfterSeconds?: unknown;
+    retryAfter?: unknown;
+    headers?: unknown;
+    response?: { headers?: unknown };
+  };
+  const raw = candidate.retryAfterSeconds ?? candidate.retryAfter;
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+    return Math.min(Math.max(Math.ceil(raw), 1), 120);
+  }
+  for (const headers of [candidate.headers, candidate.response?.headers]) {
+    if (!headers) continue;
+    let value: string | null = null;
+    if (headers instanceof Headers) {
+      value = headers.get("x-retry-after") ?? headers.get("retry-after");
+    } else if (typeof headers === "object") {
+      const record = headers as Record<string, unknown>;
+      const found =
+        record["x-retry-after"] ?? record["retry-after"] ?? record["X-Retry-After"];
+      if (typeof found === "string") value = found;
+      else if (typeof found === "number" && Number.isFinite(found)) value = String(found);
+    }
+    if (!value) continue;
+    const seconds = Number.parseInt(value, 10);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.min(Math.max(seconds, 1), 120);
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Strict session read: performs the upstream `get-session` call and classifies
+ * the outcome. NEVER throws — transport failures, 429s, 5xx and malformed
+ * responses come back as `{ ok: false, failure }` so the route can answer 503.
+ *
+ * A 401/403 from the auth backend is a per-identity answer ("this session is
+ * no longer valid"), so it maps to `{ ok: true, user: null }` — the caller may
+ * treat it as signed out. Every other non-2xx, and every transport failure, is
+ * an availability failure: we do not know who the caller is.
+ *
+ * Emits exactly ONE structured, identity-free log line per failure:
+ *   { event: "session_read_failed", errorClass, status? }
+ */
+export async function readSessionUser(): Promise<SessionReadResult> {
+  let failure: SessionReadFailure | undefined;
+
+  try {
+    const { getAuthServer } = await import("@/lib/auth/server");
+    const result = await getAuthServer().getSession();
+    const error = result?.error as
+      | {
+          status?: number;
+          message?: string;
+          code?: string;
+          headers?: unknown;
+          retryAfterSeconds?: number;
+        }
+      | null
+      | undefined;
+
+    if (error) {
+      const status = typeof error.status === "number" ? error.status : undefined;
+      // A revoked/expired session is an identity fact, not an outage: the
+      // backend answered "not signed in". Keep the forgiving contract for
+      // 401/403 so an expired cookie still renders as signed-out.
+      if (status === 401 || status === 403) {
+        return { ok: true, user: null };
+      }
+      const retryAfterSeconds = retryAfterOf(error);
+      failure = {
+        errorClass: status === undefined ? "network" : "http",
+        ...(status === undefined ? {} : { status }),
+        ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+      };
+    } else {
+      const user = result?.data?.user;
+      if (!user?.id) return { ok: true, user: null };
+      return {
+        ok: true,
+        user: {
+          id: user.id,
+          email: user.email ?? "",
+          name: user.name ?? null,
+        },
+      };
+    }
+  } catch (err) {
+    const status = statusOf(err);
+    if (status === 401 || status === 403) return { ok: true, user: null };
+    const retryAfterSeconds = retryAfterOf(err);
+    failure = {
+      errorClass: status === undefined ? "network" : "http",
+      ...(status === undefined ? {} : { status }),
+      ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
+    };
+  }
+
+  const resolved = failure ?? { errorClass: "malformed" as const };
+  // One structured line per failure; no cookie, token, host or email. The
+  // errorClass/status vocabulary matches the /api/db/token contract so
+  // dashboards can classify both endpoints the same way.
+  console.error({
+    event: "session_read_failed",
+    errorClass: resolved.errorClass,
+    ...(resolved.status === undefined ? {} : { status: resolved.status }),
+  });
+  return { ok: false, failure: resolved };
+}
+
 /**
  * Current session user, or null for guests / on any auth error.
  * Shape is intentionally minimal: only what the app needs (id, email, name).
@@ -129,24 +291,9 @@ async function readRequestHeaders(
  * the same guard `src/proxy.ts` uses.
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
-  try {
-    if (!(await hasSessionCredential())) {
-      return null;
-    }
-
-    const { getAuthServer } = await import("@/lib/auth/server");
-    const { data } = await getAuthServer().getSession();
-    const user = data?.user;
-    if (!user?.id) return null;
-    return {
-      id: user.id,
-      email: user.email ?? "",
-      name: user.name ?? null,
-    };
-  } catch (err) {
-    console.error("[session] getSession failed", err);
-    return null;
-  }
+  if (!(await hasSessionCredential())) return null;
+  const result = await readSessionUser();
+  return result.ok ? result.user : null;
 }
 
 /** Current session user id, or null for guests. */
