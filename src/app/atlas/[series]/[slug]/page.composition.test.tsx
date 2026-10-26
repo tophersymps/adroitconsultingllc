@@ -89,7 +89,7 @@ vi.mock("@/lib/seo", () => ({
   siteConfig: { url: "https://example.test" },
   buildMetadata: (p: unknown) => p,
 }));
-vi.mock("@/lib/quiz", () => ({ getQuizForLesson: () => null }));
+vi.mock("@/lib/quiz", () => ({ getQuizForLesson: () => null, getKnowledgeChecks: () => [] }));
 vi.mock("@/lib/sky-server", () => ({ loadSeriesConstellation: () => null }));
 vi.mock("@/data/lesson-audio", () => ({ lessonAudio: [] }));
 

@@ -23,10 +23,9 @@ import GuestCTA from "@/components/Progress/GuestCTA";
 import { learnSeries } from "@/data/learn";
 import {
   getCertExam,
-  getKnowledgeCheck,
   getKnowledgeChecks,
-  scoreQuizAttemptsByQuiz,
 } from "@/lib/quiz";
+import { loadCheckScores } from "@/lib/check-scores";
 import { getSeriesBySlug } from "@/lib/learn";
 import { examLabels } from "@/lib/exam-labels";
 import { buildMetadata } from "@/lib/seo";
@@ -174,33 +173,13 @@ export default async function ExamPage({ params }: Props) {
 
   // Authed — derive per-check scores from server-graded quiz_attempt rows
   // (security t_7469e31d F2: quiz_run is client-writable history, so the
-  // unlock decision must never depend on it).
-  const quizNames = checkMetas.map((c) => `${series}:check:${c.n}`);
-  const { data } = await supabase
-    .from("quiz_attempt")
-    .select("quiz_name, question_index, is_correct")
-    .eq("user_id", user!.id)
-    .in("quiz_name", quizNames);
-
-  // Canonical coverage (t_55105899): a check with only 8 of 15 questions
-  // answered (all correct) must NOT derive as 8/8 = 100% and unlock the
-  // exam. Only full-coverage attempt sets produce a score.
-  const canonicalTotals = new Map<string, number>();
-  for (const c of checkMetas) {
-    const quiz = getKnowledgeCheck(series, c.n);
-    if (quiz) canonicalTotals.set(`${series}:check:${c.n}`, quiz.questions.length);
-  }
-  const scoresByQuiz = scoreQuizAttemptsByQuiz(
-    (data ?? []) as {
-      quiz_name: string;
-      question_index: number;
-      is_correct: boolean;
-    }[],
-    canonicalTotals,
-  );
+  // unlock decision must never depend on it). A6 moved the derivation into
+  // `lib/check-scores.ts` so the lesson page's "has check 1 passed?" answer is
+  // the same read this gate makes — behaviour here is unchanged.
+  const scores = await loadCheckScores(supabase, user!.id, series, checkMetas);
 
   const checks: CheckProgress[] = checkMetas.map((c) => {
-    const bestScore = scoresByQuiz.get(`${series}:check:${c.n}`)?.score ?? 0;
+    const bestScore = scores.get(c.n)?.bestScore ?? 0;
     return { n: c.n, bestScore, attempts: 0, passed: bestScore >= CERT_CHECK_PASS_PCT };
   });
   const allChecksPassed = checks.every((c) => c.passed);
