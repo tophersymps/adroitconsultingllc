@@ -1443,6 +1443,11 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 ### Neon-Migration-R2-Hardening
 
 Neon migration R1/R2 for adroit.io: Managed Better Auth + Data API cutover from Supabase, RLS port and isolation verification, /atlas and auth-route hardening, and the R2 review fix cycle. Opened 2026-10-23 to give the whole migration line a named release; builds auto-attach from here.
+## [v1.2.0] — 2026-10-26
+
+### Learn-UX-Exam-Naming
+
+Learn UX and exam naming for adroit.io: citations as the last block on a lesson, milestone knowledge checks as nodes in the course timeline (no gating), kind-aware exam naming (course completion vs certification prep), and the mark-complete control inside the floating audio bar. Desktop and mobile.
 
 ## [Unreleased]
 
