@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "embedding-migration-dual-index-2026",
+    "title": "You Cannot Mix Two Vector Spaces: The Re-Embed Playbook",
+    "excerpt": "Swapping an embedding model is one string in your application and every vector in your index. Here is the dual-index cutover that makes the swap reversible.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 26, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Embeddings",
+      "Vector Search",
+      "pgvector",
+      "RAG"
+    ],
+    "bannerImage": "/banners/embedding-migration-dual-index-2026.webp",
+    "ogImage": "/banners/embedding-migration-dual-index-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-permission-model-migration-2026",
     "title": "The Deadline Is Gone. The Permission Sprawl Is Not.",
     "excerpt": "Salesforce cancelled the profile-permission deadline in June 2026. The access risk, the sprawl, and the migration work are still yours.",

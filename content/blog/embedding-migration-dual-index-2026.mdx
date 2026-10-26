@@ -1,0 +1,135 @@
+---
+title: "You Cannot Mix Two Vector Spaces: The Re-Embed Playbook"
+slug: embedding-migration-dual-index-2026
+excerpt: "Swapping an embedding model is one string in your application and every vector in your index. Here is the dual-index cutover that makes the swap reversible."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 26, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "11 min read"
+tags: [AI Infrastructure, Embeddings, Vector Search, pgvector, RAG]
+bannerImage: /banners/embedding-migration-dual-index-2026.webp
+ogImage: /banners/embedding-migration-dual-index-2026-og.jpg
+---
+
+Somewhere in your application there is a line that names an embedding model. Changing it is a one-line edit. It is also the only one-line edit in a retrieval system that invalidates every vector you have stored, and nothing in the stack will stop you from shipping it on a Tuesday afternoon.
+
+An embedding is not a description of a document. It is a coordinate produced by one specific function inside one specific space. Two models, and often two versions of the same model, put the same sentence at coordinates with no relationship to each other. The cosine between a document's old vector and its new one sits near zero, and it sits near zero for every other pair too, which is why the damage has no shape you can see in a latency chart or an error rate.
+
+That is what turns the index into something other than a cache. It is an artifact with a schema, and the schema is not stored in the database.
+
+## The model reference is a string, the index is a schema
+
+Six things define the space your vectors live in, and only one of them has a type the database understands:
+
+- the model identifier, such as `text-embedding-3-large`
+- the model version, because providers update a named model in place
+- the output dimension, which is fixed per column
+- the distance metric, and the index operator class that pairs with it
+- the preprocessing applied before the call, including instruction prefixes some models require on queries
+- the chunker, because chunk boundaries determine the text that gets embedded
+
+None of that is enforced. A Postgres `vector(1536)` column will accept a 1536-dimension output from any model, any version, any preprocessing, and it will not record which one filled the row. The type checks the shape and not the provenance.
+
+![Six fields define the vector space, and only the output dimension is enforced by the column type, so a change to the model, the version, the metric, the preprocessing or the chunker invalidates every stored vector with no error](</diagrams/embedding-migration-dual-index-2026/1-index-schema.png>)
+
+So the swap is cheap exactly where you look and expensive exactly where you do not. At the application layer it is a string in a config file, live on the next request. At the data layer it is a full pass over the corpus plus an index rebuild, and until that pass finishes, every query is asking one space for neighbors that live in another.
+
+## Three things change at once, and only one of them errors
+
+Practitioners talk about "changing the model" as if it were one event. It is three, and they fail differently.
+
+![Three incompatibilities that a model swap introduces: dimension, which fails loudly at the column boundary, geometry, which fails silently because identical dimensions do not mean comparable axes, and score calibration, which fails silently because a relevance threshold tuned on the old distribution means something different on the new one](</diagrams/embedding-migration-dual-index-2026/2-three-incompatibilities.png>)
+
+**Dimension fails loudly, which is the good case.** `text-embedding-3-small` returns 1536 dimensions and `text-embedding-3-large` returns 3072, and a `vector(1536)` column will reject the wider output with an insert error[^1]. The trouble is that teams fix this error with the dimension, not the model: the API takes a `dimensions` parameter, and you can ask 3-large for 1024 values instead[^1]. That is legitimate only because these models were trained so the tail can be dropped, which is what the Matryoshka work behind them is for[^2]. Truncating the output of a model that was not trained that way gives you a shorter vector with the structure destroyed, and OpenAI's own docs are explicit that shortening is a lossy trade with a performance floor rather than a free compression[^1].
+
+**Geometry fails silently.** Equal dimensions do not mean comparable axes. Two models carve up meaning differently, and even a re-trained version of the same architecture produces a point cloud with different rotation, scale and anisotropy. There is no error, no warning, and no partial credit. Nearest-neighbor search only means something when the query vector and the corpus vectors came out of the same function, which is the single sentence that governs this whole article.
+
+**Calibration fails silently and later.** Every hard-coded cutoff in your retrieval code (the 0.78 similarity that meant "relevant", the 0.4 that meant "abstain", the reranker blend weight) was fitted against one score distribution. Swap the model and the numbers keep landing in the same range while meaning something else. This is the failure that survives the migration and then shows up as a support ticket about the assistant answering questions it used to refuse.
+
+On pgvector there is a fourth, earlier bite that most migration plans hit late: the index dimension ceiling. HNSW indexes support `vector` up to 2,000 dimensions, `halfvec` up to 4,000, and `bit` up to 64,000, so a 3,072-dimension model cannot be indexed at full precision at all[^3]. You either store half precision, index a subvector, reduce dimensions, or drop to binary quantization with a rerank pass[^3].
+
+![The pgvector type ladder: a full precision vector indexes up to 2,000 dimensions at 4 bytes per dimension plus 8, a half vector reaches 4,000 at 2 bytes per dimension, and a binary vector reaches 64,000. A 3,072-dimension model needs the half precision row, and the storage column shows what one million chunks cost at each width](</diagrams/embedding-migration-dual-index-2026/3-pgvector-dimension-ladder.png>)
+
+The arithmetic is worth doing before you pick a model rather than after. At 1,536 dimensions, one million chunks cost about 6.15 GB of vector storage at full precision and 3.08 GB at half precision, since each `vector` row is `4 * dimensions + 8` bytes and each `halfvec` row is `2 * dimensions + 8`[^3]. Move to a 3,072-dimension model without thinking and the same million chunks want 12.3 GB, or 6.15 GB as `halfvec`. That is the difference between an index that fits in `maintenance_work_mem` and one that pages during every build.
+
+## The failure that looks like success
+
+A mixed index is what you get whenever old and new vectors coexist in one space, and it has three ordinary causes.
+
+The first is a partial backfill: you re-embed a slice of the corpus, cut traffic over, and let the rest catch up. The second is embedder skew, where the write path and the query path disagree: a batch job still pinned to the previous model version, one service replica holding an old config, a queue consumer deployed on Friday that nobody redeployed. The third is a corpus assembled from two pipelines at different times, each with its own model, merged into one collection because the schema looked compatible.
+
+![A query embedded in the new model's space lands in an index that still holds old-model vectors, so the top three results are the geometrically nearest points rather than the semantically nearest passages. Three causes feed it: a partial backfill, a write path and query path on different model versions, and two pipelines merged into one collection](</diagrams/embedding-migration-dual-index-2026/4-mixed-index.png>)
+
+All three produce the same behavior. Queries embed in space A, part of the corpus lives in space B, and the nearest neighbors of the query are whichever B vectors happen to sit near it geometrically. You get full result sets, at full speed, with confident answers built on unrelated passages. A retrieval bug that returns nothing is a bug. This one returns a plausible paragraph, which is why it can run for weeks.
+
+There is a quieter version that lives entirely inside the query, and pgvector documents it in the troubleshooting section. An index is only used when the `ORDER BY` is the distance operator itself in ascending order. Write `ORDER BY 1 - (embedding <=> query) DESC` to convert distance into a similarity score and the planner cannot use the index, so it scans the table[^3]. The results are exact. They are also, on a table that has grown past a few hundred thousand rows, seconds instead of milliseconds. You changed one expression, kept every answer correct, and moved the latency by three orders of magnitude. The same trap sits in the metric itself: an index built for `vector_cosine_ops` serves cosine queries, and a query using L2 against a cosine index falls back to a scan too, so the operator class is part of the schema in a way you only notice under load[^3].
+
+The defense is cheap and almost nobody builds it. Store the model identifier and the dimension on every row, or at minimum on the collection, and assert at query time that the model serving the query matches the model that built the index. Make the assertion fail closed. A retrieval path that refuses to search is a five-minute incident with a config fix. A retrieval path that searches the wrong space is a month of subtly wrong answers that ends in a rewrite of your evaluation suite.
+
+## The dual-index cutover
+
+Full re-embedding behind a second index is the default answer for a simple reason: it is the only strategy where the new index is native, because it is built by the model that will serve it[^6]. Nothing is translated, approximated, or fused across spaces. The cost is one full pass over the corpus, temporary double storage, and the engineering to run both paths at once.
+
+![The five phase dual index cutover: build the green index, backfill while dual writing, shadow read production traffic against both, swap reads atomically, then keep the old index warm for a rollback window before retiring it](</diagrams/embedding-migration-dual-index-2026/5-dual-index-cutover.png>)
+
+**1. Build green with the model in its name.** Create the new collection, table or column and put the model and dimension in the identifier, `chunks_emb_3large_3072` rather than `chunks_v2`. A year from now the alias tells you nothing, and the name is the cheapest documentation you will ever write.
+
+**2. Backfill from source text, newest first.** Re-embed from the original documents, not from the old vectors, because there is nothing in an old vector you can convert. Ordering the backfill newest-first means the content users are most likely to ask about is available in the new space earliest, which makes a partial shadow read useful instead of misleading[^6].
+
+**3. Estimate the pass before you start it.** For API models the arithmetic is straightforward: `text-embedding-3-small` returns roughly 62,500 pages per dollar at the documentation's 800-tokens-per-page assumption, and `text-embedding-3-large` roughly 9,615, which works out to about $0.02 and $0.13 per million tokens[^1]. A ten-million-chunk corpus at 500 tokens per chunk is 5 billion tokens, so $100 on the small model and $650 on the large one. For self-hosted work the wall clock is the binding constraint: one 2026 study put re-embedding MS MARCO v2, 138 million documents, at more than ten hours on eight H200 GPUs, and estimated the same corpus at $166 and $1,079 through the two OpenAI models[^7]. Scaling that to a billion-vector corpus makes it a multi-day operation, which is a scheduling problem, not a budget problem.
+
+**4. Dual-write for the whole window.** Every insert, update and delete goes to both indexes until cutover. This is the step teams skip because it is plumbing, and it is the step that decides whether the new index is actually complete on the day you flip it. Deletes matter as much as writes: an index that has every new document and none of the removals will surface content you believe you deleted.
+
+**5. Shadow read before you flip.** Send production queries to both indexes, serve the old one to users, and log both result sets. Compare them offline on the fixed evaluation set described below. Some teams shadow a slice of real traffic for a few percent of requests; the point is to see the new ranking on questions nobody wrote for the test suite.
+
+**6. Swap atomically, then keep the loser warm.** The swap has to be a single operation, not a deploy. Elasticsearch does it with one `_aliases` request whose `actions` array removes the alias from the old index and adds it to the new one, applied atomically, so no query sees a moment when the alias is missing[^4]. Qdrant's migration guide uses the same shape: delete and create the collection alias in one call, and additionally flip the model in the application config, because both halves of the space have to change together[^5]. On pgvector there is no alias, so you build the cutover into the schema: a second column or a second table behind a view, and the read path switched in one transaction. However you do it, keep the old index for a rollback window of days rather than minutes. The flip is reversible only while the predecessor is still there and still receiving writes.
+
+## Validate with recall parity, not with a feeling
+
+Migration validation fails when it is qualitative. The pattern that holds up is narrow and mechanical: fix an evaluation set of real production queries with known-relevant document ids, and gate the cutover on the new index matching the old one's recall at k.
+
+A workable gate is a tolerance rather than an absolute score, something like new recall at 10 no worse than 98 percent of old recall at 10, checked per content segment instead of in aggregate. Translation and geometry errors cluster in the corners of the space, and a single blended number hides a segment that has come apart completely[^6]. Public benchmarks are not a substitute: the MTEB leaderboard ranks models on a fixed collection of tasks, and your corpus is not one of them[^8]. A model that wins by two points on the leaderboard can lose on your documents, and the only way to know is to measure on yours.
+
+Then re-fit the calibration. Every absolute threshold, blend weight and abstention cutoff moves when the score distribution moves, and the migration is the moment to re-derive them from the new index rather than port the old numbers forward.
+
+## When you cannot re-embed
+
+Full re-embedding needs one thing people forget to check: the source text. If the originals are gone, expired licenses, deleted source systems, a compliance purge, or a corpus that was only ever delivered as vectors, you cannot regenerate them, and the migration stops being a compute question.
+
+Two strategies remain, and both are honest about their limits. Learned vector-space translation fits a mapping from the old space into the new one using paired anchors, the same items embedded by both models. Orthogonal Procrustes, solved in closed form with an SVD on a few thousand anchor pairs, recovers the rotation between two spaces; a small learned adapter does better when the models differ in more than orientation[^6]. Expect a real recall drop against natively embedded vectors, concentrated on out-of-distribution content, and treat translated vectors as a bridge with an expiry date rather than a destination.
+
+Query-side bridging is the other option: leave the corpus in the old space, embed incoming queries with the old model, and build the new index lazily as content arrives, fanning queries out to both and merging by rank. It costs almost nothing to start and is trivially reversible[^6]. It also leaves you running two encoders and two indexes indefinitely, with cross-space fusion capping retrieval quality, so it is a transition state, not an architecture.
+
+## Make the next migration cheap
+
+The migration you cannot avoid is the one you should design for on day one, and most of the design is bookkeeping.
+
+**Put the version in the artifact.** Model identifier, model version, dimension, metric and chunker version belong in the index name, the collection metadata, and ideally on every row. The retrieve path should read that metadata and compare it to the model it is about to call.
+
+**Assert at query time.** A five-line check that refuses to search on a mismatch converts your worst failure mode, silent wrong answers, into your best one, a loud error with an obvious fix.
+
+**Keep the source text addressable.** The single fact that decides whether a migration is a weekend job or a dead end is whether you can still read the documents that produced the vectors. Store the chunk text, or a pointer to a stable source, not only the embedding.
+
+**Treat re-embed cost as a model selection input.** A slightly weaker model you can afford to re-embed quarterly beats a better model whose swap never gets budgeted. The migration cost is part of the model's total cost, and the first time you pay it is usually earlier than planned.
+
+**Indirect from the start.** An alias, a pointer row, or a view costs you nothing on day one and is the entire difference between an atomic flip and a coordinated deploy across four services. If your application hardcodes a table name, you have already paid for the transition in advance.
+
+## Adroit on the ground
+
+The Fortress publishes every article through a staging gate where the artifact is registered by slug, reviewed, and only then promoted, and the truth of what is published is the committed file at the origin, never whatever happens to be sitting in a working directory. That discipline exists because a working tree is a place where things accumulate, and an index is the same kind of place. What serves traffic has to be an identified artifact with a known provenance, promoted by a pointer, with the predecessor still intact until someone has watched the successor behave. We made the same argument for container builds in [promotion by digest](/field-notes/build-once-deploy-digest-2026), and it holds with more force here, because a digest at least fails loudly when it is wrong.
+
+## What to do this week
+
+If you have an index in production, the useful work is not the migration. Check whether you can answer three questions from your own system right now: which model and version built each vector, what recall the index had on your evaluation set last month, and whether the query path would notice if the answer to the first question changed. Two of those three can be added in a day, and they are the difference between a migration you run and one that runs you.
+
+[^1]: OpenAI, "Vector embeddings," API documentation covering the 1536 and 3072 default dimensions, the `dimensions` parameter for shortening, L2 normalization of outputs, and the per-model MTEB and pages-per-dollar table. [developers.openai.com](https://developers.openai.com/api/docs/guides/embeddings)
+[^2]: Kusupati et al., "Matryoshka Representation Learning," the training method that makes truncatable embeddings possible, referenced by OpenAI as the technique behind the `dimensions` parameter. [arxiv.org](https://arxiv.org/abs/2205.13147)
+[^3]: pgvector, README for v0.8.7, covering supported index dimensions per type (vector 2,000, halfvec 4,000, bit 64,000), the `4 * dimensions + 8` and `2 * dimensions + 8` storage formulas, one operator class per distance function, and the troubleshooting note that a query must order by the distance operator itself to use the index. [github.com/pgvector](https://github.com/pgvector/pgvector)
+[^4]: Elastic, "Create or update an alias," Elasticsearch API reference documenting the `POST /_aliases` endpoint and its `actions` array for atomic alias reassignment. [elastic.co](https://www.elastic.co/docs/api/doc/elasticsearch/operation/operation-indices-update-aliases)
+[^5]: Qdrant, "Embedding model migration," an operations tutorial describing blue-green migration with two parallel collections, dual writes, a background re-embed scroll, and an atomic alias switch. [qdrant.tech](https://qdrant.tech/documentation/tutorials-operations/embedding-model-migration/)
+[^6]: Mixpeek, "How to Switch Embedding Models Without Re-Embedding Everything," updated July 2026, covering the three migration strategies, orthogonal Procrustes translation, and the recall-parity cutover gate. [mixpeek.com](https://www.mixpeek.com/guides/embedding-model-migration-without-reembedding)
+[^7]: Li et al., "Can You Trust the Vectors in Your Vector Database? Black-Hole Attack from Embedding Space Defects," arXiv 2604.05480v2, section on re-embedding cost (138M documents, more than 10 hours on eight H200 GPUs, $166 and $1,079 at OpenAI list prices). [arxiv.org](https://arxiv.org/abs/2604.05480)
+[^8]: MTEB, the Massive Text Embedding Benchmark leaderboard maintained by the embedding-benchmark project. [huggingface.co](https://huggingface.co/spaces/mteb/leaderboard)
