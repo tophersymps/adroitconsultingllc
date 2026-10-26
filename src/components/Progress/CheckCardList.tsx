@@ -1,19 +1,20 @@
 /**
  * CheckCardList — knowledge check rows on the series page (copy deck §3).
  *
- * Client component: fetches GET /api/progress/quiz/tiers for per-check pass
- * state (hydration-gated — server renders "Not taken" rows so first paint is
+ * Client component: reads the tier rollup through `useTierProgress` (one shared
+ * GET /api/progress/quiz/tiers per series page) for per-check pass state
+ * (hydration-gated — server renders "Not taken" rows so first paint is
  * identical for guests and returning users; the client fills real scores after
  * mount). Guests see the same list with "Not taken" (each page shows the CTA).
  */
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { CheckProgress, KnowledgeCheckMeta, TierProgress } from "@/shared/contracts";
+import type { CheckProgress, KnowledgeCheckMeta } from "@/shared/contracts";
 import type { ExamKind } from "@/data/types";
 import { examLabels } from "@/lib/exam-labels";
 import { CERT_CHECK_PASS_PCT } from "@/lib/exam-config";
+import { useTierProgress } from "@/lib/hooks/useTierProgress";
 
 interface CheckCardListProps {
   series: string;
@@ -29,27 +30,9 @@ interface CheckCardListProps {
 
 export default function CheckCardList({ series, checksMeta, kind }: CheckCardListProps) {
   const labels = examLabels(kind);
-  const [tiers, setTiers] = useState<TierProgress | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/progress/quiz/tiers?series=${encodeURIComponent(series)}`, {
-          cache: "no-store",
-        });
-        if (cancelled) return;
-        if (!res.ok) return;
-        const data = (await res.json()) as TierProgress;
-        if (!cancelled) setTiers(data);
-      } catch {
-        // guests / no data — rows render as "Not taken"
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [series]);
+  // Shared tier rollup (A4): one GET /api/progress/quiz/tiers per series page,
+  // shared with CertReadiness and ExamCard.
+  const { tiers } = useTierProgress(series);
 
   const checks: CheckProgress[] = tiers?.checks ?? [];
 

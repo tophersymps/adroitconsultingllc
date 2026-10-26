@@ -17,12 +17,11 @@
  */
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { TierProgress } from "@/shared/contracts";
 import type { ExamKind } from "@/data/types";
 import { examLabels } from "@/lib/exam-labels";
 import { CERT_CHECK_PASS_PCT } from "@/lib/exam-config";
+import { useTierProgress } from "@/lib/hooks/useTierProgress";
 
 interface ExamCardProps {
   series: string;
@@ -46,27 +45,9 @@ export default function ExamCard({
   minutes,
 }: ExamCardProps) {
   const labels = examLabels(kind);
-  const [tiers, setTiers] = useState<TierProgress | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/progress/quiz/tiers?series=${encodeURIComponent(series)}`, {
-          cache: "no-store",
-        });
-        if (cancelled) return;
-        if (!res.ok) return;
-        const data = (await res.json()) as TierProgress;
-        if (!cancelled) setTiers(data);
-      } catch {
-        // guests / no data / degraded route — locked state with 0 passed
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [series]);
+  // Shared tier rollup (A4): one GET /api/progress/quiz/tiers per series page,
+  // shared with CertReadiness and the check list.
+  const { tiers } = useTierProgress(series);
 
   const unlocked = tiers?.unlocked ?? false;
   const passedCount = tiers?.checks.filter((c) => c.passed).length ?? 0;

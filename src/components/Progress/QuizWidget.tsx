@@ -26,6 +26,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuizProgress } from "@/lib/hooks/useQuizProgress";
+import { invalidateTierProgress } from "@/lib/hooks/useTierProgress";
 import { trackQuizTierComplete } from "@/lib/analytics";
 
 export interface QuizQuestion {
@@ -77,6 +78,16 @@ interface QuizWidgetProps {
    */
   serverGraded?: boolean;
   /**
+   * Series slug for knowledge checks (t_499542c6). Check attempts feed the
+   * series' tier rollup (best score, pass, exam unlock), so a successful
+   * grading POST drops the cached `useTierProgress` entry for this series —
+   * otherwise the client-side "Back to series" Link lands on the PRE-submit
+   * rollup because the module cache outlives the navigation. Omitted on
+   * lesson-only quizzes, where the rollup's inputs are the lesson-completion
+   * toggle (invalidated by `useLessonProgress`).
+   */
+  seriesSlug?: string;
+  /**
    * Lesson-tier opt-in: fired once when a run completes PERFECT (all answers
    * correct) in this session — used to auto-mark the lesson complete. Guests
    * and reloads of an already-perfect quiz never fire it (session-scoped).
@@ -93,6 +104,7 @@ export default function QuizWidget({
   backHref,
   backLabel = "Back",
   serverGraded = false,
+  seriesSlug,
   onPerfectScore,
 }: QuizWidgetProps) {
   const [currentQ, setCurrentQ] = useState(0);
@@ -301,6 +313,12 @@ export default function QuizWidget({
         setGradeError(true);
         return;
       }
+      // Freshness (t_499542c6): the grading POST persisted a quiz_attempt, so
+      // this series' cached tier rollup (check best score, pass flag, exam
+      // unlock) is now stale. Drop it before the results view offers its
+      // client-side "Back to series" Link — that navigation does not reload
+      // the document, so a cached entry would win over a fresh request.
+      if (seriesSlug) invalidateTierProgress(seriesSlug);
       setGradedResults((prev) => ({
         ...prev,
         [currentQ]: {

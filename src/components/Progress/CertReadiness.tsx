@@ -2,14 +2,16 @@
  * CertReadiness — tier-aware progress rollup for the series header (§9).
  *
  * "Lessons X/46 · Checks X/9 · Exam best Y%" + weighted readiness bar
- * (lessons 40% / checks 30% / exam best 30% — ADR-107). Fetches
- * GET /api/progress/quiz/tiers (hydration-gated; server renders nothing for
- * first paint, so guests/returning users never mismatch).
+ * (lessons 40% / checks 30% / exam best 30% — ADR-107). Reads the tier rollup
+ * through `useTierProgress`, the one shared GET /api/progress/quiz/tiers per
+ * series page (A4) — this component used to carry its own copy of the fetch,
+ * which made the series page issue the same request three times.
+ * Hydration-gated: the server renders nothing for first paint, so
+ * guests/returning users never mismatch.
  */
 "use client";
 
-import { useEffect, useState } from "react";
-import type { TierProgress } from "@/shared/contracts";
+import { useTierProgress } from "@/lib/hooks/useTierProgress";
 
 interface CertReadinessProps {
   series: string;
@@ -18,27 +20,7 @@ interface CertReadinessProps {
 }
 
 export default function CertReadiness({ series, onGradient = false }: CertReadinessProps) {
-  const [tiers, setTiers] = useState<TierProgress | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`/api/progress/quiz/tiers?series=${encodeURIComponent(series)}`, {
-          cache: "no-store",
-        });
-        if (cancelled) return;
-        if (!res.ok) return;
-        const data = (await res.json()) as TierProgress;
-        if (!cancelled) setTiers(data);
-      } catch {
-        // no data — render nothing (never invent stats)
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [series]);
+  const { tiers } = useTierProgress(series);
 
   // Hydration gate + "never invent stats": show nothing until the fetch lands
   // and there is some progress.
