@@ -21,7 +21,7 @@
  * read at request time does.
  */
 
-import { isSecureRequest } from "@/lib/auth/transport";
+import { isSecureRequest, type HeaderReader } from "@/lib/auth/transport";
 
 export interface SessionUser {
   id: string;
@@ -54,6 +54,67 @@ export const SESSION_COOKIE_NAME = "__Secure-neon-auth.session_token";
 export const PLAIN_SESSION_COOKIE_NAME = "neon-auth.session_token";
 
 /**
+ * The session cookie name that is valid on this transport, or the `__Secure-`
+ * form when no request header scope is available (a unit-test stub that mocks
+ * only `cookies`, and any non-request caller — both want the deployed form).
+ *
+ * Only the cookie name that is valid on this transport counts (M2,
+ * t_7ecb98d7): the plain name on https is a planting vector, and the
+ * `__Secure-` name on plain http would have been dropped by the browser.
+ */
+function sessionCookieNameForRequest(headers: HeaderReader | null): string {
+  if (!headers) return SESSION_COOKIE_NAME;
+  return isSecureRequest(headers) ? SESSION_COOKIE_NAME : PLAIN_SESSION_COOKIE_NAME;
+}
+
+/**
+ * Whether the CURRENT request presented a Managed Better Auth session cookie.
+ *
+ * This is the "did the caller claim an identity" predicate, deliberately kept
+ * separate from "who is the caller": it reads `next/headers` only and performs
+ * NO network call, so it answers in microseconds even while the auth backend
+ * is throttling every mint. Presence is not validity — an expired or revoked
+ * cookie is still a credential, and a caller that presented one must never be
+ * answered as an anonymous guest (fail-closed contract for GET /api/db/token;
+ * docs/decisions/2026-10-26-db-token-fail-closed-contract.md).
+ *
+ * Do NOT replace this with `getNeonSessionUser()`/`getSessionUser()`: those
+ * return null for guests AND for an unreachable `/get-session`, which is the
+ * exact ambiguity this predicate exists to remove.
+ */
+export async function hasSessionCredential(): Promise<boolean> {
+  try {
+    const nextHeaders = await import("next/headers");
+    const cookieStore = await nextHeaders.cookies();
+    return cookieStore.has(
+      sessionCookieNameForRequest(await readRequestHeaders(nextHeaders)),
+    );
+  } catch {
+    // Outside a request scope (static build pass, script): no credential.
+    return false;
+  }
+}
+
+/**
+ * `next/headers`'s `headers()` when the module actually exposes it.
+ *
+ * The lookup is guarded twice on purpose: a unit-test `vi.mock` that exports
+ * only `cookies` THROWS on property access to any other export, so "does this
+ * module have `headers`?" cannot be asked with a bare `typeof`. A missing
+ * header scope means "use the deployed (`__Secure-`) cookie name".
+ */
+async function readRequestHeaders(
+  nextHeaders: Awaited<typeof import("next/headers")>,
+): Promise<HeaderReader | null> {
+  try {
+    const read = nextHeaders.headers;
+    return typeof read === "function" ? await read() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Current session user, or null for guests / on any auth error.
  * Shape is intentionally minimal: only what the app needs (id, email, name).
  *
@@ -69,16 +130,7 @@ export const PLAIN_SESSION_COOKIE_NAME = "neon-auth.session_token";
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
   try {
-    const { cookies, headers } = await import("next/headers");
-    const cookieStore = await cookies();
-    // Only the cookie name that is valid on this transport counts (M2,
-    // t_7ecb98d7): the plain name on https is a planting vector, and the
-    // `__Secure-` name on plain http would have been dropped by the browser.
-    const secure = isSecureRequest(await headers());
-    const expectedCookie = secure
-      ? SESSION_COOKIE_NAME
-      : PLAIN_SESSION_COOKIE_NAME;
-    if (!cookieStore.has(expectedCookie)) {
+    if (!(await hasSessionCredential())) {
       return null;
     }
 

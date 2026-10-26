@@ -38,6 +38,7 @@ import { cookies } from "next/headers";
 import { NeonPostgrestClient } from "@neondatabase/postgrest-js";
 import { getAnonymousJwtResult, type AnonTokenResult } from "./anonymous-token";
 import { createTokenUnavailableClient } from "./degraded-client";
+import { hasSessionCredential } from "@/lib/session";
 
 /** The minimal user projection the app reads off the session. */
 export interface DbSessionUser {
@@ -117,6 +118,15 @@ function parseRetryAfter(headers: Headers): number | undefined {
   const seconds = Number.parseInt(raw, 10);
   if (!Number.isFinite(seconds)) return undefined;
   return Math.min(Math.max(seconds, 1), 120);
+}
+
+/**
+ * Whole seconds until a local wait ends, clamped to the range the failure
+ * contract advertises (`Retry-After`: 1..120). Rounds UP so a caller is never
+ * told to retry earlier than the cooldown actually allows.
+ */
+function retryAfterFromMs(ms: number): number {
+  return Math.min(Math.max(Math.ceil(ms / 1000), 1), 120);
 }
 
 /**
@@ -214,8 +224,18 @@ async function fetchTokenResult(
   // The endpoint burned the budget moments ago: do not spend the render's
   // remaining budget re-asking it (t_81b09ba8). Reported as a failed mint, so
   // the caller degrades exactly as it would on a network error.
-  if (cooldownRemainingMs(path) > 0) {
-    return { ok: false, errorClass: "network" };
+  //
+  // `cooldownRemainingMs`/`retryAfterSeconds` are carried so a fail-closed
+  // caller (GET /api/db/token) can emit an honest `Retry-After` instead of
+  // telling the user to retry immediately into the same cooldown.
+  const cooldownMs = cooldownRemainingMs(path);
+  if (cooldownMs > 0) {
+    return {
+      ok: false,
+      errorClass: "network",
+      cooldownRemainingMs: cooldownMs,
+      retryAfterSeconds: retryAfterFromMs(cooldownMs),
+    };
   }
 
   const remaining = deadline - Date.now();
@@ -285,10 +305,43 @@ async function fetchTokenResult(
 /**
  * The signed-in caller's Data API JWT, or null for guests. Per-request only
  * (React `cache`): a session token is NEVER cached across requests/users.
+ *
+ * Kept for compatibility — it is a lossy projection of the classified mint
+ * below. Anything that has to distinguish "no session" from "the mint failed"
+ * (i.e. GET /api/db/token) must use `getSessionTokenResult()` instead: this
+ * wrapper is exactly the collapse the fail-closed contract removes.
  */
 async function mintSessionJwt(deadline: number): Promise<string | null> {
-  const result = await fetchTokenResult("/token", deadline);
+  const result = await mintSessionResult(deadline);
   return result.ok ? result.token : null;
+}
+
+/**
+ * The session mint WITH its classification intact (`errorClass`, `status`,
+ * `retryAfterSeconds`, `cooldownRemainingMs`).
+ *
+ * Throws only for a missing `NEON_AUTH_BASE_URL` — a misconfigured runtime must
+ * fail closed rather than degrade, exactly like `getSupabaseServerClient()`
+ * already does. Route callers that must answer an opaque 503 use
+ * `getSessionTokenResult()`, which converts that throw to `errorClass:"config"`.
+ */
+async function mintSessionResult(deadline: number): Promise<AnonTokenResult> {
+  return fetchTokenResult("/token", deadline);
+}
+
+/**
+ * Classified version of `getSessionJwt()` for the token route: never rejects,
+ * so the route can branch on the mint's classification instead of on a
+ * `try/catch` around a value that has already lost it.
+ */
+export async function getSessionTokenResult(): Promise<AnonTokenResult> {
+  try {
+    return await mintSessionResult(requestMintDeadline());
+  } catch {
+    // authBaseUrl() refused → missing NEON_AUTH_BASE_URL. Opaque 503 at the
+    // edge; the diagnosis lives in the log line, not the response body.
+    return { ok: false, errorClass: "config" };
+  }
 }
 
 export const getSessionJwt = cache(
@@ -387,9 +440,16 @@ function createDegradedDbClient(): DbClient {
  * `await getSupabaseServerClient()` — name kept from the Supabase era so the
  * call sites moved by import path only (R2-2 scope item 1).
  *
- * ALWAYS resolves (R2-5 AC-1): when neither a session JWT nor the anonymous
- * role token can be resolved, the caller gets a classified degraded client
- * instead of a rejection — a guest page must render, never 500.
+ * ALWAYS resolves (R2-5 AC-1): when no usable JWT can be resolved, the caller
+ * gets a classified degraded client instead of a rejection — a guest page must
+ * render, never 500.
+ *
+ * FAIL CLOSED ON THE ROLE (CWE-636/CWE-863, fail-closed contract §9): the
+ * decision to read as the Postgres `anonymous` role is made from credential
+ * PRESENCE, never from a failed mint. A request that presented a session cookie
+ * and whose mint failed gets the degraded client — never the anonymous JWT. The
+ * old `mintSessionJwt() ?? getAnonymousJwt()` shape was reachable from a failed
+ * session mint and served 48 call sites the wrong role's data.
  */
 export const getSupabaseServerClient = cache(
   async (): Promise<DbClient> => {
@@ -398,9 +458,15 @@ export const getSupabaseServerClient = cache(
     // (t_81b09ba8). `getSessionJwt` is not reused here because it would create
     // its own deadline (React `cache()` does not memoise outside a render).
     const deadline = requestMintDeadline();
-    const jwt =
-      (await mintSessionJwt(deadline)) ?? (await getAnonymousJwt(deadline));
-    return jwt ? createDbClient(jwt) : createDegradedDbClient();
+    // Presence, not validity, and no network call: an unreachable /get-session
+    // must not be mistaken for "this is a guest".
+    if (await hasSessionCredential()) {
+      const session = await mintSessionResult(deadline);
+      // A missing endpoint env throws here (fail closed), as before.
+      return session.ok ? createDbClient(session.token) : createDegradedDbClient();
+    }
+    const anonymousJwt = await getAnonymousJwt(deadline);
+    return anonymousJwt ? createDbClient(anonymousJwt) : createDegradedDbClient();
   },
 );
 

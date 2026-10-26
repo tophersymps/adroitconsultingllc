@@ -121,11 +121,13 @@ describe("Data API token provider", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("treats a non-OK token response as a guest (null) rather than throwing", async () => {
-    fetchMock.mockResolvedValue({ ok: false, json: async () => ({}) });
+  it("rejects a non-OK token response classified rather than resolving a guest null", async () => {
+    // Contract §8: `null` means "you are a guest" to postgrest-js, so a 503
+    // must reject with a classified, retryable error instead.
+    fetchMock.mockResolvedValue({ status: 503, ok: false, json: async () => ({}) });
     const provider = tokenProvider();
 
-    await expect(provider()).resolves.toBeNull();
+    await expect(provider()).rejects.toMatchObject({ code: "TOKEN_UNAVAILABLE" });
   });
 
   it("exposes resetDbTokenCache as the review-named alias of the same reset", async () => {

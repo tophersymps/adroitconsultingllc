@@ -83,9 +83,48 @@ describe("db token cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("treats a failed token response as a guest instead of throwing", async () => {
-    fetchMock.mockResolvedValue({ ok: false, json: async () => ({}) });
+  it("rejects a failed (503) token response instead of treating it as a guest", async () => {
+    // Contract §8 / C1: a mint outage is NOT a guest identity. Resolving null
+    // here would surface as AuthRequiredError ("please sign in") upstream.
+    fetchMock.mockResolvedValue({ ok: false, status: 503, json: async () => ({}) });
+
+    await expect(getToken()).rejects.toMatchObject({ code: "TOKEN_UNAVAILABLE" });
+    // Never memoised: the next read asks again.
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ token: "jwt-user" }) });
+    await expect(getToken()).resolves.toBe("jwt-user");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a 200 { token: null } as a genuine guest (C3)", async () => {
+    respondWith(null);
     await expect(getToken()).resolves.toBeNull();
+  });
+
+  it("rejects a fetch failure classified, not as a guest (C4)", async () => {
+    fetchMock.mockRejectedValue(new TypeError("fetch failed"));
+    await expect(getToken()).rejects.toMatchObject({ code: "TOKEN_UNAVAILABLE" });
+
+    // Not memoised as null: an offline blip must not sign the user out for 60 s.
+    respondWith("jwt-user");
+    await expect(getToken()).resolves.toBe("jwt-user");
+  });
+
+  it("drops the cache on 401 and resolves null (session expired, C2)", async () => {
+    const t0 = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(t0);
+
+    respondWith("jwt-user");
+    await expect(getToken()).resolves.toBe("jwt-user");
+
+    // Past the 60 s TTL: the next read really talks to /api/db/token again.
+    clock.mockReturnValue(t0 + 61_000);
+    fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+    await expect(getToken()).resolves.toBeNull();
+
+    respondWith(null);
+    await expect(getToken()).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    clock.mockRestore();
   });
 });
 
