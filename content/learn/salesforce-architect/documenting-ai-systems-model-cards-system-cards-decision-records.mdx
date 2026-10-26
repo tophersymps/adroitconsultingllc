@@ -1,0 +1,251 @@
+---
+title: "Lesson 80: General Systems Architecture: Documenting AI Systems: Model Cards, System Cards, and Decision Records"
+slug: documenting-ai-systems-model-cards-system-cards-decision-records
+series: "salesforce-architect"
+lesson: 80
+excerpt: "A model card describes a model. A system card describes what you deployed around it. An AI decision record explains why. This lesson covers all three artifacts, the Salesforce-specific facts that belong in them, and the arithmetic of keeping the set current when the model underneath you changes without a code commit."
+date: "October 26, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Salesforce, Architecture, Documentation, AI Governance, Model Cards]
+---
+
+# Lesson 80: General Systems Architecture: Documenting AI Systems: Model Cards, System Cards, and Decision Records
+
+A support organization launches an Agentforce service agent that drafts replies to billing disputes. Six months later, someone asks a simple question during an audit: which model is this agent using, what was it evaluated on before launch, and who approved letting it issue credits? The team can name the agent. Nobody can name the model snapshot. The evaluation deck exists in someone's email. The approval happened in a Slack thread that has since been archived.
+
+Nothing broke. That is the point. The agent is still working, which is precisely why nobody noticed the documentation was missing until an auditor asked. Ordinary architecture documentation decays because the system changes and the document does not. AI documentation decays faster, because the thing at the center of it changes without anyone touching your repository: a vendor ships a new model version, a router starts sending some traffic to a different model, a retrieval index gets rebuilt, a prompt template gets edited in Setup instead of in source control.
+
+Lesson 79 gave you the decision record and the merge gate that keeps ordinary architecture documentation honest. This lesson applies that machinery to AI systems and adds the two artifacts that have no equivalent in traditional architecture: the model card and the system card. You will get the fields each one needs, a worked example with real content, the Salesforce facts that belong in a system card, and the arithmetic for keeping the set current.
+
+## Define the terms first
+
+- **AI system**: the deployed combination of one or more models, the prompts and templates around them, the data they retrieve, the tools they can call, the guardrails in front of them, and the interface a human or another system uses. The model is one component of the system, not the system itself. [^7]
+- **Model card**: a short document that accompanies a trained model and reports what it is for, how it was evaluated, how it performs across different conditions and groups, and where it should not be used. Mitchell and coauthors proposed the format in 2018 and it is now the default vocabulary for model-level reporting. [^1]
+- **System card**: a document about a deployed AI product or system, covering its components, its safeguards, the evaluations run before release, the deployment decisions taken, and the known limitations. Anthropic describes its system cards as documenting capabilities, safety evaluations, and responsible deployment decisions for its models. [^5]
+- **Datasheet**: documentation for a dataset, covering motivation, composition, collection process, and recommended uses, by analogy with the datasheet that ships with an electronic component. [^3]
+- **Evaluation report**: the record of one evaluation run: the golden set version, the grader, the pass rate, the date, and the model snapshot tested. Lesson 30 covered how to produce one. This lesson covers where it lives so a future reader can find it.
+- **Model snapshot**: the specific pinned version of a model that a system calls, as opposed to a floating alias that silently moves. If you cannot name the snapshot, you cannot document the system.
+- **Model inventory (AI registry)**: the list of every AI surface live in the org, with an owner, a risk tier, and a link to its cards and records. Coverage is measured against this list, not against the number of documents you have written.
+- **Intended use and out of scope use**: the tasks the system was designed and evaluated for, and the tasks it must refuse or escalate. A model card without an out of scope section is a brochure.
+- **Documentation debt**: AI systems running in production with no card, no evaluation report, or no decision record. Like technical debt, it is invisible until the day someone needs the missing context.
+- **Card theater**: cards written to satisfy a process, filled with vendor marketing language and no numbers from your own environment. The artifact exists, the evidence does not.
+
+## Three artifacts, three questions
+
+The fastest way to get this wrong is to write one document and expect it to answer everything. Each artifact answers a different question for a different reader.
+
+A **model card** answers "what is this model good at, and how do we know?" The reader is an engineer or a risk reviewer deciding whether the model is suitable for a use case. The evidence is benchmark results, disaggregated by relevant groups.
+
+A **system card** answers "what did we actually deploy, what guards it, and what did we decide about release?" The reader is an auditor, a new architect, or an incident responder at 2am. The evidence is a component inventory, configuration, and release evaluations.
+
+A **decision record** answers "why this model, this autonomy level, this data boundary, and what would make us revisit it?" The reader is the person who will otherwise reverse the decision without understanding it. The evidence is the alternatives considered and the numbers that killed them.
+
+You need all three because they expire at different rates. A model card is valid until the model version changes. A system card is valid until the configuration changes, which is more often than you think. A decision record never expires; it stays true as a statement of what the team believed on a date, and gets superseded rather than edited.
+
+## What belongs in a model card
+
+Mitchell's original framework is compact: model details, intended use, factors, metrics, evaluation data, training data, quantitative analyses, ethical considerations, and caveats. [^1] The two fields that carry the most weight in practice are the ones teams skip.
+
+**Quantitative analyses, disaggregated.** Aggregate accuracy hides the failures that matter. The paper's argument is that models should report benchmarked evaluation across different cultural, demographic, or phenotypic groups, and across intersectional groups, because a single headline number can be excellent while performance on a subgroup is poor. [^1] On a Salesforce program, the equivalent disaggregation is by customer segment, language, product line, and case type. A dispute-drafting model that scores 92 percent overall and 71 percent on Spanish-language disputes is not a 92 percent model.
+
+**Intended use and out of scope use.** Hugging Face's model card guidance asks for intended uses and potential limitations, including biases and ethical considerations, and its cards carry YAML metadata so the model is discoverable and reproducible. [^2] The metadata matters more than it looks: it is the difference between a document and a queryable record. Google's Model Card Toolkit takes the same idea further with a JSON schema and automatic population from ML metadata, so evaluation numbers flow into the card instead of being retyped. [^4]
+
+For vendor models you did not train, you still own a model card. It is a thin one that references the vendor card for training details and adds your own evaluation on your own data, with the snapshot named. A copy of the vendor card with your logo on it is card theater.
+
+## What belongs in a system card
+
+A system is not a model, and the gap between them is where most AI incidents live. OpenAI's GPT-5 system card is a useful illustration of the shape: it describes a unified system made of a fast model, a deeper reasoning model, and a real-time router that picks between them based on conversation type, complexity, tool needs, and intent. [^6] One product, several models, plus routing logic that no individual model card could describe. If your only documentation is per model, the router is undocumented, and the router is where behavior is decided.
+
+A system card for a Salesforce AI system should cover:
+
+1. **Components and versions.** The agent or feature, the model provider and snapshot, the prompt template and its version, the retrieval sources, the actions or tools exposed, and the channel it runs in.
+2. **Routing and fallback.** Which model handles which request class, what happens when the primary model is unavailable or rate limited, and whether a fallback changes quality in a way someone has measured.
+3. **Data boundary.** What data enters the prompt, what is masked, what is excluded, and where the audit trail lands.
+4. **Guardrails and permissions.** Which guardrails are platform defaults, which the team configured, and which are simply assumed. Assume nothing that you have not opened in Setup.
+5. **Release evidence.** The evaluations run before launch, the golden set version, the thresholds, the red team findings, and who signed off.
+6. **Known limitations and monitoring.** What the system is known to get wrong, which signals are watched in production, and what triggers a rollback.
+
+The NIST AI Risk Management Framework exists because that evidence has to be structured: it is a voluntary framework for incorporating trustworthiness considerations into the design, development, use, and evaluation of AI products and systems. [^8]
+
+Point 4 is where Salesforce teams get caught. The Einstein Trust Layer is real and it does a specific list of things: grounding in CRM data, masking of sensitive data, toxicity detection on generations, an audit trail and feedback loop, and zero data retention agreements with external model providers. [^9] [^10] Those are genuine controls and they belong in the system card. But the same setup documentation that describes masking states plainly that data masking for LLMs is disabled for agents. [^11] A system card that says "PII is masked before it reaches the model" and is describing an agent is not inaccurate because the writer lied. It is inaccurate because the writer copied a platform capability into a document without checking which product surface it applies to.
+
+That single line is the argument for this whole lesson. An AI system card is a record of configured behavior, not a restatement of vendor capability.
+
+## Decision records for AI systems
+
+The ADR format from Lesson 79 transfers with three additions: the model is pinned, the evidence is an evaluation, and the revisit trigger includes vendor events.
+
+A workable template:
+
+```text
+AI-ADR-007: Use the pinned reasoning snapshot for dispute drafting, draft only
+
+Status: Accepted
+Date: 2026-10-14
+Owner: Service platform architect
+Supersedes: none
+
+Context
+18,000 disputes per month, 62 percent of them billing. Draft quality on the
+golden set of 240 disputes: 84 percent acceptable at the fast snapshot,
+91 percent at the reasoning snapshot, at 2.4x the cost per draft and 3.1s
+added latency. Reviewers currently edit 38 percent of drafts, and the handle
+time target is 4 minutes.
+
+Decision
+We use the reasoning snapshot, pinned by version identifier, for drafting.
+The agent drafts and does not send. Credit actions are proposed, not executed.
+
+Consequences
+Positive: reviewer edit rate falls in evaluation; drafts clear the tone bar.
+Negative: 2.4x inference cost per draft; 3.1s latency inside the console;
+the pinned snapshot will be deprecated by the vendor at some point.
+Neutral: the fast model stays configured as the fallback for peak hours.
+
+Revisit trigger
+Reopen if the vendor deprecates the pinned snapshot, if monthly inference cost
+exceeds the budget line, if reviewer edit rate rises above 30 percent for two
+consecutive weeks, or if the golden set is rebuilt.
+```
+
+Three rules make these records survive contact with a real program.
+
+**Pin the version in the record and in the config.** A record that says "GPT class model" is not a decision. Provider aliases move. When the vendor deprecates a snapshot, the record's revisit trigger fires and you get a scheduled decision instead of an unannounced behavior change.
+
+**Cite the evaluation, not the vibe.** The context section should name the golden set size, the pass rates, and the cost difference. That is what lets a future reader see whether the decision still holds when the numbers change.
+
+**Record autonomy as a decision.** "Read only," "draft only," "propose a write," and "execute a write" are four different systems with four different blast radii. Autonomy is the single most consequential AI decision an architect makes and it is the one most often left implicit.
+
+## Worked example: the billing dispute agent
+
+A utility runs 18,000 disputes a month through a Salesforce service console. The agent drafts a response, proposes a credit, and never sends. Here is the artifact set, condensed.
+
+**System card, excerpt:**
+
+```text
+System: Billing Dispute Draft Agent (agent API name: Billing_Dispute_Draft)
+Owner: Service platform architect
+Risk tier: Medium. Customer-facing text with human review, no direct writes.
+
+Components
+- Orchestration: Agentforce service agent, topic Billing_Dispute
+- Model: provider snapshot pinned in the model config, reasoning tier
+- Prompt template: Dispute_Draft_v3 (source controlled, deployed by CI)
+- Retrieval: Knowledge articles tagged Billing, plus usage summary via Apex action
+- Actions: get_dispute (read), get_usage (read), propose_credit (write, approval)
+- Channel: service console only. Not exposed to Experience Cloud.
+
+Guardrails and data boundary
+- Grounding restricted to the running user's record access and field level
+  security.
+- Trust Layer data masking for LLMs is disabled for agents in this org, so
+  account numbers and meter identifiers are excluded from the prompt template
+  by design rather than masked at runtime.
+- Prompt, response, and trust signals retained in the Trust Layer audit trail.
+
+Release evidence
+- Golden set v4, 240 closed disputes, reviewed by two team leads
+- Acceptable draft rate 91 percent overall, 88 percent on Spanish language
+  cases (previously 71 percent before the retrieval fix)
+- Reviewer edit rate in pilot: 22 percent of drafts
+- Approved by service operations director, 2026-10-14
+
+Known limitations
+- Weak on multi-account disputes where the customer references two premises
+- Does not know about tariff changes announced less than 48 hours earlier
+- Escalates to a human when the dispute reason is unmapped
+
+Monitoring
+- Reviewer edit rate weekly, escalation rate daily, toxicity score distribution
+  weekly. Rollback is a config switch to fast tier plus template v2.
+```
+
+**Model card addendum, excerpt:**
+
+```text
+Model: reasoning tier, provider snapshot pinned 2026-09
+Vendor card: referenced for training data and safety evaluations
+Organizational evaluation
+- 240 disputes, golden set v4, graded by two team leads with adjudication
+- 91 percent acceptable drafts, 6 percent minor edit, 3 percent unusable
+- Disaggregation: English 92 percent, Spanish 88 percent, multi-premise 74
+- Cost per draft 0.9 cents at current volume
+Intended use: drafting dispute responses for human review in the console
+Out of scope: sending without review, credit decisions, regulatory complaints,
+collections communication
+```
+
+**Two decision records** cover the model choice (shown above) and the autonomy level. The autonomy record is one paragraph of context, one sentence of decision, and a trigger that reopens the decision if the reviewer edit rate stays below 10 percent for a quarter, because at that point the review step may be pure ceremony and the team should confront that explicitly rather than keep it by default.
+
+**One datasheet** covers golden set v4: how the 240 disputes were sampled, which case types were excluded, who labeled them, and how disagreements were resolved. Six months from now, when someone asks whether the 91 percent is trustworthy, that datasheet is the answer.
+
+## Keeping the set current
+
+Store the artifacts in the repository beside the metadata, in a directory such as `docs/ai`, one folder per system keyed by the agent or feature API name. Generate the index from the file headers so the inventory cannot drift from the files. Put the system card identifier in the pull request template for any change that touches a prompt template, a model configuration, an action definition, or a guardrail setting, and let reviewers reject changes that arrive without it.
+
+Then add the one check that ordinary documentation does not need: a quarterly comparison of live configuration against the card. Pull the configured model snapshot, the active prompt template version, the action list, and the Trust Layer settings from the org, and diff them against what the card claims. Three outcomes are possible and two of them are failures. Either they match, or the card is stale, or the configuration was changed by someone who did not know a card existed. The third case is the one that produces incidents, and the diff finds it before a customer does.
+
+Salesforce's Well-Architected guidance already treats documented decisions as a pattern rather than an option, and the matching anti-pattern is a decision made in a meeting with no record of context, alternatives, or consequences. [^12] AI systems raise the stakes on that anti-pattern because the reasoning behind an autonomy level or a data boundary is not visible in the metadata. You cannot read it out of a permission set.
+
+## The arithmetic
+
+Documentation programs die on cost objections, so price the work honestly.
+
+Take an org with nine live AI surfaces: a dispute agent, case summarization, email drafts, a next-best-action model, a churn propensity model, lead scoring, knowledge article generation, transcript summarization, and a Slack digest. Suppose three of the nine have a system card, four models have cards, and eleven decision records exist. Coverage is 33 percent of surfaces, which is the honest number and the one to report.
+
+Now cost the review. Nine system cards at 20 minutes each is 180 minutes. Four model cards at 15 minutes is 60. Eleven decision records at 25 minutes is 275. The total is 515 minutes, or about 8.6 hours a year, spread across 48 working weeks at roughly two artifacts per week. A full audit of the same set every quarter would be 2,060 minutes, or 34.3 hours a year, in four blocks nobody schedules.
+
+Compare that to a single avoidable incident: five people in a room for three hours is 15 person-hours before any customer impact. One prevented incident covers about one and a half years of staggered review. The arithmetic does not need optimistic assumptions. It needs artifacts small enough to review and an owner who notices when a trigger fires.
+
+Writing the set for a new agent is also cheaper than it feels: a system card at 90 minutes, a model card addendum at 30, four decision records at 45 each, and a datasheet at 40 comes to 340 minutes, or about 5.7 hours, against a build that runs for weeks. The reason teams skip it is not cost. It is that the work has no visible demo.
+
+## The failure modes
+
+- **Card theater.** A vendor card with your logo, no evaluation on your data, no numbers you can defend. The fix is a mandatory organizational evaluation section with a golden set version and a date.
+- **Documenting the demo instead of the deployment.** The card describes the launch configuration; production has a different prompt template and an extra action. The fix is the quarterly config diff and a card identifier in the change template.
+- **Unpinned models.** The system calls an alias, the provider moves it, and the documented behavior no longer describes the running system. The fix is a snapshot identifier in config and in the record.
+- **Model card, no system card.** Every model documented, no record of routing, retrieval, tools, or permissions. The router decides behavior and nobody wrote it down. [^6]
+- **Trust Layer as a magic word.** A card that lists platform capabilities without checking which apply to the surface in question, including the masking behavior for agents. [^11] The fix is a line per control stating whether it is default, configured, or not applicable.
+- **Decision records with no evidence.** "We chose the larger model for quality" with no golden set, no pass rate, and no cost figure. That is a preference, not a decision. The fix is a required evidence field.
+- **Autonomy left implicit.** The most consequential choice in the system is the one nobody wrote down. The fix is an explicit autonomy record with its own revisit trigger.
+- **No owner, no trigger.** The card is correct on the day it is written and wrong forever after. The fix is a named owner and a trigger that includes vendor deprecation events. [^12]
+- **The wiki graveyard.** Cards in a tool that is not searched during a release, not linked from the design document, and not reviewed with the code. The fix is storage in the repository and a generated index.
+
+## Try it
+
+1. Pick one AI feature live in your org. Write the component inventory for its system card: agent or feature name, model snapshot, prompt template version, retrieval sources, actions, channel. *(Answer: if you cannot fill the model snapshot, you have found a real gap. Check the model configuration in Setup and the provider's release notes, then pin it.)*
+2. Write the out of scope use section for that system in three bullets. *(Answer: name the tasks it must refuse or escalate, such as sending without review, regulated decisions, or communication it was never evaluated for. [^1])*
+3. Take the last AI build you shipped and write its decision record with the evidence field filled: golden set size, pass rate, cost per call, latency. *(Answer: if the evidence does not exist, the record should say so and a revisit trigger should schedule the evaluation, rather than invent a number.)*
+4. For each Trust Layer control you plan to claim in the card, mark it default, configured, or not applicable, and check the setup documentation for the surface you are describing. *(Answer: masking for agents is the known trap. Document what the org actually configured. [^9] [^11])*
+5. Compute coverage for your org: live AI surfaces with a card divided by live AI surfaces. *(Answer: the denominator comes from the inventory, not from the folder of documents. Anything under half is documentation debt worth naming in the next architecture review.)*
+
+## What's next
+
+You can now write the three artifacts an AI system needs, pin a model version in both config and record, describe a deployed system rather than a model in isolation, and cost the review cycle with arithmetic instead of optimism.
+
+The next lesson is a change of mode. Lesson 81 is a CTA design scenario: you get a brief and a clock, and you build the complete solution under time pressure, the way a review board presents it. Everything from this track gets pulled into one pass, including the documentation decision, because a design scenario is judged on whether the artifacts you would produce are the right ones. Bring the templates.
+
+[^1]: Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer, Inioluwa Deborah Raji, and Timnit Gebru. "Model Cards for Model Reporting." arXiv:1810.03993, 2019. [arxiv.org](https://arxiv.org/abs/1810.03993)
+
+[^2]: Hugging Face. "Model Cards." Hub documentation. [huggingface.co](https://huggingface.co/docs/hub/model-cards)
+
+[^3]: Timnit Gebru, Jamie Morgenstern, Briana Vecchione, Jennifer Wortman Vaughan, Hanna Wallach, Hal Daumé III, and Kate Crawford. "Datasheets for Datasets." arXiv:1803.09010, 2021. [arxiv.org](https://arxiv.org/abs/1803.09010)
+
+[^4]: Google Research. "Introducing the Model Card Toolkit for Easier Model Transparency Reporting." [research.google](https://research.google/blog/introducing-the-model-card-toolkit-for-easier-model-transparency-reporting/)
+
+[^5]: Anthropic. "Model system cards." [anthropic.com](https://www.anthropic.com/system-cards)
+
+[^6]: OpenAI. "GPT-5 System Card," August 7, 2025. [openai.com](https://openai.com/index/gpt-5-system-card/)
+
+[^7]: EU Artificial Intelligence Act. "Annex IV: Technical Documentation Referred to in Article 11(1)." [artificialintelligenceact.eu](https://artificialintelligenceact.eu/annex/4/)
+
+[^8]: NIST. "AI Risk Management Framework." [nist.gov](https://www.nist.gov/itl/ai-risk-management-framework)
+
+[^9]: Salesforce. "Einstein Trust Layer." Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.generative_ai_trust_layer.htm&language=en_US&type=5)
+
+[^10]: Salesforce Developers. "Trust Layer," Agentforce Developer Guide. [developer.salesforce.com](https://developer.salesforce.com/docs/ai/agentforce/guide/trust.html)
+
+[^11]: Salesforce. "Set up Einstein Trust Layer." Salesforce Help. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.generative_ai_trust_setup.htm&language=en_US&type=5)
+
+[^12]: Salesforce Architects. "Architecture Strategy and Planning," Resource and Cost Optimization: Architecture Patterns, Well-Architected Framework. [architect.salesforce.com](https://architect.salesforce.com/docs/architect/well-architected/guide/resource-and-cost-optimization-architecture-patterns.html)
