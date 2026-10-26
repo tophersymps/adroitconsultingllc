@@ -1,301 +1,415 @@
 # K3 — Lesson sources at the very bottom (incl. anchor offsets)
 
-**Card:** t_15aa2216 (K3 of 19, Wave 2 — Learn UX Items 1/2/4)
-**Owner:** kara (design) · **Handoff to:** steel · **Scope:** design only — no implementation in this card
+**Card:** t_15aa2216 (K3 of 19, Wave 2 — Learn UX Items 1/2/4) · **Tenant:** adroit
+**Owner:** kara (design) · **Handoff to:** steel (**A2** implements) · **Scope:** design only — no implementation in this card
+**Surface archetype:** **Decide/Learn** — a reading surface, so hierarchy is typographic and the interactive block is the exception, not the default.
 
 | Artifact | Path | Status |
 |---|---|---|
 | **Spec (this note)** | `design/lesson-sources-bottom.md` | canonical |
-| **Mockup — live page** | `design/mockups/lesson-sources-k3.html` | canonical: real sticky header + docked audio bar, working anchor jumps in both directions |
-| Screenshots | `design/screenshots/lesson-sources-desktop-1280.png`, `…-mobile-360.png`, `…-mobile-390.png` | captured from the canonical mockup |
-
-A second annotated study sheet produced earlier in this card's history
-(`design/mockup-lesson-sources.html`, uncommitted) is **superseded** where it disagrees: it assumed
-a flat 240px anchor offset and a 4-reference list. Its framing notes on register contrast are still
-worth a read; implement from this note, not from it.
+| **Mockup** | `design/mockup-lesson-sources.html` | canonical: real sticky header + docked audio bar, working anchor jumps, live measurement readout |
+| Screenshots | `design/screenshots/k3-desktop-1280-transition.png`, `k3-desktop-1280-sources.png`, `k3-mobile-360-sources.png` | captured from the canonical mockup |
+| Earlier study sheet | `design/mockups/lesson-sources-k3.html` (commit `4a3ae864`) | compatible; its anchor-offset block was re-measured and corrected to match this note (it assumed a 104px docked bar; the real card is 140px at 1280 and 198px at 360). Use this note as the source of truth. |
 
 ---
 
-## 1. Surface + stance
+## 1. What changes
 
-**Surface archetype: Decide/Learn** (lesson reading → practice → completion). The Sources list is the
-page's **appendix**, so it is designed as *reference*, not as content momentum:
-
-- No card, no fill, no shadow, no accent bar, no CTA. The block sits on the page surface.
-- Red (`#C8102E`) belongs to the exercise. The appendix's only red is the small numerals.
-- The exercise is a **bounded object** (bordered quiz card + navy result panel). The appendix is
-  **unbounded text**. That register contrast is the separation strategy — not a divider ornament.
-
-Block order on the lesson page is now:
+`Sources` stops being the last thing inside the MDX body and becomes the **last content block on the
+lesson page**, after the knowledge-check affordance.
 
 ```
-lesson header (title / author / share / complete)
-↓  body (MDX, ends with an inline superscript reference)
-↓  PRACTICE QUESTIONS ─ bordered exercise card
-↓  CHECK PANEL ─ navy result panel, part of the exercise
-↓  SOURCES ─ last block on the page          ← this card
-↓  Prev / Next lesson navigation
+lesson hero (title / author / share / complete)
+└ article body (MDX, citations inline as superscripts)
+    └ Practice Questions ─ bordered exercise card
+    └ Check panel ─ navy, part of the exercise (A6)
+└ SOURCES ─ last content block on the page          ← this card
+└ Prev / Next navigation                            ← page chrome, not content
 ```
+
+**DOM order equals visual order.** No CSS `order`, no `flex-direction: reverse`, no absolute
+positioning, no `display: contents` reordering. Screen-reader order, tab order and paint order are the
+same order. `Sources` is the last element carrying lesson content; only navigation follows it.
+
+**No gating, no second completion path.** Sources is static text — it never writes progress, never
+depends on auth, and does not participate in the quiz/check flow.
 
 ---
 
-## 2. What makes Sources *not* read as part of the exercise
+## 2. Separation rule — register, not a divider
 
-| Lever | Exercise (practice + check panel) | Sources (appendix) |
+The check panel is the loudest block on the page: navy slab, red-tinted glow, 20px radius, a white
+primary button. **Sources must be the quietest.** A heavier border between two cards would still read
+as "another card in the exercise"; the separation has to be a change of *register*.
+
+| Lever | Exercise (practice card + check panel) | Sources (appendix) |
 |---|---|---|
-| Container | bordered card, `rounded-16`, white fill + shadow; navy panel | **no container** — plain page surface |
-| Top boundary | 1px rule at `margin-top: 44px` (mobile 36) | **1px rule at `margin-top: 64px` (mobile 48)** + `padding-top: 24px` (mobile 20) |
-| Kicker | `PRACTICE QUESTIONS` — red, 3px red tick, uppercase mono | `REFERENCES` — `gray-500`, 14px gray **hairline** tick, uppercase mono, 10.5px |
-| Heading | `1.35rem/800` navy, "Check your understanding" | `1.125rem/800` navy, "Sources" (smaller = subordinate) |
-| Color | red + white + navy fill | navy text, gray metadata, red **numerals only** |
-| Measure | 640px (question column) | 720px (reading column) |
-| Voice | 2nd person imperative ("Answer all three…") | 3rd person bibliographic |
+| Container | card: border, white fill, `rounded-[20px]`, `shadow-sm`, `p-7`; navy panel | **none** — sits on the page surface |
+| Top boundary | 1px rule at `margin-top: 44px` | **64 × 2px navy rule at `margin-top: 72px`** (56 mobile) |
+| Kicker | `PRACTICE QUESTIONS` — red, 3px red tick, mono 11px | `SOURCES` — `--ink-muted`, mono 11px, `.14em` tracking, **no tick** |
+| Heading | extrabold navy `h4` 20–21.5px | none — the kicker *is* the heading (mono, subordinate) |
+| Accent | red for CTA, progress, status | red **only** on the numerals |
+| Body | 14.5px options, 13.5px panel copy | 13px / 1.6, `--ink-muted` |
+| Density | airy, interactive targets | tight list, 1px `--border-subtle` row rules |
+| Measure | 640px | 720px (the reading column) |
+| Voice | 2nd person imperative | 3rd person bibliographic |
 
-**Do not** add a divider ornament, an icon, a background tint, a "Was this helpful?" row, or an
-accordion here. The 64px throw (vs 44px between body blocks) plus bounded-vs-unbounded carries it.
+Three moves carry it, in order of importance:
 
-```
-REFERENCES            ← mono eyebrow, uppercase, tracking .08em, gray-500, gray hairline tick
-Sources               ← h2, 1.125rem/800 navy
-3 sources · cited in this lesson   ← mono 10.5px, gray-400
-1.  <citation title>
-    <url>                            ↩
-2.  …
-```
+1. **No card.** No radius, no fill, no shadow, no padding box. The block is text on the page.
+2. **A short rule, not a border.** A **64 × 2px** navy rule (`--ink-primary`) above the kicker. A short
+   heavy rule reads as *end of document*; a full-width hairline reads as *another section*.
+3. **Type register flip.** Mono uppercase 11px kicker instead of an extrabold navy `h4`. Utility voice
+   vs. instruction voice.
 
-The count line is suppressed when there is exactly one source; the entire block is not rendered when
-there are zero.
-
----
-
-## 3. Entry anatomy (per source)
-
-```
-1.  Cagan, M. — Transformed: Moving to the Product Operating Model, ch. 7            ↩
-    https://www.svpg.com/transformed-moving-to-the-product-operating-model/
-    chapter-7-discovery-and-the-product-model-in-practice
-```
-
-| Property | Desktop | Mobile | Class |
-|---|---|---|---|
-| list | `<ol>`, `list-style:none`, `counter-reset` | same | `.lesson-sources ol` |
-| numeral | red `#C8102E`, mono 12px/700, absolute at `left:0` | same | `li::before` |
-| title | `gray-800` `#1F2937`, 14px/600, `line-height:1.6` | 13px | `.src-title` |
-| url | navy, mono 12px/500, own block line, underlined | mono 11.2px | `.src-url` |
-| row gap | 14px | 14px | `li { margin-bottom }` |
-| indent | `padding-left: 26px` | 24px | — |
-| right gutter | `padding-right: 34px` (keeps text clear of the chip) | same | — |
-| back-ref | 24×24 chip, absolute top-right of the row | same | `.src-backref` |
-
-Notes:
-
-- The chip is **absolutely positioned at the entry's top-right**, not inline after the URL. Inline
-  placement orphans the arrow onto its own line as soon as the URL wraps (observed in review, fixed).
-  The `padding-right: 34px` keeps the first line of the title from ever colliding with it.
-- The title is not a link; the URL carries the affordance. One clear tap target per row, and no
-  "two links to the same place" screen-reader stutter.
-- Wrapped titles stay flush: the numeral is absolute, so no hanging-indent drift. (Attempt-1's
-  `grid 22px/1fr/44px` is an equally valid alternative if steel prefers explicit columns; either
-  produces the same render at 320–1280.)
+**72px** of air above the rule is the separation budget (≈1.6× the 44px used between exercise blocks).
+Do **not** add a divider ornament, an icon, a background tint, a "Was this helpful?" row, or an
+accordion here.
 
 ---
 
-## 4. Long URLs at 320–360 px
+## 3. Structure + copy
 
-Failure mode: a citation URL has no break opportunity, so the `<a>` pushes the row wider than the
-viewport and the whole page scrolls horizontally. Contract (as implemented and measured in the
-mockup):
+Production markup is `remark-gfm`'s footnote section, split out by **A1** (`MDXSources.tsx`) and
+placed by **A2**. Do not re-author the list — reuse the generated tree.
+
+```html
+<section class="footnotes lesson-sources" data-footnotes aria-labelledby="footnote-label">
+  <hr class="sources-rule" aria-hidden="true">
+  <div class="sources-head">
+    <h2 id="footnote-label">Sources</h2>            <!-- renamed from "Footnotes" by MDXArticle -->
+    <span class="sources-count">4 REFERENCES</span> <!-- optional, see below -->
+  </div>
+  <ol>
+    <li id="fn-1">
+      developer.salesforce.com. <a href="…">Enterprise Messaging Platform Events</a>
+      <a href="#fnref-1" class="data-footnote-backref" aria-label="Back to reference 1">↩</a>
+    </li>
+    …
+  </ol>
+</section>
+```
+
+| Element | Copy | Notes |
+|---|---|---|
+| Heading | `Sources` | unchanged string; only the styling moves off `.footnotes h2` |
+| Count meta | `{n} REFERENCES` | mono 10.5px `--ink-faint`; `1 REFERENCE` singular; suppressed at n=1. **Optional** — drop it if A1 cannot count cheaply |
+| Back-reference | `↩` | keep remark-gfm's glyph and `aria-label="Back to reference n"` |
+
+### 3.1 CSS (authoritative)
 
 ```css
-.lesson-sources li        { overflow-wrap: anywhere; }
-.lesson-sources a,
-.lesson-sources .src-url  { overflow-wrap: anywhere; word-break: break-word; }
+/* ── Sources: the document colophon, not a card ───────────────── */
+.lesson-sources{
+  max-width:720px;                 /* same column as the article */
+  margin:72px auto 0;              /* the separation budget */
+  padding:0 24px 8px;
+  scroll-margin-top:var(--lesson-anchor-offset);
+}
+.sources-rule{
+  border:0;height:2px;width:64px;margin:0 0 18px;
+  background:var(--ink-primary);border-radius:1px;
+}
+.sources-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.sources-head h2{
+  font-family:var(--font-mono);font-size:11px;font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-muted);margin:0;
+  /* remark-gfm ships this heading sr-only — reveal it, same overrides the
+     blog's .footnotes h2 already uses */
+  position:static !important;width:auto !important;height:auto !important;
+  clip:auto !important;clip-path:none !important;overflow:visible !important;
+  white-space:normal !important;
+}
+.sources-count{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.06em;color:var(--ink-faint)}
+
+.lesson-sources ol{list-style:none;margin:0;padding:0;counter-reset:footnote}
+.lesson-sources li{
+  position:relative;
+  padding:9px 44px 9px 22px;       /* 22 = numeral gutter, 44 = backref gutter */
+  border-top:1px solid var(--border-subtle);
+  font-size:13px;line-height:1.6;color:var(--ink-muted);
+  scroll-margin-top:var(--lesson-anchor-offset);
+}
+.lesson-sources li:first-child{border-top:0;padding-top:0}
+.lesson-sources li::before{
+  content:counter(footnote) ".";counter-increment:footnote;
+  position:absolute;left:0;top:9px;
+  font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--accent);
+}
+.lesson-sources li:first-child::before{top:0}
+.lesson-sources li a{
+  color:var(--ink-primary);font-weight:600;
+  text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;
+  text-decoration-color:rgba(200,16,46,.35);
+}
+.lesson-sources li a:hover{text-decoration-color:var(--accent)}
+@media (max-width:767px){ .lesson-sources{margin-top:56px} }
 ```
 
-Rules:
+**Do not use CSS grid on `li`.** `remark-gfm` emits a variable number of element children inside the
+`li` (text nodes plus one `<a>` per citation); grid auto-placement would spread them across columns.
+The numeral and the back-reference are absolutely positioned inside reserved padding instead, so the
+layout is independent of how many children the generator emits.
 
-- `overflow-wrap: anywhere` — a bare `break-word` will not break inside a long path segment in every
-  engine; `anywhere` guarantees it and also lets a flex/grid child shrink below its content size.
-- Never set `display:inline-block` on the URL: that kills line-breaking. `text-decoration` still
-  applies across every broken line box.
-- `.src-url` is its own block line so the URL starts at a predictable x-position regardless of title
-  length — this is what makes a long URL readable when broken.
-- Not assumed, measured: with a 180-character unbroken token substituted into a URL, the mockup holds
-  `scrollWidth === clientWidth` at 320, 360, 390 and 1280.
+**Scoping:** the blog keeps `.article-body .footnotes` exactly as it renders today. New rules are
+scoped to `.lesson-sources`, which only the lesson route applies — not `/field-notes`, not the preview
+routes, not `PreviewFirstLesson` (D-6).
 
 ---
 
-## 5. Back-reference targets (tap targets)
-
-**Visual box 24×24 + 8px of spacing, expanded to a 44×44 pointer area** — satisfies both readings of
-the acceptance line ("≥44px target **or** 24px + spacing") without inflating the row.
+## 4. Long URLs at 320–360px
 
 ```css
-.lesson-sources .src-backref{
-  position:absolute; top:-1px; right:0;
-  display:inline-flex; align-items:center; justify-content:center;
-  width:24px; height:24px;            /* visible 24×24 */
-  border-radius:6px;
-  color:#8A94A6; font-size:12px; font-weight:700;
-  text-decoration:none;
-  transition:background-color .15s ease, color .15s ease;
+.lesson-sources li,
+.lesson-sources li a{
+  overflow-wrap:anywhere;    /* the actual fix */
+  word-break:break-word;     /* older-engine fallback */
+  hyphens:none;
 }
-.lesson-sources .src-backref::before{ /* invisible 44×44 hit area */
-  content:""; position:absolute; inset:-10px; border-radius:10px;
-}
-.lesson-sources .src-backref:hover,
-.lesson-sources .src-backref:focus-visible{
-  background:var(--color-gray-100); color:var(--color-red-dark);
-}
-.lesson-sources .src-backref:focus-visible{ outline:2px solid var(--color-red); outline-offset:2px; }
 ```
 
-- `aria-label="Back to reference N"` on the link; the `↩` glyph is `aria-hidden="true"` (a bare
-  glyph is announced as "leftwards arrow with hook").
-- Applies unchanged at every width — no mobile-specific enlargement, so the row rhythm is stable.
-- Multiple mentions of the same footnote: one chip per occurrence, labels
+`overflow-wrap:anywhere` is required, not `break-word`: Salesforce doc URLs have no break opportunity
+inside `platform_events_intro_emp.htm`, so `break-word` alone leaves an unbreakable ~300px token.
+
+Never set `display:inline-block` on the URL — that kills line-breaking. `text-decoration` still
+applies across every broken line box.
+
+**Measured at 360px:** text column **198px** (`312 − 22 − 44`), the longest real URL (118 chars) wraps
+to **5 lines**, `scrollWidth === clientWidth === 312`. At 1280px: 558px column, 2 lines. The 44px
+backref gutter costs 44px of measure on a phone — accepted trade, since source URLs are secondary and
+a stable target beats 44px of URL width.
+
+---
+
+## 5. Back-reference tap target
+
+`remark-gfm` renders the backref as a bare inline `↩` (~11px). It must be a real target.
+
+```css
+.lesson-sources .data-footnote-backref{
+  position:absolute;right:0;top:-2px;
+  display:grid;place-items:center;
+  width:44px;height:44px;           /* the target */
+  border-radius:50%;
+  font-size:13px;line-height:1;     /* the visible glyph stays small */
+  color:var(--ink-faint);text-decoration:none;
+  background:transparent;
+  transition:background .15s ease,color .15s ease;
+}
+.lesson-sources li:first-child .data-footnote-backref{top:-11px}
+.lesson-sources .data-footnote-backref:hover,
+.lesson-sources .data-footnote-backref:focus-visible{
+  background:var(--surface-sunken);color:var(--ink-primary);
+}
+.lesson-sources .data-footnote-backref:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
+```
+
+- **44 × 44 px** measured at both 360px and 1280px — the requirement's ≥44px path, no reliance on the
+  24px + spacing fallback.
+- The target lives in a **reserved 44px right gutter**: it never overlaps text and never inflates the
+  row. Absolutely positioned, not inline — inline placement orphans the arrow onto its own line as
+  soon as the URL wraps.
+- The glyph stays 13px: a 44px circle of chrome would out-shout the citation.
+- `aria-label="Back to reference n"`; the `↩` glyph itself is `aria-hidden="true"` (a bare glyph is
+  announced as "leftwards arrow with hook").
+- Multiple mentions of one footnote: one chip per occurrence, labelled
   `Back to reference 1 (first mention)` / `(second mention)`.
-- Contrast: `#8A94A6` on white is 3.6:1 — acceptable for a non-text control (≥3:1) but weak. Prefer
-  `#6B7686` (5.0:1) for the resting colour; keep the red on hover/focus.
 
 ---
 
 ## 6. Anchor offsets — one custom property
 
-Both directions of the jump break without this: source `↩` → inline superscript, and superscript →
-source entry. Both land under the sticky band today.
+The lesson page has **two** sticky layers: the site header (`h-16` = 64px, `sticky top-0 z-50`) and the
+audio bar (`sticky top-16 z-40`). Without `scroll-margin-top`, a jump from a source's `↩` back to its
+inline superscript lands the citation **under the audio bar** — invisible, and the reader concludes the
+link is broken.
 
 ```css
-/* app/globals.css — the single source of truth */
-:root { --lesson-anchor-offset: 208px; }                    /* header + docked audio bar */
-body:not(:has([data-audio-scroll])) { --lesson-anchor-offset: 112px; }
+:root{
+  /* desktop: stuck bar bottom 204 (64 header + 140 bar) + 36px air */
+  --lesson-anchor-offset: 240px;
+}
+@media (max-width: 767px){
+  /* phone: the bar wraps to three rows → 64 + 198 = 262 + 34px air */
+  :root{ --lesson-anchor-offset: 296px; }
+}
+/* no narration on this lesson → no audio bar → only the header */
+.lesson-page:not(.lesson-page--has-audio){ --lesson-anchor-offset: 96px; }
 
-/* apply to every jump target on a lesson page */
-.lesson-body :is(h2, h3, h4)[id],
-.lesson-body sup[id],
-.lesson-sources [id],
-.lesson-sources li[id] {
+.lesson-sources,
+.lesson-sources li[id^="fn-"],
+.article-body sup a[id^="fnref-"],
+.article-body h2[id],
+.article-body h3[id]{
   scroll-margin-top: var(--lesson-anchor-offset);
 }
 ```
 
-**Why 208 / 112 — measured, not guessed.** The lesson page's sticky band is the site header
-(`h-16` = 64px) plus, when the lesson has narration, the audio player docked at `top-16`. In the
-mockup at 1280 and at 360 the docked card is 104px tall, so the band bottom sits at **168px**;
-adding 40px of clearance gives **208px** — which puts the jumped-to line at `top: 208px`, i.e. 40px
-below the band, fully visible at both widths (verified). With no audio bar the band is 64px, and
-112px leaves 48px of clearance. 512 of 512 lessons under `content/learn` currently have narration,
-so 208px is the common case, not the exception.
+**One property, three declarations** (desktop / phone / no-audio). No JS offset math, no
+`scrollIntoView`, no scroll listener — the browser's anchor algorithm does the work, so it also holds
+for `location.hash` loads, back/forward and middle-click.
 
 Rules for steel:
 
-- **One property, one name: `--lesson-anchor-offset`.** Nothing else may hard-code
-  `scroll-margin-top`. If the bar's height changes, this number changes and nothing else does.
-- Declare it on `:root`, not on `.lesson-sources` — body headings and future targets consume the same
-  value. Sources are the first consumer, not the owner.
-- Do not add `scroll-padding-top` on `html` as a second mechanism. `scroll-margin-top` travels with
-  the target, including targets inside a scroll container.
+- **One property, one name.** Nothing else may hard-code `scroll-margin-top`.
+- Declare it on `:root` (or the lesson page wrapper), not on `.lesson-sources` — headings and future
+  targets consume the same value. Sources are the first consumer, not the owner.
+- Do **not** add `scroll-padding-top` on `html` as a second mechanism; `scroll-margin-top` travels
+  with the target, including targets inside a scroll container.
 - Smooth scrolling is optional and must respect `prefers-reduced-motion: reduce`.
-- Landscape phones and the docked bar can shrink, so verify, don't assume: after a jump,
-  `document.querySelector('#fnref-1').getBoundingClientRect().top` must be ≥ band bottom + 32.
-  (Mockup measured 208 vs band 168 → 40px clearance at 1280, 390, 360.)
-- Optional landing cue (in the mockup): the jumped-to marker pulses for 900ms
-  (`prefers-reduced-motion` → no animation). Editorial nicety, not required by acceptance.
+
+### 6.1 Derivation (measured, not guessed)
+
+| Layer | Desktop 1280 | Phone 360/390 |
+|---|---|---|
+| Site header (`h-16`) | 64 | 64 |
+| Audio bar, stuck (border box) | 140 | 198 (three rows: controls + follow-along + audio) |
+| **Stuck stack bottom** | **204** | **262** |
+| Air below the bar | +36 | +34 |
+| **`--lesson-anchor-offset`** | **240** | **296** |
+| No audio bar | 64 + 32 | **96** |
+
+The bar's `my-6` (24px) margin is **not** honoured once the element is stuck — Chrome positions the
+sticky border box at `top: 64px`. Measured, not assumed.
+
+### 6.2 Verified landings (real browser, mockup)
+
+| Width | Stuck stack | Target lands at | Clearance | Result |
+|---|---|---|---|---|
+| 1280 | 204 | 240 | **+36px** | not hidden ✔ |
+| 390 | 262 | 296 | **+34px** | not hidden ✔ |
+| 360 | 262 | 296 | **+34px** | not hidden ✔ |
+| 1280, no audio | 64 | 96 | **+32px** | not hidden ✔ |
+| 360, no audio | 64 | 96 | **+32px** | not hidden ✔ |
+
+**Dependency on K2/A8:** the 198px phone bar assumes the three-row layout K2 resolves for the
+completion control. If A8 lands a taller bar, add the delta to the phone value — the property is the
+single place to change, and A2's test should assert the *landed position*, not the number.
+
+### 6.3 Arrival state
+
+```css
+@keyframes anchor-flash{
+  0%  {background:rgba(200,16,46,.16);box-shadow:0 0 0 3px rgba(200,16,46,.16)}
+  100%{background:transparent;box-shadow:0 0 0 3px transparent}
+}
+.article-body sup a:target,
+.lesson-sources li:target{
+  animation:anchor-flash 1.9s ease-out 1;border-radius:4px;
+}
+@media (prefers-reduced-motion: reduce){
+  .article-body sup a:target,
+  .lesson-sources li:target{animation:none;outline:2px solid var(--accent);outline-offset:2px}
+}
+```
+
+A jump that lands silently is disorienting — the reader arrives mid-paragraph with no idea which
+sentence they were sent to. The 1.9s red wash marks the landing and gets out of the way; under reduced
+motion it becomes a static 2px ring (still a marker, no animation).
 
 ---
 
-## 7. States
+## 7. Responsive behaviour
+
+| | 1280 | 768–1279 | 360 / 390 |
+|---|---|---|---|
+| Column | `max-width:720px` centred | same | full width − 48px |
+| Sources width | 672px | ≤672px | **312px** |
+| Row padding | `9px 44px 9px 22px` | same | same |
+| Text column | 558px | scales | **198px** |
+| URL wrap | 2 lines | 2–3 lines | 3–5 lines |
+| Backref | 44 × 44 | 44 × 44 | 44 × 44 |
+| Offset | 240px | 240px | **296px** |
+| Horizontal scroll | none | none | **none** |
+
+---
+
+## 8. States
 
 | State | Treatment |
 |---|---|
-| 0 sources | Block not rendered — no empty list, no "No sources" copy. The page ends after the exercise. |
-| 1 source | Block renders; count line suppressed. |
-| 2–8 sources | As specified; count line `N sources · cited in this lesson`. |
-| >8 sources | Full list, no "show more". Truncating references damages trust more than it saves scroll. |
-| Long title (3+ lines) | Wraps inside the indented column; the `↩` stays pinned top-right and never floats mid-title. |
-| URL with no break opportunity | `overflow-wrap:anywhere`; the row grows vertically, never horizontally. |
-| Quiz not attempted / failed / no quiz file | Sources render identically — the appendix does not depend on quiz state. |
-| Guest (not signed in) | Sources still render. References are never gated. |
-| Dark theme | `--color-gray-*` and navy flip with the existing `.dark` tokens; the chip uses `gray-400`/`gray-500`, hairline rule uses `--border-default`. No new colours. |
-| Print | Sources is the last printed section; hide `↩` chips (`display:none`) and keep URLs as visible text. |
+| **0 sources** | `MDXSources` returns **`null`** — no rule, no "Sources" heading, no empty list. The page ends after the exercise |
+| **1 source** | Block renders; count line suppressed |
+| **2–8 sources** | As specified; count line `N REFERENCES` |
+| **>8 sources** | Full list, no "show more" — truncating references damages trust more than it saves scroll |
+| **`:target` arrival** | 1.9s red wash; static ring under reduced motion |
+| **Long title (3+ lines)** | Wraps inside the indented column; the `↩` stays pinned top-right, never floats mid-title |
+| **URL with no break opportunity** | `overflow-wrap:anywhere`; row grows vertically, never horizontally |
+| **Quiz not attempted / failed / no quiz file** | Identical — the appendix does not depend on quiz state |
+| **Guest** | Identical. References are never gated |
+| **No audio narration** | Offset drops to 96px; everything else identical |
+| **Dark theme** | No new colours: `--ink-primary` / `--ink-muted` / `--ink-faint` / `--border-subtle` / `--accent` / `--surface-sunken` all flip with `html.dark`. The 2px rule uses `--ink-primary`, so it becomes light on dark |
+| **Print** | Sources is the last printed section; hide `↩` chips (`display:none`), keep URLs as visible text |
 
 ---
 
-## 8. Accessibility + semantics
+## 9. Accessibility
 
-- `<section class="lesson-sources" aria-labelledby="footnote-label">` wrapping
-  `<h2 id="footnote-label">Sources</h2>` — the same id `remark-gfm` already emits for the footnote
-  label, so the existing heading rename keeps working. Edge visible; the eyebrow is decorative.
-- `<ol>` not `<ul>`: the numbers are referenced from the body, so the order is meaningful. Numbers
-  are CSS-generated, keeping the DOM text clean.
-- **Reading order must equal DOM order equals visual order.** Sources is the last node of the lesson
-  article, after the practice/check section. CSS `order` / `display:contents` reordering of the
-  existing footnote section is forbidden — screen readers would announce sources before the
-  exercise. See §9 for the sanctioned mechanism.
-- Focus management: jumped-to targets get `tabindex="-1"` so the anchor move also moves focus;
-  otherwise keyboard users are left at the previous focus position.
-- The chip is a real link with a focus ring, not a span with an onclick.
+- `section[data-footnotes]` + `<ol>` keep the generator's list semantics; numerals are CSS-generated
+  (`::before`), so a screen reader hears "list, 4 items", not "1. 1.".
+- The backref is the last focusable element of its row; focus order follows DOM order.
+- Jumped-to targets get `tabindex="-1"` so the anchor move also moves focus — otherwise keyboard users
+  are left at the previous focus position.
+- Contrast: `--ink-muted` (#4B5563) on `--surface-page` (#F7F8FA) = **7.6:1**; numerals `--accent`
+  (#C8102E) = **5.6:1**. Both pass AA at 11–13px.
+- The 44px target satisfies WCAG 2.2 §2.5.8 without relying on the spacing exception.
+- The arrival flash is animation-only and is disabled under reduced motion.
 
 ---
 
-## 9. Implementation interface for steel (no code in this card)
+## 10. What steel must build (A2)
 
-The hard part is not CSS. `remark-gfm` **appends the footnote section to the end of the MDX output**,
-and today `MDXArticle` renders inside `.article-body`, which ends *before* `LessonQuiz`. So the
-sources currently sit above the exercise. Three options, best first:
-
-1. **Recommended — inject the exercise into the MDX stream.** In the lesson page, splice a
-   `<LessonPractice />` marker into `mdxBody` immediately before the first footnote definition
-   (`^\s*\[\^[^\]]+\]:` at line start) and expose it through `MDXArticle`'s `components` map. Compiled
-   order becomes: body → practice card → check panel → footnote section, so Sources lands last in the
-   DOM for free. Ids (`fn-1`, `fnref-1`, `footnote-label`) stay intact, no duplication, SR order
-   correct. Guard: when the lesson has no footnote definitions, append the marker at the end of the
-   source. Blog posts pass no marker and keep today's in-article footnotes untouched.
-2. **Acceptable — split at the definition boundary.** Strip definitions from the body source and
-   render a synthetic MDX document (definitions only) inside the new Sources section. Use only if the
-   splice in (1) proves unreliable (e.g. a definition inside a fenced code block); you then own
-   re-linking `↩` back to `#fnref-n`.
-3. **Do not** reorder with CSS. Visual order would diverge from DOM order.
-
-New CSS goes in a scoped `.lesson-sources` block in `globals.css`, plus the single `:root` property
-from §6. The existing `.article-body .footnotes` rules stay for blog posts; the lesson page should
-either stop matching that selector or override it deliberately (do not delete the blog styling).
+1. Render `MDXSources` **after** the check panel and **before** `LessonNavigation` — DOM order, no CSS
+   reordering. Blog, `/preview/*` and `PreviewFirstLesson` stay `inline` (D-6).
+2. Apply the §3.1 CSS scoped to `.lesson-sources`; leave `.article-body .footnotes` untouched so the
+   blog render stays byte-identical (A1's proof).
+3. Declare `--lesson-anchor-offset` (`:root` + the ≤767px media query + the no-audio state) and put
+   `scroll-margin-top` on the selector groups in §6.
+4. Keep remark-gfm's `↩` anchor and `aria-label`; restyle only.
+5. Tests to add:
+   - DOM order: `section[data-footnotes]` is the last content element, after the check panel, before nav.
+   - Exactly one `section[data-footnotes]` on the page.
+   - No footnote definitions → no `section[data-footnotes]` and no "Sources" text, at both widths.
+   - Anchor jump: click a backref, assert the target's `getBoundingClientRect().top ≥` the sticky stack
+     bottom — derive the expectation from the property, not a hardcoded number.
+   - `page.overflow.test` extended to 360px with a long-URL fixture.
 
 ---
 
-## 10. Verification (evidence from this card)
+## 11. Verification evidence
 
-Measured in the canonical mockup in a real browser, not inferred:
+Mockup: `design/mockup-lesson-sources.html` — serve it over HTTP (`file://` is blocked in workers) and
+open it. It renders the real order at **1280 × 760** and **360 × 760** in independently scrollable
+frames, with an audio-bar on/off toggle, a live measurement readout, and clickable `↩` arrows that
+report the landing position.
 
-| Check | 1280 | 390 | 360 | 320 |
-|---|---|---|---|---|
-| Sources top gap from the check panel | 64px | 48px | 48px | 48px |
-| `scrollWidth / clientWidth` (no horizontal scroll) | 1280/1280 | 390/390 | **360/360** | **320/320** |
-| No horizontal scroll with a 180-char unbroken URL token | ✓ | ✓ | ✓ | ✓ (wraps to 7 lines) |
-| Longest real URL line count | 2 | 3 | 3 | 4 |
-| `↩` visible box / effective hit area | 24×24 / 44×44 | same | same | same |
-| `↩` stays on the entry's first line after wrapping | ✓ | ✓ | ✓ | ✓ |
-| Anchor jump clearance below the sticky band | 40px | 40px | 40px | — |
-| `scroll-margin-top` resolved on targets | 208px | 208px | 208px | 208px |
+Measured in Chrome, 2026-10-25:
 
-Screenshots: `design/screenshots/lesson-sources-desktop-1280.png`,
-`lesson-sources-mobile-360.png`, `lesson-sources-mobile-390.png`.
+| Check | 1280 | 390 | 360 |
+|---|---|---|---|
+| `scrollWidth / clientWidth` | 1280/1280 | 390/390 | **360/360** |
+| Sources block width | 672 | — | **312** |
+| Longest real URL → lines | 2 | 3 | **5** |
+| `↩` target | 44×44 | 44×44 | **44×44** |
+| `scroll-margin-top` resolved | 240 | 296 | **296** |
+| Jump clearance below the bar | **+36** | **+34** | **+34** |
+| No-audio jump clearance | +32 | — | **+32** |
 
----
+Visual check (`k3-desktop-1280-transition.png`, `k3-mobile-360-sources.png`): the navy check panel and
+the Sources block read as two different things; no clipping, no misalignment, no horizontal scroll.
 
-## 11. Slop + wow self-audit
+**Slop self-audit: 1/10.** Single deduction: #9 (Inter — the repo's existing type system, kept
+deliberately for consistency with the rest of Learn). No gradient, no glass, no accent rail, no icon
+topper, no monument stat, no center stack, no feature-tile grid, no wrong surface.
 
-**Slop score: 1/10.** No gradient, no glass, no accent rail, no icon topper, no monument stat, no
-center stack, no feature-tile grid. Single deduction: red numerals are the safe choice — kept
-because red is the lesson page's established reference accent.
-
-**Wow bar: 4/6.** Typographic scale (display title → mono eyebrows → mono numerals → mono URLs) ✓;
-craft details (2px underline, broken-URL typography, chip that stays quiet until hover) ✓; depth via
-register contrast (bounded exercise card vs unbounded appendix) ✓; signature detail (the "reference
-desk" row: numeral column, mono URL, silent back-ref, landing pulse) ✓; motion — only hover/underline
-transitions, appropriate here ✗; real imagery — n/a for an appendix ✗. Adding imagery or
-choreographed motion to a sources list would be slop, not wow; 4/6 is the ceiling this block should
-aim for.
+**Wow bar: 4/6** — typographic scale (72px air + 64px heavy rule against an 11px mono kicker) ✓;
+craft details (reserved gutters, 1px row rules, hover/focus states) ✓; motion (arrival flash +
+reduced-motion path) ✓; signature element (end-of-document rule + red numerals) ✓; depth ✗;
+real imagery ✗ — n/a for a citation apparatus on a reading surface; photos here would be decoration
+pretending to be content.
 
 ---
 
@@ -303,14 +417,16 @@ aim for.
 
 | Acceptance criterion | Where satisfied |
 |---|---|
-| Desktop 1280: Sources visibly separate from the exercise | §2 (unbounded vs bounded, 64px throw, gray hairline tick, smaller heading) + desktop screenshot |
-| Desktop 1280: back-reference targets usable | §5 (24×24 chip, 44×44 hit area, focus ring, `aria-label`) |
-| Mobile 360/390: long URLs wrap | §4 `overflow-wrap:anywhere`; measured 360/360 and 390/390 |
-| Mobile 360/390: no horizontal scroll | §10 measured `scrollWidth`/`clientWidth` parity, incl. a 180-char token |
-| Mobile: back-reference targets usable | §5 applies unchanged at all widths; measured 44×44 |
-| Anchor jump not hidden under the sticky bar | §6 single property `--lesson-anchor-offset` (208px with the docked audio bar, 112px without); measured 40px clearance |
+| Desktop 1280: Sources visibly separate from the exercise | §2 (unbounded vs bounded, 72px throw, mono kicker, no card) + `k3-desktop-1280-transition.png` |
+| Desktop 1280: back-reference targets usable | §5 (44×44 measured, focus ring, `aria-label`) |
+| Mobile 360/390: long URLs wrap | §4 `overflow-wrap:anywhere`; measured 5 lines at 360, no overflow |
+| Mobile 360/390: no horizontal scroll | §11 `scrollWidth === clientWidth` at 360 and 390 |
+| Mobile: back-reference targets usable | §5 unchanged at all widths; 44×44 measured |
+| Anchor jump not hidden under the sticky bar | §6 single property: **240px** desktop / **296px** phone / **96px** no-audio; measured +36 / +34 / +32 clearance |
 
 ## 13. Out of scope
 
-No gating, no second completion path, no "mark as read" on sources, no citation popovers, no change
-to blog-post footnote rendering.
+No gating, no second completion path, no "mark as read" on sources, no citation popovers, no accordion,
+no change to how citations are authored (`[^n]`) or to blog-post footnote rendering. The check panel's
+own design belongs to A6; the audio bar's layout belongs to K2/A8 — this card only fixes the boundary
+above Sources and measures the bar.
