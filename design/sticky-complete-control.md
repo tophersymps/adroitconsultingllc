@@ -15,7 +15,7 @@ One control, in the existing header row of the lesson audio bar:
 | State | Renders | Interactive |
 | --- | --- | --- |
 | Incomplete | `<button>` "Mark complete", 143 × 44 | yes |
-| Complete | `<span role="status">` "Completed", 113 × 30 inside the same 143 × 44 slot | no |
+| Complete | `<span role="status">` "Completed", 113 × 30 inside the same 144 × 44 slot | no |
 
 The **complete** state is not a toggle. Un-marking stays in the hero control above the article (the
 circular 48 px check that already exists, `src/components/Progress/MarkComplete.tsx`).
@@ -53,9 +53,10 @@ a state. The button is text-only; the chip carries the tick.
 
 ## 3. The crowding case at 360 px — the decision the card asked for
 
-Four groups plus the label need ~560 px on one line. Measured on the sheet: on one row at 360 px they
-would occupy **label 143 + follow 96 + speed 106 + slot 143 + 4 gaps ≈ 570 px** against 286 px of
-content. So the header must become two rows, and something has to give.
+Four groups plus the label need more than one row. Measured on the sheet (intrinsic widths, read from
+the live DOM at 1280): **label 173 + Follow-along 104 + Speed 106 + slot 144 + three 8 px gaps =
+551 px** on one line, against 286 px of content at 360. So the header must become two rows, and
+something has to give.
 
 **Decision: the Follow-along label does NOT collapse to an icon. The word "Speed" goes instead.**
 
@@ -80,11 +81,11 @@ content. So the header must become two rows, and something has to give.
 
 | Measured at 360 (content 286) | width |
 | --- | --- |
-| Row 1 label column (`minmax(0,1fr)`, text needs ~143) | 210 (67 px headroom) |
+| Row 1 label column (`minmax(0,1fr)`; the text itself measures 155) | 210 (55 px headroom) |
 | Row 1 Speed column (pinned 64 px; a native select reserves its widest option otherwise) | 64 |
 | Row 2 Follow-along (17 px box + label, 44 px tall) | 104 |
-| Row 2 action slot | 143 |
-| Row 1 total / Row 2 total | 284 of 286 / 247 of 286 |
+| Row 2 action slot | 144 |
+| Row 1 total / Row 2 total (gap 10) | 284 of 286 / 258 of 286 |
 
 The action slot is the row's right edge — the thumb corner, directly above the audio it completes.
 At 390 the same grid has 30 px more room and behaves identically.
@@ -109,7 +110,7 @@ the transport controls.
 | bar height | 140 px | **72 px** |
 | reading area under the bar | 194 px | **262 px** |
 | audio width | 768 px | 372 px (the documented exception) |
-| action slot | 143 × 44 | 143 × 44 (unchanged) |
+| action slot | 144 × 44 | 144 × 44 (unchanged) |
 
 +68 px of reading area (+35 %). The label's text goes visually hidden in this mode; the three-bar
 audio mark stays as the identity. The audio keeps a **280 px floor** — below that the browser starts
@@ -119,8 +120,8 @@ dropping native controls, which is why this is the only place the audio shares a
 
 ## 5. The slot contract (this is what makes it safe)
 
-The action slot is a **fixed 143 × 44 box at every breakpoint**. The button fills it; the chip sits
-inside it, right-aligned.
+The action slot is a **fixed 144 × 44 box at every breakpoint**. The button fills it (143 × 44 at
+desktop, 140 × 44 in the two-row form); the chip sits inside it, right-aligned.
 
 ```html
 <!-- incomplete -->
@@ -142,8 +143,11 @@ inside it, right-aligned.
 ```css
 .ab-complete {
   display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto;
-  min-width: 143px; min-height: 44px;   /* the slot, not the control inside it */
+  /* 144, not 143: the button's intrinsic width is 143.2px, so a 143 minimum let
+     the slot breathe 0.2px between states and the compact audio absorbed it. */
+  min-width: 144px; min-height: 44px;
 }
+.ab-complete > .mc-btn { max-width: 100%; }   /* the button can never widen the slot */
 .mc-btn  { height: 44px; min-height: 44px; min-width: 44px; padding: 0 14px 0 11px;
            border: 1px solid var(--line-strong); border-radius: 10px; background: var(--card);
            color: var(--navy); font: 600 13px/1 var(--font-sans); }
@@ -188,8 +192,8 @@ behaviour of the hero control. Do not add a spinner or an error toast to the bar
 
 - **Name** — the visible text is the accessible name: "Mark complete". Do not add an `aria-label` that
   would change it.
-- **Target** — 143 × 44 (button) and 143 × 44 (slot, chip inside), at every breakpoint including the
-  compact landscape row. Never below 44 × 44.
+- **Target** — 143 × 44 (button) inside a 144 × 44 slot, at every breakpoint including the compact
+  landscape row. Never below 44 × 44.
 - **Announcement** — the chip is `role="status"`, a polite live region. Its visually hidden suffix
   ("— change this in the lesson header") tells the reader where the toggle lives. **Do not add a second
   live region** — one mechanism, one announcement.
@@ -249,10 +253,14 @@ CSS width; the sheet scales only visually). Incomplete → complete, per viewpor
 
 | Viewport | Content | Bar | Header rows | Audio | Slot | Button | Chip | Bar shift | Audio shift |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1280 | 848 | 140 | 1 | 846 | 143 × 44 | 143 × 44 | 113 × 30 | 0 | 0 |
-| 390 | 316 | 188 | 2 | 314 | 143 × 44 | 140 × 44 | 113 × 30 | 0 | 0 |
-| 360 | 286 | 188 | 2 | 284 | 143 × 44 | 140 × 44 | 113 × 30 | 0 | 0 |
-| 844 × 390 | 778 | 72 | 1 | 372 | 143 × 44 | 143 × 44 | 113 × 30 | 0 | 0 |
+| 1280 | 848 | 140 | 1 | 846 | 144 × 44 | 143 × 44 | 113 × 30 | 0 | 0 |
+| 390 | 316 | 188 | 2 | 314 | 144 × 44 | 140 × 44 | 113 × 30 | 0 | 0 |
+| 360 | 286 | 188 | 2 | 284 | 144 × 44 | 140 × 44 | 113 × 30 | 0 | 0 |
+| 844 × 390 | 778 | 72 | 1 | 372 | 144 × 44 | 143 × 44 | 113 × 30 | 0 | 0 |
+
+Fractional check on the same run: the audio's sub-pixel width is identical in both states at all four
+viewports (846.000 / 314.000 / 284.000 px, and 371.523 px in the compact form) — a delta of 0.0000,
+not just a rounded zero.
 
 Reading area under the pinned bar (frame height − site header − bar):
 
@@ -337,7 +345,9 @@ const { isCompleted, markComplete, isLoading } = useLessonProgress(lessonSlug ??
 1. A native `<select>` reserves its widest option for intrinsic sizing (142 px here), which starves the
    label column in the grid. Pin the column to 64 px and let the select fill it.
 2. Sizing the action slot by its content makes the audio element jump 30 px on completion in the
-   compact form. The slot is fixed at 143 × 44 — this is the whole reason the control is safe.
+   compact form. The slot is fixed at 144 × 44 (not 143 — the button's intrinsic width is 143.2, so a
+   143 minimum leaves a 0.2 px breathing difference the audio absorbs). This is the whole reason the
+   control is safe.
 3. `flex-wrap` at 360 produces a third row at some widths. The two-row form must be an explicit grid.
 4. `container-type: inline-size` on the dock (not on the card's parent chain) is what makes the
    breakpoint track the bar's real width; a viewport media query would mis-fire the moment the dock
@@ -359,7 +369,7 @@ const { isCompleted, markComplete, isLoading } = useLessonProgress(lessonSlug ??
 | Requirement | Where | Status |
 | --- | --- | --- |
 | Control lives in the header row | §5, specimen 1280 | done |
-| Incomplete: button "Mark complete" ≥ 44 × 44 | 143 × 44 measured | done |
+| Incomplete: button "Mark complete" ≥ 44 × 44 | 143 × 44 measured, in a 144 × 44 slot | done |
 | Does not shrink the audio element | audio 846 of 848 content at 1280 (block sibling); 0 px shift across the swap | done |
 | Complete: static chip, no toggle | `<span role="status">`, cursor default, no hover | done |
 | 360/390: two-row layout resolved and shown | §3 + specimens 360 / 390 | done |
