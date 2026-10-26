@@ -35,6 +35,15 @@ export { AUTH_CHANGED_EVENT };
 interface UseAuthReturn {
   user: AuthUser | null;
   isLoading: boolean;
+  /**
+   * True when the last session read could not be answered (503/network).
+   *
+   * This is NOT "signed out": a transient auth-backend failure must not make a
+   * signed-in user look signed out. Consumers that render a signed-out CTA
+   * (the avatar menu / Header "Sign in" link) should suppress it while this is
+   * true, and keep showing the last known user if one is already loaded.
+   */
+  unavailable: boolean;
   /** Re-fetch session from the server (after login/logout). */
   refresh: () => Promise<void>;
 }
@@ -55,6 +64,12 @@ function normalizeUser(u: AuthUser | null): AuthUser | null {
  * (`refresh` / `notifyAuthChanged` / the auth-changed + focus listeners).
  */
 let sessionPromise: Promise<AuthUser | null> | null = null;
+/**
+ * Set when the last read failed transiently (503 / network / non-ok). A null
+ * result then means "couldn't check", NOT "signed out". Reset on a successful
+ * read and on an explicit identity transition.
+ */
+let sessionUnavailable = false;
 /** Set by an invalidation; the next `readSession` refetches in place. */
 let sessionStale = false;
 /** Collapses concurrent forced refreshes (an auth-changed event fans out to
@@ -73,14 +88,24 @@ let sessionEpoch = 0;
 async function fetchSessionUser(epoch: number): Promise<AuthUser | null> {
   try {
     const res = await fetch("/api/auth/session", { cache: "no-store" });
-    if (!res.ok) return null;
+    // A non-ok response (503 SESSION_UNAVAILABLE) means "couldn't check" —
+    // not "signed out". Flag it so the hook does not blank out a known user.
+    if (!res.ok) {
+      if (epoch !== sessionEpoch) return null;
+      sessionUnavailable = true;
+      return null;
+    }
     const data = (await res.json()) as { user: AuthUser | null };
     const user = normalizeUser(data.user ?? null);
     // The identity changed while this read was in flight: this payload belongs
     // to the previous user (or to a guest). Never hand it to a subscriber.
     if (epoch !== sessionEpoch) return null;
+    sessionUnavailable = false;
     return user;
   } catch {
+    // Network error or timeout: also "couldn't check", not "signed out".
+    if (epoch !== sessionEpoch) return null;
+    sessionUnavailable = true;
     return null;
   }
 }
@@ -119,11 +144,21 @@ export function invalidateAuthSession(): void {
   sessionStale = true;
   sessionPromise = null;
   sessionRefresh = null;
+  // A new read is about to start; don't carry "unavailable" across an explicit
+  // identity transition (sign-in/sign-out may well succeed).
+  sessionUnavailable = false;
 }
 
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  /**
+   * True when the last read failed transiently (503/network). This is NOT a
+   * signed-out signal: a signed-in user must keep their avatar during an
+   * auth-backend outage, and an unknown visitor must not be shown "Sign in"
+   * when we simply couldn't check.
+   */
+  const [unavailable, setUnavailable] = useState(false);
 
   const refresh = useCallback(async () => {
     // A read started before an identity transition resolves to `null` by
@@ -132,7 +167,15 @@ export function useAuth(): UseAuthReturn {
     const epoch = sessionEpoch;
     const next = await refreshSession();
     if (epoch !== sessionEpoch) return;
+    // "Couldn't check" is not "signed out": keep the last known user and only
+    // mark availability. Never set `user` to null on a transient failure.
+    if (sessionUnavailable) {
+      setUnavailable(true);
+      setIsLoading(false);
+      return;
+    }
     setUser(next);
+    setUnavailable(false);
     setIsLoading(false);
   }, []);
 
@@ -142,7 +185,15 @@ export function useAuth(): UseAuthReturn {
       const epoch = sessionEpoch;
       const next = await readSession();
       if (cancelled || epoch !== sessionEpoch) return;
+      // "Couldn't check" is not "signed out": keep the last known user and only
+      // mark availability. Never set `user` to null on a transient failure.
+      if (sessionUnavailable) {
+        setUnavailable(true);
+        setIsLoading(false);
+        return;
+      }
       setUser(next);
+      setUnavailable(false);
       setIsLoading(false);
     })();
     /*
@@ -198,7 +249,7 @@ export function useAuth(): UseAuthReturn {
     };
   }, [refresh]);
 
-  return { user, isLoading, refresh };
+  return { user, isLoading, unavailable, refresh };
 }
 
 /**
