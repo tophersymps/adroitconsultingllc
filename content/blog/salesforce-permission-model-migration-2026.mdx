@@ -1,0 +1,169 @@
+---
+title: "The Deadline Is Gone. The Permission Sprawl Is Not."
+slug: salesforce-permission-model-migration-2026
+excerpt: "Salesforce cancelled the profile-permission deadline in June 2026. The access risk, the sprawl, and the migration work are still yours."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 26, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "14 min read"
+tags: [Salesforce, Security, Permissions, Agentforce, Administration]
+bannerImage: "/banners/salesforce-permission-model-migration-2026.webp"
+ogImage: "/banners/salesforce-permission-model-migration-2026-og.jpg"
+---
+
+In June 2026, Salesforce rewrote a Knowledge article and cancelled the retirement of permissions in profiles. Not pushed out, not softened with a new target date. Cancelled, on the grounds of customer feedback and remaining feature gaps.[^1] There was no release note shouting about it. Most admins found out from a blog post weeks later.[^2]
+
+Two reactions followed, and both are wrong.
+
+The first is relief. Three years of migration planning gets a reprieve, the project comes off the roadmap, and everyone goes back to shipping. The second is paralysis: we already built half the permission sets, and now nobody can tell us whether finishing is worth the change risk.
+
+Here is the position this article argues. The deadline was never the reason to fix a permission model. It was the funding mechanism. A profile that grants 60 unrelated permissions to 400 people is not safer because a vendor stopped counting down to a date. It is exactly as dangerous as it was in January 2023, and in 2026 there is a second layer on top of it: the agents and integrations that run under those same users inherit the same excess, at machine speed, without a person noticing a screen that looks wrong.
+
+So treat the cancellation as removing a false urgency, not the problem. What follows is how the permission model actually computes in 2026, the three places where a migration quietly fails, and the order of operations that lets a team finish it without a big-bang weekend.
+
+## What Salesforce actually cancelled
+
+The history matters, because it explains why so many orgs are stranded mid-migration.
+
+Salesforce announced an end-of-life for permissions on profiles in early 2023, targeted at the Spring '26 release. Object permissions, field-level security, the checkboxes admins have clicked since the Classic era: all of it was supposed to live only in permission sets by then.[^3] By 2024 the enforcement date had come off, disclosed to the community rather than in the release note the original announcement had promised, and Salesforce added a line that was easy to read past: no further improvements would be made to profiles, and all investment would go to permission sets, permission set groups, and related features.[^2][^3]
+
+That combination, direction locked and clock removed, is what produced the current mess. Teams that read it as "the deadline moved" kept planning around a date that never arrived. Teams that read it as "it is not happening" stopped. The June 2026 article resolved the ambiguity in the least useful direction: enforcement is cancelled, and a permission set-led model is still the recommended architecture.[^1]
+
+![A three-stage timeline: a 2023 end-of-life announcement targeting Spring 26, a 2024 walk-back that removed enforcement while keeping the direction, and a June 2026 Knowledge article cancelling the retirement outright with no replacement date](</diagrams/salesforce-permission-model-migration-2026/1-cancelled-deadline-timeline.png>)
+
+What survives the cancellation is the division of labor, and it is worth stating precisely because it is the thing a migration has to preserve. Profiles keep the baseline settings a user needs to function at all: default assigned apps, default record types and page layouts, login hours, login IP ranges, password policies, session settings. Permission sets and permission set groups keep the access control layer: object permissions, field-level security, user and system permissions, custom permissions, tab settings, non-default record types, Apex class access, Visualforce page access, connected app access.[^1]
+
+Read that list twice. Every line in the second group decides what a person can read, change, export, or delete. Every line in the first group decides how their day is configured. Most orgs have both mixed into one object, which is why nobody can answer a simple question like "who can delete a contract" without opening four screens.
+
+![Two columns splitting the permission model: profiles hold baseline defaults such as apps, record types, page layouts, login hours, IP ranges and password policies, while permission sets and permission set groups hold object permissions, field-level security, user permissions, tabs and Apex access](</diagrams/salesforce-permission-model-migration-2026/2-profile-versus-permission-set-split.png>)
+
+## How a user's permission is actually computed
+
+The reason migrating is hard is not the clicking. It is that a user's effective permission is a union across every grant they hold, and the union is not visible on any single screen.
+
+A user has exactly one profile and, depending on edition, any number of permission sets and permission set groups.[^4] Salesforce adds the profile's permissions, every assigned set, and the aggregate of every assigned group. The result is what the user can do. There is no precedence order and no override, only addition. Record-level visibility composes on top of that and is a separate question, covered in our [sharing model walkthrough](/field-notes/salesforce-record-sharing-model-2026).
+
+Permission set groups are what make that addition manageable, because they bundle permission sets by persona and let one set be reused across several groups.[^5] They also come with the feature that gets misread more than any other in this stack: muting permission sets. A muting set disables chosen permissions for one group. It does not revoke them. If a user holds the same permission through their profile, through a directly assigned permission set, or through a different group, they still have it after the mute.[^6]
+
+That single sentence explains a category of finding that reads like a mystery in an audit: the team muted Modify All Records on the support group, the group shows the permission as muted, and 40 support reps still have Modify All Records. They had it from somewhere else the whole time, and muting was never going to touch that.
+
+![How a user's effective permissions resolve: profile grants, directly assigned permission sets, and permission set group aggregates are summed into one union, with a muting permission set subtracting only inside its own group and leaving grants from other sources intact](</diagrams/salesforce-permission-model-migration-2026/3-effective-permission-union.png>)
+
+Two more mechanics belong with that one, because they decide whether a muting strategy works at all.
+
+Only one muting permission set is allowed per permission set group.[^7] If a persona needs three different carve-outs, that is not three muting sets, it is a signal that the underlying permission set is too broad and should be split.
+
+And permission dependencies run downhill. Mute Read on an object and Create, Edit, Delete, View All Records, and Modify All Records are muted with it, because none of them mean anything without read access.[^6] That behavior is helpful when it matches intent and destructive when it does not: a carve-out can silently remove the ability to do the job the user was hired for, and the group page will not explain why.
+
+There is a fourth trap that looks like a feature. Session-based permission sets, which grant access only for the current session and can be activated by a Flow, are the right tool for "this buyer needs Contracts occasionally."[^8] Put one inside a permission set group and the semantics invert: for users assigned the group, those permissions no longer require session activation at all. They are simply on.[^5] Lean on session-based sets for temporary elevation, and keep them out of the group.
+
+## The recalculation, which is where deployments go wrong
+
+Permission set groups are computed objects. A group's aggregate is recalculated when you add, remove, or edit a permission set inside it, and until that recalculation completes, users assigned to the group keep the permissions from the last completed calculation.[^9] Not the new ones. The old ones.
+
+The status field is the only honest signal: Updated, Outdated, Updating, Failed.[^9] Outdated and Updating mean the same thing operationally, which is that your change has not reached anybody yet. Failed means it may never reach them, and while a group is failed, changes do not propagate to the combined permission page at all.[^9]
+
+![The permission set group recalculation state machine: Updated, then Outdated or Updating after a change, then either back to Updated or into Failed, with users holding the permissions from the last completed calculation throughout](</diagrams/salesforce-permission-model-migration-2026/4-recalculation-state-machine.png>)
+
+This is why a permission change that passed a sandbox test can look broken in production for twenty minutes and then fix itself. Recalculation is asynchronous and queued, and the time it takes grows with the number of included permission sets, the complexity of those sets, the number of users assigned, whether any included set is missing a required license, and concurrent recalculations triggered by package installs, Apex tests, or metadata deployments. For large or complicated updates that range runs from seconds to hours.[^9]
+
+Four operational rules fall out of that:
+
+- Change permission set groups in the test phase of a deployment, not the deploy phase. A group change during the deploy phase triggers a recalculation; adding permission sets and user assignments in the test phase does not.[^5]
+- Assign permissions to Apex test users through permission sets, not through permission set groups, because a group can be mid-recalculation when your test runs and the test user then has nothing.[^5] Forcing the calculation with `calculatePermissionSetGroup()` works, but it counts against Apex CPU limits, and recalculating a complex group can blow a test out on CPU alone.[^10]
+- Know the known failure: object permissions on View Setup, Edit Setup, or Create Setup on an included permission set cause the group recalculation to fail.[^11] Bad data in a permission set becomes a group that quietly stops updating.
+- Check whether a managed package has gone inactive or expired. A group that references a component from a lapsed package fails recalculation too.[^9]
+
+Add a manual Recalculate on the group detail page to the runbook. It is the standard fix after a failed deployment or package update, and it is the step teams skip because the group looked fine before the change window.[^9]
+
+![A deployment sequence showing permission set and group edits landing in the test phase, the group status after each change, and the wait for the status to read Updated before the change is treated as live](</diagrams/salesforce-permission-model-migration-2026/5-deploy-recalculation-sequence.png>)
+
+## Where most orgs actually sit
+
+The instinct is to assume the stragglers are the exception. They are the norm.
+
+Salesforce Ben's 2026 Admin Survey put 20.5% of organizations at a fully permission set-led model. Another 43.6% were mostly there with profiles still doing significant work. 22.7% had moved only critical permissions, 10.8% still ran primarily on profiles, and 2.3% were unsure.[^12] That is roughly four in five orgs carrying a hybrid model, most of them in the messy middle rather than at either extreme.
+
+The middle is the worst place to be, for a reason that has nothing to do with tidiness. A hybrid model means the effective-permission union is computed across two systems with different interfaces, different deployment characteristics, and different audit trails. Answering "who can see this field" requires knowing both.
+
+## The migration, in slices, in this order
+
+Salesforce's own guidance has not changed with the cancellation: document what each profile currently grants, design the equivalent permission set and group structure, automate assignment with user access policies, test in a recently refreshed sandbox, then roll out in production.[^1][^13] What the guidance under-specifies is the sequencing that keeps it survivable. Here is the version that works.
+
+**Start from a persona, not a profile.** Identify the personas, list the tasks each one performs, then list the permissions each task actually requires. Salesforce recommends picking one current user per persona and reading their access summary as the model, which is faster than reasoning from a permissions matrix and catches grants nobody documented.[^13]
+
+**Name for the grant, not for the team.** A permission set named after a department will get reused by three other departments and will drift. Name it for what it grants, and use the description field to say who it is for.[^13] The naming discipline is what makes the audit query at the end of this article readable a year from now.
+
+**Split before you mute.** A broad permission set plus one muting carve-out per group is a permission set that should have been two. Because only one muting set exists per group, and because muting is invisible to every other grant source, the cheap fix compounds into the exact confusion the migration was supposed to end.[^6]
+
+**Assign with user access policies, in the migration mode.** User access policies are available in Enterprise and Unlimited editions and can run as a one-time manual migration or as ongoing criteria-based assignment, so the same tool that carries the cutover keeps the population correct afterward.[^13] Cut over one profile at a time, not in a single window. Salesforce's note about recording how long the work takes, so you can negotiate a low-activity maintenance period, is a warning dressed as advice.[^13]
+
+**Slim the profiles as you go.** Assign users the Minimum Access - Salesforce profile, or a clone of it where default settings differ, and remove permissions from the old profiles rather than leaving them as a safety net. A leftover permission in a profile still grants access after the migration and still shows up in the union.[^1] Two settings pay for themselves here: enable Field-Level Security for Permission Sets during Field Creation so new fields get field permissions on permission sets from the start, and update organization-wide email addresses to be permission set-based where needed.[^13]
+
+**Deploy permissions in metadata, and expect change sets to under-deliver.** Profiles are not fully supported as change set components. A newly created profile in the target inherits object-level access from the license's standard profile, deployed custom tabs arrive hidden unless the change set sets visibility, and a deployment containing a profile and record type without the assigned page layout removes the existing layout assignment for that record type.[^14] Every one of those is access drift introduced by the deployment tool, not by the design.
+
+**Test the negative case.** The sandbox pass that matters is not "the support rep can do their job." It is "the support rep cannot delete a contract," tested as the persona, after a refresh, with the group status reading Updated rather than Outdated.[^9]
+
+## The query that finds the sprawl
+
+You cannot migrate what you cannot enumerate, and the platform's permission data has one wrinkle that derails most hand-built audits: object and field permissions are only stored as records against permission sets. Profile permission data is exposed the same way, through a permission set that the profile owns.[^15]
+
+That means an audit query which ignores `IsOwnedByProfile` sees only half the picture, and will report a clean org that is not clean.
+
+```sql
+-- profile-owned permission sets: the profile's own grants
+SELECT Id, Label, ProfileId, Profile.Name
+FROM PermissionSet
+WHERE IsOwnedByProfile = TRUE
+
+-- every user who holds a grant on one object, through any path
+SELECT Assignee.Name, PermissionSet.Name, PermissionSet.IsOwnedByProfile
+FROM PermissionSetAssignment
+WHERE PermissionSetId IN (
+  SELECT ParentId FROM ObjectPermissions
+  WHERE SObjectType = 'Contract' AND PermissionsRead = TRUE
+)
+```
+
+The first query lists profile-owned sets. The second walks assignments and their grant source, which is the table you want when someone asks why a muted group still shows a live permission. Two practical notes: profile-owned permission sets can be queried but not modified, and their Name and Label values can change, so join on `ProfileId` rather than the label.[^15]
+
+Run that pair before the migration and again ninety days after. What you are looking for is not a count of permission sets. It is whether any user still holds a dangerous permission through a path nobody designed: a leftover profile grant, a direct assignment made during an incident, a package's standard permission set assigned wholesale.
+
+## Why the cancellation is the more expensive lesson
+
+The access exposure has not changed. What changed is the sentence that made the work fundable.
+
+If a SOX control, an ISO 27001 remediation item, or a penetration test finding listed "move off profile-based permissions by Spring '26," that line item just lost its external forcing function. Auditors do not accept "the vendor cancelled the deadline" as a reason to close a finding, and they are right not to, because the finding was about access sprawl that only coincidentally had a vendor date attached.[^2] The person who used the EOL date to win budget and headcount now has a harder argument in the next planning cycle, for work whose risk profile did not move at all.
+
+It is worth naming the delivery lesson plainly, because it generalizes past Salesforce. A vendor's future date is not a risk register entry. It is a dependency on someone else's decision, and this one was reversed twice in three years. The durable version of that line item is not "complete X by date Y." It is "no user holds a dangerous permission through an undocumented path," which you can test this quarter, independent of any announcement.
+
+And in 2026 there is a second reason the union matters more than it did in 2023. Every agent, Flow, integration, and API caller runs under a Salesforce user, and that user's effective permissions are the outer boundary of what the machine can touch, which is [the running-user problem](/field-notes/salesforce-agent-access-scoping-2026) in full. A profile that over-grants to humans over-grants to whatever runs as them. The blast radius of a lazy grant stopped being a person who might click the wrong button and became a program that will exercise the full scope, thousands of times, in the middle of the night.
+
+Nothing about the cancellation makes that safer. It just removes the meeting where someone would have asked about it.
+
+## What to do this quarter
+
+If your org is in the 20.5% that finished, keep the review cadence and move on. If you are anywhere in the other four-fifths, the work is the same five steps Salesforce still recommends, on your own timeline rather than a vendor's.[^1][^13]
+
+Do three things before touching production. Enumerate the union with the queries above and write down which users hold which dangerous permissions through which path. Pick the single worst profile, measured by people multiplied by unrelated permissions, and migrate only that one. Then run the negative tests as the persona, and wait for the group status to read Updated before you believe any of it.
+
+One profile per slice. That is the whole plan. The deadline is gone, so nothing forces the sequencing, which means the sequencing is now a design decision rather than a vendor's constraint. Make it deliberately.
+
+[^1]: Salesforce Help, "Permissions in Profiles Retirement Cancelled," Knowledge Article 003834041, published June 6, 2026. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=003834041&language=en_US&type=1)
+[^2]: Salesforce Dictionary, "Profiles Keep Their Permissions," on the 2023 announcement, the 2024 softening of enforcement, the quiet Knowledge article update, and the audit and trust cost of a cancelled security deadline. [salesforcedictionary.com](https://salesforcedictionary.com/news/salesforce-news-july-9-2026-profile-permissions-retirement-cancelled)
+[^3]: Salesforce Admins, "Permissions Updates | Learn MOAR Spring '23," carrying the original Spring '26 end-of-life target and the notice that enforcement would not continue and profiles would receive no further investment. [admin.salesforce.com](https://admin.salesforce.com/blog/2023/permissions-updates-learn-moar-spring-23)
+[^4]: Salesforce Help, "Permission Sets," on one profile per user and multiple permission sets depending on edition. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.securityImplGuide.meta/securityImplGuide/perm_sets_overview.htm)
+[^5]: Salesforce Help, "Permission Set Groups Considerations," on the 100-permission-set limit per group, session-based sets losing their activation requirement inside a group, deployment-phase recalculation, and the Apex test assignment recommendation. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.perm_set_groups_considerations.htm&language=en_US&type=5)
+[^6]: Salesforce Trailhead, "Mute Permissions in Permission Set Groups," on permission dependencies and grants from profiles or other assignments surviving a mute. [trailhead.salesforce.com](https://trailhead.salesforce.com/content/learn/modules/permission-set-groups/mute-permissions-in-permission-set-groups)
+[^7]: Salesforce Help, "Mute a Permission in a Permission Set Group," on muting scope and the single-muting-set limit. [help.salesforce.com](https://help.salesforce.com/s/articleView?language=en_US&id=platform.perm_set_groups_create_mute.htm&type=5)
+[^8]: Salesforce Help, "Session-Based Permission Sets," on session-scoped grants, Flow activation, and the asynchronous-process limitation. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.perm_sets_session_use.htm&language=en_US&type=5)
+[^9]: Salesforce Help, "Permission Set Group Status and Recalculation," on the four statuses, last-completed-calculation behavior, recalculation timing factors, manual recalculation, and the managed package failure mode. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.perm_set_groups_status_recalc.htm&language=en_US&type=5)
+[^10]: Salesforce Apex Developer Guide, "Permission Set Groups" testing guidance, on calculatePermissionSetGroup and Apex CPU limits. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_permission_set_group_testing.htm)
+[^11]: Salesforce Help, "Permission Set group recalculation fails due to View Setup or Edit Setup or Create Setup object permissions," Knowledge Article 002723601. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=002723601&language=en_US&type=1)
+[^12]: Salesforce Ben, "Salesforce Permission Sets vs. Profiles: Why Most Orgs Are Still Stuck," 2026 Admin Survey distribution: 20.5% fully permission set-led, 43.6% mostly, 22.7% partially, 10.8% primarily profiles, 2.3% unsure. [www.salesforceben.com](https://www.salesforceben.com/permission-sets-vs-profiles-why-most-orgs-are-still-stuck/)
+[^13]: Salesforce Help, "Migrate from Profiles to Permission Sets," on persona planning, naming conventions, user access policies and editions, the Minimum Access profile, the Field-Level Security for Permission Sets setting, and maintenance-window timing. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.migrate_profiles.htm&language=en_US&type=5)
+[^14]: Salesforce Help, "Deploy profiles via change sets," Knowledge Article 000386377, on profile component limitations, inherited object access for new profiles, hidden custom tabs, and layout assignment removal. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000386377&language=en_US&type=1)
+[^15]: Salesforce Object Reference, "PermissionSet," on IsOwnedByProfile, ProfileId, query-but-not-modify behavior for profile-owned sets, and nested assignment queries. [developer.salesforce.com](https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_objects_permissionset.htm)
