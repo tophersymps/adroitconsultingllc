@@ -119,10 +119,17 @@ export function checkState(
 /** D-5 rule: hide a check node only when passed AND every lesson in its range is hidden. */
 export function hiddenByFilter(
   node: TimelineNode,
-  hiddenLessonSlugs: ReadonlySet<string>,
+  hiddenLessonNumbers: ReadonlySet<number>,
   passedCheckNumbers: ReadonlySet<number>,
 ): boolean;
 ```
+
+**Amendment (A3, same PR):** the hidden set is **lesson numbers**, not slugs. A check node's
+range is `[a, b]` in lesson numbers, so a slug set cannot answer "is *every* lesson in this range
+hidden" without also receiving the lessons; a number set answers it directly and keeps the
+predicate total. The syllabus (A5) maps its completed-lesson slugs to `lesson` numbers once, when
+it builds the set. First parameter stays the node and the third stays the passed-check set, so the
+call shape A5 was written against is unchanged.
 
 ---
 
