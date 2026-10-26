@@ -19,5 +19,6 @@ site merger.
 warnings in `src/lib/auth/server.test.ts`); `npm test` 183 files / 1779 tests pass; `npm run build`
 succeeds. Live check of the replacement URL returns HTTP 200 and the old URL returns 404.
 
-**Known Issues** - None. A separate sweep found 8 dead citation links inside published articles
-(7 x 404, 1 x 410) which are unrelated to this change and are tracked separately.
+**Known Issues** - None in this change. A separate sweep found 7 dead citation links inside
+published articles (6 x 404, 1 x 410) which are unrelated to this change and are tracked
+separately.
