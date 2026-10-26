@@ -108,11 +108,20 @@ function nowMs(): number {
 function LessonCompleteControl({ lessonSlug }: { lessonSlug: string }) {
   const { isCompleted, markComplete, isLoading } = useLessonProgress(lessonSlug);
   const chipRef = useRef<HTMLSpanElement>(null);
+  // Set ONLY by the button's click handler: the sanctioned focus move is the
+  // button→chip swap that removes the pressed element. The hook starts
+  // `isCompleted=false` (hydration-safe) and flips true on mount for an
+  // already-completed lesson — and again on same-tab/cross-tab sync — so an
+  // unguarded effect stole focus (and fired the role="status" announcement)
+  // on plain page load (QA t_81573261).
+  const userSwappedRef = useRef(false);
 
-  // Move focus to the chip when the button→chip swap removes the pressed
-  // button from the DOM. tabindex="-1" keeps it out of the tab order.
+  // Move focus to the chip when OUR swap removes the pressed button from the
+  // DOM. tabindex="-1" keeps it out of the tab order.
   useEffect(() => {
-    if (isCompleted) chipRef.current?.focus();
+    if (!isCompleted || !userSwappedRef.current) return;
+    userSwappedRef.current = false;
+    chipRef.current?.focus();
   }, [isCompleted]);
 
   return (
@@ -139,7 +148,11 @@ function LessonCompleteControl({ lessonSlug }: { lessonSlug: string }) {
         <button
           type="button"
           className="mc-btn"
-          onClick={markComplete}
+          onClick={() => {
+            // Mark the swap as user-initiated so the focus effect above may run.
+            userSwappedRef.current = true;
+            markComplete();
+          }}
           disabled={isLoading}
           aria-disabled={isLoading}
         >

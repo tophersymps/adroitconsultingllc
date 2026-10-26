@@ -138,4 +138,45 @@ describe("AudioPlayer completion control (K2)", () => {
     expect(screen.getByText("Speed").className).toContain("sfl");
     expect(await screen.findByRole("checkbox", { name: /Follow along/i })).toBeInTheDocument();
   });
+
+  // ── FOCUS CONTRACT (design §a11y, QA t_81573261) ──────────────────
+  // Focus moves to the chip ONLY when the reader's own press removes the
+  // button. A completed lesson loading, or a same-tab/cross-tab sync flipping
+  // the hook's hydration-safe `false` to `true`, must not steal focus.
+  const renderLesson = () => (
+    <AudioPlayer slug={SLUG} hasAudio label="lesson" lessonSlug={SLUG} />
+  );
+
+  it("does NOT steal focus when an already-completed lesson loads", () => {
+    progressState = { isCompleted: true, isLoading: false };
+    render(renderLesson());
+
+    const chip = screen.getByRole("status");
+    expect(chip).toBeInTheDocument();
+    expect(chip).not.toHaveFocus();
+  });
+
+  it("does NOT steal focus when completion arrives from a sync (no user press)", () => {
+    const { rerender } = render(renderLesson());
+    expect(screen.getByRole("button", { name: /Mark complete/i })).toBeInTheDocument();
+
+    // Simulates the hook's mount read / storage-event sync: isCompleted goes
+    // false → true with no click having happened.
+    progressState = { isCompleted: true, isLoading: false };
+    rerender(renderLesson());
+
+    expect(screen.getByRole("status")).not.toHaveFocus();
+  });
+
+  it("moves focus to the chip after the reader presses Mark complete", async () => {
+    const { rerender } = render(renderLesson());
+    await userEvent.click(screen.getByRole("button", { name: /Mark complete/i }));
+    expect(markComplete).toHaveBeenCalledTimes(1);
+
+    // The swap that follows the press (optimistic state flip in the real hook).
+    progressState = { isCompleted: true, isLoading: false };
+    rerender(renderLesson());
+
+    expect(screen.getByRole("status")).toHaveFocus();
+  });
 });

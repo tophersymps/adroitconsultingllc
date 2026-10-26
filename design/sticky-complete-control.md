@@ -200,7 +200,9 @@ behaviour of the hero control. Do not add a spinner or an error toast to the bar
 - **Focus** — the pressed button is removed from the DOM by the swap. Give the chip `tabindex="-1"` and
   move focus to it on completion, so keyboard and screen-reader users are not dropped back to
   `<body>` in the middle of a lesson. `tabindex="-1"` keeps it out of the tab order, so the next Tab
-  still lands on the article.
+  still lands on the article. The move is for **the reader's own press only**: an already-completed
+  lesson loading (the hook starts `false` for hydration safety, then flips `true` on mount) and a
+  same-tab/cross-tab progress sync must NOT move focus or announce the live region.
 - **Follow-along when the label hides** (compact landscape) — the input keeps `aria-label="Follow along"`;
   the 17 px box is `opacity: 0` but stays in the accessibility tree and keeps `:focus-visible` on the
   visible `.box` via `input:focus-visible + .box`.
