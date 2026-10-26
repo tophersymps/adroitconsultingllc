@@ -32,6 +32,8 @@ import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 import MDXArticle from "@/components/MDX/MDXArticle";
+import MDXSources from "@/components/MDX/MDXSources";
+import { hasFootnoteDefinitions } from "@/lib/lesson-sources";
 import Paywall from "@/components/Catalog/Paywall";
 import { AudioPlayerLazy } from "@/components/BlogPost/AudioPlayerLazy";
 import { lessonAudio } from "@/data/lesson-audio";
@@ -227,7 +229,11 @@ export default async function LessonPage({ params }: Props) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div
+      className={`min-h-screen flex flex-col lesson-page${
+        audio ? " lesson-page--has-audio" : ""
+      }`}
+    >
       <ReadingProgress />
       <Header />
 
@@ -315,9 +321,14 @@ export default async function LessonPage({ params }: Props) {
           </div>
         )}
 
-        {/* Article Body — rendered from MDX content */}
+        {/* Article Body — rendered from MDX content.
+            The body render drops the GFM footnotes section (`sources="split"`)
+            so the citations can be composed as the page's LAST content block,
+            after the practice/check block (K3 spec §1). Both renders compile
+            the same source, so footnote numbering and back-reference ids stay
+            in agreement; the section is rendered exactly once, by MDXSources. */}
         <article className="article-body max-w-[720px] mx-auto px-6 pb-16">
-          <MDXArticle mdx={mdxBody} />
+          <MDXArticle mdx={mdxBody} sources="split" />
 
           {/* Gated Practice Questions section — guests get the CTA placeholder,
               authed users get the interactive LessonQuiz; authed with no
@@ -346,6 +357,12 @@ export default async function LessonPage({ params }: Props) {
               passed={milestonePassed}
             />
           ) : null}
+
+          {/* SOURCES — appendix, last content block on the page. Rendered only
+              when the document declares footnote definitions; MDXSources
+              additionally returns null when definitions exist but no
+              reference emits a section (no empty "Sources" heading). */}
+          {hasFootnoteDefinitions(mdxBody) ? <MDXSources mdx={mdxBody} /> : null}
         </article>
 
         {/* Prev/Next within series (authored sequence). On a range-end lesson

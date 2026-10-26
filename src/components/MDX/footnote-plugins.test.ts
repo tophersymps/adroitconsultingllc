@@ -12,6 +12,7 @@ import {
   dropFootnoteSection,
   isFootnoteSection,
   keepOnlyFootnoteSection,
+  markLessonSources,
   renameFootnoteHeading,
 } from "@/components/MDX/footnote-plugins";
 import {
@@ -161,6 +162,62 @@ describe("sources render", () => {
     );
     expect(parseHtml(html).querySelectorAll("section")).toHaveLength(0);
     expect(parseHtml(html).textContent).toBe("");
+  });
+});
+
+describe("markLessonSources", () => {
+  it("adds the lesson-sources class to the footnotes section, keeping .footnotes", async () => {
+    const dom = parseHtml(await renderMdx(DOC_WITH_SOURCES, SOURCES_PLUGINS));
+    const section = dom.querySelector("section[data-footnotes]")!;
+
+    expect(section).not.toBeNull();
+    expect(section.classList.contains("footnotes")).toBe(true);
+    expect(section.classList.contains("lesson-sources")).toBe(true);
+  });
+
+  it("does not tag anything when no footnotes section exists", async () => {
+    const dom = parseHtml(await renderMdx(DOC_WITHOUT_SOURCES, SOURCES_PLUGINS));
+    expect(dom.querySelectorAll(".lesson-sources")).toHaveLength(0);
+  });
+
+  it("is idempotent and preserves an existing class string", () => {
+    const section = {
+      type: "element",
+      tagName: "section",
+      properties: { dataFootnotes: true, className: "footnotes" },
+      children: [],
+    } as never;
+    const tree = (): Root => ({ type: "root", children: [{ ...(section as object) } as never] });
+
+    const once = markLessonSources()(tree());
+    const twice = markLessonSources()(once);
+    const classes = (twice.children[0] as never as { properties: { className: string[] } })
+      .properties.className;
+    expect(classes).toEqual(["footnotes", "lesson-sources"]);
+  });
+});
+
+describe("body + sources together (the lesson page's split composition)", () => {
+  it("emits exactly one section[data-footnotes] across the two renders", async () => {
+    const bodyHtml = await renderMdx(DOC_WITH_SOURCES, SPLIT_BODY_PLUGINS);
+    const sourcesHtml = await renderMdx(DOC_WITH_SOURCES, SOURCES_PLUGINS);
+    const dom = parseHtml(bodyHtml + sourcesHtml);
+
+    expect(dom.querySelectorAll("section[data-footnotes]")).toHaveLength(1);
+    expect(dom.querySelectorAll("h2#footnote-label")).toHaveLength(1);
+    expect(dom.querySelectorAll("li#user-content-fn-1")).toHaveLength(1);
+  });
+
+  it("puts the sources section after the body content in document order", async () => {
+    const combined = parseHtml(
+      (await renderMdx(DOC_WITH_SOURCES, SPLIT_BODY_PLUGINS)) +
+        (await renderMdx(DOC_WITH_SOURCES, SOURCES_PLUGINS)),
+    );
+
+    const bodyText = combined.textContent!.indexOf("Body copy that must not appear");
+    const sourcesText = combined.textContent!.indexOf("https://example.com/first");
+    expect(bodyText).toBeGreaterThan(-1);
+    expect(sourcesText).toBeGreaterThan(bodyText);
   });
 });
 

@@ -83,3 +83,32 @@ export function keepOnlyFootnoteSection() {
     return tree;
   };
 }
+
+/**
+ * Tag the footnote section with the `lesson-sources` class.
+ *
+ * K3 puts the lesson appendix's anchor offsets on `.lesson-sources`, so the
+ * section needs a class the lesson page owns — `footnotes` alone is shared
+ * with blog posts, which must keep their in-article rendering untouched.
+ * Applies to the sources render only (the blog body render never runs it).
+ */
+export function markLessonSources() {
+  return (tree: HastRoot): HastRoot => {
+    for (const child of tree.children) {
+      if (!isFootnoteSection(child)) continue;
+      const candidate = child as unknown as SectionLike;
+      const properties = (candidate.properties ??= {});
+      const className = properties.className;
+      const classes = Array.isArray(className)
+        ? className.map(String)
+        : typeof className === "string"
+          ? className.split(/\s+/).filter(Boolean)
+          : [];
+      if (!classes.includes("lesson-sources")) {
+        classes.push("lesson-sources");
+      }
+      properties.className = classes;
+    }
+    return tree;
+  };
+}

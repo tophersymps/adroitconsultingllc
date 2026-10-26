@@ -13,6 +13,7 @@ import remarkGfm from "remark-gfm";
 import {
   dropFootnoteSection,
   keepOnlyFootnoteSection,
+  markLessonSources,
   renameFootnoteHeading,
 } from "@/components/MDX/footnote-plugins";
 
@@ -73,7 +74,11 @@ function legacyRenameFootnoteHeading() {
 /** Plugin lists matching each render the production components perform. */
 export const INLINE_PLUGINS = [renameFootnoteHeading];
 export const SPLIT_BODY_PLUGINS = [renameFootnoteHeading, dropFootnoteSection];
-export const SOURCES_PLUGINS = [renameFootnoteHeading, keepOnlyFootnoteSection];
+export const SOURCES_PLUGINS = [
+  renameFootnoteHeading,
+  markLessonSources,
+  keepOnlyFootnoteSection,
+];
 export const LEGACY_PLUGINS = [legacyRenameFootnoteHeading];
 
 /** Compile `mdx` through a given rehype pipeline and serialise it to HTML. */
