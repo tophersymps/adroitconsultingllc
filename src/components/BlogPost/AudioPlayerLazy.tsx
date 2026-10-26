@@ -13,6 +13,7 @@
  * grows the narrated set, so any fixed figure goes stale by construction.
  */
 import dynamic from "next/dynamic";
+import type { ReactNode } from "react";
 
 const AudioPlayer = dynamic(() => import("@/components/BlogPost/AudioPlayer"), {
   ssr: false,
@@ -23,10 +24,13 @@ export interface AudioPlayerLazyProps {
   hasAudio?: boolean;
   /** Passed through to AudioPlayer — see AudioPlayerProps.label. */
   label?: string;
-  /** Passed through to AudioPlayer — see AudioPlayerProps.lessonSlug. */
-  lessonSlug?: string;
+  /**
+   * Passed through to AudioPlayer — see AudioPlayerProps.trailing. The lesson
+   * page supplies `<MarkCompleteCompact />`; article pages supply nothing.
+   */
+  trailing?: ReactNode;
 }
 
-export function AudioPlayerLazy({ slug, hasAudio, label, lessonSlug }: AudioPlayerLazyProps) {
-  return <AudioPlayer slug={slug} hasAudio={hasAudio} label={label} lessonSlug={lessonSlug} />;
+export function AudioPlayerLazy({ slug, hasAudio, label, trailing }: AudioPlayerLazyProps) {
+  return <AudioPlayer slug={slug} hasAudio={hasAudio} label={label} trailing={trailing} />;
 }

@@ -21,10 +21,9 @@
  *
  * Auth source-of-truth: src/lib/hooks/useAuth.ts (as before).
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { useLessonProgress } from "@/lib/hooks/useLessonProgress";
 import {
   alignSegmentsToBlocks,
   activeSegmentIndex,
@@ -48,12 +47,19 @@ export interface AudioPlayerProps {
    */
   label?: string;
   /**
-   * Present only on the Learn lesson page. Enables the "Mark complete"
-   * control in the bar's header row (K2, design t_239eb3ed). Article
-   * (field-notes) usage omits it and keeps today's bar exactly — no
-   * completion slot is rendered.
+   * Optional control rendered at the end of the bar's header row, inside the
+   * fixed 144 × 44 completion slot (K2 layout, card A8). The Learn lesson page
+   * passes `<MarkCompleteCompact />` here; article (field-notes) usage omits it
+   * and keeps the bar exactly as before — no slot, no completion container.
+   *
+   * It is a plain ReactNode rather than a lesson slug so the player stays a
+   * presentation surface: it knows nothing about completion, and there is
+   * still exactly one write path (useLessonProgress inside the control).
+   *
+   * Only rendered in the signed-in branch, so guests get the existing locked
+   * card and never any part of the trailing control.
    */
-  lessonSlug?: string;
+  trailing?: ReactNode;
 }
 
 const SPEEDS = [1, 1.25, 1.5] as const;
@@ -93,91 +99,7 @@ function nowMs(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
-/**
- * LessonCompleteControl — the "Mark complete" / "Completed" control in the
- * lesson audio bar's header row (K2, design t_239eb3ed). A fixed 144×44
- * action slot that swaps a 143×44 "Mark complete" button for a static
- * 113×30 "Completed" chip WITHOUT resizing the slot, so the <audio> element
- * never moves or reflows on completion.
- *
- * One write path (useLessonProgress → POST /api/progress/lesson); un-marking
- * stays on the hero MarkComplete control. The chip is a `role="status"` live
- * region and takes focus after the swap so keyboard/SR users are not dropped
- * to <body>. No toggle, no spinner, no second live region.
- */
-function LessonCompleteControl({ lessonSlug }: { lessonSlug: string }) {
-  const { isCompleted, markComplete, isLoading } = useLessonProgress(lessonSlug);
-  const chipRef = useRef<HTMLSpanElement>(null);
-  // Set ONLY by the button's click handler: the sanctioned focus move is the
-  // button→chip swap that removes the pressed element. The hook starts
-  // `isCompleted=false` (hydration-safe) and flips true on mount for an
-  // already-completed lesson — and again on same-tab/cross-tab sync — so an
-  // unguarded effect stole focus (and fired the role="status" announcement)
-  // on plain page load (QA t_81573261).
-  const userSwappedRef = useRef(false);
-
-  // Move focus to the chip when OUR swap removes the pressed button from the
-  // DOM. tabindex="-1" keeps it out of the tab order.
-  useEffect(() => {
-    if (!isCompleted || !userSwappedRef.current) return;
-    userSwappedRef.current = false;
-    chipRef.current?.focus();
-  }, [isCompleted]);
-
-  return (
-    <div className="ab-complete">
-      {isCompleted ? (
-        <span ref={chipRef} className="mc-chip" role="status" tabIndex={-1}>
-          <svg
-            width="11"
-            height="11"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          Completed
-          <span className="sr-only"> — change this in the lesson header</span>
-        </span>
-      ) : (
-        <button
-          type="button"
-          className="mc-btn"
-          onClick={() => {
-            // Mark the swap as user-initiated so the focus effect above may run.
-            userSwappedRef.current = true;
-            markComplete();
-          }}
-          disabled={isLoading}
-          aria-disabled={isLoading}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="12" cy="12" r="9" />
-            <polyline points="8 12.2 11 15.2 16.2 9.4" />
-          </svg>
-          <span>Mark complete</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
-export default function AudioPlayer({ slug, hasAudio, label = "article", lessonSlug }: AudioPlayerProps) {
+export default function AudioPlayer({ slug, hasAudio, label = "article", trailing }: AudioPlayerProps) {
   const { user, isLoading } = useAuth();
   const audioRef = useRef<HTMLAudioElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -588,7 +510,7 @@ export default function AudioPlayer({ slug, hasAudio, label = "article", lessonS
         pinned
           ? "shadow-[0_8px_24px_rgba(11,29,58,0.16)] ring-1 ring-gray-300 dark:shadow-[0_8px_24px_rgba(0,0,0,0.5)] dark:ring-[var(--border-default)] transition-shadow duration-300"
           : "transition-shadow duration-300"
-      }${lessonSlug ? " has-complete" : ""}`}
+      }${trailing ? " has-trailing" : ""}`}
     >
       <div className="ab-head">
         <span className="ab-label text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-[var(--ink-muted)]">
@@ -621,7 +543,7 @@ export default function AudioPlayer({ slug, hasAudio, label = "article", lessonS
             ))}
           </select>
         </label>
-        {lessonSlug && <LessonCompleteControl lessonSlug={lessonSlug} />}
+        {trailing}
       </div>
       <audio
         ref={audioRef}
