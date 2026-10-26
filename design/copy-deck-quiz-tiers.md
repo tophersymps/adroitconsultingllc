@@ -6,6 +6,29 @@
 
 ---
 
+> **ANNOTATION - 2026-10-25 - the exam label is kind-aware now. Do not copy the exam wording in this deck into new work.**
+>
+> The exam strings below were drawn from the OmniStudio certification series and say
+> `Certification Prep Exam` / `Cert Prep Exam` everywhere. That is one of two kinds now. Every series
+> declares `examKind` in `content/learn/<series>/series.json`, and the label is read at runtime from
+> **`src/lib/exam-labels.ts`** (`examLabels(series.examKind)`):
+>
+> | `examKind` | Long | Short | In-sentence |
+> |---|---|---|---|
+> | `certification-prep` | `Certification Prep Exam` | `Cert Prep Exam` | `cert prep exam` |
+> | `course-completion` | `Course Completion Exam` | `Course Exam` | `course completion exam` |
+>
+> So: **never paste the literal `Cert Prep Exam` strings from this deck into a new screen, mockup, or
+> component.** Call `examLabels(kind)` and render `full` / `short` / `phrase`. A literal in
+> `src/components/Progress/**`, `src/app/atlas/**` or `src/lib/**` is a bug (the B6 grep test fails on
+> it). Where a string below disagrees with `exam-labels.ts`, `exam-labels.ts` wins - copy is owned by
+> Lois and lives in `deliverables/learn-ux-exam-naming/api-contracts.md` section C.
+>
+> This deck's wording is left exactly as written (t_27a117d2, annotation only) so the historical
+> reference for the certification series survives. It is a record, not a template.
+
+---
+
 ## 1. Lesson quiz embed (authed)
 
 | Element | Copy (exact) |
