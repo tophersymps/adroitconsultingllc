@@ -1,4 +1,4 @@
-## Learn — exam.json titles now follow each series' exam kind
+### Learn — exam.json titles now follow each series' exam kind
 
 **What.** All 8 `course-completion` series (`ai-at-work`, `ai-adoption`, `ai-power-user`,
 `hermes-consultant`, `hermes-consultant-intermediate`, `hermes-consultant-advanced`, `agentic-ai`,
