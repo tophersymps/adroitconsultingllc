@@ -66,3 +66,50 @@ describe("series syllabus horizontal overflow (t_335bc9da)", () => {
     expect(outer).toContain("max-w-[1120px]");
   });
 });
+
+/**
+ * A5 — the knowledge-check milestone node must not add a horizontal floor to
+ * the syllabus. The lesson rows already scroll to zero at 360px; a fixed
+ * min-width (or a non-wrapping badge competing with the label) would re-break
+ * the page at the same viewports.
+ */
+describe("knowledge check node does not reintroduce horizontal overflow (A5)", () => {
+  const ROOT = process.cwd();
+  const read = (...parts: string[]) => fs.readFileSync(path.join(ROOT, ...parts), "utf-8");
+
+  it("feeds the checks into the syllabus timeline on the series page", () => {
+    const source = pageSource();
+    const idx = source.indexOf("<SeriesSyllabus");
+    const tag = source.slice(idx, source.indexOf(">", idx));
+    expect(tag).toContain("checks={checksMeta}");
+    expect(tag).toContain("series={series}");
+    expect(tag).toContain("kind={s.examKind}");
+  });
+
+  it("never sets a fixed min-width on the node or its label/badge tracks", () => {
+    const node = read("src", "components", "Progress", "CheckTimelineNode.tsx");
+    // Tailwind width floors are the class-level failure mode.
+    expect(node).not.toMatch(/min-w-\[\d/);
+    expect(node).not.toContain("min-w-");
+  });
+
+  it("sizes the node from a container query with a shrinkable label track", () => {
+    const css = read("src", "app", "globals.css");
+    const milestone = css.slice(css.lastIndexOf(".syllabus-timeline"));
+    // Container-driven, not viewport-driven: the syllabus sits in a shell.
+    expect(milestone).toContain("container-type: inline-size");
+    expect(milestone).toContain("container-name: syllabus");
+    expect(milestone).toContain("@container syllabus (min-width: 560px)");
+    // The label is the only shrinkable track; the badge never squeezes it.
+    expect(milestone).toContain("grid-template-columns: 40px minmax(0, 1fr)");
+    expect(milestone).toContain("white-space: nowrap");
+    // ≥44px row height at every width.
+    expect(milestone).toContain("min-height: 64px");
+  });
+
+  it("renders the milestone root with the syllabus container class from the component", () => {
+    const syllabus = read("src", "components", "Learn", "SeriesSyllabus.tsx");
+    expect(syllabus).toContain("syllabus-timeline");
+    expect(syllabus).toContain("CheckTimelineNode");
+  });
+});

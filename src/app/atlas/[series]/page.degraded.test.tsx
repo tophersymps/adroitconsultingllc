@@ -117,7 +117,6 @@ vi.mock("@/components/Learn/LessonProgress", () => ({ default: () => <div /> }))
 vi.mock("@/components/Progress/SeriesProgress", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/QuizStats", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/CertReadiness", () => ({ default: () => <div /> }));
-vi.mock("@/components/Progress/CheckCardList", () => ({ default: () => <div /> }));
 vi.mock("@/components/Progress/ExamCard", () => ({ default: () => <div /> }));
 vi.mock("@/components/Catalog/StatusBadge", () => ({
   StatusBadge: () => <div />,

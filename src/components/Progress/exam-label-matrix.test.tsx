@@ -45,7 +45,17 @@ import ExamLocked from "./ExamLocked";
 import ExamWidget from "./ExamWidget";
 import Certificate from "./Certificate";
 import GuestCTA from "./GuestCTA";
-import CheckCardList from "./CheckCardList";
+import SeriesSyllabus from "@/components/Learn/SeriesSyllabus";
+import { getLessonsForSeries } from "@/lib/learn";
+
+/* The syllabus timeline is a client component: `useSearchParams` needs a
+ * router context and `MarkComplete` pulls in the Supabase browser client. */
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/atlas/omni-studio-cert",
+  useRouter: () => ({ replace: vi.fn() }),
+}));
+vi.mock("@/components/Progress/MarkComplete", () => ({ default: () => null }));
 
 /* ── the 12 series, straight from the generated content dataset ────────── */
 
@@ -168,18 +178,28 @@ describe("series page — ExamCard names the exam for every series", () => {
   }
 });
 
-describe("series page — CheckCardList names the exam the checks unlock, for every series", () => {
+describe("series page — the syllabus unlock note names the exam the checks unlock, for every series", () => {
   for (const fixture of SERIES) {
     it(`${fixture.slug} (${fixture.kind})`, () => {
       const text = renderText(
-        <CheckCardList
+        <SeriesSyllabus
           series={fixture.slug}
-          checksMeta={getKnowledgeChecks(fixture.slug)}
+          lessons={getLessonsForSeries(fixture.slug)}
+          checks={getKnowledgeChecks(fixture.slug)}
           kind={fixture.kind}
+          totalLessons={getLessonsForSeries(fixture.slug).length}
+          published={getLessonsForSeries(fixture.slug).length}
+          upcoming={0}
         />,
       );
-      expect(text).toContain(`the ${EXAM_LABELS[fixture.kind].phrase}`);
-      expectKindCorrect(text, fixture.kind, [EXAM_LABELS[fixture.kind].phrase], "CheckCardList", fixture.slug);
+      expect(text.toLowerCase()).toContain(`the timed ${EXAM_LABELS[fixture.kind].phrase}`);
+      expectKindCorrect(
+        text,
+        fixture.kind,
+        [EXAM_LABELS[fixture.kind].phrase],
+        "SeriesSyllabus unlock note",
+        fixture.slug,
+      );
     });
   }
 });

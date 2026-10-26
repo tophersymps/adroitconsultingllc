@@ -6,6 +6,12 @@ interface LessonCardProps {
   totalLessons: number;
   /** Marks the newest lesson in the series (first row). */
   isNewest?: boolean;
+  /**
+   * Drops the row's bottom hairline. Used when a knowledge-check milestone
+   * node follows, because that node paints its own (heavier) top rule — the
+   * boundary must read as one line, not two.
+   */
+  flushBottom?: boolean;
 }
 
 /** Syllabus row (mockup: learn-series.html) — mono sequence badge + meta. */
@@ -13,11 +19,14 @@ export default function LessonCard({
   lesson,
   totalLessons,
   isNewest = false,
+  flushBottom = false,
 }: LessonCardProps) {
   return (
     <Link
       href={`/atlas/${lesson.series}/${lesson.slug}`}
-      className="group flex items-center gap-[18px] px-3 py-[18px] border-b border-gray-200 dark:border-[var(--border-default)] rounded-lg transition-[background-color,transform] duration-150 no-underline hover:bg-gray-50 dark:hover:bg-[var(--surface-card-soft)] hover:translate-x-1"
+      className={`group flex items-center gap-[18px] px-3 py-[18px] border-b ${
+        flushBottom ? "border-b-0" : "border-gray-200 dark:border-[var(--border-default)]"
+      } rounded-lg transition-[background-color,transform] duration-150 no-underline hover:bg-gray-50 dark:hover:bg-[var(--surface-card-soft)] hover:translate-x-1`}
     >
       {/* Sequence badge */}
       <div
