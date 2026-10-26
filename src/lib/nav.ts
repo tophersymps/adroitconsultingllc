@@ -56,9 +56,13 @@ export const NAV: SiteNavModel = {
       { label: "Contact", href: "/contact" },
       { label: "Privacy Policy", href: "/privacy" },
     ],
+    /**
+     * Only profiles the company actually operates belong here. Adroit has no
+     * X/Twitter account, so the footer carries LinkedIn alone; listing a handle
+     * we do not own sends visitors to an unrelated business.
+     */
     social: [
-      { title: "LinkedIn", href: "https://www.linkedin.com/company/adroitconsulting" },
-      { title: "X / Twitter", href: "https://twitter.com/adroitconsult" },
+      { title: "LinkedIn", href: "https://www.linkedin.com/company/adroit-io/" },
     ],
   },
   contactEmail: "contact@adroit.io",

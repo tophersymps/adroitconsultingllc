@@ -14,9 +14,6 @@ export const siteConfig = {
   learnPath: "/atlas",
   logo: "/adroit-logo-fullcolor-256.png",
   defaultOgImage: "/adroit-og-image-1200x630.png",
-  social: {
-    twitter: "@adroitconsult",
-  },
 } as const;
 
 export interface PageSEO {
