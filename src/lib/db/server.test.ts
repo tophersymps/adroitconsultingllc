@@ -154,10 +154,10 @@ describe("Neon session JWT bridge to the Data API client", () => {
     // but with no JWT the gateway is an implicit, unpinnable role. We pin it.
     expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${ANON_JWT}`);
 
-    // The session endpoint is tried first and carries no cookie.
-    const sessionCall = captured.find((c) => c.url === `${AUTH_BASE}/token`);
-    expect(sessionCall).toBeDefined();
-    expect(sessionCall?.headers.get("Cookie")).toBeNull();
+    // FAIL-CLOSED SEAM (contract §9): a cookieless request never touches
+    // `/token` at all — the credential predicate answers from `next/headers`,
+    // so guest traffic no longer spends the shared mint bucket.
+    expect(captured.some((c) => c.url === `${AUTH_BASE}/token`)).toBe(false);
   });
 
   it("sends the caller's session JWT, and forwards the httpOnly cookie, when signed in", async () => {
@@ -199,19 +199,29 @@ describe("Neon session JWT bridge to the Data API client", () => {
     );
   });
 
-  it("falls back to the anonymous role when the session token endpoint refuses", async () => {
-    // Expired / revoked session: Neon Auth answers 401. The read must still be
-    // pinned to a role (guest surfaces keep working) instead of going out bare.
+  it("degrades instead of reading as the anonymous role when the session mint refuses", async () => {
+    // Expired / revoked session: Neon Auth answers 401. The read must NOT fall
+    // through to the anonymous role — that is the wrong-role read this seam
+    // used to serve (CWE-636/CWE-863). It degrades, classified, and issues no
+    // Data API request at all.
     cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
     stubFetch({ sessionToken: null, anonymousToken: ANON_JWT });
 
-    await readRole("44444444-4444-4444-4444-444444444444");
+    const client = await getSupabaseServerClient();
+    const { data, error } = (await client.from("user_roles").select("role")) as {
+      data: unknown;
+      error: unknown;
+    };
 
-    const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
-    expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${ANON_JWT}`);
+    expect(data).toBeNull();
+    expect(isDbTokenUnavailable(error)).toBe(true);
+    expect(captured.filter((c) => c.url.startsWith(DATA_BASE))).toHaveLength(0);
+    expect(
+      captured.some((c) => c.url === `${AUTH_BASE}/token/anonymous`),
+    ).toBe(false);
   });
 
-  it("treats a malformed token reply as no token (never a bare request)", async () => {
+  it("treats a malformed session token reply as a failed mint (never a bare request)", async () => {
     cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestUrl(input);
@@ -222,10 +232,17 @@ describe("Neon session JWT bridge to the Data API client", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    await readRole("55555555-5555-5555-5555-555555555555");
+    const client = await getSupabaseServerClient();
+    const { error } = (await client.from("user_roles").select("role")) as {
+      error: unknown;
+    };
 
-    const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
-    expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${ANON_JWT}`);
+    expect(isDbTokenUnavailable(error)).toBe(true);
+    expect(captured.filter((c) => c.url.startsWith(DATA_BASE))).toHaveLength(0);
+    // The anonymous role is not a fallback for a malformed session mint.
+    expect(
+      captured.some((c) => c.url === `${AUTH_BASE}/token/anonymous`),
+    ).toBe(false);
   });
 
   it("fails closed when the Data API env is missing", async () => {
@@ -357,8 +374,10 @@ describe("R2-5: anonymous token unavailable ⇒ classified degrade, never a 500"
 
   it("AC-3/AC-15: one classified warn per failed mint, with no token or cookie material", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
-    stubAnonFailure(() => throttled(60), { sessionToken: null });
+    // Guest: only the anonymous mint runs (a credential-bearing request never
+    // reaches /token/anonymous at all since the fail-closed seam change).
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubAnonFailure(() => throttled(60));
 
     await readRole("66666666-6666-6666-6666-666666666666");
     await readRole("66666666-6666-6666-6666-666666666666");
@@ -426,8 +445,12 @@ describe("R2-5: anonymous token unavailable ⇒ classified degrade, never a 500"
 
   it("AC-12: two different session cookies produce two /token calls with their own Cookie header", async () => {
     const other = { name: "__Secure-neon-auth.session_token", value: "other-session-value" };
+    // Two `cookies()` reads per request now: the credential predicate, then the
+    // forwarded Cookie header. One entry per read keeps them per-request.
     cookiesMock
       .mockResolvedValueOnce(cookieStore([SESSION_COOKIE]))
+      .mockResolvedValueOnce(cookieStore([SESSION_COOKIE]))
+      .mockResolvedValueOnce(cookieStore([other]))
       .mockResolvedValueOnce(cookieStore([other]));
     let n = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -542,20 +565,13 @@ describe("SEC-R2-5-M1: the anonymous token's scope is proven, not assumed", () =
     expect(anonTokenStats.mints).toBe(0);
   });
 
-  it("never forwards the caller's session cookie to /token/anonymous", async () => {
+  it("never forwards a session cookie to /token/anonymous", async () => {
     const shared = anonJwt(1);
-    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
-    stubAnonFailure(() => jsonResponse({ token: shared }), {
-      sessionToken: null,
-    });
+    // Guest request: the shared, identity-free mint is the only one that runs.
+    cookiesMock.mockResolvedValue(cookieStore([]));
+    stubAnonFailure(() => jsonResponse({ token: shared }));
 
     await readRole("cccccccc-cccc-cccc-cccc-cccccccccccc");
-
-    // The session mint still needs the cookie (it *is* the caller identity).
-    const sessionCall = captured.find((c) => c.url === `${AUTH_BASE}/token`);
-    expect(sessionCall?.headers.get("Cookie")).toContain(
-      `${SESSION_COOKIE.name}=${SESSION_COOKIE.value}`,
-    );
 
     // The shared, identity-free mint must carry no identity at all.
     const anonCall = captured.find(
@@ -568,5 +584,23 @@ describe("SEC-R2-5-M1: the anonymous token's scope is proven, not assumed", () =
     const dataRequest = captured.find((c) => c.url.startsWith(DATA_BASE));
     expect(dataRequest?.headers.get("Authorization")).toBe(`Bearer ${shared}`);
     expect(anonTokenStats.mints).toBe(1);
+  });
+
+  it("a credential-bearing request never reaches /token/anonymous (fail-closed seam)", async () => {
+    // S1 of the fail-closed contract: the anonymous mint is not a fallback for
+    // a failed session mint, so it is never even attempted.
+    cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
+    stubAnonFailure(() => throttled(60));
+
+    const client = await getSupabaseServerClient();
+    const { error } = (await client.from("user_roles").select("role")) as {
+      error: unknown;
+    };
+
+    expect(isDbTokenUnavailable(error)).toBe(true);
+    expect(
+      captured.some((c) => c.url === `${AUTH_BASE}/token/anonymous`),
+    ).toBe(false);
+    expect(anonTokenStats.mints).toBe(0);
   });
 });

@@ -96,6 +96,17 @@ function withSessionCookie() {
   });
 }
 
+/** A cookieless guest: the credential predicate decides from `next/headers`. */
+function withoutSessionCookie() {
+  cookiesMock.mockResolvedValue({
+    getAll: () => [],
+    get: () => undefined,
+    has: () => false,
+    set: () => undefined,
+    delete: () => undefined,
+  });
+}
+
 function get() {
   return GET(
     new NextRequest(
@@ -180,7 +191,10 @@ describe("POST /api/progress/quiz/run under /token/anonymous 429 (R2-5)", () => 
   });
 
   it("logs the degradation once, with no token or cookie material", async () => {
-    withSessionCookie();
+    // Guest: only the shared anonymous mint runs. (Since the fail-closed seam
+    // change a credential-bearing request never reaches /token/anonymous, so
+    // its degradation is logged by the /api/db/token route instead.)
+    withoutSessionCookie();
     stubThrottledAuth();
 
     await post();
