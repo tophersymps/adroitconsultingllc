@@ -8,7 +8,11 @@ The **Adroit Consulting site** is a [Next.js](https://nextjs.org) (App Router) a
 
 ## What's New
 
-Release history for the site lives on the wiki: [Changelog](https://github.com/tophersymps/adroitconsultingllc/wiki/Changelog). The most recent release is **v1.1.0** (2026-10-25), Neon-Migration-R2-Hardening, which aggregates 23 builds.
+Release history for the site lives on the wiki: [Changelog](https://github.com/tophersymps/adroitconsultingllc/wiki/Changelog). The most recent release is **v1.2.0** (2026-10-26), Learn-UX-Exam-Naming, which aggregates 19 builds.
+
+### v1.2.0 - Learn-UX-Exam-Naming (2026-10-26)
+
+Learn lessons now end with their **Sources** instead of burying citations in the body, and knowledge checks appear in the course timeline as milestone nodes between the lessons they cover - so a learner can see a check exists before reaching it. Exam wording is now kind-aware: the eight Adroit-authored courses say **Course Completion Exam** and the four Salesforce certification courses say **Certification Prep Exam**, everywhere the exam is named (card, locked panel, exam page title, certificate, chronicle). The mark-complete control on a lesson moved into the floating audio bar, and a series page now issues one tier-progress request instead of three. This release changes how a course presents itself; it changes nothing about what unlocks content, and a check node never blocks the next lesson.
 
 ### v1.1.0 - Neon-Migration-R2-Hardening (2026-10-25)
 
