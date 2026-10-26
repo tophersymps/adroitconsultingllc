@@ -293,17 +293,26 @@ Follow-along/control collision, and zero bar-height or audio-width shift across 
   classes: the layout spans a container breakpoint and a media breakpoint, and mixing the two in
   utilities produces the `flex-wrap` accident this card exists to remove.
 
-**Props**
+**Props** (as implemented in A8, t_1975dec0)
 
 ```ts
 interface AudioPlayerProps {
   slug: string;
   hasAudio?: boolean;
   label?: string;
-  /** Present only on the lesson page. Enables the completion control. */
-  lessonSlug?: string;
+  /**
+   * Optional control at the end of the header row, inside the fixed slot.
+   * The lesson page passes <MarkCompleteCompact lessonSlug label />;
+   * article pages pass nothing and render no slot.
+   */
+  trailing?: ReactNode;
 }
 ```
+
+The control itself lives in `src/components/Progress/MarkCompleteCompact.tsx` (same
+`useLessonProgress` hook, same write path). The player carries the `.has-trailing` modifier that
+scopes the two-row and compact rules below.
+
 
 **Wiring** (there is exactly one write path)
 

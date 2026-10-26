@@ -20,6 +20,7 @@ import {
 import { linkifySourceCitations } from "@/lib/mdx";
 import { buildMetadata, siteConfig } from "@/lib/seo";
 import MarkComplete from "@/components/Progress/MarkComplete";
+import MarkCompleteCompact from "@/components/Progress/MarkCompleteCompact";
 import LessonCompleteProgress from "@/components/Progress/LessonCompleteProgress";
 import LessonQuiz from "@/components/Progress/LessonQuiz";
 import GuestCTA from "@/components/Progress/GuestCTA";
@@ -317,7 +318,12 @@ export default async function LessonPage({ params }: Props) {
             across the catalogue, so the player fetches /api/audio/<slug>. */}
         {audio && (
           <div className="sticky top-16 z-40 max-w-[920px] mx-auto px-6 my-6">
-            <AudioPlayerLazy slug={slug} hasAudio label="lesson" lessonSlug={slug} />
+            <AudioPlayerLazy
+              slug={slug}
+              hasAudio
+              label="lesson"
+              trailing={<MarkCompleteCompact lessonSlug={slug} label={`lesson ${slug}`} />}
+            />
           </div>
         )}
 
