@@ -50,6 +50,7 @@ type LegacyNode = {
   tagName?: string;
   properties?: Record<string, unknown>;
   children?: LegacyNode[];
+  value?: string;
 };
 
 function legacyRenameFootnoteHeading() {
