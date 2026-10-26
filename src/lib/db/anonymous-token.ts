@@ -36,8 +36,17 @@ export type AnonTokenResult =
   | {
       ok: false;
       status?: number;
-      errorClass?: "http" | "network" | "malformed";
+      /**
+       * `config` is produced by the /api/db/token route's classified session
+       * mint (missing `NEON_AUTH_BASE_URL`), never by this module — the
+       * anonymous path still throws there so a misconfigured runtime cannot
+       * degrade into a silent guest read. It is part of the shared result type
+       * so both mints speak one vocabulary.
+       */
+      errorClass?: "http" | "network" | "malformed" | "config";
       retryAfterSeconds?: number;
+      /** Set when the failure was a local cooldown short-circuit. */
+      cooldownRemainingMs?: number;
     };
 
 /** The last failure, kept so a suppressed caller can report a classified state. */
