@@ -8,7 +8,7 @@
  *
  * Sweep scope (the surfaces a learner can see the exam named on):
  *   - src/components/Progress/**   (ExamCard, ExamLocked, ExamWidget, GuestCTA,
- *                                   Certificate, CheckCardList)
+ *                                   Certificate, CheckTimelineNode / SeriesSyllabus)
  *   - src/app/atlas/**             (series / exam / certificate / check pages)
  *   - src/lib/sky.ts, sky-server.ts (chronicle labels)
  *
@@ -94,7 +94,7 @@ describe("no hardcoded exam label outside src/lib/exam-labels.ts", () => {
         "src/components/Progress/ExamWidget.tsx",
         "src/components/Progress/GuestCTA.tsx",
         "src/components/Progress/Certificate.tsx",
-        "src/components/Progress/CheckCardList.tsx",
+        "src/components/Progress/CheckTimelineNode.tsx",
         "src/app/atlas/[series]/page.tsx",
         "src/app/atlas/[series]/exam/page.tsx",
         "src/lib/sky.ts",

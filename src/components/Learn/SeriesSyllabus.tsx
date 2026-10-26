@@ -1,10 +1,23 @@
 /**
- * SeriesSyllabus — client wrapper for the series syllabus list (ADR-105).
+ * SeriesSyllabus — client wrapper for the series syllabus timeline (ADR-105, A5).
  *
- * Owns the lesson-number sort (via LessonSortToggle + ?sort=asc|desc) and the
- * "Hide completed" filter. Receives the server-rendered lesson list as props
- * (server sorts defensively by lesson number asc; the client re-sorts in the
- * requested direction without a server round-trip).
+ * The syllabus is one timeline: every published lesson AND every knowledge
+ * check, interleaved by `buildTimeline` (A3) so a check sits between the last
+ * lesson of its range and the next lesson. A check is a milestone, not a door —
+ * it is always present, there is no locked state, and the following lesson
+ * always renders.
+ *
+ * Responsibilities:
+ *  - lesson-number sort via LessonSortToggle + `?sort=asc|desc`. Descending
+ *    reverses the TIMELINE, so each check keeps its position relative to the
+ *    lesson boundary it belongs to (after L6, before L5).
+ *  - "Hide completed" filter via the D-5 rule (`hiddenByFilter`): lessons whose
+ *    slug the learner completed are hidden; a check node is hidden only when it
+ *    is passed AND every lesson in its range is hidden.
+ *  - per-check pass state from the shared tier rollup (`useTierProgress`).
+ *    ONLY the `Passed` badge waits for that response: node presence and the
+ *    `Available` state are a pure function of lessons + checks, so a learner
+ *    with zero completed lessons sees check 1 on first paint.
  *
  * Hide-completed is hydration-gated (QA F-1 pattern): the filter state is
  * client-only and merges localStorage + Supabase completion via
@@ -16,14 +29,25 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import LessonCard from "@/components/Learn/LessonCard";
 import MarkComplete from "@/components/Progress/MarkComplete";
+import CheckTimelineNode from "@/components/Progress/CheckTimelineNode";
 import LessonSortToggle from "@/components/Learn/LessonSortToggle";
 import { useProgressSummary } from "@/lib/hooks/useProgressSummary";
-import { sortLessonsByLessonNumber } from "@/lib/lesson-sort";
-import type { LearnLesson } from "@/data/types";
+import { useTierProgress } from "@/lib/hooks/useTierProgress";
+import { buildTimeline, hiddenByFilter } from "@/lib/lesson-checks";
+import { examLabels } from "@/lib/exam-labels";
+import { CERT_CHECK_PASS_PCT } from "@/lib/exam-config";
+import type { LearnLesson, ExamKind } from "@/data/types";
+import type { KnowledgeCheckMeta } from "@/shared/contracts";
 
 interface SeriesSyllabusProps {
+  /** Series slug — the check pages live at `/atlas/<series>/check/<n>`. */
+  series: string;
   /** Server-rendered lessons (already lesson-number sorted). */
   lessons: LearnLesson[];
+  /** Milestone checks for this series (`getKnowledgeChecks`); `[]` = none. */
+  checks: KnowledgeCheckMeta[];
+  /** The series' exam kind — drives the single explanatory line's wording. */
+  kind: ExamKind;
   totalLessons: number;
   /** Published count (server-side). */
   published: number;
@@ -35,8 +59,14 @@ interface SeriesSyllabusProps {
   upcoming: number;
 }
 
+/** Id of the one explanatory line each syllabus renders (aria-describedby). */
+const UNLOCK_NOTE_ID = "syllabus-unlock-note";
+
 export default function SeriesSyllabus({
+  series,
   lessons,
+  checks,
+  kind,
   totalLessons,
   published,
   upcoming,
@@ -47,15 +77,55 @@ export default function SeriesSyllabus({
     lessons.map((l) => l.slug),
   );
 
+  // Shared tier rollup (A4): one GET /api/progress/quiz/tiers per series page.
+  // `null` until it lands (and for guests) — that only affects the badge.
+  const { tiers } = useTierProgress(series);
+
   // Read the ?sort=asc|desc URL param written by LessonSortToggle (ADR-105).
   const searchParams = useSearchParams();
   const sortOrder = searchParams.get("sort") === "desc" ? "desc" : "asc";
 
+  /*
+   * The timeline is a pure function of lessons + checks. Reversing the whole
+   * node list (not just the lessons) keeps each check on its own lesson
+   * boundary in `?sort=desc`: [L7, L6, K1, L5, …].
+   */
+  const timeline = useMemo(() => {
+    const nodes = buildTimeline(lessons, checks);
+    return sortOrder === "desc" ? [...nodes].reverse() : nodes;
+  }, [lessons, checks, sortOrder]);
+
+  /** Completed lessons as lesson NUMBERS — the unit a check's range uses. */
+  const hiddenLessonNumbers = useMemo(() => {
+    const numbers = new Set<number>();
+    for (const lesson of lessons) {
+      const n = lesson.lesson;
+      if (Number.isInteger(n) && (n as number) >= 1 && merge.lessons.has(lesson.slug)) {
+        numbers.add(n as number);
+      }
+    }
+    return numbers;
+  }, [lessons, merge.lessons]);
+
+  const passedCheckNumbers = useMemo(
+    () => new Set<number>((tiers?.checks ?? []).filter((c) => c.passed).map((c) => c.n)),
+    [tiers],
+  );
+
+  const bestScores = useMemo(
+    () => new Map<number, number>((tiers?.checks ?? []).map((c) => [c.n, c.bestScore])),
+    [tiers],
+  );
+
   const displayed = useMemo(() => {
-    const sorted = sortLessonsByLessonNumber(lessons, sortOrder);
-    if (!hideCompleted) return sorted;
-    return sorted.filter((l) => !merge.lessons.has(l.slug));
-  }, [lessons, hideCompleted, merge.lessons, sortOrder]);
+    if (!hideCompleted) return timeline;
+    return timeline.filter(
+      (node) => !hiddenByFilter(node, hiddenLessonNumbers, passedCheckNumbers),
+    );
+  }, [timeline, hideCompleted, hiddenLessonNumbers, passedCheckNumbers]);
+
+  const unlockNote =
+    checks.length > 0 ? examLabels(kind).unlockNote(CERT_CHECK_PASS_PCT) : null;
 
   return (
     <>
@@ -102,20 +172,41 @@ export default function SeriesSyllabus({
         </div>
       </div>
 
-      <div className="border-t border-gray-200 dark:border-[var(--border-default)] mt-3">
+      <div className="border-t border-gray-200 dark:border-[var(--border-default)] mt-3 syllabus-timeline">
         {displayed.length > 0 ? (
-          displayed.map((lesson) => (
-            <div key={lesson.slug} className="relative">
-              <LessonCard lesson={lesson} totalLessons={totalLessons} />
-              {/* Per-lesson completion tracking */}
-              <div className="flex items-center justify-between px-3 py-2">
-                <span className="font-mono text-[10px] font-bold text-gray-500 dark:text-[var(--ink-muted)] uppercase tracking-[0.07em]">
-                  Mark complete
-                </span>
-                <MarkComplete lessonSlug={lesson.slug} label={`lesson ${lesson.slug}`} />
+          displayed.map((node, i) => {
+            if (node.kind === "check") {
+              return (
+                <CheckTimelineNode
+                  key={`check-${node.check.n}`}
+                  series={series}
+                  check={node.check}
+                  state={passedCheckNumbers.has(node.check.n) ? "passed" : "available"}
+                  bestScore={bestScores.get(node.check.n)}
+                  noteId={unlockNote ? UNLOCK_NOTE_ID : undefined}
+                />
+              );
+            }
+            const lesson = node.lesson;
+            return (
+              <div key={`lesson-${lesson.slug}`} className="relative">
+                <LessonCard
+                  lesson={lesson}
+                  totalLessons={totalLessons}
+                  /* The node below paints a 2px rule; drop the duplicate
+                     lesson hairline so the boundary is one line, not two. */
+                  flushBottom={displayed[i + 1]?.kind === "check"}
+                />
+                {/* Per-lesson completion tracking */}
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="font-mono text-[10px] font-bold text-gray-500 dark:text-[var(--ink-muted)] uppercase tracking-[0.07em]">
+                    Mark complete
+                  </span>
+                  <MarkComplete lessonSlug={lesson.slug} label={`lesson ${lesson.slug}`} />
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <p className="text-[13px] text-gray-500 dark:text-[var(--ink-muted)] py-6 text-center font-mono">
             {hideCompleted ? "All lessons completed — nice work." : "No lessons yet."}
@@ -158,6 +249,14 @@ export default function SeriesSyllabus({
               </div>
             ))}
           </div>
+        ) : null}
+
+        {/* The explanatory line lives once per syllabus, not per node; every
+            check node points at it with aria-describedby. */}
+        {unlockNote ? (
+          <p id={UNLOCK_NOTE_ID} className="syllabus-note">
+            {unlockNote}
+          </p>
         ) : null}
       </div>
     </>

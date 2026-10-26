@@ -18,7 +18,6 @@ import { buildMetadata, siteConfig } from "@/lib/seo";
 import SeriesProgress from "@/components/Progress/SeriesProgress";
 import QuizStats from "@/components/Progress/QuizStats";
 import CertReadiness from "@/components/Progress/CertReadiness";
-import CheckCardList from "@/components/Progress/CheckCardList";
 import ExamCard from "@/components/Progress/ExamCard";
 import { getCertExam, getKnowledgeChecks } from "@/lib/quiz";
 import { CERT_EXAM_MINUTES, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
@@ -389,7 +388,10 @@ export default async function SeriesPage({ params }: Props) {
             <div className="grid gap-10 grid-cols-[minmax(0,1fr)]">
               <Suspense fallback={null}>
                 <SeriesSyllabus
+                  series={series}
                   lessons={baseLessons}
+                  checks={checksMeta}
+                  kind={s.examKind}
                   totalLessons={total}
                   published={published}
                   upcoming={upcoming}
@@ -401,19 +403,18 @@ export default async function SeriesPage({ params }: Props) {
           )}
         </div>
 
-        {/* Tier sections — checks + exam card (only for tiered courses) */}
+        {/* Exam card — the checks themselves now live in the syllabus
+            timeline as milestone nodes (A5); this is the only tier section
+            left below the list. */}
         {hasTiers && (
-          <>
-            <CheckCardList series={series} checksMeta={checksMeta} kind={s.examKind} />
-            <ExamCard
-              series={series}
-              totalChecks={checksMeta.length}
-              kind={s.examKind}
-              questionCount={examQuestionCount}
-              passPct={CERT_EXAM_PASS_PCT}
-              minutes={CERT_EXAM_MINUTES}
-            />
-          </>
+          <ExamCard
+            series={series}
+            totalChecks={checksMeta.length}
+            kind={s.examKind}
+            questionCount={examQuestionCount}
+            passPct={CERT_EXAM_PASS_PCT}
+            minutes={CERT_EXAM_MINUTES}
+          />
         )}
 
         <script
