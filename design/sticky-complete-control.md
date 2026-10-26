@@ -219,8 +219,9 @@ to suppress, so the behaviour is identical for every reader.
 The only motion in the bar is:
 
 - 120 ms border/background transitions on hover and press, which the global rule in
-  `design/tokens.css` (`transition-duration: .01ms !important`) already neutralises under
-  `prefers-reduced-motion: reduce`;
+  `src/app/globals.css` (`transition-duration: .01ms !important` at the `prefers-reduced-motion: reduce`
+  blocks, lines 683 and 1247) already neutralises — and which the sheet also pins with an explicit
+  `transition: none !important` on the control, so the guarantee does not depend on load order;
 - the optional three-bar audio mark, guarded by `@media (prefers-reduced-motion: no-preference)`, so
   it never animates for reduced-motion readers.
 
