@@ -23,7 +23,10 @@ import MarkComplete from "@/components/Progress/MarkComplete";
 import LessonCompleteProgress from "@/components/Progress/LessonCompleteProgress";
 import LessonQuiz from "@/components/Progress/LessonQuiz";
 import GuestCTA from "@/components/Progress/GuestCTA";
-import { getQuizForLesson } from "@/lib/quiz";
+import { getQuizForLesson, getKnowledgeChecks } from "@/lib/quiz";
+import { checkEndingAt, nextLessonAfter } from "@/lib/lesson-checks";
+import { loadCheckScore } from "@/lib/check-scores";
+import MilestonePanel from "@/components/Learn/MilestonePanel";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
@@ -160,6 +163,28 @@ export default async function LessonPage({ params }: Props) {
       </div>
     );
   }
+
+  // Milestone routing (A6, architecture.md §3.2 "Routing into the check").
+  //
+  // When this lesson ends a knowledge check's range, Next and the milestone
+  // panel point INTO the check until it is passed. The verdict is the
+  // authoritative server-graded `quiz_attempt` read the exam gate uses
+  // (`lib/check-scores.ts`): one query here, shared by the panel and the
+  // navigation, so the two can never disagree (US-008 — no second fetch).
+  //
+  // Guests: no query and no pass state. They get `passed: false`, which only
+  // decides a destination — there is no gate, no `blocked`/`mode` prop and no
+  // locked branch anywhere here. This lesson always renders, and so does the
+  // next one, whether or not the check is passed (architecture.md §4).
+  const checks = getKnowledgeChecks(series);
+  const milestone = checkEndingAt(checks, lesson.lesson);
+  const milestoneNextLesson = milestone
+    ? nextLessonAfter(lessons, lesson.lesson)
+    : undefined;
+  const milestonePassed =
+    milestone && isAuthed
+      ? (await loadCheckScore(supabase, user!.id, series, milestone.n)).passed
+      : false;
 
   // Constellation + Chronicle (B-18): the series' planned star field for the
   // lesson-complete celebration. Authed users only — guests get no persistent
@@ -308,10 +333,36 @@ export default async function LessonPage({ params }: Props) {
               backHref={`/atlas/${series}/${slug}`}
             />
           ) : null}
+
+          {/* Milestone panel — only on a lesson that ENDS a check's range.
+              Between the practice questions and the sources (the sources block
+              lands here with A2). Server-rendered on first paint, additive: it
+              never replaces the lesson body and never gates the next lesson. */}
+          {milestone ? (
+            <MilestonePanel
+              series={series}
+              check={milestone}
+              nextLesson={milestoneNextLesson}
+              passed={milestonePassed}
+            />
+          ) : null}
         </article>
 
-        {/* Prev/Next within series (authored sequence) */}
-        <LessonNavigation lessons={lessons} currentSlug={slug} />
+        {/* Prev/Next within series (authored sequence). On a range-end lesson
+            the "next" slot routes into the check until it is passed. */}
+        <LessonNavigation
+          lessons={lessons}
+          currentSlug={slug}
+          nextOverride={
+            milestone && !milestonePassed
+              ? {
+                  href: `/atlas/${series}/check/${milestone.n}`,
+                  label: `Knowledge Check ${milestone.n}`,
+                  sublabel: `Lessons ${milestone.lessons[0]}–${milestone.lessons[1]}`,
+                }
+              : undefined
+          }
+        />
 
         {/* Constellation + Chronicle (B-18): star-ignition celebration on
             lesson completion. Authed only (guests have no persistent
