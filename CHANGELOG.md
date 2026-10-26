@@ -2,6 +2,753 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Deleting a user now deletes the user's data (delete-sync-neon)
+
+**What** - `supabase/migrations/neon/006_delete_sync.sql` adds `public.sync_auth_user_delete()` and an
+`AFTER DELETE` trigger on `neon_auth."user"` that deletes the same id from `public."user"`. The nine data
+tables then CASCADE, and `admin_audit_log.actor_user_id` / `user_entitlements.granted_by` SET NULL, so the
+audit trail survives de-identified.
+
+**Why** - `002_provision_public_user.sql` installed 12 triggers on INSERT and UPDATE only. Nothing fired on
+DELETE, so deleting a Managed Better Auth identity left the `public."user"` mirror row behind and the CASCADE
+rules never ran. Nine such orphan rows existed on production, all created 2026-10-23, all test fixtures
+(`qa-*`, `qaz*`, `ste*`, `alp*`), owning one `user_profiles` row between them and no progress data.
+
+**Verified** - proved first inside `BEGIN ... ROLLBACK` on production, then applied for real. Live probe:
+created a user with a lesson completion and read progress, deleted only the auth identity, and `public.user`,
+`lesson_completion` and `read_progress` all went 1 to 0 without any statement touching `public.*`. Global
+invariants after: 0 orphan mirrors, 0 unmirrored identities. The nine fixtures were exported to
+`~/.hermes/backups/orphan-public-user-rows-20261024.csv` before deletion.
+
+**Known Issues** - None. The prior nine orphans are removed, so a staff member who owned one of those
+fixtures would need re-provisioning, but none held progress, entitlements or roles.
+
+### QA test-user helper moved to Neon Managed Better Auth (qa-test-user-neon)
+
+**What** - `scripts/qa-create-test-user.cjs` no longer calls the Supabase GoTrue admin API. It now signs
+the identity up through `POST {NEON_AUTH_BASE_URL}/sign-up/email` with a trusted `Origin` header, marks
+`emailVerified` over `DATABASE_URL`, asserts the eager trigger mirrored the row into `public."user"`,
+proves the credentials by calling `/sign-in/email`, and only then prints them. `--delete` removes the
+session, account, `public."user"` and `neon_auth."user"` rows.
+
+**Why** - after the 2026-10-23 cutover the script's only code path was the GoTrue admin REST API on the
+retired Supabase project, so QA could not create a test user at all. The failure was silent in the sense
+that it looked like a product signup problem rather than a stale helper.
+
+**Verified** - `node scripts/qa-create-test-user.cjs neon-smoke` returned
+`{"created":true,"verified":true,"public_user_rows":1,"sign_in":"ok"}`; a second run reused the identity
+(`created:false`, `emails_sent:0`); `POST https://adroit.io/api/auth/login` with those credentials
+returned HTTP 200 and set `__Secure-neon-auth.session_token`; `--delete` removed 1 auth user, 1 account,
+3 sessions and 1 `public."user"` row, and follow-up counts were 0 in all three tables.
+
+**Known Issues** - Creation still sends one verification email, because the password hash is produced by
+the auth service and cannot be fabricated over SQL. The send goes to a real plus-addressed inbox
+(`kelex1812+qa-<label>@gmail.com`) so it cannot bounce. `requireEmailVerification` is now `true` in
+`neon_auth.project_config`, which is why the script sets the verified flag itself.
+
+### PRs now explicitly request the owner as reviewer (process)
+
+**What** - New `.github/workflows/pr-review-assign.yml` requests a review from `@tophersymps` on every
+`opened` / `ready_for_review` / `reopened` pull request, skipping only PRs the owner authored themselves. It
+never fails the run: a duplicate request or an unavailable reviewer logs and exits 0.
+
+**Why** - `.github/CODEOWNERS` is on `main` and `codeowners/errors` returns `[]`, yet PRs #403 and #404 were
+opened 1.5 hours AFTER it landed with no reviewer requested at all. An implicit review request that silently
+does not fire is how work sits green-but-unreviewed while the board reports it done, which is the exact
+failure that stranded three tickets on 2026-10-23. The explicit workflow makes the request deterministic and
+visible in the PR checks.
+
+**Verified** - Workflow YAML lints clean. The request action itself is exercised on this PR (see the
+"Request owner review" check). Also confirmed `gh pr edit --add-reviewer tophersymps` works for the
+backfill case, which was used to add the reviewer to #403 and #404.
+
+**Known Issues** - This is a fallback for an unexplained GitHub behaviour, not a root-cause fix. Turning on
+the ruleset's "Require review from Code Owners" (owner-only) would additionally make the approval a hard merge
+blocker rather than only a request.
+
+### One `/api/progress/quiz/tiers` request per series page (t_09755fdf)
+
+**What** - New `src/lib/hooks/useTierProgress.ts` owns the tier rollup read with a module level
+cache keyed by series (in flight promise plus resolved value, `null` cached for guest/degraded
+responses). `CertReadiness`, `ExamCard` and `CheckCardList` now read through the hook instead of
+each carrying a copy of the same `fetch('/api/progress/quiz/tiers')` effect. The cache is dropped
+on `AUTH_CHANGED_EVENT` so a rollup fetched by one identity is never served to another, and it is
+hydration safe: state starts `null` on the server and on the client's first render, so the hero
+strip still renders nothing until the read lands.
+
+**Why** - A series page issued the same GET three times, once per consumer. Measured on a dev
+server against `/atlas/omni-studio-cert`: 6 requests before the change (three components, each
+effect run twice by React strict mode in dev) and 1 after.
+
+**Verified** - `npx vitest run` 171 files / 1592 tests pass (includes the new
+`src/lib/hooks/useTierProgress.test.tsx`: three concurrent consumers share one fetch, cached reuse
+on a later mount, `null` on error/non OK, per series isolation, refresh, identity change, and the
+new `src/components/Progress/CertReadiness.test.tsx`: nothing on `null` or empty progress, real
+stats and the 47% weighted readiness on data, `onGradient` treatment). `npx tsc --noEmit` clean,
+`npx eslint` clean on every touched file. Browser check on the running dev server: 1 tier request
+at 1280, 390 and 360 widths, page `innerText` byte identical to the pre change render, no
+horizontal overflow. `grep -r "learn-gate|LESSON_GATE_MODE|resolveLessonGate" src/` returns
+nothing.
+
+**Known Issues** - `CheckCardList` still exists and is still rendered (card A5 deletes it in favour
+of `SeriesSyllabus`); it is already converted, so A5 only has to move the caller. No lesson gating
+was added anywhere, per architecture.md section 4.
+
+### SEC-HIGH: every zod copy resolves to 4.6.7 via an npm override, clearing GHSA-mrhx-c7xc-m3w5 (t_0ea674f5)
+
+**What** - `package.json` gains `"zod": "^4.6.7"` inside the existing `overrides` block (next to the
+older `nanoid` pin) and `package-lock.json` is regenerated in the same commit. The tree collapses to a
+single `zod@4.6.7`: the hoisted `4.5.4` (reached via `@neondatabase/auth@0.7.0-beta` ->
+`better-auth@1.7.6`, `@better-auth/*`, `@daveyplate/better-auth-ui`, `@hookform/resolvers`) is upgraded
+in place, and the nested exact pin `node_modules/@neondatabase/neon-js/node_modules/zod` (`4.1.12`)
+disappears because the override satisfies `neon-js` too. No other dependency version moves; the rest
+of the lockfile diff is npm metadata churn on unchanged versions (`devOptional` -> `dev` flags, and an
+optional peer `ajv`/`json-schema-traverse` subtree materialising under `@neondatabase/auth`).
+
+**Why** - `npm audit --omit=dev` reported 4 HIGH advisories for `zod < 4.6.6`: GHSA-mrhx-c7xc-m3w5,
+"Zod can exhaust memory while validating oversized constrained collections". zod is transitive only
+(no `from "zod"` import anywhere under `src/`), but both copies sit on the Managed Better Auth request
+path, which parses attacker-supplied bodies on the public `/api/auth/*` routes, so the advisory was
+reachable in principle without us writing a schema. `zod@4.6.7` is published and in range for every
+consumer (all declare `^4`), which is why an override is safe here rather than a fork or a Neon
+upgrade (deliberately out of scope: one change, one reason).
+
+**Verified** - `npm ls zod --all` -> 16 zod references, all `zod@4.6.7`, no nested copy
+(`find node_modules -type d -name zod` -> hoisted only, plus Next's vendored `next/dist/compiled/zod`,
+which is not a package dependency). `npm audit --omit=dev` -> 0 zod advisories (only the two dev-only
+`@vitest/mocker` moderates remain, untouched by this change). `npx tsc --noEmit` exit 0; `npm run
+build` succeeds (next 16.4.2); `npx vitest run` -> 135 files / 1156 tests passed, the same counts as
+the pre-change baseline. Auth smoke against the built app (`npx next start` on :3311, production Neon
+auth host from `.env.local`, `Origin: https://adroit.io` because the auth service allowlists trusted
+origins): sign-up 200 `{"status":"check-email"}`; sign-in of that identity (marked
+`emailVerified=true` directly in `neon_auth."user"`, no mail provider in this environment) 200
+`{"status":"ok"}` with two HttpOnly cookies (`neon-auth.session_token`,
+`neon-auth.local.session_data`); `GET /api/auth/session` with that cookie 200 with the expected
+`user.id`/`user.email`/`isAdmin:false`; `GET /api/admin/analytics` and `GET /api/admin/users` with
+the same non-admin session 403 `{"error":"Forbidden"}` each. The throwaway probe identities were
+deleted from `neon_auth."user"`/`account`/`session` afterwards.
+
+**Known Issues** - (1) `/api/auth/session` does not send `Cache-Control: private, no-store` on `main`
+today; the card asked for it, but that header is added only on the unmerged `t_87fc937e` /
+`t_15a53bb8` branches, so it was verified as a pre-existing gap independent of zod and left alone
+here ("no unrelated cleanup"). (2) Requests forwarding `Origin: http://localhost:<port>` are rejected
+upstream as `feature_not_supported` / `INVALID_ORIGIN` (auth-service trusted-origin allowlist), not a
+zod problem. (3) The override is task-scoped and should be dropped once `@neondatabase/auth` and
+`neon-js` ship builds that depend on `zod >= 4.6.6` themselves.
+
+### Fail closed when the auth mint fails on GET /api/db/token (t_142d2334)
+
+**What** - `GET /api/db/token` no longer answers a signed-in caller with
+`200 {token:null}` when the Neon Auth mint fails. The route now decides from
+the session cookie's presence (`hasSessionCredential()` in `src/lib/session.ts`,
+no network call):
+
+- no cookie: `200 {token:null}` and no upstream request at all;
+- cookie and mint ok: `200 {token:"<jwt>"}`;
+- cookie and upstream 401/403: `401 {code:"SESSION_INVALID"}`;
+- cookie and anything else (network, timeout, cooldown, 429, 5xx, malformed,
+  missing `NEON_AUTH_BASE_URL`): `503 {code:"AUTH_MINT_UNAVAILABLE"}` with
+  `Retry-After` when a wait is known.
+
+Every branch carries `Cache-Control: private, no-store, no-cache, must-revalidate`
+and `Vary: Cookie`, and each failure emits exactly one structured,
+secret-free `console.error` line (`event`, `tokenPath`, `errorClass`, `status`,
+`retryAfterSeconds`, `cooldownRemainingMs`).
+
+`getSupabaseServerClient()` stops being able to serve the anonymous role to a
+request that presented a credential: it mints the session token and falls back
+to the classified degraded client, never to `getAnonymousJwt()`. The browser
+token cache (`src/lib/db/token-cache.ts`) now rejects a `503` or a failed fetch
+as `DbTokenUnavailableError` (`code: "TOKEN_UNAVAILABLE"`) instead of resolving
+`null`, caches no failure, honours `Retry-After` as a floor, and keeps
+`200 {token:null}` as a genuine guest. The mint classification
+(`getSessionTokenResult()`) is preserved from `fetchTokenResult`, so the route
+branches on it and never on an error message.
+
+**Why** - a mint failure for a signed-in user was indistinguishable from a
+guest: the route's `catch` and `mintSessionJwt` both collapsed every
+classification to `null`. QA reproduced it live (PR #430 review): the same
+route returned an 866-character JWT on one call and `null` minutes later while
+the auth backend answered 429, so a learner with a `lesson_completion` row saw
+the guest state. Server-rendered reads had the same collapse, with
+`mintSessionJwt() ?? getAnonymousJwt()` serving 48 call sites the anonymous
+role's data. Contract and evidence:
+`docs/decisions/2026-10-26-db-token-fail-closed-contract.md`.
+Regression class: CWE-636 fail-open, CWE-863 wrong role, CWE-525 cacheable
+identity response, CWE-778 missing failure logging.
+
+**Verified** - `npx vitest run` 183 files / 1776 tests green, including the new
+`src/app/api/db/token/route.test.ts` (guests, success, 401, 403 normalisation,
+429 with `x-retry-after`, 5xx, network, malformed, missing env, cooldown, the
+`cookie implies never 200 {token:null}` sweep, and log hygiene) and the retargeted
+`token-cache` / `client` / `server` suites. `npx tsc --noEmit` and `npx eslint`
+are clean. The eleven R2-5 degraded suites still pass; one assertion in
+`api/progress/quiz/run/route.degraded.test.ts` now exercises the anonymous mint
+logging through a guest request, because a credential-bearing request no longer
+reaches `/token/anonymous` at all.
+
+**Known Issues** - The mint cooldown is still keyed by endpoint path only at
+module scope, so one caller's 429 suppresses session mints for every request in
+that process for up to 8 seconds. That now surfaces as an honest `503` with
+`Retry-After` (it used to be a silent guest answer); keying it per cookie hash is
+left as a follow-up. `/api/auth/session` has the same null-collapse shape for UI
+identity gating and is out of scope here (t_8101e74f).
+
+### Lesson sources at the very bottom — design spec + anchor offsets (K3)
+
+Design-only card. Adds `design/lesson-sources-bottom.md` (spec), `design/mockup-lesson-sources.html`
+(verified mockup) and three screenshots. Sources becomes the last content block on a lesson page, after
+the knowledge-check affordance, with the separation carried by register (no card, 64×2px navy rule,
+mono kicker) rather than a divider. Anchor jumps are cleared by one custom property,
+`--lesson-anchor-offset`: 240px desktop, 296px phone, 96px when the lesson has no audio bar.
+
+No production code, no gating, no second completion path. Implementation is A2.
+
+### A8: sticky-bar completion control as a `trailing` slot (t_1975dec0)
+
+**What** - Moved the lesson audio bar's completion control out of `AudioPlayer` and into its own
+component, `src/components/Progress/MarkCompleteCompact.tsx`, exposed to the player through a
+generic `trailing` ReactNode slot threaded through `AudioPlayerLazy`. The lesson page passes
+`<MarkCompleteCompact lessonSlug label>`; the field-notes article page passes nothing and keeps its
+bar unchanged. The card modifier that scopes the two-row container query and the compact landscape
+strip is renamed `.has-complete` to `.has-trailing`, since the slot is no longer completion-specific.
+Completed state stays a static `role="status"` chip with no toggle and no second write path: the
+component uses `useLessonProgress`, so bar and hero share one hook and one `POST
+/api/progress/lesson`. The button's accessible name now names the lesson (`Mark complete for lesson
+<slug>`) while its visible label stays "Mark complete", and an explicit
+`prefers-reduced-motion: reduce` rule switches off the control's 120ms hover/press transitions so the
+guarantee does not depend on the global reset's load order.
+
+**Why** - A8 requires the player to stay a presentation surface with a `trailing` slot rather than
+knowing about lesson completion, and requires the control's accessible name to identify the lesson it
+completes. Renaming the marker class keeps the CSS honest now that any control can occupy the slot.
+
+**Verified** - `npx vitest run` 1718/1718 pass (179 files), including 9 new
+`MarkCompleteCompact.test.tsx` tests against the REAL hook (exactly one POST per tap with the lesson
+slug in the body, static chip with no aria-pressed, no un-mark write from the bar, bar to hero and
+hero to bar sync, already-complete first paint with zero writes, viewport contract at 360/390/844x390)
+and the reworked `AudioPlayerComplete.test.tsx` (12 tests: slot markup, accessible name, guest locked
+card with no control, no-narration no bar, hydrating disabled state, focus contract). `npx tsc
+--noEmit` exit 0; `eslint` exit 0 on all changed files; `npm run build` exit 0. Built-CSS browser
+measurement of the shipped rules at 360x800, 390x844, 844x390 and 1280x800: slot 144x44 in both
+states, bar height and audio width identical across the incomplete to complete swap (0.000px shift;
+72px compact bar at 844x390, 140px at 1280).
+
+**Known Issues** - The authed lesson bar cannot be exercised end to end in this workspace: no Learn
+lesson currently has a narration in `src/data/audio.ts`, and the lesson route needs
+`NEON_AUTH_BASE_URL`/`NEON_AUTH_COOKIE_SECRET`, which are not provisioned here (the local prod server
+500s on the lesson route for that reason, on unchanged code too). The full authed viewport matrix is
+A9's evidence card.
+
+### Learn: every series declares its exam kind, and the build enforces it (t_1a40ef35)
+
+**What** - All 12 `content/learn/*/series.json` now carry an explicit
+`examKind` (`course-completion` or `certification-prep`), classified from the content evidence in
+`deliverables/learn-ux-exam-naming/waves.md` §3.0: the eight Adroit-authored courses
+(ai-at-work, ai-adoption, ai-power-user, hermes-consultant, hermes-consultant-intermediate,
+hermes-consultant-advanced, agentic-ai, salesforce-architect) are `course-completion`; the four
+Salesforce certification courses (omni-studio-cert, salesforce-data-architect,
+salesforce-sharing-visibility-architect, sf-omni-consultant) are `certification-prep`.
+`scripts/build-learn.js` validates the field and throws a named error when it is missing or not one
+of the two values, emits it into the generated `src/data/learn.ts`, and `LearningSeries` gains a
+required `examKind: ExamKind` so consumers are typed. While touching them, `agentic-ai` and
+`salesforce-architect` had their stale display-only `group: "Certifications"` corrected to
+`"Tracks"` (Chris confirmed neither is a certification course).
+
+**Why** - Exam surfaces have had to guess whether a course is a certification prep or an Adroit
+course; every non-certification course currently calls its exam a certification prep exam. The kind
+is now authored once per series, in data, and cannot be silently omitted: a new series without an
+`examKind` fails `npm run build` (and therefore the deploy) instead of defaulting to the wrong label.
+The classification is deliberately not derived from the `group` label, which is display-only and was
+stale for exactly the two series fixed here.
+
+**Verified** - `node scripts/build-learn.js` regenerates `src/data/learn.ts` with 12 series and 12
+`examKind` values (4 `certification-prep`). Deleting `examKind` from one `series.json` makes the
+generator exit 1 with `[examKind] content/learn/ai-at-work/series.json is missing "examKind"` and
+makes the new test fail; restoring it makes both pass again (the test was proved to bite).
+`npx tsc --noEmit -p tsconfig.json` clean, `npm run lint` 0 errors (6 pre-existing warnings in
+`src/lib/auth/server.test.ts`), `npx vitest run` 163 files / 1387 tests passed, `npm run build`
+exits 0.
+
+**Known Issues** - No surface reads `examKind` yet: the label source (`src/lib/exam-labels.ts`),
+component props, exam/certificate copy and SEO heads land in B2-B5. D-3 (the pass mark for
+course-completion exams) stays open and is untouched here.
+
+### Design references annotated: the exam label is kind-aware now (t_27a117d2)
+
+**What** - `design/copy-deck-quiz-tiers.md`, `design/mockup-exam.html` and `design/mockup-exam-locked.html`
+now carry a dated annotation (2026-10-25) saying the exam label is kind-aware and that the literal
+"Cert Prep Exam" wording in them must not be copied into new work. The note names the source of truth
+(`src/lib/exam-labels.ts` via `examLabels(series.examKind)`), gives both label sets
+(`certification-prep` -> "Certification Prep Exam" / "Cert Prep Exam"; `course-completion` ->
+"Course Completion Exam" / "Course Exam"), and says `exam-labels.ts` wins on any disagreement. The two
+mockups get an HTML comment at the top of the file plus a visible amber annotation strip above the mockup
+body, marked `role="note"` and labelled "not mockup content".
+
+**Why** - the deck and both mockups were drawn from the OmniStudio certification series, so they spell out
+"Certification Prep Exam" as if it were the only wording. Eight of the twelve series are
+`course-completion` (four are `certification-prep`), and the B6 grep test fails on any hardcoded exam label,
+so a designer or developer who copies a string out of these references reintroduces the US-009 bug
+("a Tracks course never says certification prep") that the release exists to fix.
+
+**Verified** - `git diff --numstat HEAD~1 HEAD -- design/` shows 49 insertions and 0 deletions across the
+three design files, so no mockup or deck content was reworded. `npx vitest run src/lib/exam-labels.test.ts src/lib/no-hardcoded-exam-labels.test.ts`
+passed (2 files, 28 tests). Both mockups were loaded in a browser: the note renders at the top of the body
+(1180x133 at 1640px viewport, dashed amber border), the previous first block follows it at y=165, and there
+is no horizontal overflow.
+
+**Known Issues** - None. Documentation only, no surface change.
+
+### Learn: one label source for exam naming (t_338bf27e)
+
+**What** - Adds `src/lib/exam-labels.ts`, the single source of exam wording, with the copy table from
+`deliverables/learn-ux-exam-naming/api-contracts.md` §C. `EXAM_LABELS` is a
+`Record<ExamKind, ExamLabelling>` keyed by the `examKind` authored in each `series.json` (B1) and
+exposes `full` ("Course Completion Exam" / "Certification Prep Exam"), `short` ("Course Exam" /
+"Cert Prep Exam"), `phrase`, `lockHeading(checkCount)`, `seoTitle(seriesName)`,
+`seoDescription(seriesName)` and `unlockNote(checkPassPct)`. `examLabels(kind)` is total: it throws on
+an unknown kind and never falls back to certification prep. The module's only import is
+`import type { ExamKind }` from `@/data/types`, so it carries no series data, no per-slug table and no
+inference from the display-only `group` field, and it cannot pull the learn dataset into a client
+bundle. Adds `src/lib/exam-labels.test.ts`: a 12-series matrix that asserts each series' seeded kind
+and the exact `full`/`short`/`phrase` it resolves to, cross-kind leakage checks in both directions,
+prop-driven counts and pass marks (`lockHeading(4)` is "all 4 knowledge checks", not the 9 currently
+hardcoded on the locked panel), the totality/throw behaviour, and structural guards on the module
+(type-only import, no data import, no series slug, no `group`).
+
+**Why** - Eight of the twelve Atlas series are Adroit courses but every exam surface today calls their
+exam a certification prep exam, because the wording is hardcoded at each call site. B1 gave each
+series a kind; without a single label source, B3-B5 would each re-derive wording and drift. Wording is
+Lois's (api-contracts.md §C) and lives here only, so a surface can render the label but cannot invent
+one.
+
+**Verified** - `npx vitest run src/lib/exam-labels.test.ts` 24/24 passed. The matrix was proved to
+bite: changing `course-completion`'s `full` to "Certification Prep Exam" turns the eight
+course-completion rows red (restored afterwards). Full suite `npx vitest run` 164 files / 1411 tests
+passed (was 163 / 1387), `npx tsc --noEmit -p tsconfig.json` clean, `npm run lint` 0 errors (the same
+6 pre-existing warnings in `src/lib/auth/server.test.ts`), `npm run build` exits 0, and a dev server on
+port 3121 served `/`, `/atlas` and `/atlas/ai-at-work/exam` with HTTP 200.
+
+**Known Issues** - No surface renders from this module yet: ExamCard, ExamLocked, ExamWidget, the exam
+page, GuestCTA, Certificate, `chronicleLabel` and the SEO heads are wired up in B3-B5, and
+`CERT_EXAM_MINUTES` / `CERT_EXAM_PASS_PCT` land in the exam-config module those cards add. Wording is
+copied verbatim from `api-contracts.md` §C; `unlockNote` reuses the existing locked-panel sentence
+("The timed <phrase> opens once every knowledge check is passed at <pct>% or higher.") with only the
+kind-dependent exam name substituted, because §C does not specify separate copy for it. D-3 (the pass
+mark for course-completion exams) stays open and is untouched here.
+
+### Learn UX — exam naming matrix + no-hardcoded-label guard (B6)
+
+**What:** Workstream B integration. Two guards now cover the whole lane:
+
+- `src/components/Progress/exam-label-matrix.test.tsx` — one matrix over the
+  generated `learnSeries` dataset (all 12 series) that renders every surface
+  which can name the exam — `ExamCard`, `CheckCardList`, `ExamLocked`,
+  `ExamWidget`, `GuestCTA` (exam / check / certificate tiers), `Certificate`,
+  the exam-page `<head>` (`examLabels(kind).seoTitle/seoDescription`) and
+  `chronicleLabel` — and asserts each one renders its own kind's label and
+  never the other kind's, in any of the three spellings (`full` / `short` /
+  `phrase`). 98 tests.
+- `src/lib/no-hardcoded-exam-labels.test.ts` — a source sweep of
+  `src/components/Progress/**`, `src/app/atlas/**`, `src/lib/sky.ts` and
+  `src/lib/sky-server.ts` (comments stripped, tests and the label source
+  allow-listed) that fails if any of the six label strings appears as a literal.
+
+Two surviving literals the sweep caught and this card fixed:
+`CheckCardList` (series page, every tiered course) said "unlock the **cert prep
+exam**" and the certificate page's eligibility checklist said "**Cert prep
+exam** passed (≥ 72%)" — both now read from `examLabels(kind)` and
+`exam-config.ts`.
+
+**Why:** B1–B5 each fixed one slice; nothing proved the seam. A Tracks course
+could still have shown certification-prep wording on a surface that forgot to
+plumb `kind` — exactly the US-009 bug — and the next edit could have re-typed
+the phrase into a component. The matrix fails per-surface *and* per-series, so a
+regression names the guilty surface; the grep test fails on the raw literal
+regardless of which surface.
+
+**Known issues / notes:**
+- Numbers, not labels, still literal in the certificate page's copy
+  (`72%` on the head/body lines, `72%+` in the checklist headline). Not this
+  card's scope — `CERT_EXAM_PASS_PCT` / `CERT_CHECK_PASS_PCT` are in
+  `src/lib/exam-config.ts` whenever that copy is next touched.
+- The grep test strips comments before matching on purpose: doc comments
+  legitimately quote the old wording while explaining the fix.
+- Branch is stacked on B3 (which is stacked on B5 → B2) and merges B4 in, since
+  `exam-labels.ts`/`ExamKind` and B4's certificate/sky/SEO work are not on
+  `main` yet. Retarget to `main` once #411–#415 land.
+
+### Learn lesson IA and kind-aware exam naming: architecture (t_47db5c5e)
+
+**What** - Adds the decision-ready blueprint for Chris's four Learn items: `deliverables/learn-ux-exam-naming/architecture.md` (component boundaries, data flow, ADR-301..310, test strategy, risks), `api-contracts.md` (the seams between parallel implementation cards), `cards.md` (19 ready-to-file cards scoped 30-45 min for kara and steel), and the client-facing report `docs/architecture-learn-ux-exam-naming.html`. No application code changes.
+
+**Why** - Sources on a lesson are generated GFM footnotes inside a renderer shared by five surfaces, so "move citations below the knowledge check" needs a render-pipeline split, not a layout tweak. Probes proved a definitions-only document renders nothing, so the split is two filtered renders of the same document (measured +3-5 ms per lesson, one compile 5.1 ms vs two 7.9 ms). Milestone checks exist only in a separate section while nothing maps a lesson to its check at runtime; `group` in `series.json` is not read at runtime, is dropped in the R2-5 degraded path and is already wrong for `agentic-ai`, so exam naming needs an explicit required `examKind`. D-1 is decided (Chris, 2026-10-25): **there is no lesson gating** - no gate module, no mode constant, no `Locked` state, no locked copy. A check is placed after the last lesson of its range and the learner is routed into it; the following lesson always stays reachable, and passing continues the flow. Chris's driving complaint on Item 2 is discoverability: the check node must be visible in the timeline on first view, before the learner reaches its range, so a learner with zero completed lessons sees check 1 as available - the trailing "Milestone checks" section is removed. D-2 and D-3 remain content/product answers.
+
+**Verified** - Repo read at `93198b82`: 12 Learn series (not 11), 511 of 511 lessons carry footnote definitions, `getKnowledgeChecks` reads ranges from each check file's title, `CertReadiness`, `CheckCardList` and `ExamCard` each issue the same `/api/progress/quiz/tiers` GET on one series page (three identical requests), no duration field in `exam.json` (105 hardcoded on five surfaces: ExamWidget, ExamLocked, GuestCTA, ExamCard, exam/page), no lesson-level gating anywhere. Two probes against the real MDX toolchain confirm the footnote section can be dropped from one render and kept in another with matching ids and back-references.
+
+**Known Issues** - D-2 and D-3 remain open for Chris; `agentic-ai` is seeded as `course-completion` pending D-2. D-4 (a possible exam email surface outside this repo) is out of scope. The check page's own pass pill reads `quiz_run` while the exam gate reads `quiz_attempt` - flagged for a separate card, not changed here.
+
+### Invalidate the tier progress cache after a submit (t_499542c6)
+
+**What** - `useTierProgress` exports two invalidation entry points. `invalidateTierProgress(series)`
+drops that series' cached rollup and re-reads it in every consumer mounted right now (they re-arm
+the same deduped request, so the one-fetch-per-page guarantee still holds); `invalidateAllTierProgress()`
+drops every series entry for writes that carry no series slug. They are wired into the flows that
+mutate the rollup: `QuizWidget` on a successful graded knowledge-check answer (new optional
+`seriesSlug` prop, passed by the check page), `ExamWidget` on a successful `/api/progress/quiz/batch`
+submit, and `useLessonProgress.markComplete` (lesson-complete toggle and lesson-quiz perfect score,
+which feed the lessons-completed count). The hook's `refresh()` now routes through
+`invalidateTierProgress`, and the docstring that claimed a submit-time `refresh()` call site now
+describes the real mechanism.
+
+**Why** - A4's module cache outlives a mount, so after a check/exam submit the results view's
+client-side "Back to series" `Link` rendered the PRE-submit rollup: old lessons-completed count, old
+check best score, stale exam `unlocked` state. Before A4 each consumer refetched on mount, so the
+series page was always fresh on arrival; the cache made freshness depend on an invalidation that did
+not exist.
+
+**Verified** - New tests in `src/lib/hooks/useTierProgress.test.tsx` (invalidating one series
+refetches only that series and leaves the other cached, N mounted consumers re-read in ONE request,
+`invalidateAllTierProgress` drops every series) and
+`src/components/Progress/tierProgressInvalidation.test.tsx` (QuizWidget graded submit invalidates its
+series and no-ops without a series, ExamWidget batch submit invalidates, MarkComplete invalidates
+all). `npx tsc --noEmit` clean, `npx eslint` clean on every touched file, full `npx vitest run` green.
+
+**Known Issues** - Invalidation granularity for lesson completion is coarse (all series) because
+`useLessonProgress` only knows the lesson slug; cost is at most one extra tiers GET on the next
+mount. A graded knowledge-check answer invalidates once per answered question — again a cache drop
+plus at most one refetch per mount, never per-question network traffic. `CheckCardList` is untouched
+(card A5 owns its removal).
+
+### Learn — exam.json titles now follow each series' exam kind
+
+**What.** All 8 `course-completion` series (`ai-at-work`, `ai-adoption`, `ai-power-user`,
+`hermes-consultant`, `hermes-consultant-intermediate`, `hermes-consultant-advanced`, `agentic-ai`,
+`salesforce-architect`) now title their exam `<series name>: Course Completion Exam` instead of
+`<old short name>: Practice Exam`. The 4 `certification-prep` series keep their titles
+character-for-character. Exam questions and descriptions are untouched. New
+`src/lib/exam-titles.test.ts` pins every title to its series' `examKind` through
+`src/lib/exam-labels.ts` and fails when a title carries the other kind's wording.
+
+**Why.** `exam.json.title` is what the exam page composes into the browser tab
+(`<title> | Adroit Learn`), so a Tracks course was advertising a "Practice Exam" while every other
+surface called it a course completion exam (US-009/US-010). The drift test stops a future series —
+or a flipped `examKind` — from shipping mismatched wording.
+
+**Known issues.** The exam page's visible `<h1>`/kicker and its `description` fallback are still
+hardcoded cert-prep copy; those are B3 and B4. `agentic-ai` is seeded `course-completion` per Chris
+(waves.md §3.0), so its title follows the track shape.
+
+### K2 follow-up: landscape compact strip + completion focus fix (t_81573261)
+
+**What** - Two fixes to the K2 "Mark complete" control from PR #423. (1) `src/app/globals.css`: the
+compact strip rule inside `@media (orientation: landscape) and (max-height: 480px)` was written as
+`.has-complete .audio-card`, a descendant selector for two classes that live on the SAME element, so
+it never matched; it is now the compound selector `.audio-card.has-complete`. (2)
+`src/components/BlogPost/AudioPlayer.tsx`: the chip focus effect is now gated on a `userSwappedRef`
+that only the button's `onClick` sets, so focus moves to the chip only when the reader's own press
+removes the button.
+
+**Why** - QA failed PR #423 on the landscape strip: with the dead selector the card kept
+`display: block` while its sibling compact rules applied, so at 844x390 the bar measured 198px
+(design target 72px, pre-K2 stacked 140px), the `<audio>` sat at its 280px `min-width` floor instead
+of filling the row, and the action slot stretched the full 762px row. Separately, `useLessonProgress`
+starts `isCompleted=false` for hydration safety and flips it true on mount for an already-completed
+lesson, so the unguarded effect moved focus to the chip and fired its `role="status"` announcement on
+a plain page load, with no swap having happened.
+
+**Verified** - `npx vitest run` 1706/1706 pass (178 files), including 3 new focus-contract tests in
+`AudioPlayerComplete.test.tsx`; `npx tsc --noEmit` exit 0; `eslint` exit 0 on the two changed source
+files; `npm run build` exit 0. Measured in a browser against the repo's own compiled CSS chunk
+(`.next/static/chunks/2ojkqwrcjxyl4.css`) with the exact DOM `AudioPlayer.tsx` emits, inside the real
+`max-w-[920px] mx-auto px-6` sticky wrapper: at 844x390 the bar is 72px (198px when the old
+`display: block` state is re-applied, reproducing the QA numbers), the audio fills the row at 391px,
+the slot is 144x44 right-aligned at x=663, and the button-to-chip swap produces 0.000px shift of the
+audio and the bar. Regression pass at 1280 (140px bar, audio 838px), 390 and 360 (two-row grid, 144x44
+slot): 0px shift and no horizontal overflow at every width.
+
+**Known Issues** - The design sheet's 372px audio width assumes a 778px-wide card; the real lesson
+wrapper at an 844px viewport yields a 796px card, so the audio measures 391px there. The audio is the
+flex filler in this mode, so this is the documented exception, not a fixed target. The design's
+three-bar equaliser mark in the compact strip is still not implemented (pre-existing, out of scope).
+
+### "Mark complete" control in the lesson sticky audio bar (t_8dcf32b5)
+
+**What** - Added a "Mark complete" control to the header row of the lesson audio bar
+(`src/components/BlogPost/AudioPlayer.tsx`). An incomplete lesson shows a 143×44 "Mark complete"
+button inside a fixed 144×44 action slot; a complete lesson shows a static 113×30 "Completed" chip
+(`role="status"`, `tabindex="-1"`, focus moved to it after the swap) inside the same slot, so the swap
+never resizes the bar or the `<audio>` element. Threaded an optional `lessonSlug` prop through
+`AudioPlayerLazy` and passed it from the lesson page. The control uses the single existing write path
+(`useLessonProgress` → `POST /api/progress/lesson`); un-marking stays on the hero `MarkComplete`
+control. Added the responsive layout in `src/app/globals.css`: a container-query 2×2 grid at ≤559px
+(the word "Speed" collapses, the Follow-along label is kept) and a 72px single-row compact strip at
+`orientation: landscape and max-height: 480px`, both scoped to `.has-complete` so the article
+(field-notes) bar is unchanged.
+
+**Why** - Wave 2 Learn UX (K2 of 19). The lesson reader needed a completion affordance in the Operate
+surface (the sticky bar) without gating, without a second toggle, and without unearned motion: a
+content-sized slot made the compact audio jump 30px on completion, which the fixed slot eliminates
+(0px shift at 1280/390/360/844×390 per the design sheet).
+
+**Verified** - `npx vitest run src/components/BlogPost/AudioPlayer*.test.tsx` (34 tests pass, including
+6 new completion-control tests and the 28 existing audio-player tests); `npm run lint`; `npm run build`;
+the two states were confirmed in a browser against the design specimen.
+
+**Known Issues** - The design's three-bar equaliser mark and custom 17px Follow-along checkbox are not
+implemented (outside this card's scope; the article bar keeps its native controls). The base header gap
+is the design's 8px rather than the prior 12px. The completed chip's border uses a hardcoded
+`rgba(4,120,87,.22)` (light) / `rgba(52,211,153,.32)` (dark) rather than a named `--signal-done-line`
+token.
+
+### Continue to the next lesson after passing a knowledge check (t_a188edfc)
+
+**What** - `QuizWidget` accepts two additive props, `continueHref` and `continueLabel`, per
+`deliverables/learn-ux-exam-naming/api-contracts.md` section B.5. When the run passed, a pass
+threshold is set and a `continueHref` is supplied, the results view renders that link as the
+primary action (filled navy, full width, `data-primary-action="continue"`) and demotes Retake to
+the secondary outline treatment. Retake stays primary on a fail, and every caller that passes
+neither prop (all lesson tier quizzes) renders exactly what it rendered before. The check page now
+computes the target with the pure `nextLessonAfter` helper against the series' lesson list, using
+the check's own range end as the anchor, and passes `/atlas/<series>/<next.slug>` with the label
+`Continue to Lesson <n>`. A check whose range ends at the published tail has no following lesson,
+so it passes neither prop and keeps Retake primary. The widget adds no pass logic of its own: it
+reuses the `passed` computation that already drives the verdict pill.
+
+**Why** - A learner who passed Knowledge Check 1 (lessons 1 to 5) landed back on the series page
+and had to find lesson 6 themselves. The milestone is passed, so the useful next step is the next
+lesson, and the results card is the surface where that decision is made.
+
+**Verified** - `npx vitest run src/components/Progress/QuizWidget.test.tsx "src/app/atlas/[series]/check/[n]/page.test.tsx"`
+26 tests pass, including the new pass case (Continue link with the right href, `bg-navy`, Retake no
+longer `bg-navy`), the fail case (no Continue link, Retake primary) and the no-props case (lesson
+quiz unchanged), plus two check page tests (the widget receives the lesson after the range end, and
+receives no target when the range ends at the tail). `npx tsc --noEmit` clean.
+
+**Known Issues** - None.
+
+### Learn lesson sources render as their own block (t_a2a2d687)
+
+**What** - Added the two-render footnotes split the Learn "Sources last" layout needs. `src/lib/lesson-sources.ts`
+exposes `hasFootnoteDefinitions()`. `src/components/MDX/footnote-plugins.ts` owns the rehype plugins
+`renameFootnoteHeading`, `isFootnoteSection`, `dropFootnoteSection` and `keepOnlyFootnoteSection`.
+`MDXArticle` takes a new additive `sources?: "inline" | "split"` prop defaulting to `"inline"`. `src/components/MDX/MDXSources.tsx`
+compiles the same document with the keep filter, returns `null` when the tree has no footnotes section, and renders
+only the citations list. Tests cover both pipelines end to end through the real next-mdx-remote compile.
+
+**Why** - `remark-gfm` appends a single `section[data-footnotes]` at the end of the rendered tree, so there was no
+seam to place the knowledge-check block between the lesson body and its sources. Two filtered renders of the same
+document keep footnote numbering, ids and back-reference targets identical by construction, which a source-level
+split cannot do (a reference without its definition stays literal text). This card changes no visible surface; it
+adds the seam the later Learn cards compose.
+
+**Verified** - `npx vitest run src/components/MDX src/lib/lesson-sources.test.ts`: 4 files, 30 tests pass.
+Full suite: 166 files, 1409 tests pass. `npx tsc --noEmit -p tsconfig.json` clean; `npx eslint` on the new files
+clean. Blog output unchanged is pinned by a byte-identical HTML comparison of a real blog post
+(`content/blog/acceptance-gate-consulting-delivery-2026.mdx`) and a real lesson
+(`content/learn/agentic-ai/agent-loop-by-hand-no-framework.mdx`) rendered through the frozen pre-split plugin
+and the new `"inline"` default.
+
+**Known Issues** - None. `MDXSources` is not wired into the lesson page yet; that is a later card in the wave.
+
+### Learn UX — lesson/check mapping module (A3)
+
+**What:** New pure module `src/lib/lesson-checks.ts` (contract
+`deliverables/learn-ux-exam-naming/api-contracts.md` §B.1) owning every
+lesson ↔ knowledge-check relationship, plus `src/lib/lesson-checks.test.ts`
+(68 tests):
+
+- `buildTimeline(lessons, checks)` interleaves a check node immediately after
+  the last published lesson at or below `check.lessons[1]` — the range end
+  `getKnowledgeChecks()` resolved from the check file's own title. It is total
+  (`lessons.length + checks.length` nodes for any input), it never mutates its
+  inputs, there is no `5 * n` arithmetic anywhere in it, and checks past the
+  published tail or before lesson 1 land at the end in `n` order instead of
+  crashing or claiming lessons that do not exist.
+- `checkEndingAt`, `checkCovering`, `nextLessonAfter`, `checkState`,
+  `hiddenByFilter` implement the D-5 hide rule and the routing seams A5/A6/A7
+  consume.
+- `checkState` returns `"passed" | "available"` only: no `"locked"` member, no
+  `mode` parameter, no gate module (architecture.md §4, ADR-304).
+- A check whose `lessons` range is missing, short, non-integer, zero-based or
+  backwards **throws** (`assertCheckRange`) instead of falling back to
+  `5n-4, 5n` (ADR-303).
+
+No visible surface changes (build card).
+
+**Why:** Item 2 moves the milestone checks into the syllabus timeline so a
+learner sees the milestone coming before finishing the course, and A6/A7 route
+into and out of a check from the lesson page. Three consumers must agree on
+where a check sits, so that arithmetic lives in one pure, unit-tested module
+rather than in each component. Positioning from the resolved title range (not
+`5n`) keeps it correct for the non-5 cadences already in the content:
+`agentic-ai` 8-lesson ranges, `sf-omni-consultant` 12 checks, `ai-at-work`
+6 checks, `ai-adoption`'s short tail at 31-34. A test pins the input
+conformance at the file level: all 90 `check-*.json` titles across 12 series
+match `Lessons A-B`, so `quiz.ts`'s dormant `5n` fallback cannot move a node
+today, and a future file that breaks the pattern fails CI instead of silently
+relocating a milestone.
+
+**Verified:**
+- `npx vitest run src/lib/lesson-checks.test.ts` — 68 passed.
+- `npx vitest run src/lib/lesson-checks.test.ts src/lib/quiz.test.ts` —
+  91 passed.
+- `npx tsc --noEmit -p tsconfig.json` — clean.
+- `npx eslint src/lib/lesson-checks.ts src/lib/lesson-checks.test.ts` — clean.
+
+**Known issues / notes:**
+- `hiddenByFilter` takes the hidden set as lesson **numbers**, not slugs. A
+  check node's range is in lesson numbers, so a slug set cannot answer "is
+  every lesson in this range hidden" without the lessons themselves. The
+  amendment is recorded in `api-contracts.md` §B.1 in this same PR; the
+  syllabus (A5) maps its completed-lesson slugs to numbers once.
+- `quiz.ts`'s `5n` fallback itself is untouched (out of scope for this plan);
+  this module never calls it and never re-derives a range.
+- Nothing in this card renders. The node component, syllabus interleave and
+  lesson-page routing are A5/A6/A7.
+
+### Lesson-end milestone: route into the knowledge check (t_bdfc05d8)
+
+**What** - Extracted the exam gate's per-check pass derivation into `src/lib/check-scores.ts`
+(`loadCheckScores`, `loadCheckScore`) and used it from both `exam/page.tsx` (behaviour unchanged) and
+the lesson page. A lesson that ends a knowledge check's range now routes into the check: the new
+`MilestonePanel` renders between the practice questions and the sources with "Take Knowledge Check N"
+as its primary action, and `LessonNavigation` gained `nextOverride` so the Next card targets
+`/atlas/<series>/check/<n>` ("Knowledge Check N", kicker "Lessons A-B"). Once the check is passed,
+Next and the panel continue to the following lesson instead. The verdict is the authoritative
+server-graded `quiz_attempt` read, one query per lesson page, shared by panel and navigation.
+
+**Why** - The check exists as a milestone in the syllabus but nothing on the lesson told the learner
+where to go when they finish the range; US-005. Reading pass state from `quiz_run` was already ruled
+out (client-writable), so the lesson page asks the same question of the same table the exam gate uses
+rather than adding a third opinion.
+
+**Verified** - `npx tsc --noEmit` clean. `npx vitest run src/lib/check-scores.test.ts
+"src/app/atlas/[series]/[slug]/page.milestone.test.tsx"` 14 passed; the exam page, certificate and
+lesson page suites 107 passed across 8 files; full suite green. Page tests cover: zero-progress
+learner on lesson 5 gets the panel and a check Next on first paint; passed check sends Next and the
+panel to lesson 6; guest issues no score query and claims no pass state; a non-range-end lesson gets
+neither.
+
+**Known Issues** - Guests see the panel in its not-passed state (no pass state is claimed and no
+query is made), so the primary action leads to the check route, which is paywalled for them. The
+panel's passed-but-no-next-lesson case (a check ending on the series' last lesson) offers "Review
+Knowledge Check N" because the contract does not define a destination there. No lesson gating of any
+kind was added: the lesson body and the following lesson render whether or not the check is passed.
+
+### Learn lesson IA and exam naming: final card list and wave plan (t_c5f264d4)
+
+**What** - Adds `deliverables/learn-ux-exam-naming/waves.md` and the readable report at `deliverables/learn-ux-exam-naming/reports/card-waves.html`. The 19-card blueprint is reconciled against Chris's four items and grouped into four waves: W1 exam naming (B1-B6), W2 design and foundations (K1-K3, A1, A3, A4), W3 surfaces (A2, A5, A6, A7, A8), W4 integration and evidence (A9, C1). A wave opens only when the previous wave is merged and deployed. Every surface-changing card now carries explicit desktop and mobile acceptance criteria, and every card is mapped to its requirement story (US-001 to US-015). Documentation only, no application code. **Scope clarified after Chris's PR review:** the exam-naming change covers *every* non-certification course (all eight `course-completion` series), not only AI at Work; AI at Work is the smoke case. The Wave 1 exit criteria, the B3 and B5 acceptance lines and the HTML report were corrected to require the whole set, and the four real certification-prep series must keep their wording character for character.
+
+**Why** - The blueprint was complete but not schedulable: it had two lanes and a dependency graph, and no wave order, no per-card responsive acceptance text, and no written proof that the gating and second-write-path rules had actually been applied to every card. This pass audits all 19 cards against those two rules (all clean), records the retired gate artefacts so nobody re-files them, and fixes five gaps the blueprint left: A7 now reads the authoritative attempt record so the continue action cannot disagree with the results pill (the blueprint's own known issue), B3 and B6 cover the degraded exam card label (US-012), A2 records why preview and paywall-peek routes stay unchanged, A6 forbids a second progress fetch on the lesson page, and B6 requires the changelog fragment the repo mandates.
+
+**Verified** - Repo read at `ee63df18`: `content/learn/*/series.json` group values confirmed (six Tracks, two Certifications, four Salesforce Certifications); "Certification Prep" confirmed in exactly three components plus certificate naming; no `Locked` state exists in `CheckCardList` or `quiz.ts`, so node states are Passed and Available only; `git show f8ce6e16` confirms the gate module, mode constant and locked copy were already removed and 19 cards were retained; `gh pr list` shows only #408 open. Report rendered through `~/.hermes/scripts/render-client-report.py --raw-html` and checked in a browser: 6 tables, 49 rows, no unresolved template placeholders, 0 horizontal overflow.
+
+**Known Issues** - D-2 is closed: Chris confirmed `agentic-ai` and `salesforce-architect` as `course-completion` on 2026-10-25 ("Agentic-AI is not a certification course"; "the architect primer ... was just something I did before we even started doing certification courses"). No classification question remains open. D-3 (pass mark for course-completion exams) and D-4 (a possible exam email surface outside this repo) are unchanged and out of scope. D-6 (paywall peek citation placement) and D-7 (check results pill reads `quiz_run` while the exam gate reads `quiz_attempt`) are recorded as open. Wave 1 may not open until PR #408 merges; B1 and B2 are the only cards safe to start early.
+
+### Knowledge checks are milestone nodes in the syllabus timeline (t_c991c488)
+
+**What** - The series page now interleaves every knowledge check into the syllabus as a milestone
+node (`CheckTimelineNode`) between the last lesson of its range and the next lesson, in both sort
+directions. The separate "Milestone checks" section (`CheckCardList`) is gone; its one explanatory
+line now renders once under the list (`examLabels(kind).unlockNote()`), referenced by every node's
+`aria-describedby`. `SeriesSyllabus` takes `checks`, `series` and `kind`, builds the list with
+`buildTimeline` and filters with the D-5 `hiddenByFilter` rule. `ExamCard` is unchanged.
+
+**Why** - A learner could not learn a check existed until they had finished every lesson: the checks
+sat in a section at the bottom of the page. On first view with zero progress the syllabus now shows
+check 1 as `Available` between lesson 5 and lesson 6. Node presence is a pure function of lessons plus
+checks; only the `Passed` badge waits for the tiers response, so first paint is progress-independent.
+
+**Verified** - `npx tsc --noEmit` clean. `npx vitest run` 178 files / 1715 tests pass, including the
+reworked `SeriesSyllabus` component suite (interleaving, descending order, D-5 hide, aria-label per
+state, zero-progress first paint), `page.overflow.test.ts`, `page.degraded.test.tsx` and the exam
+label matrix. `npx next build` succeeds. Rendered the real syllabus at 360/390/768/1280: node heights
+99/99/68/68 px, badge intact, no horizontal scroll, order `L5, K1, L6` (asc) and `K9, L46 ...` (desc).
+
+**Known Issues** - None. The milestone node has no fixed min-width and is container-query driven.
+
+### Learn UX — exam surfaces are kind-aware (B3)
+
+**What:** `ExamCard`, `ExamLocked`, `ExamWidget`, the exam page (guest view, kicker,
+meta line, locked panel) and `GuestCTA`'s exam/certificate/check tiers now take
+`kind` (`ExamKind`) and render every exam name from `examLabels(kind)`. Counts and
+pass marks come from props/constants: `questionCount` from `exam.questions.length`
+(and `checksMeta.length` for the check count), `passPct` from `CERT_EXAM_PASS_PCT`,
+`minutes` from the new `CERT_EXAM_MINUTES` in `src/lib/exam-config.ts`. The exam
+page's meta-description fallback is label-derived too.
+
+**Why:** A Tracks course ("AI at Work") was telling learners it had a
+"Certification Prep Exam". Every one of the eight `course-completion` series now
+says "Course Exam"/"Course Completion Exam" on these surfaces, and the four
+certification series keep their wording character for character (US-009/US-010).
+The numbers also stop drifting: `105`, `72`, `9` and `60` are no longer literals.
+
+**Known issues / notes:**
+- `CERT_EXAM_PASS_PCT` and `CERT_CHECK_PASS_PCT` moved to `src/lib/exam-config.ts`
+  (client-safe) and are re-exported from `src/lib/certificate.ts`, because
+  `ExamWidget` is a client component and `certificate.ts` imports `fs`/`path`.
+- `GuestCTA.kind` stays optional on the type, but a missing kind now degrades to a
+  neutral "Exam" — it never falls back to cert-prep copy. The check and
+  certificate pages pass `kind` so their existing wording is preserved.
+- The certificate page's own copy, `sky.ts` chronicle labels and the SEO
+  `<title>` composition remain card B4's scope.
+
+### Lesson page: Sources is the last content block (t_d70b7211)
+
+**What** - The Learn lesson page (`/atlas/[series]/[slug]`) now composes its content as
+body, practice questions, `SOURCES`, prev/next navigation. `MDXArticle` renders the body with
+`sources="split"` (dropping the GFM footnotes section from the body tree) and `MDXSources` renders
+that section once, after the practice/check block, inside `article.article-body`. `MDXSources` is
+gated on `hasFootnoteDefinitions(mdxBody)`. A new rehype plugin `markLessonSources` tags the section
+with the `lesson-sources` class (blog posts keep their in-article rendering untouched). `globals.css`
+gains the single `--lesson-anchor-offset` property (240px desktop, 296px phone, 96px when the lesson
+has no narration, selected by `lesson-page--has-audio` on the page wrapper) and applies it as
+`scroll-margin-top` to the footnote targets and body headings.
+
+**Why** - `remark-gfm` appends the footnote section to the end of the MDX output, so the citation list
+was rendering above the practice questions. K3 (`design/lesson-sources-bottom.md`, corrected offsets
+from PR #424) specifies Sources as the page's appendix. Without `scroll-margin-top` both directions of
+the anchor jump landed under the sticky header + docked audio bar, and the back-reference looked
+broken.
+
+**Verified** - `npx vitest run` green (see metadata for the count); `npx tsc --noEmit` clean;
+`npx eslint` clean on the touched files. Real browser (Playwright/Chromium, harness route rendering the
+same composition + `globals.css`, deleted before commit): one `section[data-footnotes]` at 360 and 1280
+(no duplicate), document order body, practice card, Sources, nav in both viewports, resolved
+`scroll-margin-top` = 240px at 1280 and 296px at 360, 96px with no audio bar. Anchor jump from a source
+back-reference lands at 296 with the stuck band bottom at 262 (34px clearance) at 360, and 240 vs 204
+(36px) at 1280. `scrollWidth === clientWidth` at both widths. Screenshots:
+`design/screenshots/a2-lesson-sources{,-transition}-{1280,360}.png`.
+
+**Known Issues** - The sources block still inherits the blog `.article-body .footnotes` styling (48px
+top rule, gray hairline); Kara's K3 v2 register treatment (72px throw, mono `SOURCES` kicker, red
+numerals only) is visual polish outside this card's acceptance and is not implemented here. The
+`:target` landing flash from K3 6.3 is also left for that pass. Verification used a harness route
+rather than the live page because the lesson route needs Neon credentials that are absent locally.
+
+### Real user deletions get a 30-day recovery window; QA accounts do not (user-recovery-window)
+
+**What** - `supabase/migrations/neon/007_user_tombstone.sql` adds `deleted_at` and `is_test` to
+`public."user"` and makes the auth-delete trigger branch: `is_test = true` hard-deletes the mirror row and
+cascades the data away immediately; everything else is tombstoned, keeping the row and all progress, quiz,
+profile and entitlement data. `public.restore_tombstoned_user(uuid)` clears a tombstone. The FKs already
+support this (nine tables CASCADE from the mirror row, two audit fields SET NULL). `scripts/qa-create-test-user.cjs`
+now stamps `is_test = true` so throwaway accounts are never given a window.
+
+**Why** - 006 made identity deletion cascade immediately. Correct for test accounts, irreversible for real
+ones: one mistaken delete in the Neon console destroyed a paying user's history with no path back.
+
+**Verified** - proved inside `BEGIN ... ROLLBACK` on production before applying: a real account with a lesson
+row was tombstoned with its data intact and restored successfully, then purged by the window-expiry delete; a
+QA account in the same transaction was hard-deleted with its data. Applied for real, then a live check: a helper-created
+account (`is_test = true`) hard-deleted on auth-identity delete with no tombstone. Production after: 37 users,
+0 unmirrored identities, 0 live orphans, 0 tombstones.
+
+**Known Issues** - The window restores a mistaken deletion; it does not merge a returning user's new signup
+(new uuid) into their old data. Recreating the identity with the original uuid is the recovery path. The purge
+side lives outside this repo as the `~/.hermes/scripts/tombstone-purge.py` cron.
+
 ### Consolidated ship: learn-seam disclosure intersect, /atlas Continue Learning start strip, and the atlas card CLS fixes (t_a774c0d2, t_bbc735da, t_c54f6999)
 
 **What** - One branch carrying three completed-but-unshipped pieces of work whose PRs were closed or stranded during the 2026-10-23 fan-out. Nothing here is new fiction: each part is the reviewed implementation taken verbatim from its own branch.
@@ -696,6 +1443,11 @@ Suite: `npx vitest run` → **109 files / 917 tests passed** (906 before this ca
 ### Neon-Migration-R2-Hardening
 
 Neon migration R1/R2 for adroit.io: Managed Better Auth + Data API cutover from Supabase, RLS port and isolation verification, /atlas and auth-route hardening, and the R2 review fix cycle. Opened 2026-10-23 to give the whole migration line a named release; builds auto-attach from here.
+## [v1.2.0] — 2026-10-26
+
+### Learn-UX-Exam-Naming
+
+Learn UX and exam naming for adroit.io: citations as the last block on a lesson, milestone knowledge checks as nodes in the course timeline (no gating), kind-aware exam naming (course completion vs certification prep), and the mark-complete control inside the floating audio bar. Desktop and mobile.
 
 ## [Unreleased]
 
