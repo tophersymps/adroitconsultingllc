@@ -20,6 +20,7 @@ import {
   type HastRoot,
   isFootnoteSection,
   keepOnlyFootnoteSection,
+  markLessonSources,
   renameFootnoteHeading,
 } from "@/components/MDX/footnote-plugins";
 
@@ -66,6 +67,7 @@ export default async function MDXSources({
       remarkPlugins: [remarkGfm.default],
       rehypePlugins: [
         renameFootnoteHeading,
+        markLessonSources,
         keepOnlyFootnoteSection,
         detectFootnoteSection,
       ],
