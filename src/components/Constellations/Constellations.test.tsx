@@ -8,7 +8,7 @@
  *    "Constellation complete." label on course completion; respects reduced
  *    motion (no cx-ignite animation class).
  */
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { StreakCounter } from "./StreakCounter";
 import { ConstellationCelebration } from "./ConstellationCelebration";
@@ -85,6 +85,32 @@ describe("ConstellationCelebration", () => {
   it("renders nothing when the flag never flips (no premature pop)", () => {
     render(<ConstellationCelebration {...baseProps} />);
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("cancels its timers on unmount so none fire post-teardown", () => {
+    // Regression: the course-complete pulse (60ms + 1200ms) used to be held in
+    // local consts that the unmount cleanup could not reach. They outlived the
+    // component and fired after jsdom teardown, which CI reported as
+    // "Unhandled Error: ReferenceError: window is not defined".
+    vi.useFakeTimers();
+    try {
+      const { unmount } = render(
+        <ConstellationCelebration
+          {...baseProps}
+          litStars={8}
+          courseJustCompleted
+        />,
+      );
+      localStorage.setItem(lessonKey(baseProps.lessonSlug), "true");
+      fireEvent(window, new CustomEvent(PROGRESS_CHANGED_EVENT));
+      expect(screen.getByRole("status")).toBeInTheDocument();
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("dismisses on Escape", async () => {
