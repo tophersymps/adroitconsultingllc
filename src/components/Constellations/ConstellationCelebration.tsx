@@ -41,6 +41,12 @@ export function ConstellationCelebration({
         window.matchMedia("(prefers-reduced-motion: reduce)").matches),
   );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The pulse timers must outlive `show()` so the unmount cleanup can cancel
+  // them. Held in refs (not locals) because a timer that fires after teardown
+  // calls setState on a dead tree — in jsdom that throws
+  // `ReferenceError: window is not defined`.
+  const pulseOnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pulseOffRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const celebrated = useRef(false);
 
   const show = useCallback(() => {
@@ -49,20 +55,10 @@ export function ConstellationCelebration({
     setVisible(true);
     if (courseJustCompleted) {
       // Constellation pulse on course-complete (≤1.2s).
-      const p = setTimeout(() => setPulse(true), 60);
-      const clearPulse = setTimeout(() => setPulse(false), 1200);
-      timerRef.current = setTimeout(() => {
-        setVisible(false);
-      }, AUTO_DISMISS_MS);
-      return () => {
-        clearTimeout(p);
-        clearTimeout(clearPulse);
-      };
+      pulseOnRef.current = setTimeout(() => setPulse(true), 60);
+      pulseOffRef.current = setTimeout(() => setPulse(false), 1200);
     }
     timerRef.current = setTimeout(() => setVisible(false), AUTO_DISMISS_MS);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
   }, [courseJustCompleted]);
 
   useEffect(() => {
@@ -82,6 +78,11 @@ export function ConstellationCelebration({
       window.removeEventListener("adroit-blog:progress-changed", onChanged);
       window.removeEventListener("storage", onChanged);
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (pulseOnRef.current) clearTimeout(pulseOnRef.current);
+      if (pulseOffRef.current) clearTimeout(pulseOffRef.current);
+      timerRef.current = null;
+      pulseOnRef.current = null;
+      pulseOffRef.current = null;
     };
   }, [lessonSlug, show]);
 
