@@ -292,7 +292,7 @@ describe("buildTimeline — real series cadences", () => {
       [49, 56],
       [57, 64],
       [65, 72],
-      [73, 80],
+      [73, 81],
     ]);
 
     const nodes = buildTimeline(lessonRange(1, total), checks);
@@ -576,7 +576,7 @@ describe("input conformance — every check file carries a Lessons A–B range",
     ]);
     // Short tail: the last range simply ends at the last lesson.
     const aiAdoption = getKnowledgeChecks("ai-adoption");
-    expect(aiAdoption[aiAdoption.length - 1]).toEqual({ n: 7, lessons: [31, 34] });
+    expect(aiAdoption[aiAdoption.length - 1]).toEqual({ n: 7, lessons: [31, 35] });
     // And every resolved range equals the range parsed from its own file title.
     const byTitle = new Map(files.map((f) => [`${f.series}:${f.file}`, f.range]));
     for (const series of CHECK_SERIES) {
