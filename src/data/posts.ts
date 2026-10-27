@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "supabase-auth-proxy-session-2026",
+    "title": "Your Supabase Session Dies When proxy.ts Never Runs",
+    "excerpt": "Next.js 16 renamed middleware to proxy. Miss the rename, or write the cookie to the wrong response, and every session expires on schedule.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 27, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12",
+    "featured": false,
+    "tags": [
+      "Supabase",
+      "Next.js",
+      "React",
+      "TypeScript",
+      "Auth",
+      "Sessions",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/supabase-auth-proxy-session-2026.webp",
+    "ogImage": "/banners/supabase-auth-proxy-session-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "embedding-migration-dual-index-2026",
     "title": "You Cannot Mix Two Vector Spaces: The Re-Embed Playbook",
     "excerpt": "Swapping an embedding model is one string in your application and every vector in your index. Here is the dual-index cutover that makes the swap reversible.",
