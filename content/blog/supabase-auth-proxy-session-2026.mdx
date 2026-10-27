@@ -1,0 +1,129 @@
+---
+title: "Your Supabase Session Dies When proxy.ts Never Runs"
+slug: supabase-auth-proxy-session-2026
+excerpt: "Next.js 16 renamed middleware to proxy. Miss the rename, or write the cookie to the wrong response, and every session expires on schedule."
+category: "React & Web Dev"
+categoryColor: "react"
+categoryGradient: "from-emerald to-emerald-dark"
+date: "October 27, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: 12
+tags: [Supabase, Next.js, React, TypeScript, Auth, Sessions, Web Development]
+bannerImage: "/banners/supabase-auth-proxy-session-2026.webp"
+ogImage: "/banners/supabase-auth-proxy-session-2026-og.jpg"
+---
+
+A team ships a routine upgrade to Next.js 16. The build passes, the type check passes, the preview deployment renders every page correctly, and sign-in works on the first try. An hour later, support starts collecting reports: people are being logged out while they work. Not on deploy. One hour after deploy, then again an hour after that, for everyone.
+
+Nothing in the diff looks like an auth change. The application code is the same. The Supabase project is the same. What changed is a filename. Next.js 16 deprecated `middleware.ts` and renamed the convention to `proxy.ts`, and the session refresh for a Supabase app lives inside that file.[^1] Rename it, or migrate the code but keep the old name, and the refresh stops happening. Every symptom arrives later, on the access token's own schedule.
+
+That is the shape of this class of bug: the failure is silent at build time and delayed at runtime, so it reads as flakiness. This article covers the five places a Supabase session actually gets lost in a Next.js App Router app, in the order the request touches them, plus the two settings that decide whether verification is a local check or a network call.
+
+## The refresh is a file, and the file moved
+
+Server Components cannot write cookies. That single constraint is why the proxy exists in a Supabase app at all. When the access token expires, something has to refresh it, receive the new token, and put it on both the request and the response. In the App Router, that something runs before rendering, in the proxy.[^2]
+
+The Supabase documentation for the Next.js client is explicit about the direction of the trap: on Next.js 15 and earlier, a `proxy.ts` file is never called, so sessions never refresh and users get signed out. Next.js renamed the file in version 16, where `middleware.ts` is deprecated and `proxy.ts` is the convention, and the function export changes from `middleware` to `proxy`.[^1][^3] The Supabase code inside the file is identical either way. Only the name and the export move.
+
+That gives two ways to break it, and both look innocent in review. Upgrade Next.js to 16 and keep `middleware.ts`, and you are on a deprecated path that the upgrade guide tells you to migrate. Follow a tutorial written for Next.js 15 and create `proxy.ts` on a project that has not upgraded yet, and the file is inert. It compiles. It is never imported. Nothing warns you.
+
+The proxy has three jobs and all three matter.[^2] It calls `supabase.auth.getClaims()`, which verifies the token and refreshes the session when the token is close to expiring. It writes the refreshed token onto the incoming request with `request.cookies.set`, so the Server Component render that follows sees the current identity instead of refreshing a second time. And it writes the token onto the outgoing response with `response.cookies.set`, so the browser replaces the expired cookie.
+
+![Where the session gets refreshed and where it gets written: browser, proxy.ts, request cookie write, server render, response cookie write, with the failure noted when the file is named middleware.ts or proxy.ts on the wrong framework version.](</diagrams/supabase-auth-proxy-session-2026/1-request-path.png>)
+
+The matcher is the second half of that file, and it fails differently. With no `config` export, the proxy runs on every request, including `_next/static`, `_next/image`, and files in `public`. The Supabase template excludes those with a negative lookahead so auth logic does not sit in front of asset requests.[^2] Copy the matcher but edit it carelessly and you can exclude a path that serves authenticated content, which is the subject of a later section.
+
+## Verification is not the same as reading the cookie
+
+Once the proxy runs, it has to answer a question: is the person making this request who the cookie says they are? Supabase ships three functions that look interchangeable and are not.[^2]
+
+`getSession()` reads the token out of storage and decodes it. It does not verify the signature. In the browser that is acceptable, because the client library is managing its own session. On the server it is a vulnerability, because anyone can forge a cookie and have your server render another user's page. The Supabase docs say not to trust it in server code, in those words.
+
+`getClaims()` verifies the signature on every call and returns the decoded claims. On a project with asymmetric signing keys, which is the default for new projects, it verifies locally using the WebCrypto API against a cached copy of the project's public keys. On a project still on a shared secret, it calls the Auth server to validate. Either way the claims come from a token the server verified rather than from whatever the cookie carried. It also refreshes the session when the access token is near expiry, which is what keeps a server-rendered session alive across hour boundaries.
+
+`getUser()` makes a network call to the Auth instance and returns the user record. It is the only one of the three that sees changes made server-side after the token was issued.
+
+The distinction that gets missed: a valid signature proves the token was issued by your project and has not expired. It does not prove the session still exists. If a user signs out on their phone, the token in their laptop's cookie stays cryptographically valid until its expiry, and `getClaims()` will keep accepting it. Supabase's own guidance is to call `getUser()` where that window matters, such as admin surfaces, destructive actions, or anything with a payment attached.[^4]
+
+![Comparison of getSession, getClaims, and getUser across what they read, whether they verify a signature, network cost, refresh behavior, whether they catch a revoked session, and what each should be used for.](</diagrams/supabase-auth-proxy-session-2026/2-verification-ladder.png>)
+
+There is a fourth decision hiding in that table, and it is not in the auth guide. `@supabase/ssr` and `@supabase/server` are different packages for different transport models, and they coexist. Use `@supabase/ssr` when the session lives in cookies, which is the Next.js case. Use `@supabase/server` when identity arrives per request in an `Authorization: Bearer` header, which is the case for Edge Functions, workers, and framework APIs. Neither deprecates the other.[^5] A team that reads a blog post recommending the newer-sounding package and swaps it into an App Router app will spend a day discovering why sessions stopped persisting.
+
+## The signing key decides what verification costs
+
+Everything in the previous section has a price, and the price is set in the dashboard rather than in the code.
+
+On the legacy system, every JWT is signed with one shared secret, and validation runs on the Auth server. That puts the Auth server in the hot path of every authenticated request, in a single region, and it makes rotation painful: rotate the secret and active users are signed out immediately, every service that verifies tokens has to be redeployed in coordination, and the `anon` and `service_role` keys have to move at the same time.[^6]
+
+Asymmetric signing keys change the shape of all of that. The private key stays inside Supabase and cannot be extracted. The public half is published at the project's JWKS endpoint, so any verifier can check a signature locally without calling the Auth server. Rotation becomes a state machine with reversible steps instead of an outage: create a standby key, rotate so new tokens use it while both keys remain trusted, leave the old key in the previously used state until its tokens expire, then revoke.[^6]
+
+Two timings decide whether that safe path stays safe. Supabase Edge caches the JWKS response for ten minutes, and the guidance is to wait at least twenty minutes before creating a standby key or revoking a previously used one, so every edge cache has cycled.[^7] If your own app caches the key set for longer than that, a rotation can leave you rejecting valid tokens, and you will have introduced the outage the new system was supposed to remove.
+
+![Two rotation timelines compared: the legacy shared secret, where rotation forces sign-outs, ordered redeploys, and keeps the Auth server in the request path, against asymmetric keys, where standby, rotate, previously used, and revoke happen without downtime.](</diagrams/supabase-auth-proxy-session-2026/3-key-rotation.png>)
+
+The migration has two traps worth naming because they are not auth-code bugs. Any component that verifies tokens against the legacy secret directly, using `jose` or `jsonwebtoken`, breaks when the key rotates. And Edge Functions with the Verify JWT setting enabled break too, because that setting validates against the old scheme. Both have to be moved to a verification path that reads the key set, or the setting has to be turned off, before the rotation happens.[^6]
+
+## The cookie lives on the response object
+
+Here is the failure that produces the most confusing support tickets, because it looks like the proxy works. It does run. It does refresh. The user is still signed out.
+
+`setAll` is the callback `@supabase/ssr` calls with the cookies it wants written. The refreshed session only reaches the browser if those cookies land on the response object that the handler actually returns. The Supabase template builds a `supabaseResponse` first, has `setAll` write onto it, and returns that same object at the end. The docs are blunt about the consequence of returning anything else: an earlier response does not carry the refreshed cookies, so the user is signed out on the next request.[^2]
+
+The everyday version of this bug is a redirect. A developer adds a role check to the proxy, decides the user is not allowed on the page, and returns `NextResponse.redirect(...)` from inside the handler. That redirect is a different response object, and the refreshed token was written to the one being discarded. The user gets bounced to the login page with a cookie that is about to expire, logs in again, and the cycle repeats. The correct pattern is to copy the cookies and the cache headers onto the new response before returning it.[^2]
+
+![Two cookie write paths side by side: returning the response that setAll built keeps the user signed in, while constructing a fresh response after setAll drops the refreshed token and signs the user out on the next request.](</diagrams/supabase-auth-proxy-session-2026/4-cookie-write-path.png>)
+
+Caching is the same bug with a worse blast radius. When a session refresh happens, `@supabase/ssr` writes the new token into a `Set-Cookie` header. If a CDN or an ISR cache stores that response and serves it to somebody else, that somebody else is now signed in as the wrong person. Supabase documents both shapes: ISR on an authenticated route, and CDN or reverse proxy caching of a response carrying `Set-Cookie`.[^4]
+
+The library has partial protection. Since `@supabase/ssr` version 0.10.0, the callback receives the necessary cache headers as a second argument whenever a token refresh occurs, and applying them to the response is enough for most CDNs.[^4] That is not a substitute for the framework-level rule: use `export const dynamic = 'force-dynamic'` on routes that require authentication, and never enable ISR where a refresh can happen.
+
+One more cache-adjacent leak is specific to Vercel's Fluid compute. Instances stay warm and can be reused across requests, so a Supabase client created at module scope, or stored in a shared variable, can be reused by a different user than the one who created it. Initialize the client inside the request handler and never keep user-scoped state in a module-level variable.[^4]
+
+## The proxy is not the authorization boundary
+
+It is tempting to treat the proxy as a gate: if a route is matched, the user is authenticated, and everything behind that route is safe. Next.js documents why that reasoning fails in a specific and non-obvious way.
+
+Server Functions are not separate routes in the execution chain. They are handled as POST requests to the route where they are used. A matcher that excludes a path also skips the Server Function calls on that path.[^3] So a matcher like the common `'/((?!api|_next/static|_next/image|.*\\.png$).*)'` excludes `/api/*`, and if a Server Action happens to be used on a page under `/api`, it is unguarded. The same applies to any route someone later adds to the exclusion list for an unrelated reason.
+
+The framework's own guidance is to verify authentication and authorization inside each Server Function rather than relying on the proxy alone.[^3] That is not a belt-and-braces suggestion. It is the only way the check survives a matcher edit, a refactor that moves an action to a different route, or a route rename. The proxy keeps the session fresh and handles coarse redirects. The action decides whether this caller may do this thing.
+
+![Route coverage compared: a matched dashboard route where the proxy refreshes the session and gates the page, against an excluded checkout route where a Server Action posts without proxy coverage, showing that matchers are per route and functions live on routes.](</diagrams/supabase-auth-proxy-session-2026/5-matcher-gap.png>)
+
+There is a softer version of the same problem on the client. Next.js prefetches routes with `<Link>` and `router.push()`, and those prefetch requests can reach the server before the browser has processed the tokens from a sign-in redirect. The server renders unauthenticated content for a moment. The documented workaround is to send users to one page after sign-in that does not prefetch, let the client library finish storing the session, and navigate from there.[^4]
+
+## Sign-out scope, and the refresh race
+
+Two session mechanics produce "invalid refresh token" errors that look like a server problem and are not.
+
+The first is scope. `signOut()` defaults to global scope, which revokes the refresh token for every session that user has: other tabs, other devices, and any server-side context still holding the old token. A single-tab sign-out that unexpectedly boots a user off their phone is usually this default. Pass `{ scope: 'local' }` when the intent is to end only the current session.[^4]
+
+The second is refresh token reuse. A refresh token can be exchanged once. Supabase allows a ten-second reuse window to absorb legitimate duplicate refreshes, which happen when the same token is used on the server and then again in the browser, and it also returns the active token when a parent token is replayed after a lost response. Outside those two exceptions, a reuse attempt is treated as a stolen token and the entire session is revoked.[^8] That design is correct, and it punishes exactly the thing an App Router app does when both the proxy and a route handler refresh the same session concurrently.
+
+The practical rules that follow are unglamorous. Keep the `onAuthStateChange` listener free of bugs and register it early. Treat a server-side "invalid refresh token" as a stale token from the browser and defer rendering to the client where it can read a current one. And leave the access token expiry alone unless you have a reason, because the default of one hour is also the recommendation, and values below five minutes invite clock skew and refresh load that are hard to debug.[^8]
+
+## The order to fix it in
+
+The fixes are cheap once you know which one you need, so sequence them by cost of verification rather than by difficulty.
+
+1. Confirm the filename and the export match the installed Next.js version. `proxy.ts` with an exported `proxy` function on 16, `middleware.ts` with `middleware` on 15.
+2. Confirm the proxy actually refreshes: log inside `setAll` during a token refresh and check that it fires.
+3. Confirm the handler returns the response `setAll` wrote to, including on redirect paths.
+4. Replace `getSession()` with `getClaims()` anywhere it gates access. Keep `getUser()` for the actions where revocation has to bite immediately.
+5. Add `getClaims()` inside every Server Action and Route Handler that touches user data, and treat that as the authorization check.
+6. Confirm the project is on asymmetric signing keys, and that nothing in the app still verifies against the legacy secret.
+7. Mark authenticated routes `force-dynamic`, and confirm the CDN is not caching responses that carry `Set-Cookie`.
+8. Move the Supabase client initialization inside the request handler if it is at module scope.
+
+None of these are framework features you have to opt into. They are defaults that hold only if a specific file, a specific return value, and a specific key type stay in place. Nothing was removed to cause the outage described at the top of this article. A filename stopped being called, and that was enough.
+
+Two companion pieces cover the neighbouring layers. [How RLS gates a realtime stream](/field-notes/realtime-rls-enforcement-boundary-2026) takes the same identity and follows it to the subscription boundary, where a wrong policy leaks rows instead of pages. [The Next.js cache lifecycle](/field-notes/nextjs-16-cache-lifecycle-2026) explains the caching layer that turns a `Set-Cookie` header into a cross-user session leak.
+
+[^1]: Next.js, "How to upgrade to version 16." The middleware filename is deprecated and renamed to `proxy`, the named export changes from `middleware` to `proxy`, the `proxy` runtime is Node.js and cannot be configured, and the `middleware` convention remains available for Edge runtime cases. [nextjs.org](https://nextjs.org/docs/app/guides/upgrading/version-16)
+[^2]: Supabase Docs, "Creating a Supabase client for SSR." Cookie-based session storage with `@supabase/ssr`, the proxy's three refresh responsibilities, `getClaims`, `getUser`, and `getSession` compared, the requirement to return the `supabaseResponse` that `setAll` built, copying cookies and cache headers onto a replacement response, the matcher that excludes static assets, and the cached ISR warning. [supabase.com](https://supabase.com/docs/guides/auth/server-side/creating-a-client?queryGroups=framework&framework=nextjs)
+[^3]: Next.js, "proxy.js file convention." Proxy executes before routes render, runs on the Node.js runtime, a matcher with no config runs on every request including static files, Server Functions are POST requests to the route where they are used so an excluded path skips them, and the recommendation to verify auth inside each Server Function. [nextjs.org](https://nextjs.org/docs/app/api-reference/file-conventions/proxy)
+[^4]: Supabase Docs, "Advanced guide" for server-side auth. PKCE and cookie storage, the Next.js prefetch gap and the post-sign-in redirect, refresh token errors and `signOut` scope, `getClaims` versus `getUser` for revoked sessions, ISR and CDN caching of `Set-Cookie`, the `@supabase/ssr` 0.10.0 cache headers, and Vercel Fluid compute module-scope client reuse. [supabase.com](https://supabase.com/docs/guides/auth/server-side/advanced-guide)
+[^5]: Supabase Docs, "Which package to use." `@supabase/ssr` for cookie-based sessions in SSR frameworks, `@supabase/server` for header-based identity in Edge Functions, workers, and framework APIs, and the statement that the two coexist without either being deprecated. [supabase.com](https://supabase.com/docs/guides/auth/choosing-a-server-package)
+[^6]: Supabase Docs, "JWT Signing Keys." The legacy JWT secret against asymmetric signing keys, the comparison table covering performance, reliability, revocation, zero-downtime rotation, and compliance, the standby, rotate, previously used, and revoke lifecycle, and the migration warnings for direct secret verification and Edge Function JWT verification. [supabase.com](https://supabase.com/docs/guides/auth/signing-keys)
+[^7]: Supabase Docs, "JSON Web Token." The JWKS endpoint at `/auth/v1/.well-known/jwks.json`, its ten-minute cache at Supabase Edge, the twenty-minute wait before creating a standby key or revoking a previously used one, and the warning not to cache the key set longer in your own application. [supabase.com](https://supabase.com/docs/guides/auth/jwts)
+[^8]: Supabase Docs, "User sessions." Access tokens as short-lived JWTs and single-use refresh tokens, the default one-hour expiry and why values under five minutes are discouraged, the ten-second reuse interval, parent token replay, and the reuse-detection rule that revokes the whole session. [supabase.com](https://supabase.com/docs/guides/auth/sessions)
