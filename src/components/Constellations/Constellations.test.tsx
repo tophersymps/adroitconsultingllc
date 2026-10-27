@@ -93,6 +93,8 @@ describe("ConstellationCelebration", () => {
     // component and fired after jsdom teardown, which CI reported as
     // "Unhandled Error: ReferenceError: window is not defined".
     vi.useFakeTimers();
+    const setSpy = vi.spyOn(globalThis, "setTimeout");
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
     try {
       const { unmount } = render(
         <ConstellationCelebration
@@ -102,13 +104,26 @@ describe("ConstellationCelebration", () => {
         />,
       );
       localStorage.setItem(lessonKey(baseProps.lessonSlug), "true");
+      setSpy.mockClear();
+      clearSpy.mockClear();
+
       fireEvent(window, new CustomEvent(PROGRESS_CHANGED_EVENT));
       expect(screen.getByRole("status")).toBeInTheDocument();
-      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      // The celebration schedules 3 timers: pulse-on (60ms), pulse-off
+      // (1200ms) and auto-dismiss (3200ms). Compare ids rather than the global
+      // timer count so unrelated pending timers can't make this brittle.
+      const scheduled = setSpy.mock.results.map((r) => r.value as number);
+      expect(scheduled).toHaveLength(3);
 
       unmount();
-      expect(vi.getTimerCount()).toBe(0);
+      const cancelled = new Set(clearSpy.mock.calls.map((c) => c[0] as number));
+      for (const id of scheduled) {
+        expect(cancelled.has(id)).toBe(true);
+      }
     } finally {
+      setSpy.mockRestore();
+      clearSpy.mockRestore();
       vi.useRealTimers();
     }
   });
