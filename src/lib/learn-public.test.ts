@@ -51,21 +51,45 @@ describe("learn-public — disclosure boundary (t_a6b7630b)", () => {
 
   it("the serialisable search payload names no stealth series and no stealth lesson", () => {
     const payload = getPublicSearchData();
-    const json = JSON.stringify(payload);
 
-    for (const slug of STEALTH_SLUGS) expect(json).not.toContain(slug);
+    // Scope: identity-bearing fields only. SLUGS are checked wherever they can
+    // appear as identifiers (series slug, lesson slug, the lesson's `series`
+    // back-reference) plus naming fields. Display NAMES are checked in the
+    // fields that name a thing: the series `name` and the lesson `title`.
+    //
+    // `excerpt` (authored prose) and `tags` (free-text vocabulary) are excluded
+    // on purpose. `tags` are carried through verbatim, so a topical tag equal to
+    // a stealth series' display name ("AI Adoption" on an agentic-ai lesson
+    // about change management) failed the old whole-payload string scan while
+    // disclosing nothing. Stealth content still cannot reach this payload
+    // silently: only launched series are projected, and a stealth document would
+    // carry its own slug and series in the fields checked below.
+    const identity = [
+      ...payload.series.flatMap((s) => [s.slug, s.name]),
+      ...payload.lessons.flatMap((l) => [l.slug, l.series, l.title]),
+    ].join("\n");
+    // Naming fields only, for the display-name assertions below.
+    const naming = [
+      ...payload.series.map((s) => s.name),
+      ...payload.lessons.map((l) => l.title),
+    ].join("\n");
+    // Guard against a vacuous pass.
+    expect(identity.length).toBeGreaterThan(0);
+    expect(payload.lessons.length).toBeGreaterThan(0);
+
+    for (const slug of STEALTH_SLUGS) expect(identity).not.toContain(slug);
     // Stealth series display names too, not just their slugs.
     for (const s of learnSeries) {
       if (isPubliclyLaunchedSeries(s.slug)) continue;
-      expect(json).not.toContain(s.name);
+      expect(naming).not.toContain(s.name);
     }
-    // Lesson titles/excerpts of stealth series must not leak either.
+    // Lesson titles of stealth series must not leak either.
     const stealthLessons = learnLessons.filter(
       (l) => !isPubliclyLaunchedSeries(l.series),
     );
     expect(stealthLessons.length).toBeGreaterThan(0);
     for (const l of stealthLessons.slice(0, 200)) {
-      expect(json).not.toContain(l.title);
+      expect(identity).not.toContain(l.title);
     }
   });
 

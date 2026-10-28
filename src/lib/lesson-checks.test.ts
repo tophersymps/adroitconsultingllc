@@ -282,18 +282,23 @@ describe("buildTimeline — real series cadences", () => {
   it("follows agentic-ai's 8-lesson ranges (check 2 after lesson 16, not lesson 10)", () => {
     const checks = getKnowledgeChecks("agentic-ai");
     const total = seriesLessonCount("agentic-ai");
-    expect(checks.map((c) => c.lessons)).toEqual([
-      [1, 8],
-      [9, 16],
-      [17, 24],
-      [25, 32],
-      [33, 40],
-      [41, 48],
-      [49, 56],
-      [57, 64],
-      [65, 72],
-      [73, 81],
-    ]);
+    const ranges = checks.map((c) => c.lessons);
+
+    // Assert the CONTRACT (cadence, contiguity, tail), never a frozen lesson
+    // count. Pinning the last range's end turns every lesson add into a red
+    // main: the fixtures said [73, 81] while the check files (correctly) said
+    // `Lessons 73-82`. The end of the final range is derived from the published
+    // lesson total instead.
+    expect(ranges[0]).toEqual([1, 8]);
+    // Every range except the last is a full 8-lesson window; the last absorbs
+    // the short tail (or a short-tail merge, which is why its length may be
+    // larger than 8).
+    expect(ranges.slice(0, -1).map((r) => r[1] - r[0] + 1)).toEqual(
+      new Array(ranges.length - 1).fill(8),
+    );
+    // Ranges are contiguous and cover 1..total exactly.
+    expect(ranges.map((r) => r[0])).toEqual([1, ...ranges.slice(0, -1).map((r) => r[1] + 1)]);
+    expect(ranges[ranges.length - 1][1]).toBe(total);
 
     const nodes = buildTimeline(lessonRange(1, total), checks);
     expect(nodes).toHaveLength(total + checks.length);
@@ -574,9 +579,17 @@ describe("input conformance — every check file carries a Lessons A–B range",
       { n: 2, lessons: [9, 16] },
       { n: 3, lessons: [17, 24] },
     ]);
-    // Short tail: the last range simply ends at the last lesson.
+    // Short tail: the last range simply ends at the last lesson. Derived from the
+    // published total, never frozen — a hardcoded [31, 35] here reddened main
+    // the moment lesson 36 shipped and the check file correctly said 31-36.
     const aiAdoption = getKnowledgeChecks("ai-adoption");
-    expect(aiAdoption[aiAdoption.length - 1]).toEqual({ n: 7, lessons: [31, 35] });
+    const adoptionRanges = aiAdoption.map((c) => c.lessons);
+    const adoptionTotal = seriesLessonCount("ai-adoption");
+    const lastRange = adoptionRanges[adoptionRanges.length - 1];
+    expect(lastRange[1]).toBe(adoptionTotal);
+    expect(lastRange[0]).toBe(adoptionRanges[adoptionRanges.length - 2][1] + 1);
+    // A merged short tail is at least 3 lessons; the merge only fires below that.
+    expect(lastRange[1] - lastRange[0] + 1).toBeGreaterThanOrEqual(3);
     // And every resolved range equals the range parsed from its own file title.
     const byTitle = new Map(files.map((f) => [`${f.series}:${f.file}`, f.range]));
     for (const series of CHECK_SERIES) {
