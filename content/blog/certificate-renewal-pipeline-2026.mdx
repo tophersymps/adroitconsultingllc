@@ -1,0 +1,173 @@
+---
+title: "The 200-Day Certificate Turns Renewal Into Infrastructure"
+slug: certificate-renewal-pipeline-2026
+excerpt: "Public certificates now cap at 200 days, then 100, then 47. Renewal is a pipeline with a last mile, and the last mile is where the outage lives."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 28, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "15 min read"
+tags: [DevOps, TLS, Certificates, Platform Engineering, Reliability, PKI, Automation]
+bannerImage: "/banners/certificate-renewal-pipeline-2026.webp"
+ogImage: "/banners/certificate-renewal-pipeline-2026-og.jpg"
+---
+
+At 02:40 on a Tuesday, a payment service starts returning 502s. The load balancer reports its upstream as healthy. Application logs are clean. The error that eventually surfaces is a TLS handshake failure, and the certificate in that handshake expired at 02:12.
+
+The renewal job ran at 01:00 and reported success. It was not lying. A new certificate was issued, written to a secret, and logged. The process that terminates TLS never read it. It loaded its certificate once at startup and had been holding the old bytes in memory for six weeks.
+
+That is the shape of most certificate outages now. Not a forgotten calendar entry, though those still happen. A pipeline that worked, followed by a delivery step that did not.
+
+## The ceiling halved in March, and it halves again next year
+
+On 15 March 2026, the maximum validity period for a publicly trusted TLS certificate dropped from 398 days to 200. The CA/Browser Forum Baseline Requirements state the schedule with unusual precision. A subscriber certificate issued on or after 2026-03-15 and before 2027-03-15 must not have a validity period greater than 200 days. From 2027-03-15 the ceiling is 100 days. From 2029-03-15 it is 47.[^1]
+
+The same section fixes the unit of measurement: a day is 86,400 seconds, and any amount of time beyond that, including fractional seconds, counts as an additional day.[^1] That is not trivia. A certificate requested at 199 days and issued with a one-second rounding is read as 200, and a request for 201 days is a violation rather than a near miss.
+
+The validation data moved on the same date. Domain name and IP address validation reuse falls from 398 days to 200 in 2026, to 100 in 2027, and to 10 days in 2029. Subject identity information reuse drops from 825 days to 398.[^1]
+
+This was not a quiet technical adjustment pushed through by one vendor. Ballot SC-081v3 passed with 25 certificate authorities voting yes, none against, five abstaining, and all four certificate consumers (Apple, Google, Microsoft, Mozilla) voting yes with no abstentions.[^2] Apple proposed it, Sectigo sponsored it, and every public certificate authority is now bound to it whether or not your team has read the ballot.
+
+![Certificate lifetime stepdown: max validity falls from 398 days to 200 in March 2026, 100 in March 2027, and 47 in March 2029, with renewals per year rising from under one to nearly eight](/diagrams/certificate-renewal-pipeline-2026/1-lifetime-stepdown.png)
+
+Put the arithmetic somewhere you will see it. At 398 days a certificate renews 0.92 times a year, so a single missed renewal cycle is survivable because the next one is almost a year away. At 200 days it renews 1.83 times. At 100 days, 3.65 times. At 47 days, 7.77 times.[^1] The workload does not grow linearly, because each renewal now has seven times as many chances to hit the one path that is broken.
+
+## Shorter lifetimes are the point, not a side effect
+
+The reasoning is not hidden. Let's Encrypt describes two advantages: shorter lifetimes limit the damage from mis-issuance and key compromise, and they encourage automation.[^4] A stolen private key is dangerous for exactly as long as the certificate it belongs to remains valid. Cutting the lifetime cuts the blast radius, and it also cuts the window in which a mistaken issuance can be abused before it rotates away on its own.
+
+The second clause carries more weight than it appears to. Let's Encrypt is explicit that automation is assumed, not hoped for: "Once certificate management is automated, shorter lifetimes aren't any less convenient than longer ones."[^4]
+
+That sentence is true. It is also conditional. For a team that renews by hand, the schedule above is a countdown rather than an inconvenience, and the first deadline that bites is not 2029. It was March 2026, and the certificates issued just after it are starting to come due now.
+
+The direction is already past theory. Let's Encrypt made six-day certificates generally available in January 2026, opt-in through a `shortlived` ACME profile, valid for 160 hours.[^9] A six-day certificate is not a certificate anyone renews by hand. It is a credential the infrastructure issues and replaces on its own, which is the model the whole industry is being pushed toward.
+
+## Four stages, and the failure at each one
+
+Every certificate has a lifecycle with four stages, and each one fails in a different way. Treating them as a single activity, the thing people mean when they say "we handle certs," is what makes the failures hard to see and easy to blame on the wrong team.
+
+**Discovery** answers which certificates exist, which names each one covers, and what depends on it. The failure here is a certificate nobody knew about. In December 2018 an expired certificate inside an Ericsson software release took down mobile data for roughly 32 million people on O2 and the virtual operators riding its network in the UK, and disrupted SoftBank in Japan. The certificate lived inside software the operators ran, not in anything they had listed as an asset they owned.[^8]
+
+**Issuance** is the call to the certificate authority. The failure is a broken challenge. An ACME account credential that expired, a DNS API token that lost a permission, a CAA record that no longer permits the CA, a rate limit hit during a retry storm. All of these log as errors, which is the good news. They are at least visible.
+
+**Deployment** is getting the new bytes into the process that terminates connections. This is where most of the elapsed time in a certificate incident is spent, and it is the stage almost nobody instruments.
+
+**Verification** is proving that what clients receive is the new certificate. The failure here is subtle: teams monitor the wrong object, confirm the file is correct, and close the ticket while the service keeps serving the old one.
+
+![Certificate lifecycle stages: discovery, issuance, deployment, and verification, each with the artifact it produces and the specific way it fails](/diagrams/certificate-renewal-pipeline-2026/2-lifecycle-stages.png)
+
+The first two stages are mostly solved by tooling that already exists. The last two are the ones that produce outages, and they are solved by engineering rather than by buying a certificate manager.
+
+## The last mile is a memory problem
+
+A certificate is bytes. The server that terminates TLS holds those bytes in memory, and it does not reread them because a file changed. Something has to tell it to.
+
+cert-manager's documentation is unusually direct about this dependency. With `rotationPolicy: Always`, cert-manager waits until the Certificate object is correctly signed before it overwrites `tls.key` in the Secret, and the docs state you can expect no downtime "if your application can detect changes to the mounted `tls.crt` and `tls.key` and reload them gracefully or automatically restart." Then the consequence, in the next sentence: "If your application only loads the private key and signed certificate once at start up, the new certificate won't immediately be served by your application."[^6]
+
+The recommended patch is a restart, either a manual `kubectl rollout restart` or a controller such as Reloader that watches Secrets and restarts the workloads mounting them.[^6] That is a workaround for an application that cannot reload, and it is worth naming as such. A restart is a rollout, and a rollout has a blast radius.
+
+Two more traps sit in the same document, both of which fail silently. Deleting a Certificate resource does not delete its Secret by default, so services keep running on the certificate they already hold while renewal stops.[^6] The second is a config-shape error: `spec.duration` and `spec.renewBefore` must be Go duration strings, which have no `d` suffix, so `renewBefore: 30d` is not 30 days and can leave cert-manager unable to function correctly.[^6]
+
+![Issued but not served: the control plane updates the Secret while the process keeps the old certificate in memory, so clients continue to receive an expiring certificate](/diagrams/certificate-renewal-pipeline-2026/3-issued-not-served.png)
+
+Outside Kubernetes the mechanism changes and the shape does not. An NGINX worker that was never signaled keeps its old certificate in memory. A load balancer holds a certificate in its own configuration, updated by a control-plane call that can fail independently. A CDN edge node caches a certificate until the control plane pushes an update to it. A service mesh sidecar keeps an in-memory copy with its own refresh interval. In every case the artifact on disk or in the control plane can be current while the thing answering on port 443 is not.
+
+This is the same promotion gap we described for [container artifacts](/field-notes/build-once-deploy-digest-2026), where a rebuild between staging and production means the thing that passed is not the thing that shipped. A certificate that was issued but never loaded is the TLS version of that failure: the artifact exists, and the running service is not using it.
+
+The same shape appears outside TLS entirely. Our publishing pipeline once served a page that returned 200 while an asset it referenced returned 404, because the page and the asset landed on different deployments a minute apart. The page was current, the thing it pointed at was not yet live, and neither deploy reported an error. A certificate that has been issued but not loaded by the server is that failure with a different transport.
+
+## The renewal window is now the CA's decision
+
+When certificates lasted a year, renewal timing was a local scheduling decision. When they last 47 days and millions of them renew against the same handful of CAs, local scheduling becomes a coordination problem.
+
+RFC 9773 defines the ACME Renewal Information extension for exactly that. The CA exposes a `renewalInfo` resource, and the client asks for a suggested window bounded by a start and an end timestamp. The spec's recommended algorithm is to pick a uniform random time inside that window, renew immediately if the chosen time has already passed, and otherwise sleep until it arrives.[^5] Clients are told to fetch renewal information immediately after issuance and never to check it after the certificate has expired.[^5]
+
+The random selection is the mechanism, not a detail. Everyone who renews "30 days before expiry" produces a spike that arrives 30 days before everyone's expiry, which for a large fleet is every day. A CA that can spread the window can also pull a renewal forward when it needs to revoke early, which is a capability you cannot get from a static cron.
+
+The UK National Cyber Security Centre recommends ARI where the CA and client both support it, for the same reason: it gives the CA a way to move your renewal earlier before you are left without a certificate.[^10]
+
+If you run cert-manager, the equivalent local control is `spec.renewBeforePercentage` rather than a fixed duration. The default renewal point is two thirds through the issued certificate's actual lifetime, and the docs recommend the percentage form specifically to avoid renewal loops when the issuer returns a different duration than you requested.[^6] A percentage survives a lifetime change. A number of days does not.
+
+## Calendar renewal stops working at 100 days
+
+Here is the failure that will catch the largest number of teams between now and March 2027, and it is pure arithmetic.
+
+A renewal interval is usually written as a fixed number of days, chosen to land a few days before expiry. For a 90-day certificate, renewing seven days early means a cron every 83 days. Renewing ten days early means 80. Renewing at two thirds means 60. Those are the exact numbers Let's Encrypt tells operators to grep for: "Grep for common hardcoded numbers like 83, 80 or 60 in cron jobs, wrapper scripts and runbooks if you're not sure."[^3]
+
+Each of those numbers encodes an assumption about a 90-day lifetime. Change the lifetime to 64 days, which Let's Encrypt does by default on 10 February 2027, and an 83-day cron fires nineteen days after the certificate it was supposed to renew has already expired.[^3] Nothing errors at the moment of failure. The cron is healthy. It simply runs too late, forever.
+
+![Renewal intervals versus certificate lifetime: an 83-day schedule sized for a 90-day certificate expires before the job runs once the lifetime drops to 64 days](/diagrams/certificate-renewal-pipeline-2026/4-interval-vs-lifetime.png)
+
+The arithmetic gets worse at 100 days, and not only because the interval shortens. A year does not divide evenly into 100-day blocks: 365 divided by 100 is 3.65. A fixed-interval schedule therefore never lines up with the calendar. Each cycle lands roughly nine days later in the year than the last, on a different weekday, which means a task pinned to "the first Monday of the month" fires twelve times a year against a certificate that needs 3.65 renewals, and the one firing that matters can land on a public holiday.
+
+Let's Encrypt's guidance is the durable fix: "If your renewals are hard-coded to a date from expiration you should update them to renew at approximately two thirds of the lifetime instead."[^3]
+
+## Monitor the certificate clients actually receive
+
+Every certificate monitoring design fails in the same place: it watches the source of truth instead of the output.
+
+A probe that reads the file on disk, the Secret in the cluster, or the object in the certificate manager is checking that issuance worked. It says nothing about whether deployment worked. The check that catches the 02:40 scenario connects to the real hostname over TLS and reads the `notAfter` value from the certificate the server actually presents.
+
+Three properties matter for that probe. It must run from outside the network path being tested, so it sees what a client sees rather than what a sidecar rewrites. It must check every name on the certificate, because a multi-name certificate expires for all of its names at once and the one you forgot is usually the one with an external dependency. And it must check the chain, not only the leaf, since an expiring intermediate produces the same outage with a different certificate to blame.
+
+Then alert on three separate things, because they fail independently:
+
+- The served certificate's remaining lifetime, with thresholds that scale to the certificate's own lifetime rather than fixed numbers. At 200 days, alerts at 30, 14, and 7 days of remaining life leave two solid weeks of slack. The same thresholds on a 47-day certificate leave a week of noise and almost no slack.
+- The renewal job's own health, as a distinct signal. A renewal that fails silently is worse than one that pages, because the calendar still looks fine until it does not.
+- The delta between issued and served. If the newest certificate in the store is four days older than the one being served, deployment has failed even though everything else is green.
+
+That third signal is the one that would have caught the opening scenario weeks before the expiry date, and it is the one almost nobody builds.
+
+![Four certificate monitors compared, with what each one reads, what it catches, and what it misses: a store or file probe, a served-certificate probe, renewal job health, and issued-versus-served drift](/diagrams/certificate-renewal-pipeline-2026/5-monitoring-signals.png)
+
+## What the two famous outages actually prove
+
+The certificate outages people cite are usually remembered as crypto failures. Read the timelines and they are deployment and visibility failures.
+
+Microsoft Teams went down globally on 3 February 2020 because an authentication certificate expired. Microsoft confirmed the cause within hours and began deploying a replacement, and the deployment took roughly five hours to complete across the service.[^7] The issuance was not the hard part. Getting a new certificate into a global platform was, and that is the part that determined how long users were down.
+
+Ericsson's December 2018 incident is the discovery failure. An expired certificate in two software versions installed at customer sites took out the SGSN-MME nodes in the core network, which is the equipment that manages subscriber sessions. Around 32 million UK subscribers lost mobile data across O2, GiffGaff, Sky Mobile, Lyca, and Tesco Mobile, and SoftBank in Japan was affected too.[^8] No operator could have renewed that certificate by watching its own inventory, because the certificate was not in its inventory. It shipped inside someone else's product.
+
+Both incidents map to the same conclusion the lifecycle stages produce. The certificate's validity date is a deadline. The outage is caused by whatever sits between the deadline and the thing that serves traffic.
+
+## Preparing for March 2027
+
+Three dates matter and two of them are close.
+
+Let's Encrypt switches its default to 64-day certificates on 10 February 2027, and its staging environment has been issuing 64-day certificates since 14 October 2026 so clients can be tested before the change reaches production.[^3] The authorization reuse period is dropping from 30 days to 10, and to seven hours in 2028, which removes most of the value of caching a validation.[^3] The 100-day ceiling from the Baseline Requirements takes effect on 15 March 2027.[^1]
+
+The work that has to happen before those dates is ordinary platform engineering, and it is small if it starts now.
+
+1. **Inventory every certificate, including the ones you do not own.** Public endpoints, internal service-to-service certificates, client certificates for mTLS, and anything embedded in a vendor product you run. The 47-day rule applies to publicly trusted certificates, not to a private CA you control, but the operational risk of an unmanaged internal certificate is the same and the outage is just as real.
+2. **Move issuance behind an API.** A certificate requested through a web console is a certificate whose renewal depends on a human remembering. ACME, or a certificate lifecycle tool with an API your pipeline can call, removes that dependency.
+3. **Prove the reload path, per service.** Not the theory of it. Take one instance, replace its certificate, and confirm the process serves the new one without a restart. If it needs a restart, wire the restart into the delivery step and treat it as a rollout with a rollout's risk.
+4. **Delete the hardcoded intervals.** Grep for 83, 80, 60, 30, and 90 in cron entries, wrapper scripts, and runbooks. Replace them with a percentage of the issued lifetime, or with ARI if your client supports it.
+5. **Set `renewBeforePercentage` and `rotationPolicy: Always`.** The percentage survives a lifetime change and avoids renewal loops. Rotating the private key with the certificate means a compromised key does not outlive the incident.
+6. **Probe the served certificate from outside, and alert on issued-versus-served drift.** This is the control that turns a silent last-mile failure into a ticket three weeks early.
+7. **Test against the staging CA now.** Let's Encrypt's staging endpoint has been issuing 64-day certificates since mid-October 2026. A pipeline that has not run against it is a pipeline that will discover its assumptions in February.
+
+None of this is exotic. It is the same discipline the rest of the delivery stack already has: an artifact, a promotion path, a health check, and an owner. The only thing that changed is that the artifact now expires faster than most teams' annual planning cycle.
+
+A certificate used to be a piece of paperwork with a date on it, renewed by whoever remembered. It is now a short-lived artifact with seven renewals a year, and the question worth answering is not whether it will be renewed. It is whether the thing serving traffic will be holding the new one when the old one stops working.
+
+[^1]: CA/Browser Forum, "Baseline Requirements for the Issuance and Management of Publicly-Trusted TLS Server Certificates," version 2.3.1 (4 October 2026), section 6.3.2 for the validity schedule (398 days before 2026-03-15, 200 days from 2026-03-15, 100 days from 2027-03-15, 47 days from 2029-03-15, with a day defined as 86,400 seconds) and section 4.2.1 for validation data reuse periods: [cabforum.org](https://cabforum.org/working-groups/server/baseline-requirements/requirements/)
+
+[^2]: CA/Browser Forum, "Ballot SC081v3: Introduce Schedule of Reducing Validity and Data Reuse Periods" (April 2025): the 25 to 0 issuer vote with five abstentions, the 4 to 0 certificate consumer vote from Apple, Google, Microsoft and Mozilla, and the stated reduction of maximum validity from 398 days to 47 days between March 2026 and March 2029: [cabforum.org](https://cabforum.org/2025/04/11/ballot-sc081v3-introduce-schedule-of-reducing-validity-and-data-reuse-periods/)
+
+[^3]: Let's Encrypt, "64-Day Certificate Lifetimes Coming Feb 2027" (Sarah Gran, 7 October 2026): the 10 February 2027 default change, the 14 October 2026 staging switch, the last 90-day certificate expiring 11 May 2027, the authorization reuse reduction from 30 days to 10 and then seven hours, the guidance to renew at approximately two thirds of the lifetime, and the instruction to grep for hardcoded 83, 80 and 60: [letsencrypt.org](https://letsencrypt.org/2026/10/07/64-day-certs)
+
+[^4]: Let's Encrypt, "Certificate Lifetime Rationale and Plans": the two stated advantages of shorter lifetimes (limiting damage from mis-issuance and key compromise, and encouraging automation) and the statement that automated management makes shorter lifetimes no less convenient: [letsencrypt.org](https://letsencrypt.org/docs/cert-lifetimes/)
+
+[^5]: IETF, RFC 9773, "ACME Renewal Information (ARI) Extension": the `renewalInfo` resource, the suggested window bounded by start and end timestamps, the recommended algorithm of selecting a uniform random time inside the window, fetching renewal information immediately after issuance, and the rule against checking it after expiry: [rfc-editor.org](https://www.rfc-editor.org/rfc/rfc9773.html)
+
+[^6]: cert-manager Documentation, "Certificate resource": `rotationPolicy: Always` waiting for a signed Certificate before overwriting `tls.key`, the no-downtime condition that the application detect and reload or restart, the consequence for applications that load the certificate only at startup, Reloader for automated restarts, the two thirds default renewal point, the `renewBeforePercentage` recommendation to avoid renewal loops, Secrets surviving Certificate deletion, and the Go duration format limitation: [cert-manager.io](https://cert-manager.io/docs/usage/certificate/)
+
+[^7]: The Register, "Microsoft Teams starts February with a good, old-fashioned TITSUP" (3 February 2020): Microsoft's confirmation that an authentication certificate had expired, the global scope of the outage, and the deployment of a replacement certificate: [theregister.com](https://www.theregister.com/2020/02/03/teams_down/)
+
+[^8]: The Register, "Why millions of Brits' mobile phones were knackered on Thursday: An expired Ericsson software certificate" (6 December 2018): the expired certificate in two SGSN-MME software versions, the roughly 32 million UK subscribers affected across O2, GiffGaff, Sky Mobile, Lyca and Tesco Mobile, and the downstream effect on SoftBank: [theregister.com](https://www.theregister.com/on-prem/2018/12/06/why-millions-of-brits-mobile-phones-were-knackered-on-thursday-an-expired-ericsson-software-certificate/339700)
+
+[^9]: Let's Encrypt, "6-day and IP Address Certificates are Generally Available" (15 January 2026): the `shortlived` ACME profile, certificates valid for 160 hours, and the general availability of six-day certificates to all subscribers: [letsencrypt.org](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability)
+
+[^10]: UK National Cyber Security Centre, "Provisioning and managing certificates in the Web PKI": the recommendation to use ACME Renewal Information where supported, so a CA can request an early renewal and a client is not left without a certificate: [ncsc.gov.uk](https://www.ncsc.gov.uk/guidance/provisioning-and-managing-certificates-in-the-web-pki)

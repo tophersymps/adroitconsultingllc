@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "certificate-renewal-pipeline-2026",
+    "title": "The 200-Day Certificate Turns Renewal Into Infrastructure",
+    "excerpt": "Public certificates now cap at 200 days, then 100, then 47. Renewal is a pipeline with a last mile, and the last mile is where the outage lives.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 28, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "15 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "TLS",
+      "Certificates",
+      "Platform Engineering",
+      "Reliability",
+      "PKI",
+      "Automation"
+    ],
+    "bannerImage": "/banners/certificate-renewal-pipeline-2026.webp",
+    "ogImage": "/banners/certificate-renewal-pipeline-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "stop-reason-output-budget-2026",
     "title": "Length Is a Stop Reason, Not an Error",
     "excerpt": "A 200 response with a valid body is not a finished answer. The API tells you when it ran out of room, and almost nobody reads that field.",
