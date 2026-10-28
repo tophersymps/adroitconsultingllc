@@ -1,0 +1,172 @@
+---
+title: "Lesson 82: Common CTA Pitfalls: Scope Creep, Over-Engineering, and Missing NFRs"
+slug: cta-pitfalls-scope-creep-over-engineering-missing-nfrs
+series: "salesforce-architect"
+lesson: 82
+excerpt: "Three failure modes sink candidates who can clearly design a solution: scope that grows while the constraints stay fixed, architecture with more moving parts than the requirement justifies, and non-functional requirements that were never written down. This lesson names each pitfall, shows how it looks in the scenario document and in a real engagement, and gives you the repair."
+date: "October 28, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Salesforce, Architecture, CTA, Certifications]
+---
+
+# Lesson 82: Common CTA Pitfalls: Scope Creep, Over-Engineering, and Missing NFRs
+
+Lesson 81 covered the clock. This lesson covers what tends to go wrong inside it.
+
+The Review Board gives you 180 minutes to read and solve a hypothetical scenario, then 45 minutes to present and 40 minutes for questions, with only a document, a diagram tool, a spreadsheet and a slide deck to work in. [^1] Everyone who reaches that room can design something. What separates the passes from the fails is usually not design skill at all. It is three habits of judgment, and all three have a visible failure signature:
+
+- scope that grows while the constraints stay fixed
+- architecture with more moving parts than the requirement justifies
+- requirements that were never written down because nobody says them out loud
+
+I care about these three beyond the exam, and so should you. On a real program they are the fastest ways an architect loses a client's confidence: an out-of-control backlog, a solution the client's team cannot operate, and a launch that falls over on a number nobody agreed to. The cost of getting them wrong on the board is concrete as well. A Review Board Exam retake is $2,250, and a failed Architect Review Board Evaluation retake is $750. [^2]
+
+## Define the terms
+
+- **Scope creep**: the set of things you are solving grows after the design started, while the constraint set (time, budget, team, existing systems) does not move. Growth is not the problem. Unfunded growth is.
+- **Requirement versus solution**: the requirement is the outcome the business needs. The solution is how you deliver it. When a stakeholder hands you a solution ("add a custom object for this") they are usually asking you to skip straight past your own job.
+- **Over-engineering**: designing for a requirement that does not exist, or solving a real requirement with more components than it justifies. Multi-region for an internal reporting tool. A custom framework where a standard object and Flow would do.
+- **Gold plating**: adding capability because it is interesting, or because it might be useful later. The second reason is the honest one, and it is still not a requirement.
+- **Non-functional requirement (NFR)**: a requirement about how the system behaves rather than what it does. Availability, latency, throughput, recovery time, recovery point, security posture, retention, auditability, data volume.
+- **Unmeasurable NFR**: an NFR with no number and no stated method of measurement. Salesforce's own pattern library gives the canonical example, "the system should be fast and reliable", and notes the problem in one line: it is not measurable, so it drives no architecture decisions. [^3]
+- **Error budget**: the gap you deliberately leave between what the platform promises and what your solution promises. A platform availability commitment of 99.9 percent does not permit a solution target of 99.9 percent, because application-layer failures, integration failures and maintenance windows all live inside that number. [^3]
+- **Deliberate omission**: a requirement you decided not to solve, recorded with the reason and the mitigation. This is the opposite of a forgotten requirement, and judges treat it very differently.
+- **Reversibility**: how expensive a decision is to undo. Reversible decisions deserve speed. Irreversible ones (system of record, org topology, identity spine) deserve the front of your clock.
+- **Change control line**: one line in the design record that turns a new ask into an explicit trade: requirement, decision, and what it costs.
+
+## Pitfall one: scope that grows while the constraints stay fixed
+
+Scope creep on the board looks like enthusiasm. You are 90 minutes in, the system map is done, and you notice the scenario said the client's field teams use a mobile app. So you add a mobile strategy. Then you add a data warehouse for executive reporting. Then you sketch a consent management model for the marketing data you just invented.
+
+None of that is scored. The exam outline tests seven areas: system architecture, security, data, solution architecture, integration, development lifecycle and deployment planning, and communication. [^1] A judge scores coverage of those seven. Every extra subsystem you invent costs minutes from the areas that are, and every invented subsystem is something you now have to defend in 40 minutes of questioning.
+
+Scope creep in a real engagement is harder, because it arrives with a person attached. The mechanism is worth understanding. A requirement reaching you is usually a translation: somebody took a business need and turned it into a concrete ask, because a concrete ask feels like language a technical team will respond to. Salesforce's own guidance on reading requirements makes the failure concrete. A line like "the solution shall include a new custom data object" is requirements language on the surface, but it is really specifying a how before anyone confirmed the requirement calls for a new object at all. [^4] The requirement only had to say: store this data, with these attributes, tied to the vendor. Whether it lives on a custom object, a standard object, or a related list of files is the architect's call. [^4]
+
+The same guidance names the other half of the pattern: a request for a notification is often a request for the smallest possible fix, automating one step somebody is tired of doing by hand without asking whether that step should exist. Draw the current-state process before you solution anything, and you sometimes find that no new system is needed, or that the real change is who is accountable for the step. [^4]
+
+The repair is mechanical, and you can write it before the argument starts:
+
+1. **Every new ask gets priced.** Requirement, decision, and the cost in effort, licence, latency or operational load. No price, no entry.
+2. **Three responses, no fourth.** Reject it with the reason. Trade it for something of equal cost. Accept it and move a constraint, in writing, with the sponsor's name on the move.
+3. **One system of record per domain, decided early.** Most scope creep is really a second system of record sneaking in through the side door.
+
+On the board, that third point doubles as a clock defence. Once you have written "SAP owns financials, the TMS owns shipment milestones, Salesforce owns the commercial record", a new ask either fits that sentence or it does not.
+
+## Pitfall two: architecture bigger than the problem
+
+Over-engineering is scope creep's twin. Both add components the requirements did not ask for. Scope creep is driven by anxiety about missing something; over-engineering is driven by the pleasure of a good design.
+
+The canonical example is documented as an anti-pattern rather than described in the abstract: multi-org architecture implemented "just in case" without a documented business requirement justifying the operational complexity of data synchronization, user provisioning, and deployment coordination. [^3] The Salesforce Well-Architected Framework only recommends multi-org patterns when the business genuinely requires recovery targets beyond what the platform provides, regulatory geographic data isolation, or complete regional independence. [^3] "We might need it later" is not on that list.
+
+The same library documents over-engineering at the code layer with measurable consequences. Business logic written directly into trigger files produces 300-line triggers that mix validation, business logic and integration calls, and cannot be tested effectively. [^5] Queries inside an iteration loop work fine on development data and then breach the platform's 100 SOQL query limit when the trigger fires on a bulk load. DML inside an iteration loop breaches the 150 DML statement limit the same way. [^5] Configuration debt shows up as an org carrying 50 custom metadata records when 12 are in use, with no documentation explaining the rest. [^5] None of those are stylistic complaints. Each one is a maintenance bill the client pays quarterly.
+
+There are three tests I use on the board, and I use them on real programs too:
+
+- **The requirement test.** Name the requirement each component serves. A component that cannot name one is decoration.
+- **The rejected alternative test.** Name what you did instead of it, and why. If the component has no rejected alternative, you have not made a decision, you have stated a preference.
+- **The subtraction test.** Remove the component. Are all requirements still met? If yes, it was never architecture.
+
+A design that survives all three is smaller than your instincts want it to be, and that is the point. The Well-Architected Framework treats the total cost of ownership comparison between declarative and custom approaches as a pattern, not an afterthought: the analysis should cover long-term maintenance burden, upgrade effort, testing requirements, and the skill level future teams will need. [^5]
+
+One more thing about over-engineering on the board: it looks like competence to the candidate and like padding to the judge. A four-component integration design with a stated failure path reads as more senior than a nine-component integration design with no failure path, because the judge can tell which one you would actually run.
+
+## Pitfall three: the requirements nobody wrote down
+
+Missing NFRs is the most common of the three and the most expensive, and the reason is structural. Businesses talk in functional requirements, so functional requirements get written down. Availability, latency, recovery and retention are assumed by the business, so they never reach the page, and then they surface during go-live as a disagreement about a number.
+
+The pattern library lists the anti-patterns by name, which makes them easy to check yourself against: [^3]
+
+- **The unmeasurable target.** "The system should be fast and reliable." Not measurable, so it drives no architectural decisions.
+- **The uniform maximum.** "Everything needs 99.999% uptime." Unjustified cost, ignoring the difference in business criticality between revenue operations and internal admin tools.
+- **The copied SLA.** A solution target that matches the platform's availability commitment exactly, leaving no error budget for application-layer failures, integration failures or planned maintenance.
+- **The component target.** Reliability targets defined per technical component instead of per user-facing business capability. Component availability is necessary and not sufficient.
+
+There is a responsibility point underneath all four. The platform's commitments cover infrastructure. Above that layer, you own reliability: you define and meet your own service level objectives, and application-layer reliability is your responsibility regardless of which platform commitment tier applies. [^6]
+
+Salesforce publishes an explicit complexity ladder for availability targets, and it is the single most useful anti-over-engineering tool in this lesson, because it prices the number before you design anything: [^3]
+
+- 99 percent: standard platform capabilities
+- 99.5 percent: basic redundancy and active monitoring
+- 99.9 percent: multi-region awareness and automated failover
+- 99.95 percent: active-active patterns and chaos testing
+- 99.99 percent: multi-org architecture
+
+Read that column top to bottom and you have the cost of the sentence you are about to write. A candidate who writes "99.9 percent" for a partner portal has just volunteered for multi-region failover. A candidate who writes "99.5 percent, with graceful degradation to read-only for non-critical flows" has volunteered for basic redundancy, and can say why.
+
+Availability is only one NFR. The full table I want to see in every design, on the board and in a delivery, has six columns:
+
+| Column | What it must contain |
+| --- | --- |
+| Requirement | The capability it applies to, named as a business capability, not a component |
+| Target | A number, with a percentile and a population. "Portal page load under 2 seconds at p95, at 1,500 concurrent users" |
+| Measurement | How the number is observed: which tool, which signal, how often |
+| Owner | A role, not a team name, and not "the platform" |
+| Degradation | What the solution does when the target is missed. Read-only mode, queue and retry, fall back to a cached view |
+| Test | How you prove the target before go-live, and how often you re-prove it after |
+
+Two rows are usually enough to show you mean it. Retention with an audit requirement, and recovery with both a time and a point objective. "RTO 4 hours, RPO 15 minutes for claim data, validated by a restore drill twice a year" is a different sentence from "the solution will be resilient in the event of an outage."
+
+One last reason candidates skip NFRs: the exam outline has no row called "Non-Functional Requirements", so it looks unscored. It is scored inside every area that is listed. Platform limits sit inside System Architecture. Identity and access sit inside Security. Large data volumes sit inside Data. Latency and error handling sit inside Integration. Test strategy sits inside Development Lifecycle and Deployment Planning. [^1] The judges do not need a section labelled NFR. They need the numbers in whichever section the number belongs to.
+
+## Worked example: Harborline Insurance, first draft and repair
+
+Here is a scenario I wrote to exercise all three pitfalls at once, followed by the first draft I see most often, and the repair.
+
+> Harborline Insurance is a regional insurer with 900 employees. Claims run on Service Cloud. A legacy policy administration system (PAS) owns policies, premiums and payments and cannot be replaced for three years. Sixty claims adjusters work cases daily. Four thousand independent brokers quote through a partner portal, and renewal season in Q4 produces 3,000 quote requests per hour at peak. The regulator requires ten years of retention on claim documents with an immutable audit trail. The CIO wants AI-assisted claim triage. The programme window is twelve months and there is no budget for a PAS replacement.
+
+**The first draft.** The candidate proposes five orgs, one per line of business, "to keep brokers and adjusters separated." Every PAS interaction goes through a new middleware layer, including a nightly transfer of 2,000 reference records that are read-only in Salesforce. Claim status changes publish as platform events, and a Kafka cluster fans them out to the portal, the PAS and a new data warehouse. Triage is a custom Apex framework with a pluggable model interface. The NFR section reads: "the portal should be highly available and responsive." There is no recovery target for PAS synchronization and no measurement method for the retention requirement.
+
+Every part of that draft is defensible in isolation and together it is a failure. Let me score it against the three pitfalls.
+
+**Scope.** Five orgs and a data warehouse arrived from the candidate's imagination, not the scenario. The scenario named one problem: brokers need to quote, adjusters need to work claims, and the CIO wants triage assistance.
+
+**Over-engineering.** The multi-org split is the documented anti-pattern, adopted "just in case" with no regulatory isolation requirement and no recovery target the platform cannot meet. [^3] The middleware layer exists to move 2,000 read-only reference records a night, which a scheduled bulk load handles. Kafka outside the platform duplicates the platform's own event delivery for claim status changes, and adds a runtime nobody on Harborline's team operates.
+
+**Missing NFRs.** "Highly available and responsive" is the library's first anti-pattern sentence. [^3] The retention requirement has a number in the scenario (ten years with an immutable trail) and no measurement method in the design. The outage behaviour of quote requests during renewal season is undecided.
+
+**The repair**, written as numbered decisions with the rejected alternative and the cost:
+
+1. **Single org.** One Sales Cloud and Service Cloud org for adjusters and brokers. The rejected alternative was multi-org; the reason is that no scenario requirement asks for geographic isolation or recovery targets beyond platform capability, and the operational cost of synchronizing two orgs lands on a 900-person company's small Salesforce team. Decision log entry, so the rejected alternative is on the record rather than in the candidate's head. [^3]
+2. **PAS stays the system of record for policy, premium and payment data.** Reference data arrives nightly by bulk load; claim status changes arrive as platform events. Rejected: a middleware layer for all traffic, because it adds a runtime and a licensing line for no requirement.
+3. **Broker isolation by sharing model, not by org.** External organization-wide defaults, a broker community licence, sharing sets scoped to the broker's book of business, and field-level security hiding margin and reserve fields.
+4. **Measurable NFRs.** Portal page load under 2 seconds at p95 for 1,500 concurrent broker sessions during Q4. Claim status visible on the portal within 5 minutes of the adjuster's update for 95 percent of events. Solution availability target of 99.5 percent against the platform's 99.9 percent commitment, which buys the application-layer error budget that a matched target would have spent. [^3]
+5. **Recovery stated in two numbers.** RTO 4 hours and RPO 15 minutes for claim data, with a restore drill twice a year. Rejected: active-active across regions, because nothing in the scenario prices that complexity.
+6. **Retention with a measurement.** Ten years for claim documents in a document management layer with an immutable audit trail, monitored by a monthly reconciliation count that flags any document missing its audit record.
+
+Notice what the repair removed. Three orgs, a middleware layer, a Kafka cluster and a custom framework all came out, and the design got more defensible rather than less. That is the pattern to internalize.
+
+### How the judges find these three
+
+You do not have to guess what happens in the 40-minute question session. These three pitfalls generate predictable questions.
+
+- "Why five orgs?" is a scope and over-engineering probe at the same time. If the answer is "to be safe", you have lost the point.
+- "What happens when the PAS is unavailable during renewal season?" is a missing-NFR probe. It is testing whether you decided the degradation path or left it to operations.
+- "You said highly available. What number, measured how, and by whom?" is the direct one. An unmeasurable answer ends the discussion.
+- "What did you decide not to solve?" is the question that rewards deliberate omission. Candidates who have one get to show judgment. Candidates who say "nothing" have either not read the scenario or not thought about cost.
+
+## Try it
+
+Use this scenario. Give yourself 45 minutes, then answer the questions. Do not build a diagram.
+
+> Stonebridge Utilities serves 250,000 water customers across three counties. A billing and customer information system is the system of record for accounts, meters and invoices. Salesforce handles service cases and a customer portal. Field crews work from mobile devices in areas with poor connectivity. The regulator requires seven-year retention of billing dispute records, outage notifications to affected customers within 5 minutes of a confirmed outage, and an auditable record of who changed what on a dispute. A rate change is coming that will drive a 10x spike in portal registrations over six weeks. The utility has four Salesforce administrators and no developers.
+
+1. **Write the change control line.** Add one thing to this scenario that a sponsor would plausibly ask for late (a field crew scheduling tool, a chatbot, a data warehouse) and write the three parts: requirement, decision, cost. Then decide which of the three responses applies: reject, trade, or move a constraint.
+2. **Run the subtraction test on your most complex component.** Cross it out. Are all requirements still met? Write the sentence that justifies keeping it, or delete it.
+3. **Write three NFRs with all six columns.** Use the table format above. One must be latency, one availability, one recovery or retention. Every target needs a number, a percentile where latency is involved, and a measurement method.
+4. **Pick your availability number from the ladder.** Write the number, then write the complexity it buys you. If they disagree, change one of them.
+5. **Name one deliberate omission.** State what you are not solving, why, and the mitigation. A utility with four administrators and no developers is a real constraint. Use it.
+6. **Rehearse the four judge questions above** against your own design, out loud, in the three-part shape: the decision, the reason tied to a requirement, and the tradeoff accepted.
+
+Score yourself on one measure only: for every component in your design, can you name the requirement it serves, the alternative it beat, and what it costs to operate? Components that fail that test are the scope creep and the over-engineering, and the NFRs you left blank are the numbers a client will eventually argue with you about.
+
+## What's next
+
+You now have the three failure signatures to check your own work against, and the repair for each: price every new ask, run the subtraction test on every component, and write NFRs that a stranger could measure. Every repair in this lesson reduced scope, complexity or ambiguity, and each reduction needs a business reason attached to it, because a design that is smaller and cheaper still has to be sold to someone who is paying for it. That sale is the subject of the next lesson. Lesson 83 covers advising the business: translating architecture into return on investment and a roadmap the sponsor can act on. It picks up exactly where this one leaves off, at the point where you have a defensible design and now need the business to fund it.
+
+[^1]: Salesforce. [Salesforce Certified Technical Architect Review Board Exam Guide](https://help.salesforce.com/s/articleView?id=005298996&language=en_US&type=1). States the exam format (180 minutes to review and prepare a solution, 45 minutes to present, 40 minutes for questions and answers), the allowed materials (a scenario Google Doc, a Google Slide deck, a Google Sheet, a blank Lucidchart with the Salesforce Shape Library, and an onscreen timer), and the seven outline areas: System Architecture, Security, Data, Solution Architecture, Integration, Development Lifecycle and Deployment Planning, and Communication.
+[^2]: Salesforce. [Certified Technical Architect Credential](https://trailhead.salesforce.com/credentials/architectreviewboard). Lists the Architect Review Board Evaluation at $1,500 with a $750 retake, and the Review Board Exam at $4,500 with a $2,250 retake.
+[^3]: Salesforce Architects. [Availability and Performance Patterns](https://architect.salesforce.com/docs/architect/well-architected/guide/reliability-availability-performance-patterns). The Service Level Objectives section gives the availability complexity ladder (99 percent standard platform capabilities, 99.5 percent basic redundancy and active monitoring, 99.9 percent multi-region awareness and automated failover, 99.95 percent active-active patterns and chaos testing, 99.99 percent multi-org architecture), and the anti-patterns include "the system should be fast and reliable" as unmeasurable, "everything needs 99.999% uptime", a solution target matching the platform commitment exactly with no error budget, and multi-org architecture implemented "just in case" without a documented business requirement.
+[^4]: Salesforce. [Read Requirements Like an Architect](https://www.salesforce.com/blog/read-requirements-like-an-architect/). Describes pulling the why, the what and the how apart in a requirement, treats "the solution shall include a new custom data object" as a how dressed as a what, and notes that understanding the current-state process can reveal that no new system is needed or that accountability should move instead.
+[^5]: Salesforce Architects. [Code Quality Patterns](https://architect.salesforce.com/docs/architect/well-architected/guide/resource-and-cost-optimization-code-quality-patterns). The anti-patterns describe 300-line trigger files mixing validation, business logic and integration calls; SOQL in loops breaching the 100 query limit on bulk operations; DML in loops breaching the 150 DML statement limit; and configuration debt as unused metadata accumulating without cleanup, with 50 records present and 12 in use. The patterns frame standard versus custom decisions as a total cost of ownership comparison covering maintenance burden, upgrade effort, testing requirements and future team skills.
+[^6]: Salesforce Architects. [Reliability](https://architect.salesforce.com/docs/architect/well-architected/guide/reliability.html). States that the platform handles data center redundancy, network availability and infrastructure patching, that the Salesforce SLA covers the platform while the customer owns reliability for everything above the infrastructure layer, and that architects are responsible for defining and meeting their own service level objectives regardless of the platform SLA tier.
