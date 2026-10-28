@@ -1,0 +1,16 @@
+### CI: stealth guards scoped to identity fields, check-range fixtures derived
+
+**What** - Two test-only fixes that were reddening `main` on every content push.
+
+- `src/lib/lesson-checks.test.ts` - the two assertions that froze the last knowledge check's lesson range (`[73, 81]` for `agentic-ai`, `[31, 35]` for `ai-adoption`) now derive instead of pinning: the first range is pinned to the cadence 8 window, every range except the last must be a full 8-lesson window, ranges must be contiguous and cover `1..seriesLessonCount(series)`, and the short tail must end at the published total and be at least 3 lessons.
+- `src/app/api/search/route.test.ts` and `src/lib/learn-public.test.ts` - the two stealth-disclosure guards now scan identity-bearing fields only. Slugs are asserted over `href`, `terms` (route) and `slug` / `series` (learn-public); display names over `title`, `group`, `meta` and the series `name`. Authored prose (`snippet`, `excerpt`) and free-text vocabulary (`terms` tags, `tags`) are excluded from the name scan. Each test additionally asserts its projection is non-empty so it cannot pass vacuously.
+
+**Why** - `main` was red for two consecutive lesson adds, 4 tests in 3 files, with 1801 passing.
+
+The range failures were stale fixtures, not stale data: the check files correctly said `Lessons 73-82` and `Lessons 31-36` after lessons 82 and 36 shipped, while the assertions still carried the previous totals. That is the same hand-patch PR #438 needed one lesson-add earlier, so the numbers were removed rather than updated again.
+
+The stealth failures were a false positive by string collision. Both guards serialized the whole payload and asserted `not.toContain(<stealth series name>)`. Lesson 82 of `agentic-ai` carries the tag `AI Adoption`, which is also a stealth series' display name, so the raw scan tripped on a topical tag on a launched lesson. Measured before changing anything: the 165,904-character learn-public payload contained exactly one occurrence of `AI Adoption`, inside that lesson's `tags`; the `/api/search` payload had exactly one, inside its `terms` array. No stealth series slug, name, route or lesson appeared anywhere else, and no stealth content reached either payload.
+
+**Verified** - `npm run prebuild` regenerates 162 posts and 12 series / 521 lessons cleanly; `npx vitest run` passes the full suite; `npm run lint` reports 0 errors (6 pre-existing warnings) in the worktree. The narrowed guards were mutation-tested rather than assumed non-vacuous: (1) unfiltering `getPublicLearnLessons` fails the disclosure test on `ai-adoption`; (2) injecting a stealth lesson document into `buildSearchDocs` fails the route guard; (3) a check file whose title says `73-81` fails the derived tail assertion (`expected 81 to be 82`); (4) one check file drifting to a 5-lesson window fails the cadence assertion (`expected [8, 5, 8, ...] to deeply equal [8, 8, 8, ...]`).
+
+**Known Issues** - The display-name half of the guards still scans lesson `title` fields, so a future launched lesson whose title contains a stealth series' display name would fail the guard. That case is a naming collision worth a human look, unlike a free-text tag, so it is left strict on purpose. Nothing else outstanding.

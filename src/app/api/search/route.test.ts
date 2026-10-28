@@ -80,18 +80,40 @@ describe("GET /api/search", () => {
   });
 
   it("contains no stealth series slug, name or label", async () => {
-    const { raw } = await getPayload();
-    for (const needle of [
-      "hermes-consultant",
-      "ai-power-user",
-      "ai-adoption",
+    const { body } = await getPayload();
+
+    // Scope: identity-bearing fields only. `href` and `terms` carry the series
+    // and lesson SLUGS verbatim, so a slug scan over them catches any real leak
+    // of stealth content (a stealth document cannot reach the payload without
+    // its slug appearing in its own route). Display NAMES are checked in the
+    // fields that name a series or lesson (`title`, `group`, `meta`).
+    //
+    // Free-text fields are excluded on purpose: `terms` carries lesson tags
+    // verbatim, and a topical tag that merely equals a stealth series' display
+    // name ("AI Adoption" on an agentic-ai lesson about change management) made
+    // this test red without disclosing anything. See `snippet` too: it is
+    // authored prose, not an identity field.
+    const identityText = body.docs
+      .flatMap((doc) => [doc.title, doc.href, doc.group, doc.meta ?? ""])
+      .join("\n");
+    const slugText = body.docs
+      .flatMap((doc) => [doc.href, ...doc.terms])
+      .join("\n");
+
+    for (const slug of ["hermes-consultant", "ai-power-user", "ai-adoption"]) {
+      expect(slugText).not.toContain(slug);
+    }
+    for (const name of [
       "Hermes Agent Consultant",
       "AI Power User",
       "AI Adoption",
       "Sharing & Visibility",
     ]) {
-      expect(raw).not.toContain(needle);
+      expect(identityText).not.toContain(name);
     }
+    // Guard against a vacuous pass: the projection must have real content.
+    expect(identityText.length).toBeGreaterThan(0);
+    expect(slugText.length).toBeGreaterThan(0);
   });
 
   it("contains only body-free metadata documents", async () => {
