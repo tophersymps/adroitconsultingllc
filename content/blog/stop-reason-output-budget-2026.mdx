@@ -1,0 +1,124 @@
+---
+title: "Length Is a Stop Reason, Not an Error"
+slug: stop-reason-output-budget-2026
+excerpt: "A 200 response with a valid body is not a finished answer. The API tells you when it ran out of room, and almost nobody reads that field."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 28, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [AI Infrastructure, LLM Engineering, Agents, Reliability, Inference]
+bannerImage: /banners/stop-reason-output-budget-2026.webp
+ogImage: /banners/stop-reason-output-budget-2026-og.jpg
+---
+
+An agent writes a renewal summary at 2am and stops one clause short of the recommendation. The JSON parses. Every field is the right type. The ticket closes, and the account manager reads a plan that ends mid-sentence and assumes the rest was obvious.
+
+Nothing in that run raised an error, because nothing was an error. The model did what it was told. The request ran out of output room, the API said so in a field almost nobody reads, and the harness treated a 200 response with a body as a finished answer.
+
+Length is a stop reason. It arrives next to the stop reason that means the model finished on its own, and for most integrations the two are indistinguishable. Adding the branch that separates them is one of the cheapest reliability fixes in an LLM stack. It costs one `if`.
+
+## A 200 is not a finish
+
+A generation can end in several ways, and only one of them means the answer is complete.
+
+- The model reached a natural stopping point.
+- The generator hit the output limit you set, or the headroom the provider enforces.
+- The model wants to call a tool, which is a handoff rather than an ending.
+- A content filter or safety classifier stopped generation, which is unrelated to length and needs its own handling.
+
+All four arrive as a successful HTTP response. The only thing that separates them is one field in the envelope, and the first ending is the only one that lets you proceed without asking another question.
+
+OpenAI names it `finish_reason` on each choice, and the reference is blunt about the value that matters: `length` means the maximum number of tokens specified in the request was reached, while `stop` means the model hit a natural stop point or one of your stop sequences.[^1] Anthropic returns `stop_reason`, where `end_turn` is the natural finish and `max_tokens` reports that the cap was hit; the same response carries a `stop_sequence` field when a custom string ended generation.[^4] Gemini returns a `finishReason` enum, with `STOP` and `MAX_TOKENS` sitting alongside roughly two dozen other terminal values.[^6]
+
+The OpenAI Responses API looks different because the signal moved. Instead of a stop reason on a choice, the response object comes back with `status` set to `incomplete` and `incomplete_details.reason` set to `max_output_tokens`, alongside whatever content the model managed to produce before the cut.[^2] A finished one reports `status` as `completed`, which is the other value in that field you will ever need to branch on.[^9] If your client reads the output text and never looks at `status`, you are running without the signal.
+
+![Two ways a generation can end and only one of them is an error: a natural stop, a budget ceiling, a tool handoff, and a filter stop all arrive as HTTP 200 with the difference carried in a single response field](</diagrams/stop-reason-output-budget-2026/1-four-endings-one-field.png>)
+
+## The same signal goes by different names
+
+Cross-provider code is where this breaks down, because each API spells the ceiling differently and there is no shared name to key on.
+
+![What to check per provider: OpenAI Chat Completions finish_reason length, OpenAI Responses status incomplete with reason max_output_tokens, Anthropic stop_reason max_tokens, Gemini finishReason MAX_TOKENS, and the OpenAI compatible finish_reason on self hosted servers](</diagrams/stop-reason-output-budget-2026/2-provider-truncation-signals.png>)
+
+Self-hosted inference copies the OpenAI shape, so `finish_reason` with the value `length` is the value to branch on there too. The naming differences are trivial to normalize once. The cost of not normalizing is that every new provider integration silently drops the branch, and the failure only shows up as content that reads slightly too short.
+
+One detail worth building into the normalizer: a truncated generation is not a failed one, so it should not land in the same bucket as an exception. The two need separate counters, because they call for opposite responses. A failure triggers a retry. A truncation triggers a bigger budget, a smaller reasoning effort, or a change to what the caller asked for.
+
+## The budget is shared with the model's own thinking
+
+This got harder as reasoning models moved into production, because the visible answer is no longer the only thing spending output tokens.
+
+Anthropic states the constraint plainly. With manual extended thinking, `budget_tokens` must be at least 1,024 and must be less than `max_tokens`, because thinking tokens count toward the `max_tokens` limit for the turn. The budget is a target rather than a strict cap, and `max_tokens` remains the hard ceiling on total output, which is why the docs recommend batch processing once a thinking budget goes above 32k instead of pushing one long synchronous request.[^5]
+
+OpenAI's version of the same arithmetic: reasoning tokens occupy space in the model's context window and are billed as output tokens, and `max_output_tokens` limits everything the model generates, including reasoning tokens and non-visible formatting tokens. Hitting that limit produces the `incomplete` status described above, and it can happen before any visible output exists, which means you pay for input and reasoning tokens and receive nothing a user can read. The guidance that follows is a sizing rule you can adopt today: reserve at least 25,000 tokens for reasoning and outputs when you start with these models.[^2]
+
+Gemini expresses it with a hard cutoff. `max_output_tokens` includes thought tokens, and if the model reaches the limit while reasoning, it stops with status `incomplete` and returns truncated or empty output while still billing for the thinking that happened. The documented fix is to lower the thinking level rather than set a small output cap, because a small cap does not shrink the reasoning budget, it only cuts the result off. Gemini 4 adds two concrete numbers: input and `max_output_tokens` share a single 1,048,576-token window, and a synchronous request asking for more than 65,536 output tokens returns a 400 rather than being quietly clamped.[^7]
+
+![Where an output budget actually goes: the context window divided into input tokens, reasoning and formatting tokens, and the visible answer, with Anthropic requiring the thinking budget below max_tokens and OpenAI recommending 25,000 tokens of headroom](</diagrams/stop-reason-output-budget-2026/3-output-budget-allocation.png>)
+
+Self-hosted stacks have their own version of this surprise. vLLM's `SamplingParams` sets `max_tokens` to a default of 16.[^8] A call that forgets to pass a limit does not receive an unlimited budget, it receives sixteen tokens and a `length` stop reason. If a local model has ever returned a single clause of an answer, that default is the first place to look.
+
+## Where truncation turns into corruption
+
+A cut sentence is annoying. A cut object is a data problem.
+
+The shape of the failure is consistent: the payload parses, the required fields are present, and the last field holds half a value. Sometimes the parse fails loudly and you get an exception, which is the good outcome because it is visible. Sometimes the arguments come back complete enough to pass schema validation and wrong enough to act on, which is why valid JSON is a weaker guarantee than it sounds.
+
+This is where truncation stops being an inference problem and becomes an integration problem. The consumer of the response has to know the difference between "the model stopped" and "the model finished", and the only component that can tell it is the client holding the raw envelope. If the client unwraps the response and forwards the text, that knowledge is destroyed at the boundary and every layer above is working from an assumption nobody verified.
+
+The most common waste in this area is the retry. When a truncated response causes a parse error, the reflex is to send the identical request again. The budget has not changed, so the second attempt truncates in the same place, and the third one does too. Retrying a length stop without raising the limit is an expensive way to reproduce a known result.
+
+## Stop sequences quietly edit the output
+
+Stop sequences are a related mechanism with a different failure mode. A stop string ends generation when it appears, and vLLM's parameter reference is explicit that the returned output does not contain the stop strings.[^8] If a parser downstream is keyed on the delimiter, the delimiter is gone.
+
+That is harmless when the stop sequence is a turn marker you never wanted to keep. It is not harmless when you stopped on a separator you planned to split on later. The rule that holds up: stop on structural markers, never on data you still need.
+
+Filters are a third terminal state and deserve their own branch. Gemini's enum separates safety stops, recitation, blocked terms, sensitive personal information, prohibited content, and image-specific stops, each with a distinct meaning.[^6] Collapsing all of those into "empty response, retry" means a policy stop gets retried until a budget alarm fires, which teaches the team to ignore the alarm.
+
+## Make the truncation rate a number
+
+Three instruments cover most of the risk, and none of them are exotic.
+
+Record the stop reason on every call and aggregate it. A per-endpoint truncation rate is a single number that catches prompt changes, model swaps, and schema growth before a user does. Set the alert threshold low. A failed call is visible to whoever made it; a short answer is invisible to everyone.
+
+Plot output length against the cap. A spike at the cap is the signature, and it shows which endpoints are buying exactly the wrong budget because they keep hitting a ceiling they are paying for. A p99 output length far below the cap on one endpoint and pinned to it on another is a config inconsistency rather than a model difference.
+
+Measure the input before you send it. OpenAI exposes a dedicated endpoint, `POST /v1/responses/input_tokens`, which counts the exact input the model will receive, including formatting tokens for roles and message boundaries that a local tokenizer will miss.[^3] With that number in hand the budget becomes subtraction: context window, minus input, minus headroom for reasoning, equals the output you are allowed to promise downstream.
+
+One more measurement is worth keeping: reported output tokens are not visible tokens. The Responses API reports `output_tokens` and Chat Completions reports `completion_tokens`, and both include tokens the model generates that never appear in the message content, including formatting and channel delimiters that are not itemized separately. The documentation says it directly: leave headroom in these limits when you need a specific amount of visible output.[^3]
+
+## The runbook
+
+![Runbook for a response that hit its output ceiling: check for visible output, check whether side effects already ran, prefer a continuation token over a fresh call, and verify the fix by confirming the next call returns a natural stop](</diagrams/stop-reason-output-budget-2026/4-budget-runbook.png>)
+
+The order matters, because the first question changes everything that follows.
+
+Did anything visible come back? If the response is empty and the reason is a token ceiling, this is a sizing bug rather than a model problem. Raise the limit or lower the reasoning budget on that call, then send it again. If the response is partial, the answer exists and you are deciding what to do with an incomplete artifact.
+
+Did the run already cause side effects? An agent that wrote a record, sent a message, or opened a pull request before producing the truncated text is a partial run, not a retryable one. Re-running a partially applied workflow is how duplicate records get created, and no output-limit setting will undo that.
+
+Is there a continuation path? Gemini exposes one: a `finishReason` of `CONTINUATION` comes back with a `continuationToken` that resumes the response, and the documentation warns that `maxOutputTokens` is cumulative across continuation hops and must be increased monotonically or omitted.[^6] Where no continuation exists, the follow-up request is a fresh call, which is the reason downstream idempotency deserves more design attention than the retry policy does.
+
+If you stream, verify the terminal event. A stream that ends without the final event was cut, whatever the last chunk looked like, and a client that accumulates deltas has no other way to know.
+
+Finally, confirm the fix changed the reason. A larger budget is not verified by the absence of an error. Send one real request and check that the stop reason now reports a natural finish. If it still reports a ceiling, the number moved but the constraint did not, and you are about to make the same discovery in production.
+
+## The habit
+
+Every generation ends for a reason, and the API hands you that reason on every call. The rest is inference: a 200 means the request was accepted, a valid body means the text was well-formed, and neither of those means the answer was finished. Reading one field turns a silent quality problem into a metric, and it is the same field on every provider once you normalize the names.
+
+Related reading: how structural validity differs from correctness in [Valid JSON Isn't Correct Data](/field-notes/structured-output-tool-calling-reliability-2026), how to keep agent loops from discovering their budget problems at the invoice in the [spend guardrails for agent loops](/field-notes/agent-loop-spend-guardrails-2026), and why a deferred lane with a larger budget is sometimes the right answer for work that keeps getting cut off in [Half Price If It Can Wait](/field-notes/async-batch-inference-2026).
+
+[^1]: OpenAI, Chat Completions API reference, [developers.openai.com](https://developers.openai.com/api/reference/resources/chat)
+[^2]: OpenAI, Reasoning models guide, [developers.openai.com](https://developers.openai.com/api/docs/guides/reasoning)
+[^3]: OpenAI, Counting tokens guide, [developers.openai.com](https://developers.openai.com/api/docs/guides/token-counting)
+[^4]: Anthropic, Create a Message API reference, [platform.claude.com](https://platform.claude.com/docs/en/api/messages/create)
+[^5]: Anthropic, Extended thinking guide, [platform.claude.com](https://platform.claude.com/docs/en/build-with-claude/extended-thinking)
+[^6]: Google, Gemini API generateContent reference, [ai.google.dev](https://ai.google.dev/api/generate-content)
+[^7]: Google, Gemini thinking guide, [ai.google.dev](https://ai.google.dev/gemini-api/docs/thinking)
+[^8]: vLLM project, SamplingParams source, [github.com](https://github.com/vllm-project/vllm/blob/main/vllm/sampling_params.py)
+[^9]: OpenAI, Responses API reference, [developers.openai.com](https://developers.openai.com/api/reference/resources/responses)

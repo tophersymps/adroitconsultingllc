@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "stop-reason-output-budget-2026",
+    "title": "Length Is a Stop Reason, Not an Error",
+    "excerpt": "A 200 response with a valid body is not a finished answer. The API tells you when it ran out of room, and almost nobody reads that field.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 28, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "LLM Engineering",
+      "Agents",
+      "Reliability",
+      "Inference"
+    ],
+    "bannerImage": "/banners/stop-reason-output-budget-2026.webp",
+    "ogImage": "/banners/stop-reason-output-budget-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "supabase-auth-proxy-session-2026",
     "title": "Your Supabase Session Dies When proxy.ts Never Runs",
     "excerpt": "Next.js 16 renamed middleware to proxy. Miss the rename, or write the cookie to the wrong response, and every session expires on schedule.",
