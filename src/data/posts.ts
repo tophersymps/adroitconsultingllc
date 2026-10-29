@@ -2,6 +2,28 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "container-queries-design-system-2026",
+    "title": "A Component Should Know Its Own Width",
+    "excerpt": "Responsive design spent fifteen years asking the browser window how wide it is. A component can only answer one question: how much space did I actually get.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "October 29, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "CSS",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/container-queries-design-system-2026.webp",
+    "ogImage": "/banners/container-queries-design-system-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "certificate-renewal-pipeline-2026",
     "title": "The 200-Day Certificate Turns Renewal Into Infrastructure",
     "excerpt": "Public certificates now cap at 200 days, then 100, then 47. Renewal is a pipeline with a last mile, and the last mile is where the outage lives.",

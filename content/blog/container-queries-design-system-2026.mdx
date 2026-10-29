@@ -1,0 +1,180 @@
+---
+title: "A Component Should Know Its Own Width"
+slug: container-queries-design-system-2026
+excerpt: "Responsive design spent fifteen years asking the browser window how wide it is. A component can only answer one question: how much space did I actually get."
+category: "UI/UX"
+categoryColor: ux
+categoryGradient: "from-violet to-violet-dark"
+date: "October 29, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [UI/UX, Design Systems, CSS, Web Development]
+bannerImage: "/banners/container-queries-design-system-2026.webp"
+ogImage: "/banners/container-queries-design-system-2026-og.jpg"
+---
+
+A product card ships in a design system. On narrow screens it stacks its image above its text, on wide screens it goes side by side. The rule that decides which is one line of CSS: above 768 pixels, go horizontal. The card looks correct in the component library, correct on the marketing page, and correct in the Figma file where somebody drew it at 1440 pixels wide.
+
+Then a product team puts the same card in three places at once. A 320 pixel filter sidebar. A 640 pixel column in a two-up grid. A 960 pixel hero. The browser window is 1440 pixels in all three cases, so all three placements render the horizontal layout, and the sidebar version spends its 320 pixels trying to fit an image and a paragraph beside each other.
+
+The historical fix was variants. Add a compact variant. Then a sidebar variant. Then a size prop, then a dense boolean, then a fifth thing because the checkout page needed something else. Six months later the component has eleven props and its own test matrix, and the design system has quietly admitted that it cannot predict where its components will be used.
+
+Container queries change the question. Instead of asking the window how wide it is, a component asks the box it was dropped into. That sounds like a small edit to a media query. It is not, because the answer is different in every placement, and the component is the only thing that can see it.
+
+## The viewport was never the component's context
+
+Media queries were designed for a document. When Ethan Marcotte described responsive web design in 2010, the thing being resized was a page: one column of text and images, poured into whatever screen the reader had[^17]. The viewport was a reasonable proxy for "how much room do I have", because there was only one element that mattered and it filled the screen.
+
+Nothing about a design system matches that assumption. A component is a reusable box that a page decides to place somewhere. The page owns the layout, the grid, the sidebar, the modal width, and the breakpoints of the surrounding chrome. The component owns its own internal arrangement. When a component reads the viewport, it reads a variable that belongs to somebody else[^1].
+
+The failure is easy to reproduce. Take a card with a media query at 768 pixels, render it in a 320 pixel slot inside a 1440 pixel window, and the card believes it has 1440 pixels to work with. The layout code is not wrong. It is answering a question nobody asked it.
+
+![The same card in three slots inside one 1440 pixel viewport: a 320 pixel sidebar column, a 640 pixel content column, and a 960 pixel hero. A media query at 768 pixels sees a 1440 pixel viewport in all three placements and renders the horizontal layout everywhere, while a container query at 700 pixels reads the 320 and 640 slots as stacked and only the 960 pixel hero as horizontal](</diagrams/container-queries-design-system-2026/1-viewport-vs-slot.png>)
+
+## What a container query actually asks
+
+A container query needs two things: a containment context on a wrapper element, and a query rule for that wrapper's descendants.
+
+```css
+.slot {
+  container-type: inline-size;
+}
+
+/* Default: stacked */
+.promo-card {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+/* The slot is wide enough for two columns */
+@container (width > 700px) {
+  .promo-card {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+```
+
+The wrapper declares that it may be queried. The `@container` rule then applies styles to the wrapper's descendants when the condition is true of that wrapper. The syntax and the logical operators are the same as media queries: `and`, `or`, and `not`, plus range comparisons such as `(10em <= width <= 20em)`[^2].
+
+Naming is optional and worth using as soon as nesting is real. `container-name: sidebar` on the wrapper, then `@container sidebar (width > 700px)`, targets that container specifically instead of whichever ancestor happens to be nearest[^1]. There is also a name-only form, `@container sidebar`, which applies styles to anything inside a container carrying that name without asking about size at all.
+
+MDN lists five query families that share this at-rule: size queries, style queries, name-only queries, scroll-state queries, and anchored queries for positioned elements[^2]. Size queries are the ones most design systems need, and they have the longest support history. Chrome and Edge 105 shipped them in September 2022, Safari 16 in the same month, and Firefox 110 on 14 February 2023[^6]. Current Web Platform Test scores sit at 97.4 percent for Chrome, 89.7 percent for Safari, and 88.5 percent for Firefox[^6]. MDN now carries the `@container` page as Baseline, with a panel reading "well established and works across many devices and browser versions"[^3].
+
+## Containment is the part people skip
+
+Here is the sentence that causes most of the bugs. `container-type: inline-size` does not only mark an element as queryable. It also applies style containment and inline-size containment to it, which means the element's inline size is computed in isolation, ignoring its children[^4].
+
+The browser does this on purpose. If a descendant's style depends on its container's size, and the container's size depends on its descendants, the layout can oscillate forever. MDN is explicit about both halves of the reasoning: querying the size of every element in the DOM continuously would be bad for performance, and a descendant style change that resized the container could produce an infinite loop[^2].
+
+The practical consequence is that a box which used to hug its content can stop hugging it. A wrapper that sized itself to the width of a button row now takes the width of its parent, and if the parent is a flex item with no other constraint, it can collapse or stretch in ways the design never showed. The fix is a habit rather than a workaround: put the containment context on the slot, not inside the component, because the slot is already sized by the page layout and the component's contents cannot influence it.
+
+The `container-type` values behave differently, and the difference decides which units will resolve[^4]:
+
+- `normal` is the initial value. It applies no containment and cannot be queried for size or scroll state, but every element is already a style query container, so `normal` is enough for style queries and name-only queries.
+- `inline-size` applies style and inline-size containment. It supports queries on the inline axis and resolves the horizontal length units.
+- `size` applies style and size containment in both axes. It adds the block-axis queries and resolves the block length units, and it constrains the element more, because the block size is now computed in isolation too.
+- `scroll-state` applies no containment at all, and enables the scroll-state query family instead.
+
+There is one more caveat worth carrying. Can I Use lists a specific known failure: combining size container queries with table layout inside a multicolumn layout does not work[^8]. Component libraries whose layout runs on tables inside multicolumn containers should test those paths rather than assume parity.
+
+![The container-type decision: normal applies no containment and supports style and name-only queries but not size or scroll state queries, inline-size applies style and inline-size containment and resolves the inline axis units, size applies style and size containment in both axes and adds the block axis units, and scroll-state applies no containment while enabling scroll state queries](</diagrams/container-queries-design-system-2026/2-container-type-decision.png>)
+
+## The units make the difference visible
+
+Once a size container exists, its descendants can be sized in units relative to it. The six container query length units are `cqw` and `cqh` for the container's width and height, `cqi` and `cqb` for inline and block, and `cqmin` and `cqmax` for the smaller and larger of the two[^1]. When no eligible container resolves, they fall back to the small viewport unit for that axis, so a component without a container context still renders something reasonable[^1].
+
+`cqi` is the useful default. It matches `cqw` in a horizontal writing mode and stays correct in a vertical one, which matters the moment a client asks for an Arabic or Japanese locale. Pairing it with `clamp()` gives a component its own type scale:
+
+```css
+.card-title {
+  font-size: clamp(1.1rem, 5cqi, 1.9rem);
+}
+```
+
+At a 320 pixel slot, 5 percent of the container is 16 pixels, so the clamp returns its 17.6 pixel floor. At 560 pixels it returns 28 pixels. At 900 pixels it wants 45 pixels and the ceiling holds it to 30.4 pixels. The title scales with the space the component actually occupies, and there is no breakpoint anywhere in the rule[^1].
+
+Block-axis units need care. `cqh` and `cqb` only resolve against a container whose block size is contained, which means `container-type: size` rather than `inline-size`[^4]. Ask for `50cqb` inside an `inline-size` container and you get the viewport fallback instead of the number you expected.
+
+![Container query length units and a worked clamp: 5cqi resolves to 16 pixels in a 320 pixel slot so clamp returns the 17.6 pixel floor, 28 pixels in a 560 pixel slot so clamp returns it unchanged, and 45 pixels in a 900 pixel slot so clamp returns the 30.4 pixel ceiling. cqh and cqb need a size container rather than an inline-size container, and any unit with no eligible container falls back to the small viewport unit](</diagrams/container-queries-design-system-2026/3-units-and-clamp.png>)
+
+## Style queries closed their last gap in May 2026
+
+Size queries tell a component how much room it has. Style queries tell it what kind of place it is in, by reading a custom property off the container. The value is inherited by descendants anyway, so the point is not to read the value. The point is to make a component change its behavior based on a decision the page already made, with no prop threaded down through five layers of composition. A page sets `--density: compact` on a region, and every component inside that region that knows how to respond gets denser.
+
+The support timeline for style queries ran three years behind size queries. Chrome and Edge 111 shipped them in March 2023, Safari 18 in September 2024, and Firefox 151 on 19 May 2026, which is the date the feature became Baseline newly available[^7].
+
+Two details matter more than that compatibility number. First, only custom properties are implemented. The specification allows a style query to test an ordinary declaration such as `style(max-width: 600px)`, and no browser ships it yet[^9]. MDN states plainly that the only style feature currently supported is custom properties, with or without a value[^2]. Second, the Web Platform Test score is uneven: Firefox sits at 96.6 percent and Chrome at 86.2 percent, while Safari is at 58.6 percent[^7]. A team that ships density switching across all three engines should test the Safari path rather than infer it from support tables.
+
+Style queries are worth the caveats because they carry no containment. `container-type` defaults to `normal`, and that value still establishes a style container, so any ancestor can be queried for style features without applying containment to anything[^4]. There is no layout side effect to design around, which is the opposite of the size-query situation. The pattern composes well with a token layer, since the thing being queried is a custom property: the same tokens that already carry color and spacing can carry the switch that changes a component's density.
+
+State of CSS 2025 caught the shift in its own way. The survey's browser incompatibilities block asks which CSS features people have trouble using because of a lack of support or differences between browsers, and container style queries gained eleven spots in that ranking, landing at number six[^11]. That is what a feature looks like in the year it becomes usable everywhere: suddenly people are trying it, and suddenly its rough edges are visible.
+
+![Size queries and style queries compared: a size query reads the container's measured inline size and needs container-type inline-size or size, which applies containment and can change how the box sizes; a style query reads a custom property on the container and needs no container-type at all because normal already establishes a style container, so it has no layout side effect. Style queries reached Baseline newly available on 19 May 2026 when Firefox 151 shipped, and Safari's web platform test score for them is 58.6 percent](</diagrams/container-queries-design-system-2026/4-size-vs-style-queries.png>)
+
+## Scroll state, and the JavaScript it retires
+
+The third member of the family answers questions that used to need an event listener. Chrome and Edge 133 shipped scroll-state container queries in February 2025, covering `stuck`, `snapped`, and `scrollable`[^12]. Chrome 144 added `scrolled`, the most recent scroll direction, in its 13 January 2026 release[^13]. The MDN guide describes four conditions in total: whether a sticky container is stuck to an edge, whether a container can be scrolled in a given direction, whether it was most recently scrolled that way, and whether a scroll-snap container is snapped on an axis[^5].
+
+The setup is the part that surprises people. `container-type: scroll-state` goes on the element whose state you want to observe, and the styles apply to its descendants, which means a sticky header cannot style itself. A back-to-top link that only appears once the reader has scrolled down is a child of the scroll container, and a sticky navigation bar that changes color when it sticks is a child of the sticky element[^5].
+
+This family is Chromium-only today, so it belongs behind `@supports` for anything client-facing. The honest framing for a roadmap conversation is that scroll-state queries are a progressive enhancement which removes a class of scroll listeners where they are supported, not a replacement for the existing JavaScript until the other engines ship.
+
+## Where media queries still belong
+
+Container queries replace a specific use of media queries: deciding a component's internal layout. They do not replace the rest, and a codebase that deletes every media query in favor of containers is worse for it.
+
+Media queries remain correct for anything that is genuinely a property of the environment rather than the slot[^1]:
+
+- Page chrome and the app shell. Whether the primary navigation is a bottom bar or a side rail is a decision about the device and the shell, made once at the top of the tree.
+- User preferences. `prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`, and the `hover` and `pointer` features describe the person and their hardware, not the component's box[^10].
+- Print and export. Print stylesheets describe a medium, and no container will tell you that.
+- Decisions that must hold at first paint. A container query resolves against a measured box, so anything that has to be true before a layout pass is still a media query's job.
+
+The clean division is that media queries describe the environment and container queries describe the slot. Most real interfaces need both. A page-level container wrapping the whole tree is a legitimate pattern rather than a smell, because one container at the top lets components inside know whether they are in the wide shell or the narrow one without every component reading the viewport.
+
+![The division of labour between media queries and container queries: media queries own the app shell and navigation shape, user preference features like prefers-reduced-motion and prefers-color-scheme, print and export styles, and any decision needed at first paint; container queries own a component's internal layout, its type scale through container units, density and theming read from custom properties, and scroll state. Both are needed, and a page-level container wrapping the tree is a legitimate pattern](</diagrams/container-queries-design-system-2026/5-media-vs-container-division.png>)
+
+## What changes in a design system
+
+The mechanism is small. The organizational consequences are not, because the question "where does this component go" stops being answered at design time and starts being answered at runtime.
+
+**Variants collapse into rules.** Compact and sidebar variants exist because the component could not see its slot. Once it can, they become container rules and the props disappear from the API. That is a smaller contract, a smaller test matrix, and fewer combinations for a designer to specify. It also lets the documentation state a requirement instead of an approximation: this component needs 280 pixels for its first readable layout and 700 to go horizontal. If the codebase uses Tailwind CSS 4, the framework already encodes the pattern, with an `@container` class to mark a slot, `@md:` and `@max-md:` variants for its children, named targets such as `@container/main`, and `--container-*` theme keys that give slot sizes a home next to your other tokens[^16].
+
+**The Figma frame is not the slot.** Auto layout in Figma resizes by hug contents, fill container, or fixed size, and it can wrap or switch to a grid flow[^14]. None of that is a container query, and the file does not know what a 320 pixel filter rail will do to a card drawn at 1440. The handoff fix is cheap: name the slot widths in the spec, and review each component at the narrowest width it will meet rather than the widest. The review question changes from "does it look right" to "what is the smallest box this has to survive in, and does it hold there".
+
+**The responsiveness matrix moves from page widths to slot widths.** Storybook's viewport feature is built on device dimensions, with defaults such as 320 by 568, 414 by 896, 834 by 1112, and 1024 by 1280[^15]. Those are viewports, not slots. A component rendered in a 320 pixel iframe is a page in a small window, which is exactly the situation container queries were invented to stop modelling. Adding stories that wrap the component in a 280, 560, and 900 pixel container tests the mechanism the production code actually uses, and it is the same argument the [visual regression work for design systems](/field-notes/visual-regression-testing-design-systems-2026) already makes about matching the snapshot matrix to the thing being reviewed.
+
+**Nesting needs names.** Without a `container-name`, a query resolves against the nearest ancestor that has containment, so a component nested inside another container changes behavior depending on where it sits in the tree. That is sometimes correct and sometimes a surprise. Naming containers is cheap insurance, and Chrome 144 shipped a related fix in January 2026 that makes container names match across shadow tree boundaries, which removes a class of confusing failures for web-component-based systems[^13].
+
+## A migration order that does not break Monday
+
+Start by finding the components that appear in more than one slot. That list is usually much shorter than the component count, and it is where the payoff lives. The three or four worst offenders carry most of the variant props you want to delete.
+
+Then move outward: put the containment context on the slot, not inside the component. The slot is a layout wrapper the page already owns, so containment there affects nothing that was not already sized by the grid. If a component is its own slot because it fills the page, one container at the top of the tree covers it.
+
+Then convert one layout rule at a time, reading slot widths from the design rather than from devices. A rule that fires at 768 viewport pixels becomes a rule that fires at the width the component actually needs to go horizontal, which is often nearer 560.
+
+Finally, measure. A container crossing a threshold is a layout change, and a layout change at an awkward slot width is a jump the user sees. Rendering the component across a sweep of container widths and watching for the jump is faster than waiting for a bug report, and it is the same evidence a reviewer needs to approve the breakpoint.
+
+Two things stay true at the end of that work. The component still does not know what page it is on, which is the point. And the page no longer has to tell it, which is the improvement.
+
+The question to put into review is short: can this component describe the narrowest box it works in? If the answer is a device name, the responsiveness is still being decided in the wrong place.
+
+[^1]: MDN Web Docs, "CSS container queries." [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Containment/Container_queries)
+[^2]: MDN Web Docs, "Using container size and style queries." [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Containment/Container_size_and_style_queries)
+[^3]: MDN Web Docs, "@container CSS at-rule." [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/At-rules/@container)
+[^4]: MDN Web Docs, "container-type CSS property." [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/container-type)
+[^5]: MDN Web Docs, "Using container scroll-state queries." [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Conditional_rules/Container_scroll-state_queries)
+[^6]: Web Platform Status, "Container queries (size)." [webstatus.dev](https://webstatus.dev/features/container-queries)
+[^7]: Web Platform Status, "Container style queries." [webstatus.dev](https://webstatus.dev/features/container-style-queries)
+[^8]: Can I Use, "CSS Container Queries (Size)." [caniuse.com](https://caniuse.com/css-container-queries)
+[^9]: W3C CSS Working Group, "CSS Conditional Rules Module Level 5," Working Draft, 27 October 2026. [drafts.csswg.org](https://drafts.csswg.org/css-conditional-5/)
+[^10]: MDN Web Docs, "Using media queries." [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Media_queries/Using)
+[^11]: Devographics, "State of CSS 2025: CSS Usage" (Browser Incompatibilities section). [2025.stateofcss.com](https://2025.stateofcss.com/en-US/usage/)
+[^12]: Chrome for Developers, "CSS scroll-state()." [developer.chrome.com](https://developer.chrome.com/blog/css-scroll-state-queries)
+[^13]: Chrome for Developers, "Chrome 144," release notes, 13 January 2026. [developer.chrome.com](https://developer.chrome.com/release-notes/144)
+[^14]: Figma, "Guide to auto layout in Figma." [help.figma.com](https://help.figma.com/hc/en-us/articles/360040451373-Explore-auto-layout-properties)
+[^15]: Storybook, "Viewport." [storybook.js.org](https://storybook.js.org/docs/essentials/viewport)
+[^16]: Tailwind Labs, "Responsive design." [tailwindcss.com](https://tailwindcss.com/docs/responsive-design)
+[^17]: Ethan Marcotte, "Responsive Web Design," A List Apart, 25 May 2010. [alistapart.com](https://alistapart.com/article/responsive-web-design/)
