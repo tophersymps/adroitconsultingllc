@@ -1,0 +1,168 @@
+---
+title: "Lesson 85: General systems architecture: the architecture of an AI platform, end-to-end walkthrough"
+slug: ai-platform-architecture-walkthrough
+series: "salesforce-architect"
+lesson: 85
+excerpt: "An AI platform is an integration, security, data and lifecycle problem with new content in each thread. This lesson follows one request through retrieval, model gateway, tool call and trace, and names the trust, cost and control decisions at every hop."
+date: "October 29, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, CTA, Certifications]
+---
+
+# Lesson 85: General systems architecture: the architecture of an AI platform, end-to-end walkthrough
+
+Lesson 84 gave you a method for stitching integration, security, data and lifecycle into one design. This lesson takes the method somewhere less familiar. An AI platform is a system in which a model makes decisions at runtime, tools act on the world, and the same input can produce two different outputs. If your architecture experience is platform work, that last property is the one to sit with for a minute, because everything else in this lesson follows from it.
+
+Salesforce's own framework treats agentic systems as a case of the same five pillars rather than a separate discipline. Its position is that the pillars are not split into traditional and agentic concerns, that agentic systems must satisfy the same trust, reliability, operational excellence, resource and cost optimization and fairness requirements as any other enterprise solution, and that they add considerations for autonomous operation. [^6] That is a useful starting posture: an AI platform is an integration problem, a security problem, a data problem and a lifecycle problem, with new content in each.
+
+## Define the terms
+
+- **Large language model (LLM)**: the probabilistic component that turns a prompt into a response. It is a dependency with a provider, a price and a data handling policy, which is why the model gateway exists.
+- **Prompt journey and response journey**: the two halves of the request path. A prompt travels from the application through the trust layer to the model, and the generated response travels back through the same layer to the application. [^1]
+- **Model gateway**: the component that governs interactions with model providers. In the Einstein Trust Layer the gateway governs interactions with different model providers and represents a unified, secure way to communicate with multiple LLMs, with TLS encryption protecting data in transit. [^1]
+- **Zero data retention**: the policy the trust layer holds with external model providers, stating that data sent to the model is not retained. Salesforce's version of this sits alongside data masking and prompt defense in the same architecture. [^1]
+- **Data masking**: replacing sensitive values in a prompt before it leaves the trust boundary, configured in trust layer setup for features that support it. [^1]
+- **Prompt defense**: system policies, delivered through Prompt Builder and the Prompt Template Connect API, that instruct the model how to behave, and that the documentation describes as one defense against jailbreaking and prompt injection attacks. [^1]
+- **Grounding and retrieval**: assembling the context a model needs, either from inside the platform or from an external index. Retrieval decisions set the latency floor and the token bill of every request.
+- **Tool call**: an action the model requests from the platform, such as a lookup, a record update or a call to an external API. Tool calls are where a probabilistic system gets to change state, so they are where permissions matter most.
+- **Orchestrator**: the component that plans the work and routes it. In multi-agent designs the orchestrator is the highest-value target, because trust propagates through the chain it controls. [^2]
+- **Specialist agent**: a narrow component that handles one capability. It should validate the context it receives before acting, which is the same zero trust principle microservices designs use. [^2]
+- **Typed interface contract**: a structured, scoped, validated message between agents, as opposed to a raw instruction string that the receiver treats as authoritative. [^2]
+- **Minimal context transfer**: passing a specialist only what its subtask needs, rather than the full execution context, user session data or accumulated reasoning traces. [^2]
+- **Token economy**: the consumption cost of model work. The framework names it as the agentic angle of resource and cost optimization, alongside memory retrieval and consumption-based cost of agent work. [^6]
+- **Human in the loop**: the deliberate approval step before an irreversible action. It is a design decision about which actions are reversible, not a safety slogan.
+- **Evaluation set**: a fixed set of inputs with known acceptable outputs, run on every prompt, model or retrieval change so that quality regressions are caught before users find them.
+- **Observability span**: the trace record for one request, carrying prompt identity, model, latency, token count, tool calls and outcome. The framework names observing probabilistic systems as the agentic angle of operational excellence. [^6]
+
+## The layers of an AI platform
+
+Every AI platform I have reviewed can be described with the same seven layers. The names differ; the responsibilities do not.
+
+| Layer | Responsibility | The decision that constrains everything else |
+| --- | --- | --- |
+| Experience | Where a person or another system starts a request | Which requests may be autonomous and which need an approval step |
+| Orchestration | Planning, routing, specialist selection, state | Whether trust is validated at every hop or inherited from the orchestrator |
+| Model gateway | Provider selection, prompt assembly, policy and masking | Which providers are in the trust boundary and under what retention terms |
+| Context and retrieval | Grounding the model in data the org trusts | Whether retrieval is scoped by the same sharing rules the user is subject to |
+| Tools and integration | Actions the model can request, and the systems they touch | The permission set each tool runs under, which is where least privilege gets real |
+| Data and evaluation | Traces, evaluation sets, feedback | What is written down for audit, and what a regression looks like |
+| Platform operations | Access, environment strategy, release cadence | How a prompt change reaches production and how quickly it can be reversed |
+
+The seams between these layers behave like the seams in lesson 84. Provider choice is a security and cost decision. Retrieval scope is a data and security decision. Tool permissions are a security decision that determines the blast radius of a prompt injection. Release cadence is a lifecycle decision that decides how long a bad prompt stays live.
+
+## Follow one request end to end
+
+The clearest way to review an AI design is to trace a single request and name the control at each hop. Take a service agent asking the platform to summarize an open case and recommend the next step.
+
+1. **Request arrives at the experience layer.** The user's identity, role and session context come with it. If this identity is not carried all the way through, the rest of the design cannot enforce anything.
+2. **Orchestration plans the work.** The orchestrator decides which specialist runs, what context it receives, and which tools are in scope. Its instruction set is where prompt injection either is contained or spreads. [^2]
+3. **Retrieval assembles context.** Case records, entitlement rules, knowledge articles. The retrieval query must run as the requesting user, not as a service account with broad access, or the model will summarize records the user cannot open.
+4. **Prompt assembly and masking.** Sensitive values are masked before the prompt leaves the trust boundary, and prompt defense policies constrain what the model is asked to do. [^1]
+5. **The gateway sends the prompt to a provider.** The gateway is the single place where provider choice, encryption in transit and retention terms are enforced, and it is also the natural place to implement cost controls and fallbacks. [^1]
+6. **The response comes back through the same path.** The trust layer sees the response before the application does, which is the point of routing both journeys through one component. [^1]
+7. **The model requests a tool call.** The platform, not the model, evaluates whether that call is permitted, under whose identity it runs, and whether it requires approval. Irreversible actions get a human in the loop.
+8. **The outcome is recorded.** Prompt identity, model, latency, token count, tools invoked and decision taken land in the trace. Without that record, the fairness and operational pillars have nothing to measure. [^6]
+
+Read the eight hops and the failure modes write themselves. Skip identity at hop one and hops three and seven cannot be enforced. Let the orchestrator pass raw instruction strings at hop two and a poisoned context becomes an authoritative command. Skip the trace at hop eight and the first quality complaint becomes an argument.
+
+## Trust boundaries in a multi-agent platform
+
+Salesforce's agentic trust guidance is the most concrete published material on this, and its central claim is worth memorizing: multi-agent architectures compound trust complexity, because when agents communicate, trust propagates through the chain, and an orchestrator manipulated through prompt injection passes the problem to every specialist that receives its context. [^2]
+
+Three controls follow directly. [^2]
+
+- **Validate at every hop.** Each agent confirms the request falls within its defined purpose before executing. Treat inter-agent message content with the same scrutiny as external user input, because trust in the caller's identity does not mean trust in the caller's content.
+- **Use typed interface contracts.** Orchestrators pass structured, scoped, validated data to specialists instead of raw instruction strings that a specialist treats as authoritative. We hit this exact failure in our own multi-agent delivery pipeline: an orchestrator forwarded free-text task descriptions, a downstream worker followed them literally, and the fix was to make the handoff a structured contract with a validated schema.
+- **Transfer minimal context.** Specialists do not need full execution context, session data or accumulated reasoning traces. Passing everything increases both the injection surface and the token bill.
+
+External agents get the same treatment as any outside system. Responses from a third-party agent that instruct your orchestrator to act outside the current task scope should be rejected or escalated, which is a rule about content rather than about the sender's trustworthiness. [^2]
+
+Protocol design is the other half of this boundary. The Model Context Protocol specifies a client-host-server architecture in which each host can run multiple client instances, each client communicates with exactly one server, and the host controls connection permissions, lifecycle and security policy. Its stated design principles include that servers should not be able to read the whole conversation or see into other servers, that the full conversation history stays with the host, and that cross-server interaction is controlled by the host. [^3] If you are choosing between embedding tools and connecting them over a protocol, that isolation property is the architectural reason to prefer the protocol.
+
+## Cost, latency and the token economy
+
+Model work is priced per unit of consumption, and the framework's agentic angle on cost names the three levers: token economy, memory retrieval and the consumption-based cost of agent work. [^6] Two of those are architectural. How much context a design retrieves per request, and how much of it is passed between agents, determine the unit cost of every interaction long before anyone negotiates a rate.
+
+This is lesson 83's discipline again, with a shorter feedback loop. Consumption costs are the hardest part of a total cost of ownership model to estimate because they depend on behavior rather than on headcount, which is exactly why the model needs a measured assumption early: tokens per request, requests per user per day, and retrieval size per request, checked against real traffic after the first wave. A pilot that costs more per interaction than the process it replaced is a finding, and it is a finding you want in week six rather than at renewal.
+
+Reliability has its own agentic content. The framework names handling non-determinism, orchestration failures and agent interruptibility as the reliability angle for autonomous systems. [^6] Interruptibility deserves a design answer: which component can stop a running agent mid-task, what state is left behind when it stops, and who is notified. A platform that can start work but cannot cleanly stop it has an operations problem disguised as a feature gap.
+
+## Controls around a probabilistic system
+
+Two published sources are worth having in front of a client when they ask how this gets governed.
+
+The OWASP GenAI Top 10 resource page describes the 2026 edition as the latest community-driven guide to the most critical security risks facing applications powered by large language models, developed by hundreds of AI security experts, with updated rankings, expanded threat coverage and research grounded in thousands of real-world AI security incidents. It maps risks to other frameworks including NIST, MITRE ATLAS, CWE and the OWASP Top 10 for Agentic Applications. [^4] That mapping matters commercially: you can trace a client control back to a recognized list instead of defending a bespoke checklist.
+
+NIST publishes the AI Risk Management Framework with a companion playbook, developed by its Information Technology Laboratory with the private and public sectors, and the page notes both that the framework is being revised and that in April 2026 NIST released a concept note for a profile on trustworthy AI in critical infrastructure. [^5] For a regulated client, the practical use is a vocabulary: risk identification, measurement and management as organizational activities rather than as a model feature.
+
+Strip the vocabulary down and five controls do the work in most designs.
+
+1. **Least privilege for tools.** A tool runs under a permission set sized to the action, not to the agent's ambition. This is the single highest-value control because it caps what a successful injection can achieve.
+2. **Approval gates on irreversible actions.** Payments, deletions, external communications and record merges get a human decision. Reversible actions do not, or the queue becomes the product.
+3. **Evaluation sets on every change.** Prompt, retrieval and model changes run the same fixed inputs, and a regression blocks the release.
+4. **Trace everything, retain deliberately.** Audit records answer who asked, what the model saw, what it decided and which tool ran. Retention on those records is a policy decision with a legal owner.
+5. **A stop path.** A named owner, a documented procedure and a tested mechanism to disable an agent or a tool.
+
+## Worked example: an AI platform for a service desk
+
+A software company with 40,000 customers wants a case triage assistant. Cases arrive by email and portal. Triaging means classifying the case, proposing an entitlement decision, drafting a first response, and creating a task for an engineer when the case is escalated.
+
+**The design, layer by layer.**
+
+| Layer | Decision | Control it carries |
+| --- | --- | --- |
+| Experience | Assistant runs inside the service console for agents, and drafts only | Autonomy is limited to drafting, so nothing is sent without a person |
+| Orchestration | One orchestrator, three specialists: classification, entitlement, drafting | Classifier and entitlement specialists validate the case ID and the requesting user before acting |
+| Model gateway | One approved provider for drafting, a smaller model for classification | Gateway enforces masking and retention terms, and routes classification cheaply |
+| Context and retrieval | Case record, account entitlements, knowledge articles, all retrieved as the signed-in agent | Retrieval cannot surface records the agent cannot open |
+| Tools | Read case, read entitlement, create task, draft response | No send, no close, no entitlement change. Task creation is reversible and logged |
+| Data and evaluation | 500 historical cases with agreed classifications, plus traces for every run | Classification regressions block release, and the traces feed monthly quality review |
+| Operations | Prompt and retrieval changes ship weekly behind the evaluation gate | Rollback is a prompt version revert, priced in minutes |
+
+**The request path for one case.** An agent opens a case and asks for a triage suggestion. Retrieval pulls the case, the account's entitlement record and two knowledge articles, scoped to that agent's access. The orchestrator sends the classification specialist a structured payload: case ID, subject, product field, requesting user. It returns a category and confidence. The entitlement specialist receives the category and the account ID and returns an entitlement assessment with the rule it applied. The drafting specialist receives the masked case summary, the category and the entitlement assessment, and returns a draft. The platform writes a trace with prompt version, model, latency, tokens and the tools consulted, and the agent edits and sends.
+
+**The failure paths, which are the part most designs omit.** If classification confidence is low, the assistant says so and asks the agent to pick a category rather than guessing. If retrieval returns nothing relevant, the draft is withheld and the gap is logged as a knowledge defect. If the model requests a tool that is not in its allowlist, the request is refused and recorded. If the model output contains a value that should have been masked, that is a security defect with an owner, not a prompt tuning note.
+
+**What it costs to run, and how you would know.** Token spend per case, per week, tracked from the gateway. Draft acceptance rate, measured on edits. Classification agreement with the historical set, measured on every prompt change. Escalation accuracy, sampled monthly. Those four numbers are the whole business case, and each one has a name attached.
+
+## Common failure modes
+
+**Identity dropped at the first hop.** If the request path does not carry the user, retrieval and tools cannot enforce anything, and the platform quietly becomes a data exfiltration path with good intentions.
+
+**Trust inherited through the orchestrator.** A specialist acting on raw orchestrator text is a specialist acting on whatever convinced the orchestrator. Validate content at every hop. [^2]
+
+**Retrieval scoped like a service account.** Broad retrieval produces summaries of records the user cannot open, which is both a security finding and the fastest way to lose a client's confidence.
+
+**Cost discovered after adoption.** Consumption spend that nobody modeled is the lesson 83 failure in a new costume. Instrument tokens per request from the first pilot week. [^6]
+
+**No evaluation set, so quality is anecdote.** Without a fixed input set, every prompt change is a guess and every complaint is a debate.
+
+**An agent that cannot be stopped.** Interruptibility and a documented stop path belong in the design review, alongside the happy path. [^6]
+
+**Governance as a document rather than a control.** A policy that says agents must not take irreversible action is not a control. The control is the tool allowlist and the approval gate.
+
+## Try it
+
+Pick one process in your organization that a model could assist, and produce these five artifacts on one page each.
+
+1. **The eight-hop trace.** Write the request path from experience layer to trace record. Mark where identity is carried and where it could be dropped.
+2. **A trust boundary map.** List every crossing: user to platform, orchestrator to specialist, platform to provider, platform to tool, platform to external agent. For each, write what is validated and what is rejected. [^2]
+3. **A tool inventory with permissions.** One row per tool, with the permission set it runs under, whether it is reversible, and whether it needs approval.
+4. **The cost model.** Tokens per request, requests per user per day, retrieval size, and a monthly figure with the assumption written next to it. [^6]
+5. **The stop path.** Owner, procedure, and the last time it was tested.
+
+Then run one adversarial pass. Ask how a user could get the orchestrator to pass instructions to a specialist, and what the specialist would do if it received them. That test finds the design defect that a happy-path demo never will. [^4]
+
+## What's next
+
+You now have the method applied twice: once to a Salesforce design and once to a platform whose core component is probabilistic. The same review questions work in both. Who owns each fact? What crosses the trust boundary and what authenticates there? What does it cost to run, and who measures it? How does a change reach production and how does it come back?
+
+The next lesson returns to the exam. Lesson 86 is an exam prep review of the System Architect domains, covering integration, security and data, with the objective-by-objective breakdown from the Review Board exam guide, the answers that read as senior, and a timed drill you can score yourself against.
+
+[^1]: Salesforce. [Einstein Trust Layer: Designed for Trust](https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_arch.htm&language=en_US&type=5). Describes the prompt journey from CRM apps through the trust layer to the LLM and the response journey back, the LLM gateway as the component that governs interactions with different model providers and represents a unified, secure way to communicate with multiple LLMs using TLS in transit, the zero data retention policy held with external partner model providers, data masking configured in trust layer setup, and prompt defense through system policies used by Prompt Builder and the Prompt Template Connect API as a defense against jailbreaking and prompt injection.
+[^2]: Salesforce Architects. [Trust for the Agentic Enterprise](https://architect.salesforce.com/docs/architect/well-architected/guide/agentic-enterprise-trust.html). States that multi-agent architectures compound trust complexity because trust propagates through the chain and an orchestrator manipulated through prompt injection passes the problem to specialists receiving its context, and prescribes agent-to-agent validation (each agent confirms the request falls within its defined purpose, treating inter-agent content as untrusted), typed interface contracts instead of raw instruction strings, minimal context transfer, and rejecting or escalating external agent responses that fall outside the current task scope.
+[^3]: Model Context Protocol. [Architecture](https://modelcontextprotocol.io/specification/2026-07-28/architecture). Specifies a client-host-server architecture where each host runs multiple client instances, each client communicates with exactly one server, MCP is a stateless protocol built on JSON-RPC, the host controls client connection permissions, lifecycle and security policy, and the design principles state that servers receive only necessary contextual information and should not be able to read the whole conversation or see into other servers.
+[^4]: OWASP Gen AI Security Project. [OWASP GenAI LLM Top 10 2026](https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/). Describes the 2026 edition as the latest community-driven guide to the most critical security risks facing applications powered by large language models, developed by hundreds of AI security experts with updated rankings, expanded threat coverage and research grounded in thousands of real-world AI security incidents, mapped to frameworks including NIST, MITRE ATLAS, CWE and the OWASP Top 10 for Agentic Applications.
+[^5]: NIST. [AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework). Provides the AI RMF developed by the Information Technology Laboratory AI Program in collaboration with the private and public sectors, links to the AI RMF Playbook, notes that AI RMF 1.0 is being revised as part of the White House AI Action Plan, and reports the April 7, 2026 concept note for an AI RMF Profile on Trustworthy AI in Critical Infrastructure.
+[^6]: Salesforce Architects. [Well-Architected Framework](https://architect.salesforce.com/docs/architect/well-architected/guide/framework.html). Gives each pillar an agentic angle: trust covers governing what agents may do and auditing what they have done, reliability covers non-determinism, orchestration failures and agent interruptibility, operational excellence covers observing probabilistic systems and managing the agent development lifecycle, resource and cost optimization covers the token economy, memory retrieval and consumption-based cost of agent work, and fairness covers explainability, contestability and bias. States that the pillars are foundational architecture that agentic solutions build upon rather than a separate agentic track.
