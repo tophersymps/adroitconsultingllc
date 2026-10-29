@@ -24,6 +24,30 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "project-recovery-subtraction-2026",
+    "title": "A Late Project Does Not Get Faster by Adding",
+    "excerpt": "When a project slips, the reflex is to add people, hours, or process. Every addition pushes the date out. Recovery is a subtraction discipline.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "October 29, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Delivery",
+      "Recovery",
+      "Escalation of Commitment",
+      "Estimation",
+      "Consulting Delivery"
+    ],
+    "bannerImage": "/banners/project-recovery-subtraction-2026.webp",
+    "ogImage": "/banners/project-recovery-subtraction-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "certificate-renewal-pipeline-2026",
     "title": "The 200-Day Certificate Turns Renewal Into Infrastructure",
     "excerpt": "Public certificates now cap at 200 days, then 100, then 47. Renewal is a pipeline with a last mile, and the last mile is where the outage lives.",
