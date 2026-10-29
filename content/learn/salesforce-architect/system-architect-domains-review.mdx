@@ -1,0 +1,139 @@
+---
+title: "Lesson 86: Exam prep: System Architect domains review (integration, security, data)"
+slug: system-architect-domains-review
+series: "salesforce-architect"
+lesson: 86
+excerpt: "A review pass over the three domains that carry the most weight in Review Board scenarios: integration, security and data. Objective by objective, with the weak answer next to the scoring answer, the traps that cost points, and a drill you can score."
+date: "October 29, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Salesforce, Architecture, CTA, Certifications]
+---
+
+# Lesson 86: Exam prep: System Architect domains review (integration, security, data)
+
+Lesson 85 took the method outside Salesforce and walked an AI platform end to end. This lesson comes back to the exam, because the method only counts if it survives the scoring. The Review Board is a performance, not a knowledge test: 180 minutes to read, solution, design and justify a detailed architectural solution, 45 minutes to present the recommendations, and 40 minutes of questions and answers. [^5] Everyone in the room knows the platform. The differentiator is whether the design answers the domains the scenario is actually asking about, and whether the candidate can defend each answer under questioning.
+
+The outline tests seven areas: system architecture, security, data, solution architecture, integration, development lifecycle and deployment planning, and communication. [^1] Three of those do the heaviest lifting in most scenarios and they are the three this lesson reviews, because a candidate who is strong in integration, security and data can usually carry the rest with disciplined communication.
+
+## What the three domains actually ask for
+
+Read the objective bullets as requirements on your answer, not as a syllabus. The integration, security and data bullets are specific enough to check yourself against. [^1]
+
+| Domain | Objectives that appear most often | What a scored answer must contain |
+| --- | --- | --- |
+| Integration | Recommend an enterprise integration landscape with its risks and trade-offs; justify the appropriate technology; recommend an integration strategy and common patterns; justify platform-specific integration technology with its capabilities and limits | A named pattern per requirement, the reason it beat the alternative, and the failure path |
+| Security | Architect a solution using the appropriate platform security mechanisms; design a secure portal architecture for internal and external users; identify declarative and programmatic record-level security features; design and justify an end-to-end identity management solution | An identity spine, the four-layer access model applied, and the declarative-first justification for each access requirement |
+| Data | Describe large data volume architecture considerations and optimization methods; describe data modeling concepts and database design implications; determine the migration strategy and tools | Volumes with numbers, the operations that run over them, and the migration path including what stays behind |
+
+Two patterns jump out of that table. Every bullet begins with a scenario, which means the answer has to be tied to the scenario's specifics rather than to a favorite stack. And every bullet asks for capability, limitation or trade-off language, which means a design without a stated constraint does not read as a decision.
+
+## Integration domain review
+
+The integration objectives ask for four things in sequence: the enterprise integration picture with its risks, the technology choice, the strategy with its common patterns, and the platform-specific choice with its limits. [^1] Salesforce publishes the pattern vocabulary you should be speaking in: remote process invocation in request and reply form, remote process invocation in fire and forget form, batch data synchronization, remote call in, UI update based on data changes, and data virtualization, along with a selection matrix for choosing between them and appendices on security considerations and event driven architecture. [^3]
+
+Naming the pattern is the first half. The second half is defending it against the decision factors Salesforce's integration decision guidance lists: existing tools and landscape, data flow requirements including timing, directionality and expected user experience, implementation complexity, maintainability, data volume, and platform limits, all aimed at minimizing unnecessary data replication. [^4]
+
+**The exam question.** A distributor's scenario says the ERP owns pricing and inventory, dealers need stock visibility during quoting, and the ERP's API can handle roughly 200 calls a day while the portal serves 600 dealers during a renewal peak.
+
+**The weak answer.** "Integrate the ERP with Salesforce using an integration platform, and use APIs for real-time stock checks." It names a technology, ignores the volume the scenario just gave it, and leaves the platform limit untested.
+
+**The scoring answer.** "Pricing and inventory stay authoritative in the ERP. Stock position is reference data with a fifteen-minute tolerance, so I would synchronize it into a read-only staging object on a scheduled job rather than calling the ERP per page view, which keeps the daily API consumption well inside the 200-call limit and removes the portal's dependence on ERP latency. The rejected alternative is a per-quote real-time lookup: it is simpler to build and it fails the volume requirement at renewal peak, which is the only window that matters. Failure path: if the synchronization job fails, the portal shows the last synchronized position with its timestamp and quoting continues, because a stale stock figure with a visible timestamp is a better outcome than a blocked quote." [^3] [^4]
+
+Notice what the strong answer contains: the authority sentence, the pattern, the volume arithmetic from the scenario, a rejected alternative, and degradation behavior. The weak answer contains none of them.
+
+**Integration traps.** Adding an integration platform as a first move when the scenario already has an ESB or an ETL tool, which is the maintainability factor pointed the wrong way. [^4] Point-to-point connections that multiply with each new system, which the maintenance argument in lesson 83 prices. Choosing batch synchronization for something the scenario describes as needing immediate answers, or the reverse. Omitting idempotency and ordering for a write path, so a retry produces duplicate records. And a design that never says what happens when the external system is unavailable.
+
+## Security domain review
+
+The security bullets span solution security mechanisms, portal architecture with internal and external users, declarative record-level security, programmatic security features, object and field access, and an end-to-end identity solution. [^1] The published guidance gives you the vocabulary to answer all six with one spine.
+
+The starting sentence is the shared responsibility line: the platform and infrastructure are Salesforce's responsibility, and security on the platform, including identity and access management, data governance and integration security, is yours. [^2] Then the four principles: apply zero trust across all layers, grant least privilege by default using the four-layer access model of organization, object, field and record, implement defense in depth with preventive, detective and responsive controls, and integrate security into design through threat modeling. [^2]
+
+Defense in depth is where a candidate can show real depth, because the guidance names the layers and the controls together: data (field-level security, record sharing, classification, with organization-wide defaults, sharing rules and Shield Platform Encryption), application (input validation, output encoding, CRUD and FLS enforcement, with Apex security and Lightning Web Security), identity (session policies, credential management, access recertification, with login flows, session settings and multi-factor authentication), and integration (API authentication, IP restrictions, certificate validation, with OAuth 2.0 and named credentials). [^2]
+
+**The exam question.** A scenario describes a partner portal for 4,000 external dealer users where dealers must see only their own accounts, must not see margin fields, and where the security architect requires single sign-on from the corporate identity provider for internal users only.
+
+**The weak answer.** "Use sharing rules to open the dealer accounts and hide the margin fields with page layouts." Page layouts are presentation, not security, and nothing in that answer establishes an identity model or a boundary between internal and external access.
+
+**The scoring answer.** "Start from private organization-wide defaults so the default is no access, and grant external access by a mechanism the sharing engine can evaluate per dealer rather than by opening the object. That is typically a community licence with sharing sets or criteria-based rules scoped to the dealer's account, which keeps the filter expressible in the sharing model. Margin and reserve fields come out of field-level security rather than layouts, because field-level security protects the field even when a sharing rule is too permissive. Internal users authenticate through the corporate identity provider with single sign-on, and external dealers get a separate authentication path with multi-factor authentication rather than inheriting internal session policy. Both paths terminate in the same role hierarchy and permission set structure so that access recertification has one place to run." [^2]
+
+That answer uses the four-layer model explicitly, separates authentication from authorization, and justifies the declarative choice before reaching for Apex. If a scenario genuinely requires programmatic security, name what the declarative layer cannot express and then say what the Apex enforcement looks like, including CRUD and FLS checks in the handler.
+
+**Security traps.** Treating profiles and permission sets as an identity strategy. Row-level security in a report or list view being mistaken for record access. Guest user access through an Experience Cloud site reaching data nobody intended, which the threat modeling list calls out as an expanded attack surface. Forgetting that third-party and ISV packages cross the trust boundary at install time or at runtime. [^2] And describing a portal architecture without saying what authenticates each population.
+
+## Data domain review
+
+The data bullets ask for volume and optimization, modeling implications, and migration strategy with tools. [^1] Volume is the half that candidates under-answer, usually because they have not had to reason about it in production.
+
+The guidance defines a large data volume loosely and then names what actually degrades: tens of thousands of users, tens of millions of records or hundreds of gigabytes of record storage counts, and the processes most affected are loading or updating large numbers of records, directly or through integrations, and extracting data through reports, queries or views. [^6] That sentence is the one to bring into the exam room, because it reframes the question from "how many records" to "which operations run over them".
+
+Three optimization strategies cover the ground: follow standard database practice for schema changes and operations, defer or bypass business rule and sharing processing where the operation does not need it, and choose the most efficient operation for the task. [^6] For histories too large to keep in the operational object, Big Objects provide consistent performance from one million records to one billion, and the guidance recommends Bulk API or Batch Apex both for populating them and for archiving. [^6]
+
+**The exam question.** A scenario describes 40 million case records, a five-year-old reporting requirement, a regulator asking for a ten-year audit trail on case documents, and an executive dashboard that must return in under three seconds.
+
+**The weak answer.** "Store everything in the case object and use reports for the ten-year view." Forty million records with a ten-year retention requirement and a three-second dashboard is a design that has not decided where records live or which operation runs over them.
+
+**The scoring answer.** "Split the requirement three ways by operation rather than by volume. The operational case object keeps recent cases with indexed filters, and the executive dashboard reads a summarized reporting layer refreshed on a schedule, because three seconds over tens of millions of rows is a query design problem rather than a hardware one. Cases older than the operational window move to a Big Object, populated and archived with Bulk API or Batch Apex, which gives consistent performance at this scale. Case documents with the ten-year immutable audit requirement stay in a document layer with an audit record per document and a monthly reconciliation count that flags any document missing its audit record. The rejected alternative is extending the case object with a history object, which keeps the retention requirement inside the object that is already the performance constraint. Migration runs through a staging object with an external identifier per record, so the load can be retried without duplication." [^6]
+
+The scoring answer separates the three requirements, gives a number for each, and names what it deliberately does not do.
+
+**Data traps.** Answering volume with a record count and no operation. Ignoring sharing recalculation on bulk loads, which is the deferral strategy the guidance names. Migration plans with no external identifier, so a failed load cannot be re-run safely. Retention requirements that are legally named in the scenario and absent from the design. And reporting designs that read operational tables directly because a separate layer would add latency.
+
+## The answer shape that scores
+
+Every domain answer in this lesson has the same three parts, and the Communication domain names them in its own language when it asks the candidate to articulate benefits, limitations, considerations and design choices and to handle objections about the design. [^1]
+
+1. **The decision.** One sentence, stated as a choice, not as a description of a diagram.
+2. **The reason tied to a requirement.** The scenario gave you the constraint. Use its number, its regulation, its user population.
+3. **The trade-off accepted.** What you gave up, and the mitigation. This is the sentence that separates a designer from a decision maker.
+
+Rehearse that shape out loud, because 40 minutes of questions is where an inconsistent answer shape costs the most. When a judge asks "why not the simpler option", the scoring answer names the requirement the simpler option fails rather than defending complexity.
+
+## A 45-minute drill
+
+Set a timer. Answer each prompt in the three-part shape, then score yourself against the criteria.
+
+| Prompt | Scored if your answer names |
+| --- | --- |
+| A partner portal must show dealer-specific pricing with a 15-minute tolerance, and the pricing system is not owned by your client | The authority sentence, the pattern, the volume arithmetic, and the degradation path |
+| A scenario adds regulatory isolation between two regions, and each region has its own security team | Whether multi-org is justified by a requirement, what the integration between orgs costs, and who owns identity in each |
+| A scenario lists 40 million records, a ten-year retention requirement and a three-second dashboard | Three separate requirements, three separate mechanisms, and what you deliberately excluded |
+
+Then run the reverse test. For each of the three answers, name one question a judge could ask that you cannot answer in under a minute. That question is your study list, and it is more useful than re-reading the exam guide, because the guide already told you which domains are scored. [^1]
+
+## Exam traps
+
+**Answering domains in isolation.** A scenario that mentions an external system of record, a regulator and a partner population is asking you to link integration, security and data. A single-domain response reads as incomplete.
+
+**Symptom instead of constraint.** "Use an integration platform" is a symptom of not having chosen a pattern. "Recalculate sharing nightly" is a symptom of not having sized the load.
+
+**No numbers.** Volumes, latency targets, retention periods and API limits all appear in scenarios because they are meant to appear in the answer.
+
+**Declarative versus programmatic, unresolved.** State the declarative mechanism first and justify the programmatic step only where the declarative layer cannot express the requirement. [^2]
+
+**Ignoring cost and lifecycle.** TCO and maintenance load are scored inside the domains, not in a separate section, exactly as lesson 82 argued about non-functional requirements. [^6]
+
+**Winning the presentation and losing the questions.** The 40 minutes afterwards is where an answer shape and a rehearsal win or lose points. [^5]
+
+## Try it
+
+Take one scenario you have practiced, or write a new one with an external system of record, a partner population, a volume figure and a retention requirement. Then do this in 60 minutes.
+
+1. **Write the three domain answers** in the decision, reason, trade-off shape, one paragraph each. Integration gets a named pattern and a failure path. Security gets an identity spine, the four-layer model applied and a declarative-first justification. Data gets volumes, operations, retention and a migration path. [^1]
+2. **Run the seam check.** For each pair of domains, write one sentence on where they touch. Integration and security meet at the integration identity. Security and data meet at the sharing model's effect on query performance. Data and integration meet at what is replicated versus virtualized. Any pair you cannot connect is where the judges will start.
+3. **Price one decision.** Pick your most complex component, name the maintenance load it creates, and state whether you would fund it. That is the answer to "why not simpler".
+4. **Rehearse the objections.** Three questions you expect: why not the simpler option, what happens when the external system is down, and what did you decide not to solve.
+
+Score yourself on whether every answer names a decision, a reason tied to a scenario constraint, and an accepted trade-off. Anything else is a description.
+
+## What's next
+
+You now have the review pass for integration, security and data, the answer shape that scores across all three, and a drill that exposes the questions you cannot answer quickly. The next lesson continues the exam preparation with the Application Architect and Platform Architect domains, where the emphasis moves from system-level decisions toward solution composition, declarative and programmatic choice, sharing and visibility design, identity at the platform level, and the deployment and lifecycle practices those credentials test. Lesson 87 covers exam prep for the Application and Platform Architect domains.
+
+[^1]: Salesforce. [Salesforce Certified Technical Architect Review Board Exam Guide](https://help.salesforce.com/s/articleView?id=005298996&language=en_US&type=1). Lists the exam outline areas and their objectives, including System Architecture (mix of on and off platform components, reporting and analytics trade-offs, single or multi-org considerations, license mix, document management), Security (platform security mechanisms, secure portal architecture for internal and external users, declarative and programmatic record-level security, object and field access, end-to-end identity management), Data (large data volume architecture considerations and optimization, data modeling and database design implications, migration strategy and tools), Integration, Development Lifecycle and Deployment Planning, and Communication (articulating benefits, limitations, considerations and design choices, handling objections, and using visualization and documentation tools).
+[^2]: Salesforce Architects. [Trust](https://architect.salesforce.com/docs/architect/well-architected/guide/trust.html). Frames security on the platform as the architect's responsibility under the shared responsibility model, gives the design principles of zero trust across all layers, least privilege by default via the four-layer access model (organization, object, field, record), defense in depth across data, application, identity and integration layers, and threat modeling inside design using STRIDE over Salesforce-specific vectors including Experience Cloud sites and third-party or ISV code as a supply chain vector.
+[^3]: Salesforce Architects. [Integration Patterns](https://architect.salesforce.com/docs/architect/fundamentals/guide/integration-patterns.html). The pattern summary covers remote process invocation in request and reply and fire and forget forms, batch data synchronization, remote call in, UI update based on data changes, and data virtualization, with a pattern selection guide for matching pattern to scenario and appendices on security considerations and event driven architecture.
+[^4]: Salesforce Architects. [Get Started with Integration Decision Guides](https://architect.salesforce.com/docs/architect/decision-guides/guide/get-started-integration-decision-guides.html). Lists the integration decision framework factors as existing tools and landscape, data flow requirements (timing, directionality, expected user experience), implementation complexity, maintainability, data volume and platform limits, with the stated aim of minimizing unnecessary data replication and leveraging existing enterprise integration solutions.
+[^5]: Salesforce. [Certified Technical Architect Credential](https://trailhead.salesforce.com/credentials/architectreviewboard). States the Review Board Exam allows 180 minutes to read, solution, design and justify a detailed architectural solution, 45 minutes to present recommendations, and 40 minutes for question and answer discussion, with a registration fee of 4,500 dollars and a retake fee of 2,250 dollars, and the preceding Architect Review Board Evaluation at 1,500 dollars with a 750 dollar retake.
+[^6]: Salesforce Developers. [Best Practices for Deployments with Large Data Volumes](https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-introduction.html). Defines a large data volume as tens of thousands of users, tens of millions of records or hundreds of gigabytes of record storage, names loading or updating large numbers of records and extracting data through reports, queries or views as the main affected processes, lists the optimization strategies (standard schema change practices, deferring or bypassing business rule and sharing processing, and choosing the most efficient operation), and describes Big Objects as providing consistent performance from one million to one billion records with Bulk API or Batch Apex used to populate and archive them.
