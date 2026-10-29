@@ -1,0 +1,189 @@
+---
+title: "Lesson 83: Architecture Review: Presenting Your Agent Design and Defending Tradeoffs"
+slug: architecture-review-presenting-your-agent-design
+series: "agentic-ai"
+lesson: 83
+excerpt: "Lesson 82 closed the loop on adoption and left the design itself untested. This lesson is the hour where it gets tested. It covers what makes an agent design review different from a service review, the four-page packet that turns a presentation into a decision, decision records written so the reasoning outlives the meeting, scenario-based questioning borrowed from a method that has been evaluating architectures since 1998, the tradeoff table that separates the choices worth defending from the ones to concede early, a 45-minute agenda, the traps that turn a review into a follow-up meeting, and a worked review of the invoice exception queue where two real holes surface before the code exists."
+date: "October 29, 2026"
+author: "Adroit Consulting"
+readTime: "22 min read"
+tags: [Architecture Review, Decision Records, Tradeoffs, Design Review, Agentic AI]
+---
+
+# Lesson 83: Architecture Review: Presenting Your Agent Design and Defending Tradeoffs
+
+Lesson 82 finished with a 90-day change program and one assumption still standing: that the design underneath the program is sound. This lesson is about the hour where that assumption gets tested by people who did not build it.
+
+Architecture review has a poor reputation in engineering teams and it earned it. Most reviews are presentations wearing a review's name. Someone walks a diagram, a reviewer asks why the vector database is not the one they used at their last company, and the meeting ends with "let's take this offline." A review that produces a follow-up meeting has failed. A review produces a decision, a named owner for every risk it found, and a written record of what was decided and why.
+
+The lesson below is the working version: what changes when the system under review is an agent, the four-page packet that replaces the slide deck, decision records that survive staff turnover, scenario-based questioning borrowed from a method that has been doing this since 1998, the tradeoff table that tells you what to defend and what to give away, a 45-minute agenda, and a full worked review of the invoice exception queue from the last two lessons.
+
+## What changes when the design is an agent
+
+A conventional service review can lean on interfaces, load estimates and a data model. An agent design adds a set of properties that break those habits. AWS's Well-Architected Agentic AI Lens names five: agents reason rather than only respond, they act autonomously, their behavior is stochastic, they collaborate, and they remember.[^1] Each property changes a question the review has to ask.
+
+Reasoning means one request can fan out into several model calls, tool invocations and memory reads, so latency and cost belong to a loop rather than to a handler. Autonomy means the system changes data without a human approving each step, so the review has to examine permission boundaries and not only interfaces. Stochastic behavior means the same input can produce different outputs, which retires the phrase "we saw it work" as evidence and replaces it with evaluation coverage and a stated failure rate. Collaboration means a multi-agent design introduces handoff and coordination failure modes that a single-agent design does not have. Memory means state outlives the session, which raises retention, privacy and data-integrity questions a stateless service never faces.
+
+Two of those five carry most of the weight in the room. Autonomy drives every question from the security reviewer. Stochastic behavior drives every question about evidence, and it is the one that catches teams who prepared a demo instead of a case.
+
+## The three questions a review exists to answer
+
+Write them on the packet's first page, because they are also the test you should apply to the packet before the meeting.
+
+1. Is this the simplest design that meets the requirement?
+2. What breaks, and what does it cost when it does?
+3. Who owns the failure?
+
+Anthropic's guidance on agent design holds the first question to a useful standard: find the simplest solution possible and increase complexity only when it is needed, because frameworks add abstraction that obscures the underlying prompts and responses and makes failures harder to debug.[^2] In review terms, that becomes a question you should answer before it is asked. Which simpler design did you reject, and why? For an exception queue, the simpler design is a deterministic workflow with one model call to draft the evidence packet (the choice lesson 78 argued for). If you cannot describe the simpler version you deliberately did not build, the room will assume the complexity was accidental.
+
+The second question is why the tradeoff table in this lesson exists. The third is the one agent designs make harder, because the failure can be produced by a model, a tool, a prompt or a person acting on a wrong recommendation, and a design that does not say who owns that chain hands the question to an incident review later.
+
+## The four-page packet
+
+The unit of a review is not a deck. It is a packet short enough that everyone reads it in advance, which is the only reason a 45-minute meeting can reach a decision.
+
+**Page one: the decision requested.** One page of context and, at the end, the sentence that matters: what you are asking the room to approve, and what a wrong answer costs. The cost sentence is what makes the room read carefully. "We are asking for approval to post invoices under $2,500 automatically when the validator clears them; if this design is wrong in the direction of over-clearing, the cost is duplicate payments at a rate we estimate at 0.4 percent of volume."
+
+**Pages two and three: the decision records.** Three to five of them, one per architecturally significant choice, in the format below. More than five means the design is not yet decided, and the review should be a working session instead of a decision.
+
+**Page four: the evidence and the reversal plan.** The evidence is countable: eval set size, pass rate on the held-out set, the specific cases that fail, latency at the 95th percentile, and the monthly cost at the current volume. The reversal plan is one paragraph per decision record naming what it would take to undo the choice, because that number decides which decisions are worth arguing about.
+
+Two rules keep the packet honest. Anything not in the packet is not re-litigated live; new options go into the options column of the relevant record. And the evidence page states the failure rate you measured rather than the one you hope for, because a review that catches an over-optimistic number is a review that worked.
+
+## Decision records that outlive the meeting
+
+The format is old and it is short. Michael Nygard's 2011 post introduced it: a title, the context describing the forces in tension, the decision stated in full sentences with active voice, a status, and the consequences, with the instruction that all consequences are listed and not only the positive ones. Reversed decisions are marked superseded rather than deleted, because it matters that a decision was once the decision.[^3]
+
+Microsoft's Well-Architected guidance adds two details worth borrowing for agent work. A record should include the options you ruled out and the confidence level of the decision, since an architecturally significant choice made with low confidence is worth flagging for a later revisit, and the log works as an append-only record where a changed decision becomes a new record that supersedes the old one and links to it.[^4]
+
+For agent designs, add one column the classic template does not have: what the model is allowed to do unsupervised. That field is the one security will read first, and writing it down in the record is what keeps the answer stable after the reviewer rotates off the project.
+
+Five lines are enough for a review packet:
+
+- Decision, as a short noun phrase ("ADR 12: Post invoices under $2,500 without human review").
+- Options considered, including the one you rejected and the reason.
+- Decision and confidence.
+- Consequences, positive and negative, with the negative ones specific.
+- Reversal cost, in engineering days and in rework to data already written.
+
+## Defend with scenarios, not adjectives
+
+The strongest technique in this lesson comes from architecture evaluation research rather than from design review culture. The Architecture Tradeoff Analysis Method treats quality attributes as too vague to argue about until they are expressed as scenarios, and it evaluates a design by having the architect explain how the system would satisfy a prioritized scenario, with questions from the evaluation team producing the findings: risks, non-risks, sensitivity points and tradeoff points, where a sensitivity point is a decision that strongly affects one quality attribute and a tradeoff point is one that affects several in opposite directions.[^5]
+
+You are not running ATAM. It gathers a trained evaluation team, the decision makers and stakeholder representatives for an evaluation modeled on a spiral of candidate architectures and risk mitigation, which is a multi-day commitment.[^5] You are borrowing the questioning technique, and the technique fits in 20 minutes if you supply the scenario format.
+
+> When <stimulus> arrives while <condition holds>, the system must <response>, within <measure>.
+
+Two things happen when you insist on that shape. Adjectives disappear, because "it should be resilient" cannot complete the sentence. And the room starts generating scenarios you did not prepare for, which is exactly the value of inviting people who will not use the tool.
+
+## The tradeoff table
+
+One table, one row per decision record, and it does more work than any diagram in the packet.
+
+| Decision | Options considered | Chosen because | What we give up | Reversal cost |
+|---|---|---|---|---|
+| Agent scope | Deterministic workflow with a drafting call, bounded agent loop, multi-agent split | The queue's steps are known; determinism where the path is known, agency where the packet needs judgment | Flexibility for workflows that are not yet defined | Low for the loop boundary, high once state is written by an agent |
+| Posting authority | Draft only, auto-post under a threshold, auto-post everything | Threshold keeps the volume benefit while capping the blast radius | Some throughput above the threshold | Medium; a policy change plus an audit of past postings |
+| Tool permissions | Read-only ERP access, read plus write with a scope, service account with broad rights | Scope limits the damage of a bad tool call | Convenience for future tools | High; requires credential rotation and a re-audit |
+
+The reversal-cost column is the argument-settling column. Decisions with a low reversal cost are not worth a single minute of debate, so concede them early and visibly. Decisions with a high reversal cost are the ones you prepare evidence for.
+
+**Worth defending:** the autonomy level attached to each action, the permission boundary on each tool, the evaluation gate and its thresholds, data retention for traces, the human approval points, and the cost ceiling that triggers a circuit breaker.
+
+**Concede in the first five minutes:** the framework choice when the boundary is clean, prompt wording, internal module boundaries, naming, dashboard layout, and the model version when the interface is abstracted. Giving these away early buys credibility for the argument that follows, and reviewers who watch you concede something real listen differently to the thing you hold.
+
+## Running the 45 minutes
+
+Six items, in this order, with the clock visible.
+
+1. **Context and the decision requested (5 minutes).** The author states what approval is being asked for and what a wrong answer costs. Nobody else talks yet.
+2. **Walk the decision records (10 minutes).** Each one in three sentences: options, choice, what it gives up. The rejected option gets named aloud, because a record with no rejected option reads as a decision that was never made.
+3. **Scenarios (20 minutes).** The room supplies scenarios in the format above. The author answers by pointing at the architecture rather than defending the design. Anything that cannot be answered by the architecture is a finding. The moderator writes findings down and does not let the room solve them mid-sentence.
+4. **Concessions (5 minutes).** The author names what is reversible and gives it away, then names what is not reversible and asks for a decision on it.
+5. **The decision and its conditions (5 minutes).** The decision owner speaks last, with one of three outcomes: approved, approved with conditions where every condition has an owner and a date, or not approved with the specific gap named. "Approved with conditions" is the normal outcome, and a condition without a date is a rejection in disguise.
+6. **Nothing else.** Items that appear mid-review go into the parking list with an owner. A review that extends past its slot because the room found something interesting has stopped being a review.
+
+Who is in the room matters as much as the agenda. Seven people maximum: the decision owner with authority to say no, the operator who will run the workflow, the security reviewer, the person who will be on call for it, and at most two engineers close enough to the design to challenge it technically. Exclude anyone who can neither decide nor contribute a scenario, and exclude the person who arrives with a framework recommendation and no scenario, because they will consume the twenty minutes that belongs to the scenarios.
+
+## The traps
+
+**The demo as the argument.** A demo proves that a path exists on one day. With stochastic behavior, it does not prove the path is the normal path, and reviewers who have seen an agent fail after a good demo discount it. Bring the eval numbers and one honest failing case instead. The failing case is what makes the numbers believable.
+
+**"It works" as evidence.** The evidence page is where this gets settled in writing, with a pass rate, a sample size and a named held-out set. A design review that accepts an assertion costs the same hour and buys nothing.
+
+**Consensus as the goal.** Consensus is not a decision, and a design that satisfies fifteen people who each hold a veto is a design with no owner. The review's output is one person's decision with the dissent recorded in the same record.
+
+**Designing in the room.** Reviewers who start solving produce a better architecture and a later delivery date, and the meeting after the meeting appears. The moderator's line is: this goes in the options column, and the decision on it belongs to the author, dated.
+
+**Nobody owning the 2am page.** The review is the last cheap moment to name the on-call owner, the runbook's existence, and the rollback path. A design with no rollback path is a design that cannot be reversed, which the tradeoff table should have caught on page four.
+
+## Worked example: the invoice exception queue
+
+Same queue as the last two lessons. Twenty four thousand invoices a month, three thousand exceptions, six analysts at a 22 minute median, a validator gate auto-clearing 40 percent, and a projected 732 hours a month freed. The build is quoted at $180,000 with a 4.5 month payback.
+
+The room: the VP of finance operations as decision owner and payer, the AP lead as operator, a security architect, the platform lead who inherits the runbook, and one engineer from the integrations team. Five people, 45 minutes, a four-page packet.
+
+The three decision records:
+
+- **ADR 12, agent scope.** A fully autonomous agent loop for the whole exception was rejected because the queue's steps are known and the failure cost of an unbounded loop is an uncontrolled posting. The chosen design is a deterministic workflow with a bounded agent step that drafts the evidence packet. Confidence high. Reversal cost low at the loop boundary.
+- **ADR 13, posting authority.** Hands-off posting was rejected as too much blast radius. The choice is auto-post under $2,500 when the validator clears it, with a human approval above that line. Confidence medium, and the record says so, because the threshold is a guess that the first month of data will correct.
+- **ADR 14, tool permissions.** A broad service account was rejected. The choice is a scoped account with read access across the ERP and write access limited to the posting endpoint for the exception queue only.
+
+The scenarios the room supplied, quoted in the format they were asked for:
+
+1. When the same invoice arrives twice within an hour, the system must treat the second as a duplicate, cite the first exception, and take no posting action.
+2. When the ERP returns a 500 after the agent has written an approval flag, the system must leave no partial posting and must be safe to retry.
+3. When a vendor's bank details changed since their last invoice, the system must treat the change as unsafe and route the exception to a human regardless of the amount.
+4. When a packet cites a purchase order that was deleted in the last hour, the system must not present the stale record as evidence.
+5. When the model provider is unavailable for 20 minutes at month-end, the queue must remain workable by hand with no loss of exceptions.
+
+Two findings and one condition came out of scenarios 1 to 3, which is the outcome a review is for.
+
+The posting path had no idempotency key, so scenario 1 exposed a duplicate-payment route that the demo would never have shown, because a demo does not replay the same invoice twice. Scenario 2 exposed a partial-write window between the approval flag and the posting call. Scenario 3 turned out to be the expensive one: the draft classified a changed bank detail as a field mismatch and sent it to the agent's resolution path, where the cheapest-looking fix is to update the record. The security architect's objection was one sentence long. The bucket changed to unsafe-and-escalate, and the eval set gained three historical fraud cases that the team already had on file.
+
+The outcome: approved with two conditions, each with an owner and a date (idempotency key before the first production posting, bank-detail rule in the validator before the pilot expands), one concession where the author dropped a proposed three-agent split from v1 and logged it as a deferred record with a revisit trigger, and one deferred decision with a date attached to the threshold review at 30 days. Nobody in the room got everything they wanted, and the queue shipped on schedule.
+
+## The decision log and the 30-day check
+
+The records go into the repository, next to the code, in the project's documentation tree, which is where they will actually be found by the person who inherits the system.[^3][^4] Three habits keep the log useful rather than decorative.
+
+Number records sequentially, never reuse a number, and never edit an accepted record. A changed decision becomes a new record that supersedes the old one, with the reason.[^3]
+
+Record confidence, and revisit the records that were written with low confidence. The threshold in ADR 13 was a guess at review time, and the 30-day check is where the guess meets the first month of auto-clear and override data. This is lesson 82's loop applied to the design instead of the workflow: the output of the check is a change to a record, not a status update.
+
+Read your own records a year later and compare the predicted consequences with what happened. The consequences column is a set of predictions you wrote down while the reasoning was fresh, and the ones you got wrong are the most useful thing in the file, because they show which of your instincts to distrust next time.
+
+## Try it
+
+Take one agent design that is heading for production and run the review once, properly, on paper.
+
+1. Write the four-page packet before you book anything. If page one cannot name the decision requested and the cost of a wrong answer, the design is not ready for a room.
+2. Write three decision records, no more than five, using the five-line format. If a decision has no rejected option, you have not decided it yet.
+3. Build the tradeoff table and fill the reversal-cost column honestly. Sort the rows by reversal cost, then decide which rows you will hand over in the first five minutes.
+4. Assemble the evidence page: eval set size, pass rate, the cases that fail, p95 latency, monthly cost at volume. If a number is missing, write "unmeasured" next to it. That is a stronger move than a plausible estimate.
+5. Invite seven people at most and name the decision owner before the meeting, not during it. If nobody in the invite list can say no, the review is not a review.
+6. Run the 45-minute agenda, with a visible clock and a moderator whose only job is the clock and the findings list.
+7. Within a day, commit the records with their statuses and the conditions with their owners and dates, then book the 30-day check on the threshold record.
+
+Step 4 is where most packets fail, and it is the one a reviewer will notice first. "Unmeasured" costs you a condition. An invented number costs you the room, and the trust that goes with it.
+
+## Summary
+
+- A review is a decision meeting. Its output is a decision, a named owner for every risk found, and a written record. A follow-up meeting is a failure.
+- Agents change the questions: reasoning loops move cost and latency, autonomy moves the review to permission boundaries, stochastic behavior replaces "we saw it work" with measured coverage, collaboration adds handoff failure modes, and memory raises retention questions.
+- Bring a four-page packet, not a deck: the decision requested, three to five decision records, countable evidence, and a reversal plan.
+- Write records in the Nygard shape and keep them append-only. Include the options you rejected, the confidence level, and what the model may do unsupervised.
+- Borrow scenario-based questioning: when a stimulus arrives under a condition, the system must respond within a measure. Adjectives cannot complete that sentence, and unprepared scenarios are where the value is.
+- Argue with the tradeoff table's reversal-cost column. Concede reversible decisions early and visibly, and spend the room's attention on the expensive ones.
+- Expect "approved with conditions," and refuse a condition without an owner and a date.
+- Revisit the low-confidence records at 30 days and compare predicted consequences with what actually happened.
+
+## What's next
+
+Lesson 84 opens the capstone sequence with the first of two build exercises: design an enterprise agent end to end. It takes the pieces from lessons 71 through 83, platform, security, cost, reliability, oversight, change and review, and turns them into one design you produce yourself, with the decision records this lesson taught you to write. The invoice queue has been a useful running example. The capstone is where you pick your own workflow and defend the whole design instead of one decision.
+
+[^1]: aws.amazon.com. [Agentic AI Lens, AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentic-ai-lens.html)
+[^2]: anthropic.com. Erik S. and Barry Zhang. [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents)
+[^3]: cognitect.com. Michael Nygard. [Documenting Architecture Decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+[^4]: learn.microsoft.com. [Maintain an architecture decision record (ADR)](https://learn.microsoft.com/en-us/azure/well-architected/architect-role/architecture-decision-record)
+[^5]: arxiv.org. Neil A. Ernst, John Klein, Marco Bartolini, Jeremy Coles, Nick Rees. [Architecting Complex, Long-Lived Scientific Software](https://arxiv.org/pdf/2304.13797)
