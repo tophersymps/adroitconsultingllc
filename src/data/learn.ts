@@ -1472,9 +1472,28 @@ export const learnSeries: LearningSeries[] = [
           "Agentic AI"
         ],
         "status": "published"
+      },
+      {
+        "slug": "capstone-i-designing-an-enterprise-agent-end-to-end",
+        "title": "Lesson 84: Capstone I: Designing an Enterprise Agent End to End",
+        "series": "agentic-ai",
+        "lesson": 84,
+        "excerpt": "Lesson 83 closed with a review that assumed somebody already had a design to defend. This lesson is where that design comes from. It covers the five screens that filter a workflow choice, the ten-part design packet, the autonomy ladder that sets permission per action instead of per agent, the evaluation plan that has to exist before the architecture, the economics page with its four run-cost lines, a worked example built on an IT service desk queue, the 100-point self-rubric, and the five holes that appear in almost every first draft.",
+        "date": "October 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Capstone",
+          "Agent Design",
+          "Autonomy",
+          "Evaluation",
+          "Unit Economics",
+          "Agentic AI"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 83,
+    "totalLessons": 84,
     "curriculumLessons": 90
   },
   {
@@ -2911,9 +2930,60 @@ export const learnSeries: LearningSeries[] = [
           "Roadmap"
         ],
         "status": "published"
+      },
+      {
+        "slug": "complete-architecture-picture-stitching",
+        "title": "Lesson 84: The complete architecture picture: stitching integration, security, data, lifecycle",
+        "series": "salesforce-architect",
+        "lesson": 84,
+        "excerpt": "Failures usually surface at the seams between integration, security, data and lifecycle. This lesson names the seams to check, the decisions in each thread that constrain the others, and one worked pass where all four had to agree.",
+        "date": "October 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "CTA",
+          "Certifications"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "ai-platform-architecture-walkthrough",
+        "title": "Lesson 85: General systems architecture: the architecture of an AI platform, end-to-end walkthrough",
+        "series": "salesforce-architect",
+        "lesson": 85,
+        "excerpt": "An AI platform is an integration, security, data and lifecycle problem with new content in each thread. This lesson follows one request through retrieval, model gateway, tool call and trace, and names the trust, cost and control decisions at every hop.",
+        "date": "October 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "CTA",
+          "Certifications"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "system-architect-domains-review",
+        "title": "Lesson 86: Exam prep: System Architect domains review (integration, security, data)",
+        "series": "salesforce-architect",
+        "lesson": 86,
+        "excerpt": "A review pass over the three domains that carry the most weight in Review Board scenarios: integration, security and data. Objective by objective, with the weak answer next to the scoring answer, the traps that cost points, and a drill you can score.",
+        "date": "October 29, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce",
+          "Architecture",
+          "CTA",
+          "Certifications"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 83,
+    "totalLessons": 86,
     "curriculumLessons": 90
   },
   {
@@ -9037,6 +9107,25 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "capstone-i-designing-an-enterprise-agent-end-to-end",
+    "title": "Lesson 84: Capstone I: Designing an Enterprise Agent End to End",
+    "series": "agentic-ai",
+    "lesson": 84,
+    "excerpt": "Lesson 83 closed with a review that assumed somebody already had a design to defend. This lesson is where that design comes from. It covers the five screens that filter a workflow choice, the ten-part design packet, the autonomy ladder that sets permission per action instead of per agent, the evaluation plan that has to exist before the architecture, the economics page with its four run-cost lines, a worked example built on an IT service desk queue, the 100-point self-rubric, and the five holes that appear in almost every first draft.",
+    "date": "October 29, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Capstone",
+      "Agent Design",
+      "Autonomy",
+      "Evaluation",
+      "Unit Economics",
+      "Agentic AI"
+    ],
+    "status": "published"
+  },
+  {
     "slug": "advising-the-business-translating-architecture-to-roi-and-roadmap",
     "title": "Lesson 83: Advising the Business: Translating Architecture into ROI and a Roadmap",
     "series": "salesforce-architect",
@@ -9051,6 +9140,57 @@ export const learnLessons: LearnLesson[] = [
       "ROI",
       "Business Case",
       "Roadmap"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "complete-architecture-picture-stitching",
+    "title": "Lesson 84: The complete architecture picture: stitching integration, security, data, lifecycle",
+    "series": "salesforce-architect",
+    "lesson": 84,
+    "excerpt": "Failures usually surface at the seams between integration, security, data and lifecycle. This lesson names the seams to check, the decisions in each thread that constrain the others, and one worked pass where all four had to agree.",
+    "date": "October 29, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "CTA",
+      "Certifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "ai-platform-architecture-walkthrough",
+    "title": "Lesson 85: General systems architecture: the architecture of an AI platform, end-to-end walkthrough",
+    "series": "salesforce-architect",
+    "lesson": 85,
+    "excerpt": "An AI platform is an integration, security, data and lifecycle problem with new content in each thread. This lesson follows one request through retrieval, model gateway, tool call and trace, and names the trust, cost and control decisions at every hop.",
+    "date": "October 29, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "CTA",
+      "Certifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "system-architect-domains-review",
+    "title": "Lesson 86: Exam prep: System Architect domains review (integration, security, data)",
+    "series": "salesforce-architect",
+    "lesson": 86,
+    "excerpt": "A review pass over the three domains that carry the most weight in Review Board scenarios: integration, security and data. Objective by objective, with the weak answer next to the scoring answer, the traps that cost points, and a drill you can score.",
+    "date": "October 29, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce",
+      "Architecture",
+      "CTA",
+      "Certifications"
     ],
     "status": "published"
   },
