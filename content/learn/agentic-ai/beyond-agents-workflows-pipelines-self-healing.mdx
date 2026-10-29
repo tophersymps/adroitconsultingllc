@@ -1,0 +1,191 @@
+---
+title: "Lesson 87: Beyond Agents: Agentic Workflows, Autonomous Pipelines and Self-Healing Systems"
+slug: "beyond-agents-workflows-pipelines-self-healing"
+series: "agentic-ai"
+lesson: 87
+excerpt: "Lesson 86 left one agent accountable for one case class. This lesson stretches that discipline across systems that run themselves: where to hold a workflow deterministic, how a pipeline survives a crash, and the repair ladder a self-healing loop climbs."
+date: "October 29, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Agentic Workflows, Autonomous Pipelines, Self-Healing, Durable Execution, Agentic AI]
+---
+
+# Lesson 87: Beyond Agents: Agentic Workflows, Autonomous Pipelines and Self-Healing Systems
+
+Lesson 86 closed the capstone with one agent, one case class, four dashboards and a rehearsed kill switch. Meridian's returns agent is accountable for its own quality, and a person reads five of its transcripts every week. That is the right shape for a single system. It stops being the right shape the moment the returns agent feeds three other workflows, a nightly pipeline feeds all four, and nobody is scheduled to look at any of them between Friday afternoon and Monday morning.
+
+The jump this lesson covers is not about a bigger agent, and it is not about more autonomy for its own sake. The work is deciding which decisions stay inside a predefined path, which work crosses a boundary between systems, and which failures the system may repair without asking a person.
+
+Three terms get confused constantly, and separating them is most of the design. An agentic workflow is a predefined path with model calls inside it. An autonomous pipeline moves work between systems and survives interruption. A self-healing system has a control loop that acts on the gap between what it observes and what it wants. Three problems, three failure signatures, and a team that treats them as one problem ends up with a pipeline that reasons, which is the most expensive way to be unreliable.
+
+## Define the terms
+
+**Agentic workflow.** Model calls and tool calls orchestrated through predefined code paths, so the sequence of steps is fixed at design time even though the content of each step is generated. Anthropic draws the line directly: workflows orchestrate LLMs and tools through predefined code paths, while agents let the model direct its own process and tool usage.[^1]
+
+**Autonomous pipeline.** A long-running process that moves work between systems on a schedule or a trigger, with no person starting each run. Autonomy here means unattended, not unpredicted.
+
+**Durable execution.** A runtime property where a long-running process survives a crash of the process running it, because the platform hands the work to another process that rebuilds the execution state and resumes at the point where it stopped, with local variables and progress intact.[^3]
+
+**Control loop.** A non-terminating loop that regulates the state of a system, comparing current state against desired state and making or requesting changes where needed. A thermostat is the reference image: you declare a temperature, and the loop acts to bring the room to it.[^5]
+
+**Steady state.** A measurable output of a system that indicates normal behavior, defined before an experiment starts. Chaos engineering practice defines steady state as a measurable output and then sets out to disprove that it holds.[^6]
+
+**Self-healing.** A control loop whose corrective action is bounded, observable and reversible. The qualifier carries the weight, because corrective action that is none of those three things is a runaway with a status dashboard.
+
+**Repair ladder.** The ordered set of responses a system may take on its own, from least consequential to most: retry, restart, fail over, degrade, repair data, escalate. Where the ladder stops is a permission boundary.
+
+**Idempotent mutation.** A change that can be applied more than once and produce the same result. It is what makes a retry safe, and the SRE guidance on data pipelines names it as the pattern that prevents storing duplicate or incorrect data when a pipeline fails and some work has to be reprocessed.[^4]
+
+**Checkpoint.** Partial state written to storage periodically during a long-running process, so a later run can resume rather than start over. Checkpointing also lets a pipeline skip expensive reads or computations it already knows are done.[^4]
+
+**Blast radius.** How much of the business one failed component, or one deliberate experiment, can touch. Chaos engineering treats minimizing blast radius as an obligation of the person running the experiment.[^6]
+
+## The question that separates the three layers
+
+Ask one question at every boundary: who owns the sequence? The answer tells you which layer you are building and which failure mode to instrument.
+
+| Layer | Who owns the sequence | Typical failure | Instrument first |
+|---|---|---|---|
+| Agentic workflow | The code path, with the model filling in step content | A step produces a valid but wrong result | Step-level pass rate and the contract between steps |
+| Autonomous pipeline | The scheduler and the durable runtime | Partial work lost on crash, or duplicate writes on retry | Checkpoint age, resume lag, duplicate-write count |
+| Self-healing loop | The control loop, within a bounded set of actions | The loop acts on a wrong observation, or acts forever | Observation freshness and the count of autonomous actions |
+
+Read the third row carefully, because it is where most self-healing work fails. A loop watching a stale metric will cheerfully repair a system that is already healthy, and a loop with no stop condition will retry until a bill or a rate limiter stops it. Microsoft's guidance on agent orchestration makes the same point from the other direction, warning that multiagent designs add coordination overhead, latency and failure modes, and recommending iteration limits as the guard against infinite tool-call loops.[^2]
+
+## Workflows: the predictable middle
+
+Start here, because a large share of what gets described as autonomous agent behavior is a workflow with the loop removed. Anthropic's advice is to find the simplest solution possible and increase complexity only when it is needed, and to treat the choice as a tradeoff rather than a default, since agentic systems trade latency and cost for better task performance.[^1]
+
+Meridian's returns handling is a good test case. In lesson 86 it was one agent with nine tools and an approval gate. The version that survives contact with four downstream consumers is a workflow, and its steps are boring on purpose.
+
+| Step | Deterministic? | What the model contributes | Contract |
+|---|---|---|---|
+| Intake and identity | Yes | Nothing | Case ID, customer, order, channel |
+| Classify the request | Yes, around a model call | The category and a confidence | Category label from a closed list |
+| Retrieve policy and order evidence | Yes | Nothing beyond query generation | Evidence bundle with source IDs |
+| Draft the response | No | All of the prose | Draft plus the evidence it cites |
+| Validate | Yes | Nothing. The validator is code | Pass, or a rejection reason |
+| Route | Yes | Nothing | Auto-send, human review, or escalation |
+| Record | Yes | Nothing | Ledger row and trace ID |
+
+Five of seven steps have no model deciding anything, and the two that do are wrapped in code that checks them. That is what the shape buys you: the path is inspectable, the expensive step is isolated, and a bad draft cannot change where the case goes. When a step is nondeterministic, put its output through a validator rather than trusting it. When a step is deterministic, resist the urge to make it interesting.
+
+Add two consumers and the contract work moves. The evidence bundle becomes a versioned artifact rather than a prompt fragment, the category list becomes a shared schema, and the validator moves into a service the other workflows also call.
+
+## Pipelines: make the unit of work resumable
+
+A pipeline is a different animal from a workflow, because it runs unattended and it runs long. The failure that defines pipeline design is not a wrong answer. It is a lost one.
+
+Durable execution removes most of that class of failure. The Temporal documentation describes the property in plain terms: once a workflow starts, it runs to completion whether that takes a second or a year, and if the process running it crashes, the platform hands the work to another process that rebuilds the state of the execution and resumes at the point where it stopped.[^3] The same documentation names the two constraints that come with the guarantee. A workflow definition has to be deterministic, because the platform reruns it to rebuild state after a failure, and anything that talks to the outside world belongs in a separate unit of work the platform can retry safely.[^3]
+
+If you are not running a durable execution platform, the same property has to be built by hand, and the SRE chapter on data processing pipelines names the pieces. Checkpointing writes partial state so a long-running process can resume instead of restarting.[^4] Idempotent mutations make the retry safe by guaranteeing that applying the same change twice produces the same result.[^4]
+
+There is a third piece, and it is a policy decision rather than a mechanism. When an input is late, a pipeline can wait or it can proceed on what it has. The SRE guidance takes a side: stale data is almost always better than incorrect data, because processing incomplete or corrupt input propagates errors downstream, while a pipeline that stalls, waits for data and then resumes keeps the data at high quality.[^4] Write that decision down per pipeline, because the two behaviors are indistinguishable in code until the day it matters.
+
+Meridian's nightly enrichment job is the running example. It reads the day's 900 closed cases, pulls the resolution outcome from the case system, computes the edit distance between the generated draft and what a person actually sent, and writes a quality feature to the case store for the weekly dashboard.
+
+Three failure classes, three answers:
+
+1. **The job dies at case 640.** Checkpoints every 100 cases mean the rerun starts at case 601 rather than case 1. Without them, the rerun repeats 639 enrichments, and any of them that append instead of overwrite produce duplicates.
+2. **The case system is slow at 2am and returns timeouts.** The timeout is retried, and the enrichment write is idempotent by case ID, so the second attempt overwrites rather than appends. A retry that is not idempotent is a data quality incident on a delay.
+3. **Yesterday's extract arrives two hours late.** The policy is wait, because the edit-distance feature is a quality measure and a partial day silently lowers the weekly average. The pipeline records the wait as a lag metric, and a freshness alert covers the case where the wait exceeds its window.
+
+That third answer has a cost, and the cost is why the alert exists. A pipeline that waits forever is a pipeline that stops delivering, so a freshness objective is what turns a stall into a signal.
+
+## Self-healing loops and the repair ladder
+
+Now the part that deserves the most suspicion. Self-healing is a control loop, and the pattern comes from infrastructure that heals in ways a language model cannot. Kubernetes frames its controllers that way: a controller watches the state of the cluster and makes or requests changes where needed, trying to move current state closer to desired state, so control loops automatically fix failures.[^5] The same page carries the design lesson that transfers most directly to agent systems. It is useful to have simple controllers rather than one monolithic set of interconnected control loops, because controllers can fail and the system is built to tolerate that.[^5]
+
+A loop should compare a small number of specific things, because a repair loop that watches everything repairs nothing predictably. The repair ladder is how you bound it: each rung has a cost, a precondition, and a person who has to know it fired.
+
+| Rung | Action | Cost of acting wrongly | Precondition before the system may act |
+|---|---|---|---|
+| 1 | Retry the failed call | Duplicate write unless the call is idempotent | The call is idempotent and the retry budget is finite |
+| 2 | Restart the worker or the run | Wasted compute and a delayed run | A checkpoint exists, so a restart does not lose work |
+| 3 | Fail over to a second region or provider | Split state if the failover is not clean | A health signal from the primary, not a timeout guess |
+| 4 | Degrade, meaning serve a smaller answer | A partial answer presented as a complete one | The degradation is labeled in the output the user sees |
+| 5 | Repair data, meaning rewrite a record | Corrupting good data with a bad rule | A named rule, a dry run against history, and a record of every write |
+| 6 | Escalate to a person | Nothing. This rung is cheap | Always allowed, and it is the default when the loop is unsure |
+
+Rungs 1 through 3 are what most teams mean by self-healing, and they are the three that are almost always worth automating. Rung 5 is where self-healing turns into a data integrity risk, and the precondition column is not a formality. A loop that rewrites records on a rule nobody has dry-run against history is not resilient. It is unmonitored.
+
+A self-healing loop is judged by how often it escalates and how often it was right, not by how rarely a person is involved. A loop that hides its own failures to keep the escalation count low is worse than no loop at all, because it removes the signal a person would have acted on.
+
+Meridian runs three loops by the end of the quarter, and the three are deliberately different sizes.
+
+**The tool-call loop (rung 1).** Each tool call retries twice on a timeout. The ledger records every retry against its case ID, so a retry storm shows up as a count before it becomes an outage.
+
+**The run loop (rung 2).** The nightly enrichment job restarts from the last checkpoint when it dies. Restarting is automatic, and a second death in the same run escalates to the on-call engineer, because two deaths inside one run is a pattern the loop cannot interpret.
+
+**The quality loop (rungs 3 and 6).** If the golden-set pass rate drops below 88 percent two weeks running, the loop freezes prompt and model changes and pages the quality owner. It does not edit prompts, adjust thresholds or repair any data on its own. The failure it responds to is a quality regression, and the correct autonomous action for a quality regression is to stop the thing that produces them.
+
+The third loop is the one reviewers push back on, usually with a version of "could it not just roll back?" It could, and rolling back a prompt change is a rung 5 action wearing a rung 2 costume, because it rewrites the behavior that produced two weeks of already-processed cases. Anything that changes how already-written data should be interpreted belongs to a person.
+
+## Prove the healing with the thermostat turned off
+
+A self-healing loop is a hypothesis until you have watched it heal something. That is what chaos engineering is for, and its canonical statement applies almost directly: chaos engineering is the discipline of experimenting on a system to build confidence in the system's capability to withstand turbulent conditions in production.[^6]
+
+The method has four steps. Define steady state as a measurable output of a system that indicates normal behavior. Hypothesize that steady state continues in both the control group and the experimental group. Introduce variables that reflect real world events, such as crashing processes, malfunctioning disks or severed network connections. Then try to disprove the hypothesis by looking for a difference in steady state between the two groups.[^6]
+
+Three of the advanced principles matter more than the rest for agent systems. Experiments should run in production, because sampling real traffic is the only reliable way to capture the request path, and they should be automated to run continuously rather than by hand.[^6] The person running the experiment is also responsible for minimizing blast radius, since experimenting in production carries the potential to cause customer pain.[^6]
+
+Turn that into five experiments, each with the steady state it protects and the rule that aborts it.
+
+| Experiment | Injected condition | Steady state watched | Abort rule |
+|---|---|---|---|
+| Kill the enrichment worker mid-run | Process termination at a random case | Enrichments per hour, duplicates per run | Any duplicate write, or lag above 4 hours |
+| Time out the case system | 30 percent of calls time out for 15 minutes | Retries per run, ledger duplicate flag | More than 5 retries on any single case |
+| Return malformed model output | A schema-invalid response on 10 percent of drafts | Validator rejection rate | Any rejection that reaches a customer |
+| Stall the upstream extract | A two hour delay on the source file | Freshness lag against its objective | Lag above the objective window |
+| Flip the workflow kill switch | Manual fallback for 15 minutes | Time to first human-handled case | Above four minutes |
+
+The last row is a drill rather than an experiment, and it belongs in the table because nobody should improvise it at 2am. Note what the table does not contain: no experiment that injects a wrong answer into a customer interaction, and no experiment that writes bad data to a production record. Blast radius limits what you may inject, not only how much of it.
+
+## Exam traps
+
+**Confusing an unattended pipeline with an unpredicted one.** A pipeline that runs at 2am without a person is still a workflow with a schedule, and the scheduled part should be the most deterministic code you own.
+
+**Retrying without idempotency.** A retry is only safe when applying the change twice equals applying it once. A retry on an append is a duplicate row sitting in a report nobody has read yet.
+
+**Building the durable layer by hand and stopping at checkpoints.** Checkpointing and idempotent writes are the two pieces teams remember, and the freshness policy is the one they skip. A pipeline that waits has to be watched, or it just stops quietly.
+
+**A repair loop with no stop condition.** Unbounded retries consume quota, budget and the patience of whoever finds out. Every autonomous loop needs a budget and an escalation path.
+
+**Letting the loop repair data.** Rewriting records is the rung that turns a resilient system into a data integrity incident. Rules that reinterpret existing data need a person, a dry run and a record of every write.
+
+**Asserting self-healing instead of testing it.** A healing path that has never been exercised is a hypothesis. Inject the failure, watch the loop, and write down the recovery time.
+
+## Try it
+
+Take one system you run and do this over two weeks.
+
+1. Draw all three layers on one sheet: the workflows, the pipelines and the loops. If a box is both a workflow and a pipeline, split it, because the failure handling differs.
+2. For each workflow step, mark who owns the sequence. Any step where the model owns the path gets a validator or a bounded loop with an iteration cap.
+3. For each pipeline, write the freshness policy as one sentence: wait, or proceed and label. Then instrument the lag against its target and window.
+4. Audit every retry for idempotency. The question is not whether the call can be retried. It is whether the second call produces the same result as the first.
+5. Write the repair ladder for one system, all six rungs, and mark where it stops. Then name the person every rung notifies.
+6. Inject one failure on purpose. Kill a worker mid-run, time out a dependency, or flip the kill switch during business hours, and write the recovery time next to the target.
+7. Put the experiment on a schedule with the abort rule written beside it. An experiment without an abort rule is an outage with a plan attached.
+
+Step 6 is the one that gets postponed, and it is the only step that produces evidence. Everything ahead of it is a design, and designs are cheap.
+
+## Summary
+
+- Three layers, three problems. An agentic workflow fixes the sequence, an autonomous pipeline moves work unattended and survives interruption, and a self-healing loop regulates a system against a desired state.
+- Make the unit of work resumable, with durable execution or with checkpoints plus idempotent writes when you build it yourself.
+- Decide the freshness policy per pipeline. Stale data is almost always better than incorrect data, and a stall without an alert is a silent stop.
+- Bound self-healing with a repair ladder, and put the permission boundary in the design document.
+- Keep control loops simple. Controllers can fail, and the system has to tolerate that.
+- Prove the loop by injecting the failure, with steady state defined in advance and an abort rule written beside the experiment.
+- Judge a self-healing loop by how often it escalates and how often it was right, not by how rarely a person is involved.
+
+## What's next
+
+Lesson 88 takes on the future of the field: agent economies, standards and interoperability. Everything in this lesson assumed the boundaries were yours to draw, and the next one takes on the case where they are not. Agents from different vendors that have to negotiate with each other, protocols that describe what an agent can do to a stranger, identity and payment between systems that do not share an owner, and the standards work that decides which interactions become routine. This lesson ends with a boundary you draw yourself. Lesson 88 is about the boundaries you cannot, and the ones that other people are drawing at the same time.
+
+[^1]: Anthropic. [Building effective agents](https://www.anthropic.com/engineering/building-effective-agents). Defines workflows as systems where LLMs and tools are orchestrated through predefined code paths and agents as systems where the model directs its own process and tool usage, and recommends finding the simplest solution possible and increasing complexity only when it is needed.
+[^2]: Microsoft. [AI agent orchestration patterns](https://learn.microsoft.com/en-us/azure/architecture/ai-ml/guide/ai-agent-design-patterns). Sets out a complexity spectrum from a direct model call through a single agent with tools to multiagent orchestration, notes that multiagent designs add coordination overhead, latency and failure modes, and recommends iteration limits as a guard against infinite tool-call loops.
+[^3]: Temporal. [Understanding Temporal](https://docs.temporal.io/evaluate/understanding-temporal). Describes durable execution as resuming a crashed workflow in another process with local variables and progress intact, and states that workflow definitions must be deterministic while work that touches the outside world belongs in activities.
+[^4]: Google SRE. [Data Processing Pipelines](https://sre.google/workbook/data-processing/). Names idempotent mutations and checkpointing as the patterns that let a failed pipeline resume without storing duplicate or incorrect data, and argues that stale data is almost always better than incorrect data because incorrect data propagates errors downstream.
+[^5]: Kubernetes. [Controllers](https://kubernetes.io/docs/concepts/architecture/controller/). Frames controllers as control loops that move current state closer to desired state, notes that control loops automatically fix failures, and argues for simple controllers rather than one monolithic set of interconnected loops because controllers can fail.
+[^6]: Principles of Chaos. [Principles of Chaos Engineering](https://principlesofchaos.org/). Defines chaos engineering as experimenting on a system to build confidence in its ability to withstand turbulent conditions, gives the four-step method built on a measurable steady state, and requires minimizing blast radius.
