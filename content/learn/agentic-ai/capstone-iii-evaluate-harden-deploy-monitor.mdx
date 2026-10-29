@@ -1,0 +1,186 @@
+---
+title: "Lesson 86: Capstone III: Evaluate, Harden, Deploy, Monitor"
+slug: capstone-iii-evaluate-harden-deploy-monitor
+series: "agentic-ai"
+lesson: 86
+excerpt: "The MVP is live at 5 percent traffic. This lesson turns a working slice into a system you can trust: an eval suite grown from production failures, hardening against the OWASP risk list, a canary rollout on an error budget, and traces that catch quality loss."
+date: "October 29, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Capstone, Evals, Observability, SLOs, Agentic AI]
+---
+
+# Lesson 86: Capstone III: Evaluate, Harden, Deploy, Monitor
+
+Meridian's MVP went live for one region at 5 percent of eligible traffic on day ten of lesson 85, with the kill switch rehearsed and the approval gate in place. Nothing has broken yet, which is the least informative state a system can be in. A five percent rollout that works tells you the plumbing is connected. It tells you almost nothing about quality on the long tail, about what happens when the case mix shifts in a holiday week, or about what a hostile customer email does to an agent holding a return authorization tool.
+
+This lesson closes the capstone with the four jobs that turn a working slice into something the organization can rely on: evaluate, harden, deploy in stages, and monitor. All four run continuously, and the order matters less than the fact that none of them is a one-time activity. The design from lesson 84 said the stopping rule reads adoption monthly. From here, that rule reads a system that produces its own evidence.
+
+## Define the terms
+
+**Eval case.** One input with expected behavior attached: a case, the evidence available, and either the right answer or the criteria for judging one.
+
+**Eval suite.** The versioned set of cases run automatically on every change to a prompt, a model identifier, a tool contract or a retrieval rule. It is the regression test layer for a probabilistic system.
+
+**Grader.** The code or rubric that scores an eval case. Three kinds in this suite: exact checks against system state, rubric checks scored by a model with human calibration, and periodic human scoring on a sample.
+
+**Regression gate.** The rule that a change does not ship if it drops the pass rate on the suite. Same idea as a failing unit test, applied to behavior that has no single correct answer.
+
+**Service level indicator (SLI).** A defined quantitative measure of the service being provided, such as the share of eligible cases that receive an answer or a routed handoff inside the SLA window.[^3]
+
+**Service level objective (SLO) and error budget.** The target value for an SLI, and the amount of failure the target permits. An SLO of 99.5 percent allows 0.5 percent to miss, and that allowance is a budget you spend on change.[^3]
+
+**Trace.** The record of one case from intake to resolution, holding every model call, tool call, argument, result, status and token count, correlated by a single identifier.
+
+**Canary.** A rollout stage that serves the new path to a bounded share of traffic with stated exit criteria before the next stage opens.
+
+**Blast radius.** How much of the business one failed component can touch. A read tool has a small radius. A tool that mints refunds has a large one, which is why it is not in the agent's inventory.
+
+## Build the eval suite from production failures
+
+The suite starts small and grows from the work, not from a taxonomy designed in a meeting. Anthropic's guidance on agent evals is explicit about where the cases come from: source realistic tasks from the failures you actually see, start early rather than waiting for a perfect suite, and define success criteria that are unambiguous and robust.[^1] The same source describes the payoff in a sentence worth putting on a wall, which is that teams investing early find development speeds up, because failures become test cases and test cases prevent regressions.[^1]
+
+Meridian's suite has three tiers by the end of month two.
+
+| Tier | Size | Source | Grader | Run when |
+|---|---|---|---|---|
+| Golden | 40 cases | Hand-built from the case mix, 8 per class | Exact checks on state plus a rubric for tone | Every prompt, model or retrieval change |
+| Adversarial | 25 cases | Injection attempts, ambiguous requests, out-of-scope asks, malformed order numbers | Exact checks on what the agent refused to do | Every change, plus weekly |
+| Regression | Grows weekly, starts at 0 | Production failures and human edits promoted from the triage list | The grader that fits the failure | Every change, plus weekly |
+
+Two design points in that table carry most of the value. The first is that graders are mixed on purpose. A conversational support case is multidimensional, and the practical way to grade one is a state check for whether the case resolved, a transcript constraint for how long it took, and a rubric for whether the tone was right.[^1] The second is that rubric scoring should be split by dimension rather than handed to one model call judging everything at once, because a single score hides which dimension moved.[^1]
+
+Then the operational rule that keeps the suite honest: **no prompt, model, tool or retrieval change ships without the suite passing, and every production failure that reaches triage becomes a case before it is closed.** That second half is the compounding part. It is also the half that dies quietly when a team gets busy, so it needs a named owner and a weekly count.
+
+The regression gate needs a threshold, and the threshold needs a rule for when it fails. Meridian's: a candidate change must not drop the golden-set pass rate by more than two points, and it must not introduce any adversarial-tier failure. A drop inside that band is allowed to ship with the delta recorded in the change note, because a gate that blocks every small quality wobble gets disabled within a month.
+
+## Harden what the risk list actually names
+
+Hardening an agent is not a general exercise in writing safer prompts. It is a short list of specific failure modes with specific design answers, and the OWASP work on agentic risk gives the list a usable shape. Excessive agency is the vulnerability that lets damaging actions happen in response to unexpected, ambiguous or manipulated model output, and its stated root causes are excessive functionality, excessive permissions and excessive autonomy.[^2] The triggers include direct and indirect prompt injection, which in Meridian's world means instructions hidden in a customer email or in a returned-goods note that the agent reads as evidence.[^2]
+
+Four controls answer that list, and all four are already in the architecture rather than bolted on.
+
+**Reduce functionality.** Nine tools, no deletes, one tool per action. The agent cannot run a query, cannot change a bank detail, and cannot touch account administration, because those tools do not exist in its inventory. This is the control OWASP names first, and it is the cheapest one.
+
+**Reduce permissions.** Each subagent gets its own credentials. The Returns Agent cannot read payment records at all. The Dispute Agent can read invoices but cannot write to them. The orchestrator holds read scopes and no writes. A leak between these components stops being a possibility and becomes a configuration property someone can test.
+
+**Reduce autonomy.** The refund tool requires an approval token minted by a human interface, and the token is bound to the case, the tool and the amount. The autonomy table from lesson 84 is the specification, and the code review question is always the same: which line of code makes this impossible?
+
+**Validate output before it goes out.** Improper output handling is a separate risk from excessive agency for a reason, and the distinction matters at the last mile.[^2] Nothing leaves the system without passing a validator that checks the reply against the case's evidence, strips any content that looks like an instruction rather than information, and enforces the region's disclosure wording.
+
+Then prove it. The adversarial tier of the eval suite is where these controls get tested rather than asserted, and the cases are cheap to write. Twelve of Meridian's twenty-five adversarial cases are prompt injection attempts placed in the customer's own message, three are injections hidden in a support attachment, and five are requests outside the agent's scope that must produce a handoff rather than a refusal that reads like a policy argument. Any single adversarial failure blocks a release. That is not a quality target, it is a line.
+
+## Deploy in stages, with an error budget
+
+The rollout from that first 5 percent to full traffic is a sequence with exit criteria, and the criteria are read off the same dashboard whether the change is a prompt, a model version or a tool contract.
+
+Start with the SLOs, because a rollout without them is a sequence of opinions.
+
+| SLI | SLO | Error budget |
+|---|---|---|
+| Cases answered or handed over inside the SLA window | 99.5 percent | 60 cases a month out of 12,000 |
+| Golden-set pass rate, read weekly on the fixed 40 cases | 92 percent minimum | 3 cases, and the suite is fixed so this is comparable week to week |
+| First-turn response latency, p95 | Under 12 seconds | 5 percent of turns, read daily |
+| Unauthorized actions | Zero | Not a percentage. Any occurrence is an incident |
+
+The availability budget is the one that changes behavior. Sixty cases a month is not much, and when the budget burns down the response is to stop shipping changes rather than to ship faster to fix things. The SRE framing is direct on this: SLOs should drive prioritization because they reflect what users care about, and a poorly chosen objective produces wasted effort through heroics or a lax target that hides real problems.[^3]
+
+| Stage | Traffic | Duration | Exit criteria to open the next stage |
+|---|---|---|---|
+| 1 (live now) | 5 percent, one region, roughly 235 cases over two weeks | 10 business days | Golden pass rate at or above 92 percent, human edit rate under 25 percent, zero unsafe actions |
+| 2 | 25 percent, one region | 10 business days | Edit rate under 18 percent, p95 under 12 seconds, error budget above 70 percent remaining |
+| 3 | 60 percent, two regions | 15 business days | Edit rate under 15 percent, no adversarial failures, budget healthy |
+| 4 | All eligible traffic in all three regions | Ongoing | Weekly review, monthly stopping-rule read, quarterly re-derivation of the autonomy table |
+
+Edit rate is the metric to watch in stages 1 through 3, and it is the one teams forget to instrument. It measures the share of drafts a human changed before sending, and it moves within days of a retrieval or prompt regression, well before customer satisfaction scores move at all. A rising edit rate with a flat complaint rate is a system telling you it got worse and nobody outside the team has noticed yet.
+
+Two more rules make the stages mean something. Rollback is a single flag, rehearsed at three levels, and a stage that fails its exit criteria goes back one stage rather than forward on a waiver. And the tool flag for the return authorization stays off until stage 2 exits, so the write path enters production after the read path has two weeks of clean evidence behind it.
+
+## Monitor what the agent does, not what the server does
+
+Classical infrastructure monitoring is necessary and almost useless here. The web tier will be green while the agent answers a holiday-week delivery question with last month's cutoff rules. What you need instead is telemetry about the work, which is why the OpenTelemetry GenAI conventions exist: the project maintains semantic conventions for generative AI covering spans, metrics and events for GenAI clients, Model Context Protocol usage and provider-specific calls.[^4] Using those conventions rather than bespoke field names means the trace format survives a model or framework swap, and it means the operational dashboards keep working.
+
+Four dashboards, four audiences:
+
+1. **Quality.** Golden-set pass rate by week, edit rate by region and case class, retrieval miss rate on policy questions, and the count of cases handed over rather than answered.
+2. **Autonomy.** Approval volume and approval latency, refund value distribution against the 250 and 2,000 dollar thresholds, and a daily count of the autonomy table's "human only" rows that were attempted and blocked.
+3. **Cost.** Cost per resolved case, cost by case class, tool calls per case against the cap of eight, and token spend by subagent.
+4. **Safety.** Adversarial-tier failure counts, output validator rejections by reason, and every ledger row that consumed an approval token.
+
+On top of those, six alerts with thresholds and named actions. An alert without an action is a page that trains people to ignore pages.
+
+| Signal | Threshold | Action |
+|---|---|---|
+| Golden-set pass rate | Below 88 percent two weeks running | Freeze prompt and model changes, open a quality review |
+| Human edit rate | Above 25 percent for one week | Read the top ten edits, consider reverting the last change |
+| Unsafe action attempted and blocked | Any single occurrence | Page on-call, review the ledger row, open a sev-2 |
+| First-turn p95 latency | Above 12 seconds for 30 minutes | Page on-call, check downstream tool timeouts first |
+| Cost per resolved case | Above 1.75 dollars for three days | Cap tool calls per case, inspect for retrieval loops |
+| Policy retrieval miss rate | Above 12 percent | Widen the index, add the missing documents, add eval cases |
+
+That leaves one monitoring job that no dashboard does: reading transcripts. Forty-five minutes a week, five transcripts chosen at random plus the five cases with the most human edits, read end to end. The point is not to find failures the dashboards missed. It is to notice what the agent does that nobody asked for, which is exactly the category of behavior that never triggers a threshold. Our own lesson pipeline runs the same discipline in miniature: every lesson ships with its quiz attached and the course tiers regenerate from the complete set, so the check is a machine artifact rather than a memory of what someone intended.
+
+Governance reporting falls out of the same measurements. NIST's framework is organized around governing, mapping, measuring and managing risk, and the practical translation for a live agent is that the four dashboards are the measuring function and the stopping rule is the managing one.[^5] A monthly one-page report with those numbers satisfies an internal audit question in ten minutes instead of a week of reconstruction.
+
+## The incident path and the rollback drill
+
+An agent system needs a severity ladder that people can apply at 2am without reading a document.
+
+- **Severity 1.** Money moved without approval, or customer data reached the wrong customer. Global kill switch, page the program owner and security, customer-facing statement within 24 hours, postmortem within five business days.
+- **Severity 2.** An unsafe action was attempted and blocked on a live case, or the error budget burns more than half in a day. Workflow-level kill switch, page on-call, ledger review the same day.
+- **Severity 3.** Quality degradation with no safety component, such as a rising edit rate on one case class. Backlog item with an owner and a date, and an eval case attached before it closes.
+
+Every postmortem produces at least one new eval case and at most one prompt change. That ratio matters. A team that answers every incident with a prompt edit accumulates an unreadable instruction set and no test coverage, and the same incident returns in a different costume three months later.
+
+The rollback drill is the habit that makes all of this real. Once a quarter, in production, flip the workflow flag for fifteen minutes during business hours, confirm the manual queue absorbs the traffic, flip it back, and record the time from flip to first human-handled case. Two minutes is the target from lesson 85. A drill that reveals a four minute gap is a successful drill, because you found it on a Tuesday afternoon instead of during a real incident on the last day of the quarter.
+
+## Exam traps
+
+**An eval suite built once.** A suite that does not grow from production failures decays into a museum. The weekly count that matters is how many failures became cases.
+
+**Asserting a control instead of testing it.** "The agent is instructed not to disclose payment data" is a sentence. An adversarial case that tries to extract it is a test.
+
+**Using a single quality score.** One number per case hides which dimension moved, which is why the suite grades state, transcript constraints and rubrics separately.
+
+**A rollout with no exit criteria.** Staged deployment without thresholds is a slow full deployment with extra meetings.
+
+**Treating an SLO as a target to hit rather than a budget to spend.** The budget exists so that change can continue and so that a burn has a defined consequence.
+
+**Monitoring infrastructure only.** The web tier is very often green while the answers are wrong.
+
+**A postmortem without an eval case.** It converts an incident into a story instead of a regression test.
+
+## Try it
+
+Take the agent you have running and do this in the next two weeks.
+
+1. Write down your SLOs as SLI, target and error budget in a table. If you cannot compute the budget in cases per month, the SLI is not defined well enough.
+2. Build the golden tier at 40 cases, 8 per case class, split across exact checks, a rubric for tone and a transcript constraint. Run it once and record the pass rate as your baseline, even if the number is embarrassing.
+3. Write ten adversarial cases, at least four of them injections placed in user content the agent reads as evidence. Any failure is a release blocker.
+4. Define the four dashboards and pick six alerts with thresholds and named actions. Delete any alert with no action attached.
+5. Promote your last five production failures into regression cases and assign an owner to the weekly promotion count.
+6. Flip your workflow kill switch in production, time the fallback to manual, and write the number next to the two minute target.
+
+Step 6 is the one that people postpone, and it is the one that converts a design document into an operating system.
+
+## Summary
+
+- The eval suite grows from production failures. Three tiers: golden, adversarial, regression, with mixed graders by design.
+- No prompt, model, tool or retrieval change ships without the suite passing.
+- Harden against the named root causes: reduce functionality, reduce permissions, reduce autonomy, and validate output before it leaves.
+- Roll out in stages with exit criteria per stage, governed by an error budget that stops change when it burns.
+- Edit rate is the early-warning metric. It moves days before complaints do.
+- Instrument the work, not just the servers, using shared semantic conventions for spans, metrics and events.
+- Six alerts with named actions, four dashboards for four audiences, and a weekly transcript read that no dashboard replaces.
+- Every postmortem produces at least one eval case and at most one prompt change.
+- Rehearse the rollback every quarter in production. An unrehearsed switch is a hope.
+
+## What's next
+
+Lesson 87 moves beyond the single agent with "Beyond agents: agentic workflows, autonomous pipelines, self-healing systems." The capstone ends here with one agent accountable for one case class. Next lesson takes the same discipline and stretches it across systems that run themselves: pipelines of agents with their own handoff contracts, automation that acts on production telemetry without a human in the loop, and the self-healing patterns that decide when a system should repair itself, when it should stop, and when it should hand the problem back to a person.
+
+[^1]: Anthropic. [Demystifying evals for AI agents](https://www.anthropic.com/research/demystifying-evals-for-ai-agents). Advises sourcing realistic tasks from observed failures and starting before the suite is complete, notes that failures become test cases that prevent regressions, and describes multidimensional grading for conversational agents through state checks, transcript constraints and rubrics, with isolated scoring per dimension.
+[^2]: OWASP. [LLM06:2025 Excessive Agency](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/). Defines excessive agency as the vulnerability enabling damaging actions in response to unexpected, ambiguous or manipulated output, names excessive functionality, excessive permissions and excessive autonomy as the root causes, and distinguishes it from insecure output handling.
+[^3]: Google SRE. [Service Level Objectives](https://sre.google/sre-book/service-level-objectives/). Defines service level indicators as a quantitative measure of the level of service provided, defines objectives as target values for those indicators, and explains error budgets as an allowance for missing objectives that should be tracked on a daily or weekly basis.
+[^4]: OpenTelemetry. [OpenTelemetry GenAI Semantic Conventions](https://github.com/open-telemetry/semantic-conventions-genai). Maintains semantic conventions for generative AI covering spans, metrics and events for GenAI clients, Model Context Protocol usage and provider-specific conventions.
+[^5]: NIST. [AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework). Presents the voluntary framework organized around the govern, map, measure and manage functions for incorporating trustworthiness considerations into the design, development, use and evaluation of AI systems.
