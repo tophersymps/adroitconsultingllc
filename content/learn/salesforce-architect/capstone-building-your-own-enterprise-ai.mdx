@@ -1,0 +1,145 @@
+---
+title: "Lesson 90: General systems architecture: building your own enterprise AI (capstone synthesis)"
+slug: "capstone-building-your-own-enterprise-ai"
+series: "salesforce-architect"
+lesson: 90
+excerpt: "The closing lesson assembles every thread in the series into one artifact: an enterprise AI blueprint a client can fund, staff and operate, with its eval set, acting identity, tool permissions, SLO, cost ceiling and governance path written down."
+date: "October 29, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Salesforce, Architecture, CTA, Certifications]
+---
+
+# Lesson 90: General systems architecture: building your own enterprise AI (capstone synthesis)
+
+Lesson 89 handed you a 90-day rehearsal plan for the last stretch of CTA preparation. This lesson closes the series with the question that plan was circling: a client asks you to build them their own enterprise AI. Not a pilot, not a proof of concept that dies at the end of the quarter. A capability they own, staff, budget and answer for.
+
+Every thread in this course has been a room in the same house. Integration decided what data crosses a boundary and when. Security decided who the system acts as. Data decided where records live and what happens to them at volume. Reliability decided what "working" means when a probabilistic component sits in the request path. Cost decided whether the thing survives its second quarter. Governance decided who is accountable when the answer is wrong. The capstone is the assembly drawing that shows how the rooms connect, and it is also what a Review Board scenario is really asking for, because the judges are not testing whether you can name a pattern. They are testing whether you can stand behind a build under questioning.
+
+"Your own" is the load-bearing phrase. Almost no enterprise will train a model, and fewer should. What an enterprise owns is everything around the model: the retrieval over its own data, the identity the agent acts under, the tool permissions, the evaluation set, the logs, the cost ceiling and the escalation path. That surrounding system decides whether an AI capability becomes an asset or becomes an experiment nobody can switch off.
+
+## Define the terms
+
+- **Enterprise AI.** An AI capability owned by the organization, running against its own governed data, under its own identity and permission model, inside its own cost and compliance controls. The distinguishing feature is not the model. It is who holds the keys.
+- **Acting identity.** The identity under which the system touches data and executes tools. Enterprise AI acts as the requesting user, so every record and field the user cannot see stays invisible to the agent.
+- **Grounding layer.** The retrieval path that supplies the model with facts from governed systems at request time, with each retrieved item traceable to a record the user is allowed to read.
+- **Tool surface.** The enumerated set of functions the model may invoke, each with a declared input contract, a permission requirement and a side effect class (read, draft, commit).
+- **Eval set (golden set).** A written, versioned collection of real questions with expected outcomes, scored on every change. It is the only defensible definition of "good" for a non-deterministic system.
+- **Model gateway.** A single egress point for inference that owns provider selection, credentials, quotas, retries, fallbacks and logging, so no feature team embeds a vendor key in its own code.
+- **Cost ceiling.** A stated maximum spend per interaction and per month, enforced by routing, caching and quota limits rather than by a finance review after the invoice arrives.
+- **Trust boundary.** The line where data or control passes from something you govern to something you do not. Prompts, tools, retrieval corpora and third-party model providers all cross one.
+- **Shadow, assist, automate.** The release ladder for an AI capability: it observes and drafts with no visibility to end users, then it drafts while a human approves every action, then it commits actions inside permission boundaries once its evidence supports it.
+
+## What "your own" actually means
+
+There are three things you can own in an AI build, and confusing them is how projects get budgeted twice.
+
+You can own the reasoning, which means training or fine-tuning a model. Almost no enterprise has the data volume, the labeling discipline or the appetite for a retraining pipeline that justifies it. Salesforce's own guidance for agentic systems treats the model as one input among several and points architects at the capabilities agents actually need: trusted data to reason on, business logic they can safely act through, governance over their own lifecycle, a shared understanding of what the data means, and a path to escalate to a human. Those are architectural requirements, not products, and every one of them has to be answered whether or not you own the model. [^2]
+
+You can own the platform, which means the retrieval, the identity, the tool surface, the evaluation harness and the observability. This is the layer that separates an enterprise capability from an ungoverned experiment, and it is where the money goes.
+
+You rent the reasoning. That is a defensible choice with one consequence you have to design for rather than discover: cost structures shift from fixed infrastructure to variable inference consumption, so your spend scales with usage instead of with rack space. [^2] Variable cost is fine when the unit economics are known and dangerous when they are not, which is why the cost section below exists.
+
+The rented layer also has to respect the owned layer. The Salesforce trust architecture for generative features illustrates the shape: a zero data retention policy with model providers, so prompt and response content is not retained by third-party models or used to train them, and grounding that merges relevant record data into the prompt while preserving the executing user's permissions and field-level security. [^3] Steal that shape even if you are not on that platform. Permission-aware retrieval is not a feature you add later, because a retrieval layer that ignores user permissions is a data disclosure path with a natural language front end.
+
+## The seven decisions a build has to answer
+
+Before a single prompt is tuned, the architecture has to answer seven questions. Each one has a durable artifact, and each one has a specific failure mode when it is skipped. If you can produce this table for a scenario under exam pressure, you have most of a capstone answer.
+
+| Decision | The question it answers | The artifact | What breaks without it |
+| --- | --- | --- | --- |
+| Scope and success | Which capability, for which population, measured how | A versioned eval set and one target metric | A pilot nobody can declare finished or failed |
+| Data and authority | Which system is authoritative, what is copied, what is referenced | A data map with retention and residency per field | Two versions of the truth and a reconciliation job nobody owns |
+| Identity and tools | What the system may do, acting as whom | An acting identity plus a tool permission matrix | Excessive agency and a shared service account with god-mode access |
+| Model strategy | Where reasoning runs, and what happens when it does not answer | Gateway routing rules and a fallback ladder | A single provider outage that stops the business process |
+| Reliability | What "working" means at three in the morning | SLOs, an error budget and a degradation path | Heroic manual work instead of designed behavior |
+| Cost | What one interaction is allowed to cost | A unit economics model with enforced ceilings | A surprise invoice and a mandate to shut the capability down |
+| Governance | Who is accountable, and how a human gets involved | An AI inventory entry, a review gate and a decision log | Prompts and model versions nobody can trace to an owner |
+
+Two entries in that table do work that the others cannot. The tool permission matrix is where security stops being a policy document and becomes an enforceable artifact, because the four-layer access model of organization, object, field and record is as relevant to an agent's tool call as it is to a user's page load. [^1] And the fallback ladder is where reliability stops being a wish, because a probabilistic reasoning layer cannot be made deterministic. It can only be given behavior for the cases where it fails.
+
+## Worked blueprint: a field service assistant, end to end
+
+Take a concrete case. An industrial equipment manufacturer with 1,800 employees and 900 field technicians wants an assistant that answers warranty questions, finds parts and drafts claims. Salesforce holds cases and entitlements. An ERP owns parts and pricing. A document library holds the service manuals. Here is the build in the order I would actually sequence it.
+
+1. **Write the eval set before the prompt.** Pull 200 real questions from the first-line queue, including the twenty that the current process answers badly. For each, write the expected outcome and the source that settles it. Score on three things: did it answer, was the answer right against the source, and did it cite the record it used. A prompt without a scored set is a demo, and a demo cannot be argued with in a review. This is the first artifact because every later trade-off is judged against it.
+2. **Decide who owns the truth.** Parts and pricing stay authoritative in the ERP. The assistant reads a synchronized catalog rather than calling the ERP on every keystroke, and the manual library is retrieved, not copied. Write down what is replicated, what is referenced, and what each copy is allowed to be stale by.
+3. **Set the identity before the tools.** The agent acts as the user, not as a shared integration identity. A technician in one service region must not be able to retrieve a warranty record from another region through the assistant, and that property comes from the identity the request runs under, not from instructions in the prompt telling the model to behave.
+4. **Design the smallest tool surface that works.** Four tools: search the parts catalog, read entitlement and warranty status, draft a claim, create a case. Each declares its permission requirement. Drafting and committing are separate tools, because the difference between a suggestion and a state change is where most agent incidents live.
+5. **Choose the model path deliberately.** Simple intent triage routes to a small, cheap model. Diagnosis and multi-step reasoning route to a frontier model through a gateway. If the gateway cannot reach a provider, the assistant degrades to search plus a link, and says so.
+6. **Define reliability in user terms.** A lookup returns in under four seconds for 99 percent of requests during working hours. The error budget is spent on releases, not on arguing. The degradation path is a real feature, tested like one.
+7. **Model the money before the first invoice.** See the next section, because this is the step teams skip and then cannot recover from.
+8. **Sequence the release.** Ship in shadow mode where the assistant answers into a log only. Then assist mode, where it drafts and a technician approves every action. Then automate mode, where approved action classes commit inside permission boundaries. Each rung is earned with eval results and a named owner, not with a calendar date.
+
+Steps three and four are the ones a Review Board examiner will probe, because they are where an AI design stops being a language model and becomes an enterprise system. The distinction between a copilot and an agent is architectural rather than cosmetic: copilots require human approval for state-modifying actions, while agents operate independently within permission boundaries, and Salesforce's guidance is explicit that moving from assists to acts requires re-evaluating every architectural pillar rather than flipping a configuration. [^2]
+
+The capability set from the framework is worth carrying into any scenario, including ones that have nothing to do with Salesforce. Trusted, permissioned data. Business logic the agent can act through. Governance over the agent's lifecycle. A shared definition of what the data means. And an escalation path to a human. Weaken any one of those and the assistant is limited in a predictable way, which is a far better sentence to say in a review than a claim about model quality. [^2]
+
+## Unit economics: the number that kills builds
+
+Inference is a variable cost, and variable costs are invisible until someone multiplies them by usage. Do that multiplication before the client does.
+
+Assume 900 technicians, three assistant conversations each per working day, and 21 working days. That is 56,700 conversations a month. Assume, for the arithmetic, a blended rate of two dollars per million input tokens and eight dollars per million output tokens, and a conversation that sends 8,000 input tokens (instructions, retrieved context, recent history) and returns 900 output tokens. Substitute your own contracted rates. The shape of the calculation matters more than my placeholder numbers.
+
+- Input: 56,700 conversations at 8,000 tokens is 453.6 million tokens, which at two dollars per million is 907 dollars.
+- Output: 56,700 conversations at 900 tokens is 51.03 million tokens, which at eight dollars per million is 408 dollars.
+- Evaluation runs: a monthly regression of 300 cases at 6,000 input and 400 output tokens adds about 4.56 dollars. Cheap, and it is the line item that keeps the capability honest.
+- Log and index storage: call it 25 dollars a month at this volume, and note that retention policy is the lever rather than compression.
+
+That lands near 1,345 dollars a month, or about 2.4 cents per conversation. Set that against a technician who spends four minutes hunting for a part at a 45 dollar hourly cost, which is three dollars of time per conversation, and the inference cost is roughly one hundred and twenty-sixth of the value at stake. That ratio is the argument for funding the build, and it is also the argument for spending engineering effort on the two levers that move the input number: cache the stable part of the prompt, and cap retrieval at the top few passages instead of stuffing a manual chapter into every request. Cutting effective input cost by 45 percent moves the monthly figure from 1,315 dollars to about 753 dollars for the same volume.
+
+Now the guardrails, because a model with no ceiling is a denial-of-wallet risk. Enforce a per-user daily interaction cap, a per-request token cap, and an alert at 80 percent of the monthly ceiling. Treat unbounded consumption as a design defect rather than a user behavior problem, since the OWASP risk list for generative AI applications names unbounded consumption as one of the ten core risks to mitigate across the development, deployment and management lifecycle. [^4]
+
+## Governance, evaluation and the path to a human
+
+Governance is the last section in most build documents and should be the first artifact in the repository. The NIST AI Risk Management Framework is a useful vocabulary here because it is voluntary and describes an activity rather than a product: it exists to improve the ability to incorporate trustworthiness considerations into the design, development, use and evaluation of AI systems. [^5] Translated into a build, that means four things exist and are versioned together: the eval set, the prompt and model configuration, the tool permission matrix, and the decision log that records what changed and why.
+
+Three controls do most of the work. First, an inventory entry for every AI capability with a named owner, a risk tier and a review date. Second, a human review gate proportional to the consequence of the action, so a drafted warranty claim can be reviewed at the point of submission while a permission change cannot be suggested by the model at all. Third, a retirement path, because an AI capability that cannot be turned off is an outage waiting for a reason.
+
+Evaluation is the control that has to be boring. Score the eval set on every prompt, model or tool change. Keep a held-out set that nobody tunes against. Record the score next to the version so that a regression is a diff rather than a debate. Salesforce's treatment of agentic systems makes the same point from the other direction: non-deterministic behavior in the reasoning layer complicates testing, monitoring and error handling, which is exactly why the eval harness is architecture instead of quality assurance. [^2]
+
+One more standard worth knowing, because it changes how you review a tool surface. The Model Context Protocol defines how applications connect models to external data and tools, with hosts initiating connections, clients inside the host, and servers exposing resources, prompts and tools. Its current revision moves to stateless, self-contained requests with per-request capability negotiation. [^6] The practical consequence for an architect is that a tool surface can be described and reviewed independently of the model behind it, which is what makes the permission matrix auditable. When a scenario asks how you would prevent an agent from reaching data it should not see, the answer is a property of the surface, not of the prompt.
+
+## Common failure modes
+
+- **Prompting before scoring.** The team tunes against impressions, so every release is an argument about vibes and nobody can prove the system got better or worse.
+- **A god-mode identity.** The agent calls APIs as a service account that can read everything, and permission-aware retrieval is skipped because it was slower to build. This is the most common way an AI capability becomes a data disclosure incident.
+- **A tool surface that commits on the first turn.** Read, draft and commit are collapsed into one tool, so the model's first draft is a production state change.
+- **No degradation path.** Provider latency spikes and the user sees an apology where a search box used to be. The fallback is a feature, and it needs an owner.
+- **A cost model with no ceiling.** Nothing caps a single user's consumption, so one power user with a loop can move the monthly invoice.
+- **Model versions that float.** The vendor updates the model, quality shifts quietly, and the eval set is not wired into the release process to catch it.
+- **Governance as a document.** A responsible AI policy exists in a PDF, no inventory exists in a system, and no capability has a named owner who can turn it off.
+
+## Exam traps
+
+- Answering "build or buy" with a stack preference instead of constraints. Name the data, the identity requirement, the volume and the retention obligation, then let those decide.
+- Describing an AI design with no failure path. A design that only works when inference works is not a design, and the judges know it.
+- Leaving the agent's identity out of the security answer. An AI design that never says what the system acts as has not answered the security domain at all.
+- Claiming accuracy without an eval harness. "The model performs well" is an assertion. A scored golden set with a version history is evidence.
+- Treating logs as free and retention as someone else's decision. Prompt and response logs contain the same governed data as the record they came from, so they inherit its classification, retention and residency rules.
+
+The through-line in every trap is the same one from lesson 84: the seams carry the risk. An AI build fails at the joins, between the retrieval layer and the sharing model, between the tool surface and the identity, between the eval harness and the release process. Design the joins, not just the components. The trust guidance states the principle plainly enough to quote in a review: apply zero trust across all layers, grant least privilege by default, and remember that security on the platform belongs to you even though the platform's own security belongs to the vendor. [^1]
+
+## Try it
+
+Pick one plausible enterprise AI capability, from your own work or invented, and produce a one-page blueprint in 90 minutes. Use a scenario with at least one external system of record, one population whose permissions differ from the requester's, and one action that changes state.
+
+1. Write ten eval cases with expected outcomes and the source that settles each one, before you write any prompt text.
+2. Draw the data map: what is authoritative where, what is replicated, what is referenced, and the staleness each copy is allowed.
+3. Write the acting identity sentence and list five tools with their permission requirement and side effect class. Mark which tools commit.
+4. Set one SLO in user terms, name the error budget, and write the degradation path in one sentence.
+5. Run the arithmetic for one month of usage with your own assumptions written down, and state the per-interaction ceiling.
+6. Name the owner, the risk tier, and the condition under which the capability is retired.
+
+Score yourself against three questions. Can a reader see every permission decision without reading the prompt? Can they see what happens when the model is wrong or unavailable? Can they find the number that proves it got better last month? Anything you cannot answer in one sentence is the part of the blueprint that is still a description rather than a design.
+
+## What's next
+
+This is the last lesson in the series, and it closes the loop rather than extending it. The next lesson returns to lesson 1: what a Salesforce System Architect actually does, covering the role, the certification track behind it and the CTA endgame that the whole curriculum has been aiming at. If you arrived here by following the sequence, that lesson is now a review of the map rather than an introduction to the territory, and it is worth reading again with everything you have built since. The series restarts at lesson 1.
+
+[^1]: Salesforce Architects. [Trust](https://architect.salesforce.com/docs/architect/well-architected/guide/trust.html). Frames security on the platform as the architect's responsibility under a shared responsibility model, and gives the design principles of zero trust across all layers, least privilege by default through the four-layer access model of organization, object, field and record, defense in depth across the data, application, identity and integration layers, and threat modeling inside design.
+[^2]: Salesforce Architects. [The Agentic Enterprise](https://architect.salesforce.com/docs/architect/well-architected/guide/agentic-enterprise.html). Distinguishes copilots that require human approval for state-modifying actions from agents that operate independently within permission boundaries, notes that moving from assists to acts requires re-evaluating every architectural pillar, lists the capabilities agents require (trusted data and context, business logic to act through, lifecycle governance, shared data meaning, and a path to escalate to humans), states that non-deterministic reasoning complicates testing and monitoring, and describes the cost shift from fixed infrastructure to variable inference consumption.
+[^3]: Salesforce. [Einstein Trust Layer](https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_layer.htm&type=5). Describes the trust architecture built into the platform: a zero data retention policy with third-party model providers so data is not retained by those models or used for model training, dynamic grounding with secure data retrieval that merges relevant record data into the prompt while preserving the executing user's role-based permissions and field-level security, and prompt defense through system policies intended to limit hallucinations.
+[^4]: OWASP Gen AI Security Project. [LLM Risks Archive](https://genai.owasp.org/llm-top-10/). Publishes the 2025 Top 10 risks and mitigations for LLM and generative AI applications across the development, deployment and management lifecycle, listing prompt injection, sensitive information disclosure, supply chain, data and model poisoning, improper output handling, excessive agency, system prompt leakage, vector and embedding weaknesses, misinformation, and unbounded consumption.
+[^5]: NIST. [AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework). Describes the AI RMF as a voluntary framework intended to improve the ability to incorporate trustworthiness considerations into the design, development, use and evaluation of AI products, services and systems, released on January 26, 2023, with a playbook and crosswalks published alongside it and a revision of AI RMF 1.0 under way.
+[^6]: Model Context Protocol. [Specification](https://modelcontextprotocol.io/specification/latest). Defines the open protocol for connecting LLM applications to external data and tools using JSON-RPC 2.0 messages between hosts, clients and servers, with servers exposing resources, prompts and tools, and the current revision using stateless, self-contained requests with per-request capability negotiation.
