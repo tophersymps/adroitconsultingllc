@@ -6,7 +6,7 @@ lesson: 86
 excerpt: "The MVP is live at 5 percent traffic. This lesson turns a working slice into a system you can trust: an eval suite grown from production failures, hardening against the OWASP risk list, a canary rollout on an error budget, and traces that catch quality loss."
 date: "October 29, 2026"
 author: "Adroit Consulting"
-readTime: "12 min read"
+readTime: "13 min read"
 tags: [Capstone, Evals, Observability, SLOs, Agentic AI]
 ---
 
@@ -48,6 +48,8 @@ Meridian's suite has three tiers by the end of month two.
 | Adversarial | 25 cases | Injection attempts, ambiguous requests, out-of-scope asks, malformed order numbers | Exact checks on what the agent refused to do | Every change, plus weekly |
 | Regression | Grows weekly, starts at 0 | Production failures and human edits promoted from the triage list | The grader that fits the failure | Every change, plus weekly |
 
+![The eval loop at Meridian: live cases feed a triage list, every production failure becomes a case before it closes, the golden, adversarial and regression tiers run on every prompt, model, tool or retrieval change, and the regression gate blocks a drop of more than 2 points on the golden set or any adversarial-tier failure.](</diagrams/capstone-iii-evaluate-harden-deploy-monitor/1-eval-loop.png>)
+
 Two design points in that table carry most of the value. The first is that graders are mixed on purpose. A conversational support case is multidimensional, and the practical way to grade one is a state check for whether the case resolved, a transcript constraint for how long it took, and a rubric for whether the tone was right.[^1] The second is that rubric scoring should be split by dimension rather than handed to one model call judging everything at once, because a single score hides which dimension moved.[^1]
 
 Then the operational rule that keeps the suite honest: **no prompt, model, tool or retrieval change ships without the suite passing, and every production failure that reaches triage becomes a case before it is closed.** That second half is the compounding part. It is also the half that dies quietly when a team gets busy, so it needs a named owner and a weekly count.
@@ -67,6 +69,8 @@ Four controls answer that list, and all four are already in the architecture rat
 **Reduce autonomy.** The refund tool requires an approval token minted by a human interface, and the token is bound to the case, the tool and the amount. The autonomy table from lesson 84 is the specification, and the code review question is always the same: which line of code makes this impossible?
 
 **Validate output before it goes out.** Improper output handling is a separate risk from excessive agency for a reason, and the distinction matters at the last mile.[^2] Nothing leaves the system without passing a validator that checks the reply against the case's evidence, strips any content that looks like an instruction rather than information, and enforces the region's disclosure wording.
+
+![Four controls mapped to the root causes OWASP names: reduce functionality with nine tools and no deletes, reduce permissions with per-subagent credentials, reduce autonomy with a human-minted approval token bound to the case, the tool and the amount, and validate output against the case's evidence before it leaves the system. The adversarial tier is where these are tested rather than asserted.](</diagrams/capstone-iii-evaluate-harden-deploy-monitor/2-four-controls.png>)
 
 Then prove it. The adversarial tier of the eval suite is where these controls get tested rather than asserted, and the cases are cheap to write. Twelve of Meridian's twenty-five adversarial cases are prompt injection attempts placed in the customer's own message, three are injections hidden in a support attachment, and five are requests outside the agent's scope that must produce a handoff rather than a refusal that reads like a policy argument. Any single adversarial failure blocks a release. That is not a quality target, it is a line.
 
@@ -95,6 +99,8 @@ The availability budget is the one that changes behavior. Sixty cases a month is
 Edit rate is the metric to watch in stages 1 through 3, and it is the one teams forget to instrument. It measures the share of drafts a human changed before sending, and it moves within days of a retrieval or prompt regression, well before customer satisfaction scores move at all. A rising edit rate with a flat complaint rate is a system telling you it got worse and nobody outside the team has noticed yet.
 
 Two more rules make the stages mean something. Rollback is a single flag, rehearsed at three levels, and a stage that fails its exit criteria goes back one stage rather than forward on a waiver. And the tool flag for the return authorization stays off until stage 2 exits, so the write path enters production after the read path has two weeks of clean evidence behind it.
+
+![The rollout ladder with the exit criteria for each stage: stage 1 at 5 percent with the golden pass rate at or above 92 percent and the edit rate under 25 percent, stage 2 at 25 percent with the edit rate under 18 percent and the error budget above 70 percent remaining, stage 3 at 60 percent across two regions with no adversarial failures, then all eligible traffic in three regions. A stage that fails goes back one stage rather than forward on a waiver, and a burnt budget stops change.](</diagrams/capstone-iii-evaluate-harden-deploy-monitor/3-staged-rollout.png>)
 
 ## Monitor what the agent does, not what the server does
 
@@ -133,6 +139,8 @@ An agent system needs a severity ladder that people can apply at 2am without rea
 Every postmortem produces at least one new eval case and at most one prompt change. That ratio matters. A team that answers every incident with a prompt edit accumulates an unreadable instruction set and no test coverage, and the same incident returns in a different costume three months later.
 
 The rollback drill is the habit that makes all of this real. Once a quarter, in production, flip the workflow flag for fifteen minutes during business hours, confirm the manual queue absorbs the traffic, flip it back, and record the time from flip to first human-handled case. Two minutes is the target from lesson 85. A drill that reveals a four minute gap is a successful drill, because you found it on a Tuesday afternoon instead of during a real incident on the last day of the quarter.
+
+![The severity ladder read from the symptom: money moved without approval, or customer data reaching the wrong customer, is Sev 1 with the global kill switch and a customer statement within 24 hours; an unsafe action attempted and blocked, or more than half the error budget burnt in a day, is Sev 2 with the workflow kill switch; and a rising edit rate with no safety component is Sev 3, owned as backlog with an eval case attached before it closes.](</diagrams/capstone-iii-evaluate-harden-deploy-monitor/4-severity-ladder.png>)
 
 ## Exam traps
 
