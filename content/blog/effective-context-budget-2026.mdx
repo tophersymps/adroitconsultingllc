@@ -1,0 +1,131 @@
+---
+title: "A Million Tokens In, Worse Answers Out"
+slug: effective-context-budget-2026
+excerpt: "A context window is a ceiling, not a workspace. Accuracy falls long before the limit, and near-miss distractors hurt more than length does."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "October 30, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [AI Infrastructure, Context Engineering, LLM Engineering, Agents, RAG, Reliability]
+bannerImage: "/banners/effective-context-budget-2026.webp"
+ogImage: "/banners/effective-context-budget-2026-og.jpg"
+---
+
+A pipeline passes its evaluation suite at eight thousand tokens per query. Six weeks later the same pipeline runs in production at three hundred thousand tokens per query and the answers get worse. Nobody changed the model. Nobody changed the prompts. The team simply started sending everything it had, because the window allowed it, and the window is now measured in millions of tokens. The evaluation passed because the evaluation was small.
+
+That is not a model defect you can wait out. It is a measured property of how attention behaves over long inputs, and the benchmark literature has been documenting it since 2023. Vendors have started naming it in their own documentation. Anthropic's context window page says it plainly: more context is not automatically better, and as token count grows, accuracy and recall degrade, a phenomenon the industry now calls context rot.[^1]
+
+The practical consequence is a distinction most teams never make. A context window is a ceiling, the hard limit past which the API returns an error. It is not a working size, the length at which the model still reasons well about what you sent. Those two numbers are far apart, and the gap between them is where production quality lives or dies. This article covers what the measurements actually show, what they mean for an agent that resends its history every turn, and the five levers that turn context from an accident into a budget.
+
+## The number on the box is a ceiling, not a workspace
+
+Three independent benchmark efforts have measured the same thing from different angles, and each one found the advertised window overselling the usable one.
+
+RULER, published at COLM 2024, evaluated 17 long-context models across 13 task types that extend the standard needle-in-a-haystack test with multi-hop tracing and aggregation. Almost every model showed large performance drops as context length increased. The headline finding is the one to remember: while all 17 models claimed context sizes of 32,000 tokens or more, only half of them could maintain satisfactory performance at 32,000 tokens.[^2] Half the field could not operate at the length it advertised on the box.
+
+NoLiMa, accepted at ICML 2025, isolated a subtler variable. The classic needle test lets a model succeed through literal lexical matching: the question and the answer share words, so retrieval degrades into string search. NoLiMa rewrote the needles so questions and answers share almost no vocabulary, forcing the model to infer a latent association before it can locate anything. Across 13 models claiming at least 128,000 tokens of context, performance held up below 1,000 tokens and then fell apart. At 32,000 tokens, 11 of the 13 dropped below half of their strong short-context baseline. Even GPT-4o, one of the better performers, fell from a near-perfect 99.3 percent baseline to 69.7 percent.[^3]
+
+Read those two findings together and the shape of the problem appears. The benchmark you choose determines what you see. A vendor chart built on literal-match retrieval will show a flat, healthy line at lengths where the same model, asked to reason rather than match strings, is already failing a third of the time. That is not dishonesty; it is a benchmark measuring a narrower skill than your application needs.
+
+![The gap between the advertised window and the measured one: RULER found only half of 17 models held satisfactory performance at 32,000 tokens despite all of them claiming 32,000 or more, and NoLiMa found 11 of 13 models fell below half their short-context baseline at 32,000 tokens, with GPT-4o dropping from a 99.3 percent baseline to 69.7 percent](</diagrams/effective-context-budget-2026/1-claimed-vs-measured.png>)
+
+There is a mechanical reason for this, and it is worth knowing because it rules out the obvious hope that a future model will fix it. A transformer lets every token attend to every other token, so n tokens create n-squared pairwise relationships. As context grows, the model's capacity to represent all those relationships gets stretched thin. Models also learned their attention patterns from training data where short sequences dominate, so they have less practice with context-wide dependencies. Anthropic's framing is the one that survives contact with production: models draw on a finite attention budget, every new token spends some of it, and the degradation is a gradient rather than a cliff.[^4]
+
+That last point deserves emphasis, because the intuitive mental model is wrong. Long context does not work fine until it suddenly breaks. It works slightly less well than you think, continuously, from well before the limit.
+
+## Degradation is a slope, not a cliff
+
+The strongest evidence comes from a study designed specifically to answer the objection that longer inputs are simply harder problems. Chroma's 2025 context rot report ran 18 models, including frontier closed and open-weight systems, and held task complexity constant while varying only input length. That design matters: if a task gets harder as the input grows, a performance drop proves nothing about length. By fixing the task and adding only irrelevant content, the study isolates the variable.
+
+The result is uncomfortable. Across every experiment, model performance degraded consistently as input length increased, on tasks as simple as copying a run of repeated words.[^5] The decline was not uniform across models, which is exactly why a single chart from a single vendor cannot tell you what your own deployment will do.
+
+Two findings from that study should change how teams build retrieval.
+
+First, similarity matters. Needle-question pairs with low lexical or semantic similarity degraded faster as length grew. The closer a real query is to being a paraphrase rather than a keyword lookup, the earlier the drop starts. Most production queries are paraphrases.
+
+Second, and more actionable, distractors are not noise. Chroma separated the two: a distractor is topically related to the answer but does not answer the question, while irrelevant content is unrelated. Even a single distractor reduced performance below the needle-only baseline, and four distractors compounded the damage further, with the effect amplifying as input length grew.[^5] A near-miss passage is more dangerous than an unrelated one, because it competes for attention with the correct answer using almost the same words.
+
+![Why near misses are worse than noise: three conditions measured at increasing input length, needle only, needle plus one topically related distractor, and needle plus four distractors, showing that even a single distractor falls below the clean baseline and four of them compound the loss further as the context grows](</diagrams/effective-context-budget-2026/2-distractors-compound.png>)
+
+If your retrieval pipeline returns the top twenty chunks by vector similarity, you are not sending twenty pieces of evidence. You are sending one answer and nineteen distractors, and the benchmark says the nineteen actively lower the odds of getting the answer right.
+
+There is one more result worth carrying into design reviews. When Chroma analyzed which models failed under distractors, it found a behavioral split: Claude models had the lowest hallucination rates and tended to abstain explicitly when uncertain, while GPT models produced confident incorrect answers more often.[^5] Both are failures from a user's point of view, and neither is fixed by a prompt. The fix is upstream: do not put the distractor in the window.
+
+## Position matters, and the middle is the worst seat
+
+The second classic result concerns where inside the window the relevant content sits. Lost in the Middle, published in TACL, tested multi-document question answering and key-value retrieval. Performance was highest when the relevant information appeared at the beginning or the end of the input, and degraded significantly when the model had to reach into the middle of a long context, including for models explicitly built for long context.[^6]
+
+The lesson is not that position always dominates. Chroma tested 11 needle positions in its semantic retrieval task and found no notable variation.[^5] The two results are compatible, and the honest reading is the one that matters: positioning effects are task dependent, so you cannot rely on the middle to carry anything important. If a constraint, a price, a date, or a policy clause decides whether the answer is right, it belongs at an edge of the context, not buried in the center of a forty-page dump.
+
+![The position effect in multi-document question answering: accuracy is highest when the supporting passage sits at the start or the end of the context and drops through the middle, forming a U-shaped curve, with the note that a semantic needle retrieval task measured elsewhere found no notable position variation, so the effect is task dependent](</diagrams/effective-context-budget-2026/3-position-u-curve.png>)
+
+## What this does to an agent loop
+
+Everything above describes a single request. An agent is worse, because it makes the same request repeatedly over a context that keeps growing.
+
+Each turn in a conversation sends the full prior history plus the new message, so the same tokens are re-read and re-attended on every cycle.[^1] Tool results accumulate at whatever size the tools return them. By step forty, the agent is re-processing thirty-nine earlier tool outputs to decide step forty-one, and every one of them is spending attention budget. Cost rises with every turn even when the answer does not improve.
+
+The measurement for this case is LongMemEval, an ICLR 2025 benchmark of 500 questions embedded in sustained chat histories. Commercial assistants and long-context models showed a 30 percent accuracy drop on memorizing information across continued interaction.[^7] A third of the accuracy is simply gone by the time the conversation is long enough to be useful.
+
+Distractors arrive in an agent loop without anyone choosing them. Retrieved records repeat. A record gets updated and both versions sit in the window. Two similar entities get merged into one answer. In our own multi-agent pipeline we hit this exact failure: the fact needed for a step was present, twice, in two versions. The model chose the superseded one. Nothing in the trace looked like an error, because nothing was missing. What fixed it was writing state with an entity key and a version, and dropping superseded entries on write, so the window held one answer per question instead of a history of answers. The lesson generalizes beyond our stack: when the same fact can appear more than once, duplication is not redundancy, it is a distractor you manufactured.
+
+## Long context is not the villain. Uncurated context is.
+
+There is a version of this argument that oversells itself, and it is worth defusing before it becomes someone's migration plan.
+
+A 2024 evaluation comparing long context against retrieval-augmented generation found that long context generally outperformed chunk-based RAG on question answering benchmarks, especially for Wikipedia-style questions. Summarization-based retrieval performed comparably to long context, while chunk-based retrieval lagged behind. RAG retained an advantage on dialogue-based and general queries.[^8]
+
+Two things follow. Sending a well-curated, deduplicated corpus in full can beat a mediocre retrieval pipeline, so "never send long context" is not the lesson. And the variable that separates the good outcomes from the bad ones is not length. It is relevance and precision: whether the tokens in the window are the ones that decide the answer, and whether they are the only ones competing for attention. The study named this explicitly, calling context relevance the overlooked factor in the long-context versus RAG comparison.[^8]
+
+Vendor documentation now says the same thing from the operator's side. Anthropic's context window page states that curating what is in context is as important as how much space is available, and that a server-side compaction step, not a bigger window, is the primary strategy for long-running conversations.[^1] The window stopped being the scarce resource. The curation is.
+
+![Four context regimes and the response each one calls for: a small curated set sent directly, a medium set where retrieval and reranking do the pruning, a large set that needs compaction with tool results cleared, and a multi-session task that needs state externalized to artifacts and sub-agents with their own windows](</diagrams/effective-context-budget-2026/4-context-budget-ladder.png>)
+
+## Five levers for a context budget
+
+The rest is engineering. Five levers move the needle, in the order you should reach for them.
+
+**Measure your own effective window first.** Do not infer it from a spec sheet or a vendor's needle chart. Build the test from your own corpus: 30 questions whose answers you know, embedded at increasing lengths in your real background content, with your real query phrasing, which means paraphrases rather than keywords. NoLiMa is the reason to insist on paraphrases: the moment literal overlap disappears, the degradation curve starts earlier.[^3] Plot accuracy against input length at four or five points. Find the length where accuracy leaves roughly 90 percent of its peak. That is your budget, and it will be smaller than the window.
+
+**Put the contract at the edges and the evidence next to the question.** System instructions and hard constraints belong at the start, where attention is strongest. The passage that answers the question belongs immediately before the question, at the other edge. Anything you cannot afford to have skipped should not sit in the middle of a long context.[^6] This is a free change and it is measurable.
+
+**Prune by precision, not by volume.** Every near-miss chunk you drop improves the odds on the correct one, which is the opposite of the instinct that more retrieved context is safer.[^5] Deduplicate by entity and version before you rank, so one question has one current answer. If you want a single number to track, track distractor density: the count of retrieved passages that are topically adjacent to the answer without containing it.
+
+**Compact on a threshold, not after a failure.** Providers now expose this directly. OpenAI's Responses API accepts a `context_management` parameter with a compaction threshold, after which the server summarizes earlier turns and carries forward an opaque compaction item rather than the raw transcript.[^9] Anthropic ships server-side compaction for long-running conversations alongside context editing features for clearing stale tool results.[^1] Two cautions from practice: compaction preserves state, not history, so anything the agent must be able to quote verbatim belongs in an external artifact; and compaction alone is not sufficient. Anthropic's long-running agent work found that a frontier model looping across context windows, with compaction enabled, still left work half-finished and undocumented, because the next session could not tell what had been done.[^10]
+
+**Externalize state, and give sub-agents their own windows.** The pattern that fixed that failure is worth copying wholesale. A first session sets up the environment and writes a feature list with every item marked as failing, plus a progress log. Every later session starts by reading the progress log, the feature list, and the git log, then works one item to completion. The state lives in artifacts, not in a replayed transcript, and git supplies the history.[^10] Sub-agents follow the same logic in the other direction: a sub-agent can burn tens of thousands of tokens exploring, then return a distilled summary of one to two thousand tokens to the coordinator, so the exploration never enters the main window at all.[^4]
+
+![How state survives a context window: the first session writes a progress log, a versioned state file, and a feature list, each later session reads those artifacts instead of a replayed transcript, and a sub-agent explores in its own window and returns only a distilled summary to the coordinator](</diagrams/effective-context-budget-2026/5-state-externalization.png>)
+
+## What to instrument
+
+An effective context budget only holds if something reports when it slips. Four signals are enough to start.
+
+- Input tokens per turn and per resolved task, at the median and the 95th percentile. Divergence between the two is the tell that a few sessions are stuffing the window while most are not.
+- Accuracy across at least four context lengths, not one. A single passing evaluation at a small size is what let the opening example ship.
+- Distractor density per query, from the retrieval layer. Rising density with flat token counts still means falling precision.
+- Compaction events and their quality delta. Compare a task's outcome before and after a compaction fires; if quality drops when compaction runs, the summary is losing something the task needs.
+
+When one of these slips, the failure usually presents in a recognizable way. An answer that is present but from the wrong version is a duplication problem. An instruction ignored from the top of the window is a position problem. Quality that got worse after adding more retrieved chunks is a distractor problem. None of them look like model degradation, and all three get misdiagnosed as it.
+
+## Start with one measurement this week
+
+The window you can buy keeps growing, and the attention budget does not grow with it. The teams that hold quality as the window expands will be the ones that treat context as a budget with a measured ceiling, not a container to fill.
+
+If you do one thing with this article, build the small needle test from your own corpus. Thirty questions, four lengths, real phrasing. Find where accuracy leaves 90 percent of its peak. That number is the only context limit your architecture should be designed around, and it is not the one printed on the vendor's pricing page.
+
+Related reading: why an agent that seems to forget is usually a memory architecture problem in [Your Agent Isn't Forgetting. Its Memory Architecture Is.](/field-notes/agent-memory-context-engineering-2026), how retrieval precision is set before the model ever sees the context in [The Retrieval Is the Bug](/field-notes/production-rag-retrieval-quality-2026), what caching does and does not fix about the cost of a large context in [the economics of prompt caching](/field-notes/prompt-caching-ai-infrastructure-2026), and how a generation that stops early tells you it ran out of room in [Length Is a Stop Reason, Not an Error](/field-notes/stop-reason-output-budget-2026).
+
+[^1]: Anthropic, Context windows, [platform.claude.com](https://platform.claude.com/docs/en/build-with-claude/context-windows)
+[^2]: Hsieh et al., RULER: What's the Real Context Size of Your Long-Context Language Models?, COLM 2024, [arxiv.org](https://arxiv.org/abs/2404.06654)
+[^3]: Modarressi et al., NoLiMa: Long-Context Evaluation Beyond Literal Matching, ICML 2025, [arxiv.org](https://arxiv.org/abs/2502.05167)
+[^4]: Anthropic Applied AI team, Effective context engineering for AI agents, [anthropic.com](https://www.anthropic.com/research/effective-context-engineering-for-ai-agents)
+[^5]: Hong, Troynikov and Huber, Context Rot: How Increasing Input Tokens Impacts LLM Performance, Chroma, July 2025, [research.trychroma.com](https://research.trychroma.com/context-rot)
+[^6]: Liu et al., Lost in the Middle: How Language Models Use Long Contexts, TACL, [arxiv.org](https://arxiv.org/abs/2307.03172)
+[^7]: Wu et al., LongMemEval: Benchmarking Chat Assistants on Long-Term Interactive Memory, ICLR 2025, [arxiv.org](https://arxiv.org/abs/2410.10813)
+[^8]: Li et al., Long Context vs. RAG for LLMs: An Evaluation and Revisits, [arxiv.org](https://arxiv.org/abs/2501.01880)
+[^9]: OpenAI, Compaction, [platform.openai.com](https://platform.openai.com/docs/guides/compaction)
+[^10]: Young, Effective harnesses for long-running agents, Anthropic, [anthropic.com](https://www.anthropic.com/research/effective-harnesses-for-long-running-agents)

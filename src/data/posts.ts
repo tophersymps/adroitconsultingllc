@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "effective-context-budget-2026",
+    "title": "A Million Tokens In, Worse Answers Out",
+    "excerpt": "A context window is a ceiling, not a workspace. Accuracy falls long before the limit, and near-miss distractors hurt more than length does.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "October 30, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Context Engineering",
+      "LLM Engineering",
+      "Agents",
+      "RAG",
+      "Reliability"
+    ],
+    "bannerImage": "/banners/effective-context-budget-2026.webp",
+    "ogImage": "/banners/effective-context-budget-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-dual-write-outbox-2026",
     "title": "Your Save Committed. Your Event Never Arrived.",
     "excerpt": "Salesforce publishes a platform event only when the transaction commits. That is atomicity, not delivery. The dual write, and what an outbox still has to do.",
