@@ -31,6 +31,8 @@ The slice is chosen by three filters: does it carry real volume, can it be read-
 
 So the MVP answers order status and pricing, and it drafts return authorizations for a human to approve. It never calls a write tool without an approval token, and the refund tool is not in the agent's inventory at all. That last point is worth restating in code review terms: the MVP cannot refund a customer even if the model, the prompt and the retrieval layer all fail simultaneously in the most creative way available.
 
+![Decision matrix showing six candidate slices, order status, pricing, drafted returns, live return authorization, refund issuance and account administration, passing or failing three filters: real volume, read-only, and cheap human verification by a person](</diagrams/capstone-ii-implement-the-mvp/1-slice-triage.png>)
+
 ## Define the terms
 
 **Walking skeleton.** The thinnest end-to-end path that touches every layer of the real system: real tools, real model calls, real logging, real flag, with almost no functionality inside. It is what makes week two estimation honest.
@@ -52,6 +54,8 @@ So the MVP answers order status and pricing, and it drafts return authorizations
 The most common sequence error in agent implementation is building the loop first and the tools second. That order produces a demo that works on three hand-picked cases and collapses on the fourth, because the failure is in the tool contract rather than in the reasoning.
 
 Start at the seam. Meridian's internal systems do not need to know an agent exists, so the seam is a set of servers that expose capabilities. The Model Context Protocol is a reasonable choice for that seam: it is an open protocol for connecting LLM applications to external data sources and tools, and it defines three roles, the host application that initiates connections, the clients inside that host, and the servers that provide context and capabilities, all exchanging JSON-RPC 2.0 messages.[^2] Practically, that means the RMA service team writes one MCP server, the returns logic stays in their codebase under their tests, and the agent host treats it as a dependency rather than as a rewrite.
+
+![The tool layer as a seam: the agent host reaches an MCP server owned by the RMA service team through MCP clients, exposing six tools across SAP order data, published policy, the price service and returns logic, with refund issuance and account administration absent from the inventory](</diagrams/capstone-ii-implement-the-mvp/2-tool-layer-seam.png>)
 
 Three decisions in the tool layer do most of the work.
 
@@ -89,6 +93,8 @@ Four budgets make that loop safe to run unattended, and all four are boringly co
 | Per-tool timeout | 3 seconds, with 2 retries and jitter on read tools | One slow downstream system taking the whole case down |
 | Write retries | 0 without an idempotency key, 2 with one | A duplicated return authorization after a network timeout |
 
+![The agent loop drawn as a state machine, classify the case, gather evidence, compose, then check the autonomy table and answer, draft or hand over, with the four budgets attached where they fire and the idempotency key rule underneath](</diagrams/capstone-ii-implement-the-mvp/3-loop-and-budgets.png>)
+
 Then three pieces of plain engineering that have nothing to do with models.
 
 **Idempotency on every write.** The key is the case identifier plus the line item plus an action version, and the server stores the key alongside the result for 24 hours. A retry with the same key returns the stored result. Without this, the retry policy in the table above is a liability rather than a safety net.
@@ -119,6 +125,8 @@ The kill switch gets three levels, each with a name, an owner and a rehearsed dr
 | Global flag | All agent traffic, falling back to the pre-agent queue | The program owner |
 
 A kill switch nobody has flipped is a hope. Run the drill on day eight, in staging, with the support lead holding the mouse, and time the fallback. If the queue does not resume in under two minutes, the missing piece is a queue, not a switch. The workflow flag is the one an on-call support lead reaches for when a single path is hurting and the rest of the traffic is fine.
+
+![Two controls side by side: the five step approval gate that turns a draft into an authorized action with a single use token and an append only ledger, and the three level kill switch, tool flag, workflow flag and global flag, each with its owner](</diagrams/capstone-ii-implement-the-mvp/4-gate-and-kill-switch.png>)
 
 ## The ten day implementation plan
 
