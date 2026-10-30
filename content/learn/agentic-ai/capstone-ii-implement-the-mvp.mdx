@@ -1,0 +1,194 @@
+---
+title: "Lesson 85: Capstone II: Implement the MVP"
+slug: capstone-ii-implement-the-mvp
+series: "agentic-ai"
+lesson: 85
+excerpt: "The Meridian design is approved, so now we cut the smallest production slice: the tool layer over MCP, four loop budgets, idempotency on every write, the token-based approval gate, the three level kill switch, and a ten day plan to first traffic."
+date: "October 29, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Capstone, MVP, Model Context Protocol, Tool Design, Agentic AI]
+---
+
+# Lesson 85: Capstone II: Implement the MVP
+
+Meridian's design cleared review in lesson 84 with three commitments attached: a read-only first slice, a 250 dollar refund ceiling that no agent action can cross, and a stopping rule that reads adoption monthly. This lesson builds the smallest thing that honors all three. Not a prototype, not a demo for the steering committee. A slice that can take real customer cases from one region with a rollback you have rehearsed.
+
+The temptation at this point in a program is to build the impressive version. The impressive version has three subagents talking to each other, a memory layer, and a plan-and-execute loop. It also has four times the failure surface of the slice below and takes eleven weeks instead of two. Our own experience shipping this kind of work, and every vendor guide we have read on the subject, points the same direction: build the simplest thing that solves the case class, then add complexity only when a measurement demands it.[^1]
+
+## The MVP slice
+
+The slice is chosen by three filters: does it carry real volume, can it be read-only, and can a human verify the output cheaply.
+
+| Candidate slice | Volume | Effort | Write path | First slice? |
+|---|---|---|---|---|
+| Order status and tracking | 4,080 cases a month | 7 min each | None | Yes |
+| Pricing and availability from the published list | 2,520 cases a month | 22 min each | None, margin floor read only | Yes |
+| Returns eligibility plus a drafted authorization | 2,760 cases a month | 26 min each | Draft only, human click | Yes, in shadow first |
+| Live return authorization create | same | same | Yes | No, phase two behind a flag |
+| Refund issuance | 1,320 cases a month | 34 min each | Yes, money moves | No, not in this release |
+| Account administration | 1,320 cases a month | 12 min each | Yes, access changes | No, named non-goal |
+
+So the MVP answers order status and pricing, and it drafts return authorizations for a human to approve. It never calls a write tool without an approval token, and the refund tool is not in the agent's inventory at all. That last point is worth restating in code review terms: the MVP cannot refund a customer even if the model, the prompt and the retrieval layer all fail simultaneously in the most creative way available.
+
+![Decision matrix showing six candidate slices, order status, pricing, drafted returns, live return authorization, refund issuance and account administration, passing or failing three filters: real volume, read-only, and cheap human verification by a person](</diagrams/capstone-ii-implement-the-mvp/1-slice-triage.png>)
+
+## Define the terms
+
+**Walking skeleton.** The thinnest end-to-end path that touches every layer of the real system: real tools, real model calls, real logging, real flag, with almost no functionality inside. It is what makes week two estimation honest.
+
+**Tool contract.** The machine-readable definition of a tool: name, description, input schema, output schema, error cases, timeout, and whether it writes. Everything the agent knows about a system comes from this document.
+
+**Idempotency key.** A caller-supplied identifier that lets a write be retried safely, because the server recognizes the key and returns the original result instead of performing the action twice.
+
+**Structured output.** A response constrained to a schema rather than free text, so the calling code can branch on fields instead of parsing sentences. Every tool in this slice returns a status field with a fixed set of values.
+
+**Shadow mode.** The agent drafts, but the draft goes nowhere near the customer. An analyst works the case normally and the system records the draft alongside the human's actual reply so the two can be compared.
+
+**Approval gate.** The interface where a human turns a draft into an authorized action. It mints a single-use token bound to the case, the tool and the amount.
+
+**Feature flag and kill switch.** Two different things that get confused constantly. A flag decides who sees the new path. A kill switch is the switch you flip when the new path is hurting, and it must exist at three levels: one tool, one workflow, everything.
+
+## Build the tool layer before the agent
+
+The most common sequence error in agent implementation is building the loop first and the tools second. That order produces a demo that works on three hand-picked cases and collapses on the fourth, because the failure is in the tool contract rather than in the reasoning.
+
+Start at the seam. Meridian's internal systems do not need to know an agent exists, so the seam is a set of servers that expose capabilities. The Model Context Protocol is a reasonable choice for that seam: it is an open protocol for connecting LLM applications to external data sources and tools, and it defines three roles, the host application that initiates connections, the clients inside that host, and the servers that provide context and capabilities, all exchanging JSON-RPC 2.0 messages.[^2] Practically, that means the RMA service team writes one MCP server, the returns logic stays in their codebase under their tests, and the agent host treats it as a dependency rather than as a rewrite.
+
+![The tool layer as a seam: the agent host reaches an MCP server owned by the RMA service team through MCP clients, exposing six tools across SAP order data, published policy, the price service and returns logic, with refund issuance and account administration absent from the inventory](</diagrams/capstone-ii-implement-the-mvp/2-tool-layer-seam.png>)
+
+Three decisions in the tool layer do most of the work.
+
+**One tool per action, never one tool per system.** A tool called `query_sap` with a free-form parameter is not a tool. It is remote code execution with extra steps, and it is how an agent ends up reading a table nobody scoped it for. The MVP exposes `get_order` and `get_shipment`, each taking an order identifier and returning a fixed shape, plus `search_policy`, `get_price` and `check_return_eligibility`.
+
+**Poka-yoke the arguments.** Anthropic's guidance on the agent-computer interface makes the argument better than we can: treat the interface with the same investment you would put into a human interface, and change the parameters until mistakes are hard to make.[^1] In the MVP that means identifiers are required and validated against the owning system, regions come from a fixed list rather than free text, and the tool that reads price returns the margin floor as a field rather than leaving the agent to reason about whether a discount is acceptable.
+
+**Return status, not exceptions.** Every tool returns one of four status values, `ok`, `partial`, `not_found` or `error`, alongside its payload. An agent that receives a structured status can choose a next step; an agent that receives a stack trace in a string eventually learns to apologize in a loop. Tool use in practice is a structured round trip: the model emits a call, your code runs it, and the result goes back as a block the model can read.[^3] The more field-like that round trip is, the less the model has to infer.
+
+Test the tools before the agent exists. Forty real inputs per tool, including partial records, malformed order numbers, an order belonging to a different customer, and a case where the warehouse row is two hours stale. This is the step teams skip, and it is the one that determines whether week two is spent on retrieval quality or on debugging a schema mismatch at 6pm.
+
+### Tool contracts that survive review
+
+The contract for `get_price` in the MVP, written the way the team writes them:
+
+1. **Name and mode.** `get_price`, read.
+2. **Input schema.** Customer identifier, part number, quantity, region. All required, all validated against the price list, no optional free-text fields.
+3. **Output schema.** Unit price, currency, contract identifier, list price, margin floor, effective date of the price, and a status.
+4. **Error cases.** Unknown part returns `not_found` with the closest three part numbers. A quantity below the minimum order quantity returns `partial` with the rule that applies.
+5. **Freshness.** The price service is read through, no caching beyond 60 seconds in-process.
+6. **Owner.** Revenue operations, paged on a 5xx rate above 2 percent over fifteen minutes.
+
+The freshness line and the owner line are the two that turn a contract into an operational object. Without the first, the agent cannot tell a customer how current its answer is. Without the second, nobody fixes it.
+
+## Make the loop boring
+
+The agent loop in the MVP is a state machine wearing a language model as a component. The states are fixed: classify the case, gather evidence, compose, check the autonomy table, then either answer, draft, or hand over. What varies is the content, not the shape.
+
+Four budgets make that loop safe to run unattended, and all four are boringly concrete:
+
+| Budget | Value | What it prevents |
+|---|---|---|
+| Tool calls per case | 8 maximum, then the case is handed to a human with the partial work attached | A loop that keeps searching for evidence that is not there |
+| Wall clock per case | 45 seconds for the first turn, 12 seconds for each turn after | Cases that hold a worker for minutes while the customer waits |
+| Per-tool timeout | 3 seconds, with 2 retries and jitter on read tools | One slow downstream system taking the whole case down |
+| Write retries | 0 without an idempotency key, 2 with one | A duplicated return authorization after a network timeout |
+
+![The agent loop drawn as a state machine, classify the case, gather evidence, compose, then check the autonomy table and answer, draft or hand over, with the four budgets attached where they fire and the idempotency key rule underneath](</diagrams/capstone-ii-implement-the-mvp/3-loop-and-budgets.png>)
+
+Then three pieces of plain engineering that have nothing to do with models.
+
+**Idempotency on every write.** The key is the case identifier plus the line item plus an action version, and the server stores the key alongside the result for 24 hours. A retry with the same key returns the stored result. Without this, the retry policy in the table above is a liability rather than a safety net.
+
+**Config from the environment, one behavior per release.** The Twelve-Factor guidance on configuration and on dev and prod parity is old and still correct, and agent systems violate it more than ordinary services do because prompts get edited in a console.[^4] In the MVP, prompts, model identifiers and thresholds live in version control and are injected as configuration. The same container image runs in staging and production. A prompt change is a release with a diff, not an afternoon of live editing.
+
+**Logs as event streams.** Every turn emits a structured event with the case identifier, the state, the tool called, the arguments, the status, the token counts and the latency. Events go to stdout and are collected centrally. Nothing writes case data to a local file on a worker that gets recycled, and nothing important lives only in a console.
+
+Disposability follows from the same design. Workers start in under a second and can be terminated at any point, because case state lives in Postgres and not in the process. That property is what lets you deploy during business hours and what makes a stuck worker expensive to nobody.
+
+Transparency deserves its own line, because it changes the product. Anthropic's third principle for agent design is to make the planning steps explicit rather than hidden.[^1] In the MVP that means the analyst sees the evidence packet with its sources and timestamps before they see the draft, and the customer sees a short statement of what the automated part did. Both audiences can then disagree with something specific instead of distrusting the whole thing.
+
+## The approval gate and the kill switch
+
+The approval gate is where a design becomes a control. It has four properties in the MVP, and each one closes a specific failure.
+
+- **Token, not permission.** Clicking approve mints a single-use token bound to the case, the tool and the amount, with a 30 minute expiry. The agent cannot mint one, which is the whole point.
+- **Ledger, append only.** Every minted token, every tool call that consumed one, and every resulting object identifier is written to an append-only ledger row. A refund dispute is then a query rather than an archaeology project.
+- **Draft with the reasons attached.** The approval view shows the evidence, the policy line that applies, and the one sentence the agent would send. A one-click approval with no visible reasoning trains people to click.
+- **Shadow mode before live, with a comparison.** For the first five business days the draft is recorded next to what the analyst actually sent, and the team reviews agreement rates and the top ten edits. This is not a metric for a slide. It is the list of things to fix before anyone approves a live action.
+
+The kill switch gets three levels, each with a name, an owner and a rehearsed drill:
+
+| Level | What it stops | Who can flip it |
+|---|---|---|
+| Tool flag | One tool, such as `create_return_authorization` | The on-call engineer |
+| Workflow flag | The returns draft path, leaving order status running | The support lead on shift |
+| Global flag | All agent traffic, falling back to the pre-agent queue | The program owner |
+
+A kill switch nobody has flipped is a hope. Run the drill on day eight, in staging, with the support lead holding the mouse, and time the fallback. If the queue does not resume in under two minutes, the missing piece is a queue, not a switch. The workflow flag is the one an on-call support lead reaches for when a single path is hurting and the rest of the traffic is fine.
+
+![Two controls side by side: the five step approval gate that turns a draft into an authorized action with a single use token and an append only ledger, and the three level kill switch, tool flag, workflow flag and global flag, each with its owner](</diagrams/capstone-ii-implement-the-mvp/4-gate-and-kill-switch.png>)
+
+## The ten day implementation plan
+
+Ten working days for two engineers, assuming the designs above and a reviewed autonomy table.
+
+1. **Day 1.** Freeze the slice, write the six tool contracts, stand up the eval suite skeleton with the case classes and the metric definitions. Nothing gets built until the contracts exist.
+2. **Day 2.** Build the MCP server with the three read tools against SAP, the portal API and the warehouse. Contract tests with the forty-input set per tool.
+3. **Day 3.** Build the policy retrieval index. Forty golden questions with expected source documents, including five where the correct behavior is to say the policy is silent.
+4. **Day 4.** Build the state machine and the model calls with schema-constrained output. Wire the four budgets and the structured event log.
+5. **Day 5.** Wire the order status chain as a deterministic path behind the same interface as the agent, so the router can send work to whichever is cheaper.
+6. **Day 6.** Add the pricing path. Handle the margin floor as a returned field and test three cases where the answer must be a refusal to quote.
+7. **Day 7.** Add the returns eligibility read and draft generation. Turn shadow mode on for two analysts and start recording comparisons.
+8. **Day 8.** Build the approval gate, the token minting and the ledger. Rehearse the three kill switches in staging and time the fallback.
+9. **Day 9.** Review the shadow comparisons. Compute agreement, read the top ten edits, and fix the three highest-frequency ones. Rewrite the retrieval for any policy question the analysts answered from a document the agent did not find.
+10. **Day 10.** Turn the flag on for one region at 5 percent of eligible cases, with the on-call engineer watching the event stream and the support lead able to flip the workflow flag without asking anyone.
+
+Day 9 is the day that decides whether the following month is quiet. A team that skips it ships the demo they built on day five and spends three weeks discovering what the analysts could have told them in an afternoon.
+
+## Exam traps
+
+**A generic tool.** One tool that runs arbitrary queries is not least privilege, it is unbounded access with a friendly name.
+
+**Writes before reads are trusted.** If the read path has not been through shadow mode, the draft quality is unknown, and a human approving unknown drafts is a rubber stamp with extra steps.
+
+**A loop with no iteration cap.** Models will keep searching. The cap of eight tool calls is not a performance tuning knob, it is the difference between a slow case and a runaway bill.
+
+**Retrying a write without an idempotency key.** The network will fail exactly once, at the worst moment, and the customer will receive two return labels.
+
+**Prompt edits outside version control.** A prompt changed in a console is a production change with no diff, no review and no way to roll back.
+
+**A flag with no kill switch.** Rollout control is not rollback control. Build both, and know which is which.
+
+**Metrics invented after launch.** Define the case classes and the metric definitions on day one, or the first review will argue about what "adoption" means instead of what to fix.
+
+## Try it
+
+Take one workflow from your own operation and build the walking skeleton in five days.
+
+1. Write the tool contracts for the two or three tools the slice needs, including output status values and freshness. Include one contract where the correct output is `not_found`.
+2. Stand up the tool layer as a separate server with its own tests and its own owner, and run the forty-input set including partial and malformed inputs.
+3. Build the loop as an explicit state machine with the iteration cap, the wall clock budget and the per-tool timeout set to the values in the table above.
+4. Turn shadow mode on for two days. Compare drafts to what humans sent and write down the top ten differences.
+5. Build the approval gate with single-use tokens and an append-only ledger, then rehearse the kill switch at all three levels and time the fallback to the manual path.
+6. Ship to 5 percent of traffic in one region on a Friday, with the engineer who built it watching the event stream.
+
+Step 6 is deliberate. A Friday launch with the builder watching is a cheaper education than a Monday launch with the builder in a planning meeting.
+
+## Summary
+
+- The MVP is the smallest slice that carries real volume, stays read-only, and can be verified cheaply by a human. Meridian's was order status, pricing, and drafted returns.
+- Build the tool layer first. One tool per action, poka-yoke arguments, and status fields instead of exceptions.
+- Every write takes an idempotency key, and no write retries without one.
+- Four budgets make an agent loop safe: tool calls per case, wall clock per case, per-tool timeout, write retries.
+- Configuration and prompts live in version control and ship as releases. Case state lives in Postgres so workers stay disposable.
+- The approval gate mints single-use tokens and writes an append-only ledger, and shadow mode runs before any live action.
+- A feature flag controls who sees the new path. A kill switch controls whether the new path exists, at tool, workflow and global levels, and it gets rehearsed.
+
+## What's next
+
+Lesson 86 closes the capstone with Capstone III: evaluate, harden, deploy, monitor. It builds the eval suite that grows from real production failures, hardens the boundaries against the risks that actually bite agent systems, moves the rollout through canary stages with an error budget, and sets up the traces, dashboards and weekly transcript read that tell you the agent is degrading before a customer does.
+
+[^1]: Anthropic. [Building effective agents](https://www.anthropic.com/research/building-effective-agents). Recommends finding the simplest solution possible and increasing complexity only when needed, and sets out three principles for agent design including simplicity, showing the agent's planning steps, and investing in the agent-computer interface through tool documentation and testing.
+[^2]: Model Context Protocol. [Specification, revision 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28). Defines MCP as an open protocol for connecting LLM applications with external data sources and tools, describing the host, client and server roles and the use of JSON-RPC 2.0 messages.
+[^3]: Anthropic. [Tool use with Claude](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview). Describes tool use, also called function calling, as the model returning a structured call that the application runs for client tools, with tools passed in as definitions carrying an input schema.
+[^4]: The Twelve-Factor App. [The Twelve-Factor App](https://12factor.net/). Covers configuration stored in the environment, dev and prod parity, disposability through fast startup and graceful shutdown, and treating logs as event streams.
