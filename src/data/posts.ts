@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-dual-write-outbox-2026",
+    "title": "Your Save Committed. Your Event Never Arrived.",
+    "excerpt": "Salesforce publishes a platform event only when the transaction commits. That is atomicity, not delivery. The dual write, and what an outbox still has to do.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 30, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Platform Events",
+      "Integration",
+      "Apex",
+      "Flow",
+      "Architecture"
+    ],
+    "bannerImage": "/banners/salesforce-dual-write-outbox-2026.webp",
+    "ogImage": "/banners/salesforce-dual-write-outbox-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "container-queries-design-system-2026",
     "title": "A Component Should Know Its Own Width",
     "excerpt": "Responsive design spent fifteen years asking the browser window how wide it is. A component can only answer one question: how much space did I actually get.",

@@ -1,0 +1,109 @@
+---
+title: "Your Save Committed. Your Event Never Arrived."
+slug: salesforce-dual-write-outbox-2026
+excerpt: "Salesforce publishes a platform event only when the transaction commits. That is atomicity, not delivery. The dual write, and what an outbox still has to do."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 30, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Salesforce, Platform Events, Integration, Apex, Flow, Architecture]
+bannerImage: "/banners/salesforce-dual-write-outbox-2026.webp"
+ogImage: "/banners/salesforce-dual-write-outbox-2026-og.jpg"
+---
+
+An Apex trigger runs on Opportunity after update. The record closes as won. Part of that same execution posts the order to the ERP. Two writes, one user action. Now ask what happens when the second one fails.
+
+There are four outcomes, and only one of them is safe. Both writes succeed, which is fine. The record saves and the callout times out, so the ERP never hears about a deal Salesforce thinks is booked. The callout succeeds and the transaction rolls back, so the ERP holds an order that does not exist. And both fail, which is the honest one, because at least nobody is confused. Three of those four outcomes put your two systems into disagreement, and one of them is silent. Nobody gets a stack trace for the order that was never placed.
+
+That is the dual write: one business event landing in two places, on two different transaction managers, with no shared coordinator. It is the most common integration defect in a Salesforce org, and it hides well because most of the time it works.
+
+![Four outcomes of a dual write drawn as a two by two matrix, with the Salesforce save on one axis and the external system call on the other: both succeed is the safe path, save commits while the call times out leaves an unplaced order, the call succeeds while the transaction rolls back leaves an orphan order in the ERP, and both fail is visible and recoverable, so only one of the four cells is genuinely safe](</diagrams/salesforce-dual-write-outbox-2026/1-dual-write-outcomes.png>)
+
+The standard answer in distributed systems is the transactional outbox: write the business row and the outgoing message in the same database transaction, then let a separate relay process read the message table and publish it. The message is guaranteed to go out if and only if the transaction commits, and no two-phase commit is required.[^1] On Salesforce the reflex is to reach for a platform event with Publish After Commit and call the problem solved. Sometimes that is right. More often it solves one half of the problem and leaves the half that actually loses data.
+
+## Publish After Commit is real, and it covers the first half
+
+A platform event has a publish behavior, and it decides whether the event respects your transaction boundary. With Publish Immediately, the event goes out when the publish call executes, whether or not the transaction succeeds, and the publishing process is decoupled from the subscription process as a result.[^2][^3] With Publish After Commit, the event message is published only after the transaction commits successfully, and it is not published at all if the transaction fails. Salesforce's field reference lists Publish Immediately as the default when you define the event in Setup, and notes that changing the behavior can take up to five minutes to take effect.[^3]
+
+That difference matters most in the case that bites teams first. An after-insert trigger publishes an event, a Flow subscriber wakes up and queries the record the trigger just created. With Publish Immediately, the subscriber can arrive before the record is committed, so the query returns nothing and the Flow takes the "no record found" branch. With Publish After Commit, the message is published once the transaction finishes, and the subscriber finds the record.[^2]
+
+![A transaction boundary diagram showing two publish behaviors around the same commit line: with Publish Immediately the event leaves the org before the commit and a subscriber that queries the new record can arrive too early and find nothing, while with Publish After Commit the event leaves only after the commit succeeds and the same query finds the record](</diagrams/salesforce-dual-write-outbox-2026/2-commit-boundary.png>)
+
+After Commit also behaves more like a real database write in the API. When you publish through the API with a Publish After Commit event, the `allOrNone` header applies to the initial enqueuing: if one event in the call fails to enqueue, none of them are enqueued and none are published. And unlike the immediate behavior, published event messages can be rolled back with the Apex `setSavepoint()` and `rollback()` methods.[^4] That is as close to a transactional outbox as the platform gets for free.
+
+The cost is bookkeeping. Each publish call against an After Commit event counts as one DML statement against the Apex DML limit. Against an Immediately event, each call counts against a separate limit of 150 `EventBus.publish()` calls.[^5] Neither number is a reason to avoid the pattern, but both are the sort of limit you meet at scale rather than in a sandbox.
+
+## The half it does not cover is the half that loses data
+
+Here is the sentence that should be pinned above every event-driven design session. Salesforce stores platform events in an industry-standard distributed system, and a distributed system does not carry the same semantics or guarantees as a transactional database. The platform therefore cannot give you a synchronous response for a publish request: events are queued and buffered, and Salesforce attempts to publish them asynchronously. In rare cases the event message is not persisted during the initial or subsequent attempts, and when that happens the events are not delivered to subscribers and they are not recoverable.[^6]
+
+Read the last clause again. Not recoverable. There is no retry queue you can drain and no admin console where the missing message is waiting. The transaction committed, the record is correct, the publish call returned a result, and the event is gone.
+
+The publish call's own return value is a trap for exactly this reason. `EventBus.publish()` returns a `Database.SaveResult`, and without an Apex publish callback that result is the intermediate queuing outcome, not the final one.[^5] A success there means "accepted for publishing," not "published." Teams that log the `SaveResult` as confirmation build a monitoring story on top of a receipt that never promised what it appears to promise.
+
+So Publish After Commit gives you atomicity with the record. It does not give you durability of the event, uniqueness of the event, or order across events. Those are four separate guarantees, and it is worth drawing the ladder rather than treating "we use platform events" as one decision.
+
+![The delivery guarantee ladder with four rungs and what each costs: atomicity with the record comes free from Publish After Commit, durability is partial because an unpersisted event is not recoverable, uniqueness is absent because publishing is at-least-once and duplicates carry the same EventUuid with a different ReplayId, and ordering holds within a single publish call but not across separate requests](</diagrams/salesforce-dual-write-outbox-2026/3-guarantee-ladder.png>)
+
+## At-least-once means your subscriber is the deduplication layer
+
+Asynchronous platform event publishing uses the at-least-once model, not exactly-once. If the system hits an internal error while publishing a queued event it retries, and in rare cases where it does not receive a publish acknowledgment the same event is published more than once. Salesforce defines a duplicate precisely: the same `EventUuid` value, a different `ReplayId` value, and the same payload. The documented remedy is deduplication logic in the subscriber keyed on `EventUuid`.[^6]
+
+That is not a corner case you can defer. `EventUuid` is the field that is always unique; `ReplayId` refers to position in the stream, is not guaranteed to be contiguous, and is not guaranteed to be unique across maintenance activities such as an org migration.[^7] If your subscriber treats the replay ID as the message identity, it will misbehave on the day Salesforce does maintenance rather than on the day you wrote the code.
+
+Idempotency also has a subtler source on this platform. When a platform event trigger runs parallel subscriptions, and that trigger is later deactivated or its `PlatformEventSubscriberConfig` is deleted, the original subscription resumes from the earliest replay ID that any parallel subscription last processed, which means some events are processed more than once.[^8] The failure mode of an aggressive scaling optimization is duplicate work, not lost work. Design the subscriber so that is survivable: an upsert on an external ID, a processed-events table keyed on `EventUuid`, or a state check that makes a second application of the same message a no-op.
+
+## Seventy-two hours is your real durability budget
+
+Retention is the number most teams get wrong, because it is not the same for every event type. High-volume platform events, which is what you get when you define an event in a modern API version, are stored for 72 hours. Legacy standard-volume events defined before Spring '19 are stored for 24 hours. Change Data Capture events share the 72-hour window. Skill and challenge the "3 days" and "1 day" distinction against the guide rather than your memory of the last project.[^4][^9]
+
+Inside that window, the replay ID is a bookmark and the recovery story is genuinely good. A subscriber that disconnects, whether because of a network fault or because it tripped the daily delivery allocation, can resume from where it left off and receive the events it missed, because the events published during the outage were stored. The recommendation is to subscribe with the new-events-only preset by default and to resume with a saved replay ID, using the retrieve-everything preset sparingly because subscribing with it against a large backlog can slow performance.[^9][^10] Pub/Sub API also offers a managed subscribe mode where the server commits the replay ID of the last processed event, so the client does not have to keep its own store.[^11]
+
+The budget is the part that does not forgive. A subscriber that is down for 40 hours resumes and loses nothing. A subscriber that is down for 90 hours comes back to an empty buffer: everything published and purged inside the window is gone, and because events are not delivered and not recoverable, there is no second copy anywhere. The question to ask about every external subscriber is not "does it have retry logic," it is "if this consumer is offline for three days, what tells us which events we lost, and what republishes them." Retention is a durability budget, and it is spent whether or not you were watching.
+
+![A retention timeline showing the 72-hour event buffer with three subscribers: one that disconnects for 40 hours and resumes from its saved replay ID with no loss, one that trips the delivery allocation and resumes after usage decays, and one that is offline for 90 hours and returns to a purged buffer with the lost events unrecoverable because no other copy exists](</diagrams/salesforce-dual-write-outbox-2026/4-retention-window.png>)
+
+## When the platform event is not enough, and what to build instead
+
+The outbox pattern exists because a message broker and a database cannot be updated atomically without two-phase commit, and the fix is to make the message part of the database write. Structuring it as a table plus a relay, the relay can publish a message more than once (it can crash after publishing but before recording that it did), which is why the consumer has to be idempotent.[^1] Notice that the pattern's own author treats duplicate delivery as normal and pushes idempotency downstream. That is exactly the shape Salesforce gives you, minus the durable table.
+
+So the decision is not "platform events or outbox." It is which of the three failure modes you are exposed to, and the answer differs by seam. The same layer map that [organizes the rest of a modern Salesforce stack](/field-notes/salesforce-integration-seams-2026) applies here: the seam decides the pattern.
+
+- **In-org subscribers.** An Apex trigger or a Flow that reacts to a record change in the same org can live fine on Publish After Commit. The event is the transport, the transaction already gave you atomicity, and an org-level consumer that misses an event is usually recoverable from the record itself.
+- **A single external system that must not miss anything.** This is where you want the durable outbox: a custom object such as `Outbound_Message__c` with a status, a payload, a target, and an idempotency key, written in the same transaction as the business record. A scheduled or queueable relay reads open messages, calls the external system, and marks them sent. Now the record of what needs to go out survives a failed callout, a subscriber outage, an org maintenance window, and a weekend, because it is data, not an event in a buffer with a 72-hour life.
+- **External systems that can tolerate a replay.** Point Pub/Sub API at them, save the replay ID, deduplicate on `EventUuid`, and treat the 72-hour window as the contract it is.
+
+![A decision tree routing three integration seams to three implementations: in-org subscribers use Publish After Commit because the record itself is the recovery path, a single external system that must not miss an event gets a durable outbox object with a relay and an idempotency key, and external systems that can tolerate replay use Pub/Sub API with a saved replay ID and deduplication on EventUuid](</diagrams/salesforce-dual-write-outbox-2026/5-outbox-decision.png>)
+
+The hybrid is worth naming because it is what most mature orgs end up running. Use the platform event as the transport and the outbox object as the ledger. The relay can be triggered by the event rather than polling, so the common case stays fast, while the message row remains the source of truth for reconciliation. A nightly job compares outbox rows against the external system's acknowledgments, and anything still open past a threshold is a real ticket instead of a silent gap. That reconciliation job is the same discipline as any [recovery layer you would build for an org that fails at 2 a.m.](/field-notes/salesforce-error-recovery-2026)
+
+## The build checklist
+
+1. **Decide the publish behavior per event, on purpose.** Check the behavior on every event definition rather than assuming it. Publish Immediately is the Setup default and it will happily publish on a transaction that later rolls back.[^3]
+2. **Stop reading `EventBus.publish()` success as delivery.** Use the Apex publish callback if you need the final result, and log the `EventUuid` values from the `SaveResult` so you can match them against what subscribers actually received.[^5]
+3. **Deduplicate on `EventUuid`, never on `ReplayId`.** Replay IDs are positions, not identities, and they are not stable across an org migration.[^7]
+4. **Persist the replay ID per subscriber and rehearse the resume.** A bookmark you have never used is not a recovery plan. Disconnect a subscriber in a sandbox for an hour and prove it catches up.[^9]
+5. **Write down your retention budget and your alert threshold.** 72 hours for high-volume events and CDC, 24 hours for legacy standard-volume events, with purging that can start late but is not guaranteed to.[^4] Alert well before the window closes, not after, and wire that alert into the same [observability stack](/field-notes/salesforce-observability-2026) that watches the rest of your integrations.
+6. **Watch the delivery allocation, because exceeding it disconnects the subscriber.** The default 24-hour delivery allocation is 50,000 in Performance and Unlimited, 25,000 in Enterprise, and 10,000 in Developer, it is shared between platform events and Change Data Capture, and it is counted per subscribed client, including event relays. Non-API subscribers such as Apex triggers and flows do not count against it.[^10]
+7. **For any external seam that cannot lose a message, build the outbox object.** Payload, target, status, idempotency key, attempt count, and a reconciliation job. The relay may deliver twice, so the receiver has to be idempotent by design.[^1]
+8. **Note the ordering rule before you rely on it.** Order is guaranteed for events published within a single call, and it is not guaranteed across separate requests, because different requests can be processed by different application servers.[^4] If sequence matters across events, put a sequence number in the payload and make the consumer responsible for it.
+
+There is a reason this defect survives code review. The transaction that saves the record is the one everybody looks at, and on the happy path it is flawless. The failure lives in the gap between a commit and a delivery that the platform never promised in the first place. Per-transaction limits are a design discipline, and event delivery deserves the same treatment: write down what the platform guarantees, write down what it does not, and put something durable in the space between.
+
+Salesforce has spent two release cycles pushing teams onto an event fabric, and it is the right direction.[^12] The work that remains is the part no platform can do for you, which is deciding which of your messages are allowed to disappear and which ones need a row in a table with an owner. If the answer is "none of them," the outbox object is not architecture astronautics. It is the difference between a system that loses messages quietly and one that fails loudly enough to fix.
+
+[^1]: Chris Richardson, "Pattern: Transactional outbox," Microservices.io, [microservices.io](https://microservices.io/patterns/data/transactional-outbox.html)
+[^2]: Salesforce, "Decoupled Publishing and Subscription," Platform Events Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-considerations-decoupled-processes.html)
+[^3]: Salesforce, "Platform Event Fields," Platform Events Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-define-ui.html)
+[^4]: Salesforce, "Enterprise Messaging Platform Events," Platform Events Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-intro-emp.html)
+[^5]: Salesforce, "Publish Event Messages with Apex," Platform Events Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-publish-apex.html)
+[^6]: Salesforce, "Considerations for Defining and Publishing Platform Events," Platform Events Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-considerations.html)
+[^7]: Salesforce, "Platform Event Fields," Platform Events Developer Guide, ReplayId and EventUuid system fields, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-define-ui.html)
+[^8]: Salesforce, "Parallel Subscriptions Considerations," Platform Events Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-ps-considerations.html)
+[^9]: Salesforce, "Message Durability," Streaming API Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-streaming/guide/using-streaming-api-durability.html)
+[^10]: Salesforce, "Default Platform Event Allocations for Event Publishing and Delivery," Platform Events Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/platform-events/guide/platform-events-limits-default.html)
+[^11]: Salesforce, "Event Message Durability," Pub/Sub API Developer Guide, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/pub-sub-api/guide/event-message-durability.html)
+[^12]: Salesforce Architects, "Using the Right Tools and Patterns for Event-Driven Architectures," Platform Decision Guides, [architect.salesforce.com](https://architect.salesforce.com/docs/architect/decision-guides/guide/event-driven.html)
