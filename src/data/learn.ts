@@ -1500,7 +1500,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "The Meridian design is approved, so now we cut the smallest production slice: the tool layer over MCP, four loop budgets, idempotency on every write, the token-based approval gate, the three level kill switch, and a ten day plan to first traffic.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "13 min read",
         "tags": [
           "Capstone",
           "MVP",
@@ -1518,7 +1518,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "The MVP is live at 5 percent traffic. This lesson turns a working slice into a system you can trust: an eval suite grown from production failures, hardening against the OWASP risk list, a canary rollout on an error budget, and traces that catch quality loss.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "13 min read",
         "tags": [
           "Capstone",
           "Evals",
@@ -1536,7 +1536,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Lesson 86 left one agent accountable for one case class. This lesson stretches that discipline across systems that run themselves: where to hold a workflow deterministic, how a pipeline survives a crash, and the repair ladder a self-healing loop climbs.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "14 min read",
         "tags": [
           "Agentic Workflows",
           "Autonomous Pipelines",
@@ -1554,7 +1554,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Lesson 87 ended with a boundary you drew yourself. It covers the boundaries other people draw: which protocol carries tools, which carries agent to agent work, how agents find each other, and how a signed mandate lets an agent spend inside limits you set.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "13 min read",
+        "readTime": "15 min read",
         "tags": [
           "Agent Economies",
           "Interoperability",
@@ -1590,7 +1590,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Lesson 89 handed you a calendar. This is the inventory you build against it: ninety lessons sorted onto four shelves, the five decisions that survived every model release, an afternoon audit of a live system, and the rule for choosing your two deep areas.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "14 min read",
+        "readTime": "17 min read",
         "tags": [
           "Final Synthesis",
           "AI Architect",
@@ -2243,7 +2243,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Lesson 37 gave you the instruments. This lesson puts them inside a business that grew AI past the pilot stage and stayed healthy. It walks one 3,400-person logistics company from nine stalled pilots and 12 percent weekly active use to a program at scale, names the four moves that made the difference, and is honest about the two pilots that had to be killed. Alongside it sits a real published case from a bank that runs AI inside one of the most regulated environments there is, plus the survey evidence on what separates the small group of high performers from everyone else.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "11 min read",
         "tags": [
           "Learn",
           "AI",
@@ -2277,7 +2277,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "This is the last lesson of the course, and it is the one you are meant to walk away holding. It takes everything the previous thirty-nine lessons built and assembles it into a single document: a six-section AI adoption plan with a scope, an operating model, a policy and control set, a portfolio with dates, a scorecard with written definitions, and a review calendar. You get the six sections with a realistic page budget, a four-week build schedule, a filled-in one-page example for a 600-person firm, and the twelve checks a reviewer will run against your plan before believing it.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "11 min read",
         "tags": [
           "Learn",
           "AI",
@@ -3733,7 +3733,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Failures usually surface at the seams between integration, security, data and lifecycle. This lesson names the seams to check, the decisions in each thread that constrain the others, and one worked pass where all four had to agree.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "15 min read",
         "tags": [
           "Salesforce",
           "Architecture",
@@ -3750,7 +3750,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "An AI platform is an integration, security, data and lifecycle problem with new content in each thread. This lesson follows one request through retrieval, model gateway, tool call and trace, and names the trust, cost and control decisions at every hop.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "13 min read",
         "tags": [
           "Salesforce",
           "Architecture",
@@ -3767,7 +3767,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "A review pass over the three domains that carry the most weight in Review Board scenarios: integration, security and data. Objective by objective, with the weak answer next to the scoring answer, the traps that cost points, and a drill you can score.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "11 min read",
         "tags": [
           "Salesforce",
           "Architecture",
@@ -3784,7 +3784,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "The Review Board is gated by two credentials, and each is earned exam by exam. This lesson reads the published exam guides as scope documents: the domain weights, the scenario stems, the declarative boundary the Application Architect stack tests, and the identity, data and lifecycle domains the System Architect stack tests.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "15 min read",
         "tags": [
           "Salesforce",
           "Architecture",
@@ -3801,7 +3801,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "This lesson rehearses the Review Board performance: the four artifacts you are given, how to split 180 minutes, how to read a scenario under the clock, how to structure 45 minutes of presentation, and what the 40 minutes of judging actually asks.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "13 min read",
+        "readTime": "14 min read",
         "tags": [
           "Salesforce",
           "Architecture",
@@ -3818,7 +3818,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "A 90-day plan for the last stretch of CTA preparation: the program's own clock, a diagnostic run in week one, a weekly artifact cadence, scored mock boards, and the defense drills and registration logistics that close the loop.",
         "date": "October 29, 2026",
         "author": "Adroit Consulting",
-        "readTime": "12 min read",
+        "readTime": "14 min read",
         "tags": [
           "Salesforce",
           "Architecture",
@@ -9377,7 +9377,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "The Meridian design is approved, so now we cut the smallest production slice: the tool layer over MCP, four loop budgets, idempotency on every write, the token-based approval gate, the three level kill switch, and a ten day plan to first traffic.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "13 min read",
     "tags": [
       "Capstone",
       "MVP",
@@ -9395,7 +9395,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "The MVP is live at 5 percent traffic. This lesson turns a working slice into a system you can trust: an eval suite grown from production failures, hardening against the OWASP risk list, a canary rollout on an error budget, and traces that catch quality loss.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "13 min read",
     "tags": [
       "Capstone",
       "Evals",
@@ -9413,7 +9413,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Lesson 86 left one agent accountable for one case class. This lesson stretches that discipline across systems that run themselves: where to hold a workflow deterministic, how a pipeline survives a crash, and the repair ladder a self-healing loop climbs.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "14 min read",
     "tags": [
       "Agentic Workflows",
       "Autonomous Pipelines",
@@ -9431,7 +9431,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Lesson 87 ended with a boundary you drew yourself. It covers the boundaries other people draw: which protocol carries tools, which carries agent to agent work, how agents find each other, and how a signed mandate lets an agent spend inside limits you set.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "13 min read",
+    "readTime": "15 min read",
     "tags": [
       "Agent Economies",
       "Interoperability",
@@ -9467,7 +9467,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Lesson 89 handed you a calendar. This is the inventory you build against it: ninety lessons sorted onto four shelves, the five decisions that survived every model release, an afternoon audit of a live system, and the rule for choosing your two deep areas.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "14 min read",
+    "readTime": "17 min read",
     "tags": [
       "Final Synthesis",
       "AI Architect",
@@ -9502,7 +9502,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Lesson 37 gave you the instruments. This lesson puts them inside a business that grew AI past the pilot stage and stayed healthy. It walks one 3,400-person logistics company from nine stalled pilots and 12 percent weekly active use to a program at scale, names the four moves that made the difference, and is honest about the two pilots that had to be killed. Alongside it sits a real published case from a bank that runs AI inside one of the most regulated environments there is, plus the survey evidence on what separates the small group of high performers from everyone else.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "11 min read",
     "tags": [
       "Learn",
       "AI",
@@ -9536,7 +9536,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "This is the last lesson of the course, and it is the one you are meant to walk away holding. It takes everything the previous thirty-nine lessons built and assembles it into a single document: a six-section AI adoption plan with a scope, an operating model, a policy and control set, a portfolio with dates, a scorecard with written definitions, and a review calendar. You get the six sections with a realistic page budget, a four-week build schedule, a filled-in one-page example for a 600-person firm, and the twelve checks a reviewer will run against your plan before believing it.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "11 min read",
     "tags": [
       "Learn",
       "AI",
@@ -9571,7 +9571,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Failures usually surface at the seams between integration, security, data and lifecycle. This lesson names the seams to check, the decisions in each thread that constrain the others, and one worked pass where all four had to agree.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "15 min read",
     "tags": [
       "Salesforce",
       "Architecture",
@@ -9588,7 +9588,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "An AI platform is an integration, security, data and lifecycle problem with new content in each thread. This lesson follows one request through retrieval, model gateway, tool call and trace, and names the trust, cost and control decisions at every hop.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "13 min read",
     "tags": [
       "Salesforce",
       "Architecture",
@@ -9605,7 +9605,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "A review pass over the three domains that carry the most weight in Review Board scenarios: integration, security and data. Objective by objective, with the weak answer next to the scoring answer, the traps that cost points, and a drill you can score.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "11 min read",
     "tags": [
       "Salesforce",
       "Architecture",
@@ -9622,7 +9622,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "The Review Board is gated by two credentials, and each is earned exam by exam. This lesson reads the published exam guides as scope documents: the domain weights, the scenario stems, the declarative boundary the Application Architect stack tests, and the identity, data and lifecycle domains the System Architect stack tests.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "15 min read",
     "tags": [
       "Salesforce",
       "Architecture",
@@ -9639,7 +9639,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "This lesson rehearses the Review Board performance: the four artifacts you are given, how to split 180 minutes, how to read a scenario under the clock, how to structure 45 minutes of presentation, and what the 40 minutes of judging actually asks.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "13 min read",
+    "readTime": "14 min read",
     "tags": [
       "Salesforce",
       "Architecture",
@@ -9656,7 +9656,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "A 90-day plan for the last stretch of CTA preparation: the program's own clock, a diagnostic run in week one, a weekly artifact cadence, scored mock boards, and the defense drills and registration logistics that close the loop.",
     "date": "October 29, 2026",
     "author": "Adroit Consulting",
-    "readTime": "12 min read",
+    "readTime": "14 min read",
     "tags": [
       "Salesforce",
       "Architecture",
