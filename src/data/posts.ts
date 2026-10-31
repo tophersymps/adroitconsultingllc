@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "post-response-side-effects-2026",
+    "title": "Your Response Went Out. The Rest Is Best-Effort.",
+    "excerpt": "Next.js after() and waitUntil run side effects on the invocation's clock, with no queue and no retry. Here is how to tell which work can afford to be lost.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "October 31, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Next.js",
+      "React",
+      "TypeScript",
+      "Serverless",
+      "Reliability",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/post-response-side-effects-2026.webp",
+    "ogImage": "/banners/post-response-side-effects-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "effective-context-budget-2026",
     "title": "A Million Tokens In, Worse Answers Out",
     "excerpt": "A context window is a ceiling, not a workspace. Accuracy falls long before the limit, and near-miss distractors hurt more than length does.",

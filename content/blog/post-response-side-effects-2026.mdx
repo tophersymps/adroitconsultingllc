@@ -1,0 +1,140 @@
+---
+title: "Your Response Went Out. The Rest Is Best-Effort."
+slug: post-response-side-effects-2026
+excerpt: "Next.js after() and waitUntil run side effects on the invocation's clock, with no queue and no retry. Here is how to tell which work can afford to be lost."
+category: "React & Web Dev"
+categoryColor: "react"
+categoryGradient: "from-emerald to-emerald-dark"
+date: "October 31, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Next.js, React, TypeScript, Serverless, Reliability, Web Development]
+bannerImage: "/banners/post-response-side-effects-2026.webp"
+ogImage: "/banners/post-response-side-effects-2026-og.jpg"
+---
+
+The support ticket is one line long: the confirmation email never arrived, but the API returned 200.
+
+Both halves are true. The endpoint validated the payload, wrote the order row, returned a response, and registered the email with `after()`. Then the mail provider stalled, the request's remaining time budget ran out, the invocation was terminated, and the pending callback was cancelled. No retry, no dead letter, no alert. The customer has an order, the inbox is empty, and the request log says success.
+
+The framework did exactly what it documented. The team misread which lane the email was in. `after()` and `waitUntil()` are a post-response lane: work that runs after the caller is gone, on the invocation's own clock, with the same cancellation behaviour as anything else in that invocation. They are the right home for an analytics event and the wrong home for a confirmation email, and the two call sites look identical in review.
+
+## What the post-response lane promises, in three sentences
+
+`after()` schedules a callback to run once a response or prerender has finished. It is available in Server Components (including `generateMetadata`), Server Functions, Route Handlers, and the proxy file that replaced `middleware.ts`. On Vercel it has been the recommended form since Next.js 15.1, where the alternative is calling `waitUntil()` from the functions package directly.[^1][^3]
+
+The contract narrows to three clauses:
+
+- The callback runs after the response is finished, so it does not block the caller.
+- It runs for the platform's default or configured maximum duration of the route.
+- It runs even when the response did not complete successfully, including when an error is thrown or when `notFound` or `redirect` is called.[^1]
+
+That third clause describes the primitive precisely. Work scheduled here is not a transaction that either commits or rolls back. It is a callback attached to an invocation that is already over as far as the caller is concerned. The framework will not tell you it did not finish, because from its side of the boundary there is nothing left to report to.
+
+![Three lanes for a side effect and what each costs when it fails. Lane one is inline work awaited before the response, so a failure surfaces as an error in front of the user. Lane two is post-response work registered with after or waitUntil, which runs on the invocation clock and is cancelled with no retry when the function times out. Lane three is durable work published to a queue, persisted before the publish returns and redelivered until a consumer acknowledges. A table under the lanes compares the three: a time limit fails the request in lane one, cancels pending work in lane two, and triggers redelivery in lane three.](</diagrams/post-response-side-effects-2026/1-three-lanes.png>)
+
+## The callback spends the same clock the request was using
+
+The maximum duration is a single deadline for the whole invocation, request plus background work. On Vercel with fluid compute enabled, the default is 300 seconds on every plan. Hobby caps there, Pro and Enterprise can raise a function to 800 seconds, and an extended beta allows 1800 seconds on supported runtimes.[^5]
+
+The function package documents the consequence in one line: promises passed to `waitUntil()` have the same timeout as the function itself, and if the function times out, those promises are cancelled.[^3] `after()` inherits the same limit, because underneath it is the same mechanism. Next.js looks for a `waitUntil` implementation on a request-context object, and on a serverless platform that implementation is what keeps the invocation alive until the promises settle.[^1]
+
+If you have ever raised a route's `maxDuration` to stop a timeout, you have also been buying time for every callback registered on that route. That is not automatically wrong, and it is worth knowing which of the two you were fixing. When the background work needs to outlive the invocation, raising the number is a delay, not a solution: a redeploy, a crash, or a cold start on the next instance will still take the work with it.
+
+For code that has to make a decision with the time it has left, the functions package exposes `getDeadline()`, which returns the shared invocation deadline, including the asynchronous tasks still queued behind the response.[^3] The documented use is a loop that stops paging through an API while there is still time to write a result, rather than being cut off mid-write. The same read is worth doing at the top of a background callback: if the deadline is 800 milliseconds away and the work needs four seconds, a partial attempt that leaves the database consistent beats a truncated one.
+
+![One invocation on one clock. The request arrives, the render validates and writes the row, and the response goes out with a 200 while the caller moves on. After the response, the callbacks registered with after run inside a hatched window that spends the same maxDuration the request was already using. When the deadline arrives, the invocation is terminated and any pending waitUntil promise is cancelled, with no retry, no record and no alert, even though the caller read the work as finished the moment the response arrived.](</diagrams/post-response-side-effects-2026/2-invocation-clock.png>)
+
+## On a prerendered route, the callback fires on the build clock
+
+`after()` is not a request-time API, and calling it does not make a route dynamic. On a static page, the callback executes at build time, or whenever the page is revalidated.[^1]
+
+That sentence is easy to skim past, and it is the source of a distinct class of bug: the side effect that runs once per deploy instead of once per visitor. A view counter registered in a cached component counts builds. A sync callback registered in a component inside a static shell runs in CI, and if the callback reaches an external API, it also runs in local development and previews. Nothing in the response tells you this happened. The count is simply lower than the traffic by orders of magnitude, which usually surfaces months later as a reporting question.
+
+This is no longer an edge case. In Next.js 16.4 the team recommends Cache Components for every app, and new apps created with `create-next-app` have it enabled by default, with the model set to become the default in Next.js 17.[^10] Cached rendering is becoming the normal case, which means "is this component rendered per request?" is a question every callback author now has to answer.
+
+The ownership rule that makes it tractable: register the callback in the component that performs the mutation, not in a component that displays the result. A Route Handler or Server Function answers the request-time question by construction. A layout, a cached content component, or `generateMetadata` sits on the rendering side of the line, where the callback belongs to a render that may happen once for a thousand visitors.
+
+![Where after runs depends on who renders the route. On a prerendered route or a component marked use cache, the callback fires at build time or on revalidation, and the requests that follow perform no background work at all, which means a log every visit callback actually logs builds and also fires in local development and CI. On a dynamic route that reads cookies, headers or a search param, each request renders again, each request registers its own callback, and every one of them races the same deadline.](</diagrams/post-response-side-effects-2026/3-build-vs-request.png>)
+
+## Four rules that catch people in production
+
+**Request data has to be read before the callback, not inside it.** In a Server Component, a callback registered with `after()` cannot call `cookies()`, `headers()`, or another request-time API. Doing so throws at runtime. The documented pattern is to read the values during rendering and close over them: Next.js needs to know which part of the component tree reads request data to support Partial Prerendering and Cache Components, and the callback runs after React's rendering lifecycle has finished.[^1] In Route Handlers and Server Functions the rule relaxes and the calls work directly, which is a good reason to keep mutation-time logging in the handler rather than a page. In a cached component, read the cookie in a dynamic child wrapped in a Suspense boundary and pass the value into the callback.
+
+**The callback is not a success signal.** Because it runs even when the response errored out, failed a `notFound()` check, or issued a `redirect()`, it is a reliable place for cleanup and a misleading place for confirmation. A message that says "your submission was received" belongs on a path that only runs when the submission was actually received. If the callback is the thing that sends it, a redirect loses the message and nobody notices.
+
+**Self-hosting puts the drain window in your hands.** `after()` is fully supported with `next start`. The operational requirement is a graceful shutdown: send `SIGINT` or `SIGTERM`, wait, and let the server finish in-flight requests and execute pending callbacks before it exits. The docs recommend a platform drain period of 10 to 30 seconds.[^2] On a managed platform that window is configured for you. On your own containers it is a rollout setting, and a `docker stop` with the default timeout will discard every callback that happens to be in flight during a deploy.
+
+**Error isolation keeps the request alive, not the work.** On fluid compute, an uncaught exception or unhandled rejection is logged, and the process finishes its current requests before stopping, so one broken request does not take down the concurrent ones sharing the instance.[^4] That is real protection for the response, and it does nothing for the callback. A rejection inside post-response work is a log line and a lost task. The caller's status code was decided before the exception existed.
+
+Where the provider is something other than Vercel, the primitive exists under a different name with slightly different edges. Cloudflare Workers expose `ctx.waitUntil()`, which extends the Worker's lifetime and continues after the response, and a rejected promise passed to one call does not stop promises passed to the others, a `Promise.allSettled` shape rather than an all-or-nothing one.[^9] Supabase Edge Functions expose `EdgeRuntime.waitUntil()`, with its own local-testing trap and a `beforeunload` hook for work that is about to be cut off, which is covered in detail in our [Edge Functions breakdown](/field-notes/supabase-edge-functions-2026). The names differ; the lane does not. Every one of them is best-effort.
+
+## The lane above: durable work, and what it actually buys
+
+When a callback cannot afford to be lost, the fix is not a longer timeout. It is moving the work off the invocation entirely. The mechanics of the durable lane are worth knowing precisely, because the trade is different rather than free.
+
+A queue accepts a message and returns an acknowledgement only after the message has been persisted. On Vercel Queues, every message is written synchronously to three availability zones before the publish call returns, and the topic is an append-only log that retains messages until they expire or a consumer acknowledges them.[^6][^7] A consumer receives the message under a visibility-timeout lease, which hides it from other consumers in the same group without deleting it. Acknowledge and it is removed; crash, time out, or roll out a deploy and the lease expires and the message comes back.[^7]
+
+Delivery is at-least-once, which is the honest way to describe a system that refuses to lose work. The failure moves from the broker to the handler, and the contract that makes it safe is idempotency: a unique constraint, a conditional write, or an idempotency key, keyed on something stable in the message. Vercel Queues also accept an idempotency key at publish time to drop repeated publishes inside the retention window.[^6][^7]
+
+The operating numbers matter more than the vocabulary, and the defaults are not uniform:
+
+- Visibility timeout: Amazon SQS defaults to 30 seconds with a 12-hour ceiling. The Vercel Queues JavaScript SDK defaults to 300 seconds and re-extends the lease while the handler runs, while the underlying HTTP API defaults to 60 seconds with no auto-extension.[^7] A worker that takes five minutes and polls the HTTP API will look like a flaky consumer when it is actually a lease setting.
+- Retention: 24 hours by default, configurable per message up to 7 days since an April 2026 increase, and the same window governs delayed delivery.[^7][^8] A message that outlives its retention is gone. Anything that needs to wait longer than the ceiling has to chain messages or move to a workflow.
+- Dead letters: Vercel Queues have no dead-letter queue. Failed messages retry until retention closes, so routing a poison message somewhere durable is application code, keyed on the delivery count each message carries.[^7]
+- Workflows: a step-based layer on top of the same queues, generally available since April 2026, with per-step retries (three retries by default, four attempts total) and `sleep()` for pauses measured in minutes or months rather than seconds.[^7] Workflows are also the documented answer for workloads that need unlimited execution time, since the function duration ceiling does not apply to a paused run.[^5]
+
+The reason to reach for all this is narrower than it used to be, and it is worth being honest about that. With the current compute billing model, active CPU time pauses while a function waits on I/O, which removes the old cost argument for queueing work that is merely slow. What remains is the argument that always mattered: a queue is how work survives a crash, a timeout, or a rollout.[^7] That is the test. If a slow task cannot be lost, it needs a queue. If it can be lost, it needs a counter, not a broker.
+
+![The publish, lease and acknowledge cycle. The producer publishes and receives a message id only after the topic has persisted the message in three availability zones. Delivery happens under a visibility timeout lease. If the consumer dies before acknowledging, the lease expires and the message is redelivered, so the handler runs a second time on the same payload. Only an acknowledgement removes the message for that consumer group, which leaves the handler with one contract: make the second run a no-op with an idempotency key, a unique constraint or a conditional write keyed on the message id.](</diagrams/post-response-side-effects-2026/4-delivery-cycle.png>)
+
+## Choosing the lane by the failure you cannot accept
+
+Most teams pick a lane by latency, which produces two predictable mistakes. The first is a queue for work that only needed to not block the response, which adds a broker, a worker, and an on-call surface to protect something nobody would have missed. The second is a confirmation email sitting in the cancellable lane for two years, because it was fast in staging and the timeout count never appeared on a dashboard.
+
+Inverting the question fixes both. Ask what failure would be unacceptable, in this order:
+
+1. Does the response depend on the result? If the user cannot proceed without it, await it and let a failure be visible.
+2. If nobody is waiting on it, would losing it cost money, trust, or a record? A confirmation email, a payment webhook, an audit row, a state change another system is waiting for. If yes, the post-response lane is the wrong home.
+3. Must it survive a crash, a timeout, or a deploy? Then it belongs on a durable topic with an idempotent handler.
+4. Does it run in stages, or wait between them? Then it belongs in a workflow, where step retries and sleeps are the framework's job.
+
+We apply the same ordering inside our own delivery pipeline, where the rule we settled on is that anything a client will eventually notice (a published page, an invoice, a handoff into the next stage) leaves the request path and becomes a durable job, while counters, logs, and cache warming stay in the post-response lane. The rule that made it enforceable was naming the two lanes out loud, because in code they look the same.
+
+![A four question decision table for choosing the lane. If the response depends on the result, the work belongs inline and should be awaited before returning. If nobody is waiting but losing it would cost money, trust or a record, post-response work is the wrong lane. If it must survive a crash, a timeout or a deploy, it belongs on a durable topic. If it runs in stages or waits between them, it belongs in a workflow with durable steps. Asking whether work is slow enough to queue first produces a queue for work that never needed one and still leaves the confirmation email in the cancellable lane.](</diagrams/post-response-side-effects-2026/5-decision-tree.png>)
+
+## Test the lane, not just the handler
+
+Three tests catch most of the ways this goes wrong, and none of them require a production incident.
+
+**Run the callback in a harness that provides `waitUntil`.** Outside a managed platform, `after()` depends on a `waitUntil` implementation that the host supplies, discovered through a well-known request-context symbol on the global object.[^1] A test runner or an application server that never provides one will not run your callbacks, and the tests will pass while the feature does nothing. Supplying the implementation through an `AsyncLocalStorage` context is the documented shape, and it turns the background path into something a test can await and assert on.
+
+**Call the durable handler twice with the same payload.** Idempotency is the contract that makes at-least-once safe, and the only way to know the handler honours it is to deliver the message a second time and compare the database. A handler that passes the first call and duplicates a row on the second is not a handler you can put behind a queue.
+
+**Deploy while the work is in flight.** For the post-response lane, this is the test that shows whether your shutdown path drains or discards. For the durable lane, it is the test that proves the redelivery path works, since a rollout is one of the ordinary causes for a lease to expire.[^7]
+
+Then instrument the lane itself. A counter per callback and per queue topic is the difference between a silent loss and a number on a dashboard: the caller's 200 tells you nothing, and the queue's own observability reports throughput, message age, and consumer performance.[^6] If a callback cannot be counted, it cannot be trusted, and if it cannot be trusted, it does not belong in a lane where failure is invisible. The same instinct shows up in the request path itself, where a boundary that silently does not run ([a proxy file that never executes](/field-notes/supabase-auth-proxy-session-2026)) produces exactly the same class of delayed, hard-to-attribute complaint.
+
+## The inventory worth running this week
+
+Grep the codebase for `after(` and `waitUntil(`. For each call site, write down one line: what does this do, and what happens if it never runs. Most lists split cleanly. Logging, metrics, cache warming, and search index nudges belong where they are. Emails, webhooks, invoices, third-party syncs, state changes another system waits on, and anything a customer would call support about belong on a queue with an idempotent handler.
+
+Then do three small things:
+
+- Move the non-losable work rather than raising `maxDuration`. A longer timeout moves the deadline and leaves the loss mechanism intact.
+- Set `maxDuration` deliberately per route, knowing it governs the background callbacks as well as the response, and use `getDeadline()` inside long callbacks that can stop early and leave things consistent.
+- Add a counter for every lane, so a dropped callback is a number rather than a support ticket three weeks later.
+
+The 200 means the response was sent. Everything after it is a promise about the response and about nothing else, and the difference between a side effect and a business event is usually just which lane somebody put it in.
+
+[^1]: Next.js, "after," App Router API reference. The callback semantics, use in Server Components, Server Functions, Route Handlers and Proxy, execution at build time or revalidation on a static page, execution even when the response failed, the request-time API restriction inside the callback in Server Components, the duration rule, the platform support table, and the `waitUntil` request-context reference implementation. [nextjs.org](https://nextjs.org/docs/app/api-reference/functions/after)
+[^2]: Next.js, "How to self-host your Next.js application," the `after` section. Full support with `next start`, graceful shutdown through `SIGINT` or `SIGTERM`, and the recommended 10 to 30 second drain period for pending callbacks. [nextjs.org](https://nextjs.org/docs/app/guides/self-hosting)
+[^3]: Vercel, "@vercel/functions API reference (Node.js)." The recommendation to use `after()` from `next/server` on Next.js 15.1 and later, the `waitUntil` contract that pending promises share the function timeout and are cancelled when it is reached, and `getDeadline()` returning the shared invocation deadline including background tasks. [vercel.com](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package)
+[^4]: Vercel, "Fluid compute." Background processing with `waitUntil` after a response, and error isolation where uncaught exceptions and unhandled rejections are logged while current requests finish before the process stops. [vercel.com](https://vercel.com/docs/fluid-compute)
+[^5]: Vercel, "Configuring maximum duration for Vercel Functions." The default and maximum duration table (300 seconds by default on all plans, 800 seconds on Pro and Enterprise, 1800 seconds in the extended beta), plus the pointer to workflows for workloads needing unlimited execution time. [vercel.com](https://vercel.com/docs/functions/configuring-functions/duration)
+[^6]: Vercel, "Vercel Queues." Durable topics with fan-out consumer groups, at-least-once delivery, idempotency keys at publish time, and queue observability across throughput, message age and consumer performance. [vercel.com](https://vercel.com/docs/queues)
+[^7]: Vercel, "A guide to message queues for serverless teams." The publish, lease, acknowledge and retry cycle, three-zone replication before the publish returns, at-least-once semantics, visibility timeout defaults for SQS and the Vercel SDKs, the 24 hour default retention, the no-dead-letter-queue design keyed on delivery count, workflow step retries and `sleep()`, and the shift of the queueing rationale from cost to crash survival. [vercel.com](https://vercel.com/i/message-queue)
+[^8]: Vercel changelog, "Vercel Queues now supports 7-day message TTL." Maximum message TTL and delivery delay raised from 24 hours to 7 days, with the 24 hour default unchanged. [vercel.com](https://vercel.com/changelog/queues-now-supports-7-day-ttl)
+[^9]: Cloudflare, "Context (ctx)," Workers runtime APIs. `ctx.waitUntil()` extending the Worker's lifetime after a response, and the documented behaviour that a rejection in one `waitUntil` promise does not stop the others. [developers.cloudflare.com](https://developers.cloudflare.com/workers/runtime-apis/context/)
+[^10]: Next.js, "Next.js 16.4." Cache Components recommended for every app and enabled by default in `create-next-app`, with the model becoming the default in Next.js 17. [nextjs.org](https://nextjs.org/blog/next-16-4)
