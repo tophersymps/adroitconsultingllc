@@ -1,0 +1,121 @@
+---
+title: "Your Save Failed on a Record Nobody Touched"
+slug: salesforce-record-lock-contention-2026
+excerpt: "Salesforce takes locks on records your save never named: the parent, the roll-up master, the lookup target. Contention is a data model question with an order."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "October 31, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "13 min read"
+tags: [Salesforce, Apex, Flow, Data Modeling, Performance, Architecture]
+bannerImage: "/banners/salesforce-record-lock-contention-2026.webp"
+ogImage: "/banners/salesforce-record-lock-contention-2026-og.jpg"
+---
+
+A nightly integration upserts four thousand opportunities. It fails on row 2,317 with `UNABLE_TO_LOCK_ROW` and names an Account record. The integration does not write Accounts. Nobody is editing that Account at two in the morning, and the support answer, which is to retry, works, which is the real problem. The team retries, the job completes, and nothing changes about the reason it failed.
+
+That Account was locked because of the opportunity. Salesforce holds a row lock to protect referential integrity, and the rows it needs are the rows involved in the save, which is a wider set than the rows your DML names. A child write locks its parent. A roll-up summary locks its master. A lookup locks the record it points at, in some configurations. Ownership and role changes lock a table the whole org shares.
+
+The consequence is that the lock you hit is usually a lock you caused somewhere else in the graph, and the record in your error message is often a bystander to your own write. That makes contention a property of the data model and of the write schedule rather than of the failing transaction. It can be designed away, and the design has an order.
+
+## The lock is a row, the window is the transaction
+
+A record lock stops every other client from updating that record, in code or in the user interface, while still allowing reads. It is taken when the record is saved to the database and released when the transaction commits, not when your DML statement returns. Everything the save touches in between runs inside that window, and the order of execution tells you what that includes: after the record itself is written but before the commit, the platform runs after-triggers, after-save record-triggered flows, the roll-up summary recalculation that saves the parent, the same recalculation one level up in the grandparent, and criteria-based sharing evaluation.[^3]
+
+![The life of a row lock inside one save: the lock is taken when the record is written to the database at step seven and released at commit in step nineteen, while roll-up recalculations on the parent and grandparent and criteria-based sharing evaluation all run inside the same window, and a rival transaction waits at most ten seconds before a QueryException or a DmlException](</diagrams/salesforce-record-lock-contention-2026/2-lock-lifecycle.png>)
+
+The second transaction is where the pain lands. If a client tries to lock a record that another client already holds, it waits a maximum of ten seconds for the release. Past ten seconds it gets a `QueryException` if it was trying to lock records through a locking SOQL query, and a `DmlException` if it was trying to update them.[^1] Ten seconds is a generous window for a save measured in milliseconds, which is why the failures cluster: when a collision does happen, it usually means the holder was doing real work inside the transaction, and for the loser the whole transaction rolls back.
+
+There is a quieter data problem in the same paragraph of documentation. If a client attempts to modify a locked record and the lock is released shortly after, the update can succeed with a copy of the record it read before the lock existed. The read-then-write pattern is not made safe by the lock it collides with. To avoid writing stale values back, the second transaction has to take the lock itself, which returns a fresh copy of the record from the database.[^1] It is the mirror image of the [dual-write problem](/field-notes/salesforce-dual-write-outbox-2026): there, two systems disagree about what happened; here, one system quietly overwrites a newer value with an older one.
+
+One more behaviour earns a look before you rely on locks in a callout-heavy trigger. Record locks taken through a locking SOQL query are released automatically when the transaction makes a callout, and the debug log records the release along with the most recently locked entity type.[^1] A transaction that locks a set of records, calls out to an external system, and then expects its lock to still be held is running on an assumption the platform has already broken.
+
+## Locking behaviour is additive
+
+Salesforce publishes one table for this, and its most important sentence is about how to read it: the cheat sheet is additive, so you consider every row that might apply to your operation and add them together.[^4] There are three groups of rows, and a single save can pull from all three at once.
+
+Object-specific behaviour covers what the platform does by default. An Opportunity insert, update or delete locks the parent Account. A Contact insert or update locks the parent Account. A Case insert, update or delete locks the Account and the Contact, which is why a service org that reassigns Cases in bulk can fight itself. A CampaignMember insert or update locks the Campaign and the Contact or Lead. Tasks and Events are their own story: an Event locks its Who and its Account, a Task locks Who, What and Account, and on insert the Task locks apply only when the status is Completed and the activity date is not null, while on update and delete they apply regardless.[^4][^6]
+
+Custom configuration covers the locks you created by configuring something. A detail record in a master-detail relationship locks its master on insert, on delete, and on a change of the master record itself. A roll-up summary field locks the master on any insert, update or delete of a detail record, whether or not the rolled-up value changes, and that holds for standard objects such as Account as well as custom ones. A lookup relationship locks the lookup record on insert with a value and on a change of that value, and only when the relationship is not configured to clear the value if the lookup record is deleted.[^4]
+
+![Salesforce record locking is additive: a single Opportunity insert that carries a lookup value and sits under an account with a roll-up summary adds three lock rules together, and the parent Account is named in two of them](</diagrams/salesforce-record-lock-contention-2026/1-locks-are-additive.png>)
+
+That last row is worth reading twice, because it is the one most orgs configure without noticing. The default setting on a lookup clears the field when the referenced record is deleted, and that default is what keeps the lock from being taken. Change it to enforce referential integrity, which is often the correct business decision, and you have added a lock to every insert and re-point of that relationship.
+
+Then there is the layer most teams never think of as locking at all. Share-record operations such as sharing rules, org-wide default changes and share row maintenance do not lock the object records themselves, which is why they are rated low risk for contention. But role hierarchy changes, territory changes, group member inserts and deletes, user inserts and updates that carry a role, and role reparenting all take a lock on the group table, and so does updating the owner of, or deleting, an account that has community or portal roles attached.[^4] A user move to a new role can trigger a wide recalculation of sharing, because the platform has to decide who still sees the data that user owns and recalculate the sharing rules that used the old or new role as a source group.[^9]
+
+That is a lock that is not measured in rows at all. It is why the documented guidance is that most group maintenance updates must run in serial: a bulk owner reassignment across thousands of accounts is not a thousand small writes from the platform's point of view, it is a queue at a shared resource.[^5]
+
+## Two writers on one parent
+
+If all of this is additive, then two transactions that write completely different records can still collide, because they can both need the same parent. Salesforce's design guidance names the two situations that produce this: updates to parent records and their children running in separate threads, and updates to child records that share the same parent running in separate threads.[^7]
+
+The second one is the surprise for most teams, because nothing in the two jobs looks related. They are writing different contacts, different opportunities, different line items. They are competing for one lock, and the winner is whichever transaction gets there first.
+
+Deadlocks are the extreme version. Apex limits them from the inside: the runtime locks parent records before children, and locks records of the same type in order of ID.[^2] That ordering is per transaction, and it cannot help two processes that name the same two objects in opposite orders. Access the same tables and rows in the same order from every location in the application, which is the standard deadlock-avoidance technique for a reason.[^2]
+
+![Two ways one parent becomes the bottleneck: two jobs that name Account and Contact in opposite orders wait on each other until the ten second budget expires, and a parent holding hundreds of thousands of children serialises every child write and forces the platform to scan the other children whenever access changes](</diagrams/salesforce-record-lock-contention-2026/3-two-writers-one-parent.png>)
+
+Skew is the version of this that hurts at scale, and it is a data model decision that was usually made by accident. Parking unallocated contacts under a single dummy account looks harmless until that account holds 300,000 of them. A user with access to one of those contacts also has an implicit share on the account, so when that user loses access to the contact, the platform has to check the other 299,999 contacts before it can remove the parent share. The documented point of concern is a parent with 10,000 or more children, and the failure it produces is not a dramatic error, it is a save that got slow and then started timing out under load.[^8] Skew is also the same property that makes [queries on a large object expensive](/field-notes/salesforce-ldv-query-performance-2026), so if a data model review turns up a parent with tens of thousands of children, it is worth reading the two together.
+
+## The other lock, the one measured in days
+
+Not every record lock is a transaction lock, and confusing the two will send a team chasing a retry that cannot work. Submitting a record for approval locks it, so it cannot be edited while the approval is in progress. In a flow approval process that lock can be managed deliberately, at the process level or the stage level, and the platform's rule is blunt: a record can carry only one lock at a time, and asking for a second lock on a record that already has one raises an error.[^15]
+
+The behaviour difference matters more than the mechanism. A row lock is held for seconds and ends at the commit, so a retry a moment later usually succeeds. An approval lock is held for as long as the submission is open, which is hours or days, and the transaction that runs into it is not competing with a faster writer, it is competing with a human decision. Retry logic does nothing except fill a log with attempts, and an administrator can still edit a record locked by an approval while the assigned approver, and not their delegate, can edit it too.[^15]
+
+![Two locks with two clocks side by side: a transaction row lock held for seconds, retried usefully and visible only in the logs, next to an approval record lock held for hours or days that blocks the user entirely and cannot be retried away](</diagrams/salesforce-record-lock-contention-2026/4-two-clocks.png>)
+
+If the reported symptom is a person who cannot do their job, you are looking at the second clock. If the symptom is an integration error in the log, you are looking at the first. Same menu, same word, two entirely different projects.
+
+## Most collisions are your own schedule
+
+The rows above tell you where locks come from. The next question is who asks for them at the same time, and the honest answer for most orgs is that the org competes with itself. A user save path runs continuously, record-triggered flows and their after-save work run on every one of those saves, scheduled flows wake up on a clock, a batch job splits into chunks that can run in parallel, and an integration loads records in parallel batches by default.
+
+That last default is documented as a cause of exactly this error. Bulk API batches are processed in parallel, and when two batches hold records that point at the same parent, both try to lock that parent at once. The documented mitigations are to reduce the batch size, to process in serial mode so one batch runs at a time, and to sort the records so that records sharing a parent land in the same batch rather than being split across two.[^12]
+
+The more interesting cases are the ones where sorting is not enough. If a single account has significantly more than a batch worth of related tasks, no ordering fixes it, because the same parent necessarily appears in more than one batch, and the documented approach is to move that subset into a separate serial job instead of the parallel one.[^6] The same article contains the guidance most teams skip: if these loads are scheduled, leave enough time between jobs that they cannot overlap, because the overlap is the collision.[^6]
+
+Two smaller sources are worth knowing because they arrive from outside the integration and are therefore invisible in its logs. Email-to-Case processing that runs a slow trigger on the email message or its parent account can hold a lock past the ten second budget, and the documented resolution is to look at the trigger work on those objects rather than at the email pipeline.[^12][^13] And in development, parallel Apex test execution in a deployment can throw the same error, because two test threads insert community or portal users that share related records. The documented workarounds are to use `RunAs()` instead of creating those users, and to disable parallel test execution for the classes that need it.[^14]
+
+One trend deserves a line in your design review. Every new class of writer that touches the same records is a new entrant into the same lock topology, and an org that adds agent actions and portal self-service on top of an existing integration and batch landscape has multiplied the number of processes per record without changing the lock model underneath them. Contention scales with the number of concurrent writers on a parent, not with the number of records in the org.
+
+## What Winter '27 changes, and what it does not
+
+Winter '27 adds automatic retry to record-triggered flows. When a flow hits a record lock error during transaction initialization, it waits ten seconds and tries again, so the other process has time to finish and release.[^10] The same release cycle describes it as one more try, and scopes the change narrowly, listing it against schedule-triggered flows with run-time API version 62.0 or lesser in the Flow error-handling summary.[^11] Read the scope in your own org before you count on it.
+
+The feature is genuinely useful, and its shape tells you what it is for. One retry, after a fixed delay, is the right answer to an accidental collision, and it is a recovery behaviour, which means it belongs next to the [recovery layer you design deliberately](/field-notes/salesforce-error-recovery-2026) rather than standing in for one. It is the wrong answer to a nightly pattern, because the collision that repeats every night at 02:15 is not an accident, it is two jobs whose windows overlap, and the retry converts a fast failure into a slow one. And the retry does not shorten anything: the flow that waits ten seconds is running for ten seconds longer, inside a window that the next scheduled job may be waiting on.
+
+## The order that removes it
+
+Treat the retry as the last move rather than the first, and work the problem in the order that removes the most contention for the least run-time cost.
+
+1. **Remove the lock source.** A roll-up summary that exists to display a number, a lookup configured not to clear on delete, an after-save flow that updates the parent on every child save. This is the only move that costs nothing at run time, and it is the one most teams skip, because the configuration was a deliberate decision made by someone who was not thinking about concurrency.
+2. **Serialize per parent key.** Sort the load file by parent id so records sharing a parent reach the platform together. Run the job in serial mode. Reduce the batch size. Keep one writer per parent set. This is entirely within your control, and it removes the self-inflicted half of the problem.[^12][^7]
+3. **Partition the parent set.** A parent with thousands of children is a single-file queue, and no job tuning fixes a queue. Review any parent holding 10,000 or more children, and stop parking unallocated records under one shared account.[^8]
+4. **Separate the lanes.** Collisions between processes you own are scheduling decisions. Do not start the nightly load inside the window the scheduled flow is already using, and give jobs that write the same objects non-overlapping windows.[^6]
+5. **Retry last, idempotent and bounded.** Retry only the lock error, with a delay and a hard cap, and make the operation safe to apply twice. The documented position is that a small number of locking errors from integrations can be handled with retry logic, and that frequent locking is a sequencing problem instead.[^7] That distinction is the whole policy in one sentence.
+
+![The five moves that remove lock contention, ordered by how much each one removes: remove the lock source, serialize per parent key, partition the parent set, separate the lanes between processes, and only then retry the lock error with an idempotent bounded retry](</diagrams/salesforce-record-lock-contention-2026/5-mitigation-order.png>)
+
+Alongside the order, keep two habits. When the error appears, read the record id in the message and ask whether it is a parent, because if it is, the writer in the log is rarely the only writer involved. And when you need to prove where a lock is coming from, the documented route is debug logs for the user experiencing the error to identify the offending trigger, flow or validation rule, plus a check for background jobs on the same object that can be paused while you retest.[^12]
+
+The mechanism behind all of this is unglamorous, which is why it survives review cycles. A row lock is the platform keeping a promise about referential integrity, and it takes the locks the data model says it needs, not the locks your code mentions. Drawn next to the data model, the locks are predictable: which parents a child write touches, which roll-ups and sharing recalculations run inside the same transaction, and which jobs are awake at the same time. Teams that write that list down stop treating contention as bad luck. Teams that reach for a retry on day one end up with a slower version of the same problem, and a log full of the evidence they were not reading.
+
+[^1]: Salesforce, "Locking Statements," Apex Developer Guide, ten second wait, exception types, callout release and related-record locking, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/langcon-apex-locking-statements.html)
+[^2]: Salesforce, "Avoiding Deadlocks," Apex Developer Guide, parent-before-child and ID ordering, consistent access order across an application, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/langcon-apex-deadlocks.html)
+[^3]: Salesforce, "Triggers and Order of Execution," Apex Developer Guide, steps 16 to 19 covering roll-up recalculation, grandparent roll-up, criteria-based sharing evaluation and commit, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-triggers-order-of-execution.html)
+[^4]: Salesforce, "Record Locking Cheatsheet," object-specific, custom configuration and sharing locking behaviour, additive by design, [Salesforce Record Locking Cheatsheet PDF](https://d259t2jj6zp7qm.cloudfront.net/images/20210727114613/SF_Record-Locking-Cheatsheet_web-1.pdf)
+[^5]: Dan Yu, "Salesforce Platform Record Locking and Concurrency," Salesforce Developers Blog, three lock categories, the additive rule and the group membership lock, [developer.salesforce.com](https://developer.salesforce.com/blogs/2014/07/record-locking-cheat-sheet)
+[^6]: Dan Yu, "Managing Task Locks for Data Loads," Salesforce Developers Blog, Task and Event lock conditions, batch ordering by account, controlled serial loads and job spacing, [developer.salesforce.com](https://developer.salesforce.com/blogs/engineering/2014/08/managing-task-locks-data-loads)
+[^7]: Salesforce, "Record-Level Locking," Designing Record Access for Enterprise Scale, the two concurrent-update situations and when retry logic is appropriate, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/draes/guide/draes-object-relationships-record-level-locking.html)
+[^8]: Salesforce, "Parent-Child Data Skew," Designing Record Access for Enterprise Scale, 10,000 or more children on one parent and the 300,000 contact example, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/draes/guide/draes-object-relationships-parent-child-data-skew.html)
+[^9]: Salesforce, "Group Membership Operations and Sharing Recalculation," Designing Record Access for Enterprise Scale, sharing recalculation after a role move or an ownership change, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/draes/guide/draes-group-membership.html)
+[^10]: Salesforce, "Reduce Flow Failures Caused by Record Lock Contention," Salesforce Winter '27 Release Notes, flows wait ten seconds and try again during transaction initialization, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_automate_flow_builder_row_lock_retry_264.htm&language=en_US&type=5)
+[^11]: Salesforce, "Flow Error Handling Updates," Salesforce Winter '27 Release Notes, one more try and the schedule-triggered flow scope, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_automate_flow_error_handling.htm&language=en_US&release=264&type=5)
+[^12]: Salesforce, "Salesforce Error 'Unable to lock row - Record currently unavailable'," Salesforce Help, ten second timeout, Bulk API parallel batch contention and its mitigations, Email-to-Case and debug log troubleshooting, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000387767&language=en_US&type=1)
+[^13]: Salesforce, "Proactive Alert Monitoring: Rowlock Timeout Errors," Salesforce Help, causes include email-to-case updates, failing Apex triggers, Bulk API operations and parent-child skew, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000384162&language=en_US&type=1)
+[^14]: Salesforce, "Error 'UNABLE_TO_LOCK_ROW' when running test classes," Salesforce Help, parallel test execution inserting community or portal users, RunAs workaround, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000380602&language=en_US&type=1)
+[^15]: Salesforce, "Record Locking in Flow Approval Processes," Salesforce Help, approval locks, one lock per record, administrator and approver editing, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.automate_automated_approvals_concept_record_locking.htm&language=en_US&type=5)

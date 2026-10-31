@@ -26,6 +26,30 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "salesforce-record-lock-contention-2026",
+    "title": "Your Save Failed on a Record Nobody Touched",
+    "excerpt": "Salesforce takes locks on records your save never named: the parent, the roll-up master, the lookup target. Contention is a data model question with an order.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "October 31, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "13 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Apex",
+      "Flow",
+      "Data Modeling",
+      "Performance",
+      "Architecture"
+    ],
+    "bannerImage": "/banners/salesforce-record-lock-contention-2026.webp",
+    "ogImage": "/banners/salesforce-record-lock-contention-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "effective-context-budget-2026",
     "title": "A Million Tokens In, Worse Answers Out",
     "excerpt": "A context window is a ceiling, not a workspace. Accuracy falls long before the limit, and near-miss distractors hurt more than length does.",
