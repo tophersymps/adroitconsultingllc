@@ -105,6 +105,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "opentofu-vs-terraform-2026", voice: "af_heart", storagePath: "blog/opentofu-vs-terraform-2026/af_heart.mp3", timingsStoragePath: "blog/opentofu-vs-terraform-2026/af_heart.timing.json" },
   { slug: "percent-complete-status-reporting-2026", voice: "af_heart", storagePath: "blog/percent-complete-status-reporting-2026/af_heart.mp3", timingsStoragePath: "blog/percent-complete-status-reporting-2026/af_heart.timing.json" },
   { slug: "pmi-pulse-complexity-2026", voice: "af_heart", storagePath: "blog/pmi-pulse-complexity-2026/af_heart.mp3", timingsStoragePath: "blog/pmi-pulse-complexity-2026/af_heart.timing.json" },
+  { slug: "post-response-side-effects-2026", voice: "af_heart", storagePath: "blog/post-response-side-effects-2026/af_heart.mp3", timingsStoragePath: "blog/post-response-side-effects-2026/af_heart.timing.json" },
   { slug: "postgres-connection-pooling-serverless-2026", voice: "af_heart", storagePath: "blog/postgres-connection-pooling-serverless-2026/af_heart.mp3", timingsStoragePath: "blog/postgres-connection-pooling-serverless-2026/af_heart.timing.json" },
   { slug: "production-rag-retrieval-quality-2026", voice: "af_heart", storagePath: "blog/production-rag-retrieval-quality-2026/af_heart.mp3", timingsStoragePath: "blog/production-rag-retrieval-quality-2026/af_heart.timing.json" },
   { slug: "progressive-disclosure-2026", voice: "af_heart", storagePath: "blog/progressive-disclosure-2026/af_heart.mp3", timingsStoragePath: "blog/progressive-disclosure-2026/af_heart.timing.json" },
