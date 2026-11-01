@@ -1,0 +1,124 @@
+---
+title: "Your Deploy Has Two Paths. You Tested One."
+slug: graceful-shutdown-deploy-path-2026
+excerpt: "Every rollout rehearsal exercises startup. The shutdown path runs on every deploy too, and it is where zero-downtime deploys quietly drop requests."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 01, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "14 min read"
+tags: [DevOps, Kubernetes, CI/CD, Platform Engineering, Reliability]
+bannerImage: "/banners/graceful-shutdown-deploy-path-2026.webp"
+ogImage: "/banners/graceful-shutdown-deploy-path-2026-og.jpg"
+---
+
+Somewhere in the last month, one of your deploys returned a handful of 502s. The error rate graph shows a thin spike that lasted about twenty seconds, nobody filed a ticket, and the release was called clean because every pod came up green and the readiness checks passed. You tested that deploy thoroughly. You just tested the wrong half of it.
+
+Every deploy exercises two code paths. The start path pulls the image, starts the process, opens the listener, passes a probe, and joins the load balancer. The shutdown path receives a signal, stops accepting work, finishes what is in flight, and exits within a deadline that somebody else set. Your pull request pipeline rehearses the first path dozens of times a day. The second path runs on every single deploy and is tested by nobody, because the only way to observe it is to have real traffic pointed at a pod while it dies.
+
+That is where zero-downtime deploys quietly break. Not in the [strategy you picked](/field-notes/kubernetes-rollout-strategies-2026), and not in the readiness probe. In the fifteen seconds between a pod being told to stop and it actually being gone from every routing table between your users and your process.
+
+Four questions decide whether that gap costs you requests. Who is listening for the signal, whether traffic has stopped arriving when it lands, how long in-flight work takes, and whether every deadline in the chain is longer than everything upstream of it. This article takes them in order.
+
+## Two clocks start at the same moment
+
+When you delete a Pod, or when a Deployment controller replaces one during a rollout, the kubelet begins shutting the Pod down locally and the control plane evaluates whether to remove that Pod from the EndpointSlice objects that back its Service. Kubernetes documentation is explicit that these happen at the same time rather than in sequence [^1].
+
+They are not the same kind of operation. The kubelet's work is local: it runs the container's `preStop` hook and then sends TERM to the main process [^1]. Endpoint removal is a distributed update. The EndpointSlice object changes, then kube-proxy on every node in the cluster watches for that change and rewrites its own routing rules, and any external load balancer watching the same API takes its own path to the same conclusion. There is no barrier that says the routing tables converged before the process was allowed to stop.
+
+So there is a window where your process has been told to quit and the network does not know yet. Two documented details make the window concrete. First, a terminating endpoint is not deleted from the EndpointSlice immediately. It stays in the slice with the `terminating` condition true and `ready` false, so that clients can see it is going away [^1][^3]. Second, and less intuitive, a proxy is permitted to route to an endpoint that is both `serving` and `terminating` when every other available endpoint is also terminating, which is exactly the situation during a rolling update where the whole ReplicaSet is being replaced [^3].
+
+![Timeline of a pod shutdown: the control plane marks the endpoint terminating while the kubelet runs the pre-stop hook, and requests still arrive during the propagation window that follows](</diagrams/graceful-shutdown-deploy-path-2026/1-two-clocks.png>)
+
+The standard fix is a delay you probably already have a copy of and have never tuned. Because `preStop` must complete before the TERM signal is sent, a `preStop` handler that simply sleeps holds the process alive and serving while the routing update propagates [^2]. The Kubernetes tutorial that demonstrates connection draining uses a deployment with `terminationGracePeriodSeconds: 120` and a `preStop` sleep of 180 seconds, and the example comments note that nginx keeps processing requests the entire time [^4]. Real configurations use five to fifteen seconds rather than three minutes, but the shape is the same: stay up, keep answering, and delay the beginning of your shutdown until the traffic has actually stopped.
+
+One detail about that sleep is easy to get wrong. The grace period countdown begins before the `preStop` hook executes, not after [^1][^2]. The hook's duration comes out of the same budget as your drain. The hooks documentation walks through the arithmetic: with a 60 second grace period, a hook that takes 55 seconds, and a container that needs 10 seconds to stop normally, the container is killed before it finishes, because the budget is 60 and the work is 65 [^2]. A `preStop` sleep is not free time. It is the first line item in a budget you are about to spend.
+
+## Does your process get the signal at all?
+
+The second failure mode has nothing to do with routing. The signal arrives, and the process that would have handled it never sees it.
+
+Start with how the container is launched, because this one is documented in the Dockerfile reference and still surprises people. The shell form of `ENTRYPOINT` starts your executable as a subcommand of `/bin/sh -c`, and that shell does not pass signals. The reference states the consequence directly: the executable is not the container's process ID 1 and does not receive Unix signals, so it never receives the `SIGTERM` from `docker stop` [^9]. A `CMD python app.py` gets you a graceful shutdown only by luck. A `CMD ["python", "app.py"]` gets you one reliably, because your process is now the one holding the signal handlers.
+
+Then ask what your runtime does with the signal when it does arrive. In Go, the default behavior for `SIGHUP`, `SIGINT`, or `SIGTERM` is for the program to exit [^10]. That is a correct default for a command line tool and the wrong one for a server, since an exit is not a drain. Delivering the signal to a channel with `signal.Notify` disables the default, and `signal.NotifyContext` cancels a context instead, which is usually the cleaner primitive for a server that has to unwind in-flight requests [^10]. Node has the same shape: a SIGTERM handler has to be registered explicitly, and even when it is, calling `server.close()` is the beginning of draining rather than the end of it.
+
+![Three process trees compared: a shell-form command leaves the shell as process one and drops the signal, exec form makes the application process one, and adding an init process forwards the signal to the application](</diagrams/graceful-shutdown-deploy-path-2026/2-who-gets-sigterm.png>)
+
+There is a third case that catches teams running an entrypoint script. Even with an exec-form `CMD`, a shell script that launches the application without `exec` ends up as the parent process, and the application is its child. The signal goes to the script. The script dies. The application is orphaned and killed. Using `exec` in the script replaces the shell with the application so the application becomes process one and receives the signal directly.
+
+The diagnostic that catches all three cases is one line in a shutdown log. If your service does not print a line the moment it receives TERM, you do not know that it received it, and no amount of `terminationGracePeriodSeconds` tuning will help, because the process is going to be killed at the end of the budget either way.
+
+## What draining actually means
+
+Draining is three separate steps that people collapse into one word. Stop accepting new connections. Finish the work already in flight. Exit.
+
+Node's `server.close()` illustrates why the distinction matters. It stops the server from accepting new connections and keeps existing connections, and the server is finally closed when all connections have ended [^11]. Read that carefully, because the second half is a trap. The callback fires when the connections end, not when the requests end. A client holding an idle keep-alive connection to your pod will keep that connection open, and the graceful close will wait for it.
+
+In practice that means the drain needs two things that are not the same mechanism. It needs a listener close, so no new work is admitted, and it needs a deadline, so a connection that will never be used does not hold the process open past the point where the platform kills it. Real drains look like a countdown of in-flight requests against a hard deadline, after which remaining connections are destroyed and the process exits anyway.
+
+![The correct shutdown sequence: the pre-stop hook holds the pod alive while routing converges, the process then stops accepting new connections, finishes in-flight work, and exits before the grace period expires](</diagrams/graceful-shutdown-deploy-path-2026/3-drain-sequence.png>)
+
+The order is the part that is easy to invert. If you stop accepting connections before traffic has stopped arriving, every request routed to you in the gap is a connection refused, and you have turned a slow shutdown into a fast error. If you exit before in-flight work finishes, those requests are severed mid-response, which is worse than rejecting them, because a client that received half a page has no clean way to retry it.
+
+## Three clocks that were never set against each other
+
+Here is the part that turns a harmless race into a production incident. Every layer in the path has its own shutdown timeout, each default is sensible in isolation, and nobody ever compares them.
+
+The kubelet gives a Pod `terminationGracePeriodSeconds`, which defaults to 30 seconds, and sends `SIGKILL` to anything still running when that expires [^1]. If the `preStop` hook is still executing at expiry, the kubelet requests a small one-off extension of two seconds, which is an escape hatch rather than a design [^1].
+
+An Istio sidecar gives itself `terminationDrainDuration`, which defaults to five seconds. On receiving `SIGTERM` or `SIGINT`, the agent tells Envoy to begin graceful draining, discouraging new connections and letting existing ones complete, then sleeps for that duration and kills any remaining Envoy processes [^6].
+
+An AWS Application Load Balancer gives a deregistered target `deregistration_delay.timeout_seconds`, which defaults to 300 seconds, with a configurable range from 0 to 3600. The target enters the `draining` state until in-flight requests have completed [^5].
+
+![Three shutdown clocks side by side: the Istio proxy drain defaults to five seconds, the kubelet grace period to thirty, and the load balancer deregistration delay to three hundred, so each layer assumes a different shutdown budget](</diagrams/graceful-shutdown-deploy-path-2026/4-three-clocks.png>)
+
+Put next to each other, the problem is obvious. A load balancer willing to wait five minutes for a long request is fronting a pod that will be killed at thirty seconds, which is wrapped in a proxy that will kill itself at five. None of those three defaults is wrong. They were simply chosen by three different teams for three different reasons, and the smallest one sets the real ceiling on how long a request can run during a deploy.
+
+The sizing rule is a chain rather than a single number. The widest clock has to be at the outside, so the load balancer should be the most patient layer, and the platform's grace period has to be longer than the hook delay plus the longest in-flight request plus a margin. If your slowest endpoint legitimately takes forty seconds, a 30 second grace period is not a tuning opportunity, it is a guarantee that a deploy during business hours truncates that endpoint. Pick the number from your slowest request, work outward, and write the four values down somewhere a reviewer can find them.
+
+## The same shape at cluster scale
+
+Everything above happens to one pod at a time. The identical failure occurs one level up, when a cluster administrator drains a node for a kernel upgrade and takes an entire node's worth of capacity out of service at once.
+
+Kubernetes separates the cases deliberately. Involuntary disruptions are the ones you cannot control: hardware failure, a node lost to a network partition, eviction under node pressure. Voluntary disruptions are the ones somebody chose: deleting a Deployment, updating a pod template, or draining a node for repair [^7]. A PodDisruptionBudget caps how many pods of a replicated application may be down simultaneously because of voluntary disruption, and the tooling that respects it does so through the Eviction API rather than by deleting pods [^7]. The documented worked example is a three replica application with a budget requiring two available pods: the first drain evicts one replica, its replacement starts on another node, and the next drain is refused until that replacement is healthy [^7].
+
+The detail that makes budgets useful is also the one that makes them dangerous. A disruption budget protects against voluntary evictions only, so an involuntary failure still counts against it [^7]. It does not apply to rolling upgrades at all, which are governed by the workload's own update strategy [^7]. If you set `maxUnavailable` to zero, you are declaring that no voluntary eviction is ever acceptable, and a node drain running pods with that budget will never complete [^8]. Percentages round up, so seven replicas with a `minAvailable` of fifty percent requires four healthy pods, not three and a half [^8].
+
+![A three node drain with a budget of two available replicas: the first drain succeeds, a replacement pod starts, and the next drain blocks because only two replicas are available against a budget that requires two](</diagrams/graceful-shutdown-deploy-path-2026/5-pdb-drain-blocked.png>)
+
+A budget is the same idea as the [control-plane delivery model](/field-notes/control-planes-infrastructure-delivery-2026), applied to capacity instead of configuration: you declare the state that must remain true, and the reconciler refuses the change that would break it.
+
+Two operational notes that prevent a bad afternoon. `kubectl drain` evicts through the Eviction API and respects the budgets you defined, blocking any eviction that would take healthy replicas below the budget [^12]. And the unhealthy pod eviction policy is worth setting to `AlwaysAllow`, which the documentation recommends so that a drain is not blocked indefinitely by a pod stuck in a crash loop [^7][^12]. Without it, the default behavior waits for pods to become healthy before the drain can proceed, which is exactly the wrong instinct when the pod in question is unhealthy by definition.
+
+## Testing the path you never test
+
+You cannot rehearse the shutdown path from a CI job that never points traffic at the thing being shut down. You can, however, make it observable, and most teams already have the signal they need without noticing it.
+
+**Count the errors against the deploy.** A five-minute error rate graph next to a deploy marker answers the question directly. A spike that starts within seconds of a rollout beginning and ends when the old replicas are gone is a shutdown path defect, not a bad release. This costs nothing to build and it is how most teams discover the problem in the first place.
+
+**Log the signal.** One line on TERM, timestamped. If the line is absent, the process never received the signal and no timeout tuning matters. Go's `NotifyContext` and Node's process signal handler both make this a three-line change.
+
+**Rehearse with one long request.** A single client that opens a slow request and holds it through a rolling deploy answers the question that staging hides. If the request completes, your grace period is long enough. If it fails with a connection reset, the pod was killed mid-flight. If it is never accepted at all, the routing window is open and the `preStop` delay is missing.
+
+**Write the four numbers down.** For each service: what is process one and what handles the signal, the longest expected request, the platform grace period, and the load balancer deregistration delay. The unknowns in that table are your incidents. In our own multi-agent delivery pipeline, the failure that taught us this was a worker process killed at the end of its turn because it had exited as soon as its work was done, before the handoff record was written, so the next stage restarted work that had already succeeded. The fix was not a longer timeout. It was teaching the worker that finishing the work and finishing the turn are two different events, and that the second one has to wait for the first.
+
+## The half of the deploy you never see
+
+Your deploy is two paths, and one of them gets a rehearsal on every pull request. The other one runs every time you ship, on traffic you cannot reproduce, under deadlines set in three different configuration files by three different teams. It is not a subtle problem to fix. It is a `preStop` delay, a signal handler, a drain with a deadline, and four numbers that agree with each other.
+
+The uncomfortable part is that this is not a hard engineering problem. It is an attention problem. The startup path is visible: you watch pods come up, you watch the dashboard go green, you get a message when the rollout completes. The shutdown path is a pod disappearing from a list. Nobody watches it, so nothing is ever wrong with it, until a customer sees a 502 at the exact second a pod was retired, and the deploy still gets called clean.
+
+[^1]: Kubernetes, "Pod Lifecycle," the Termination of Pods section: when a Pod is deleted the kubelet begins local shutdown and the control plane evaluates removing the Pod from EndpointSlice objects at the same time; a `preStop` hook runs before the TERM signal; the grace period countdown begins before the hook runs; the default `terminationGracePeriodSeconds` is 30 seconds; a `preStop` hook still running at expiry gets a small one-off grace period extension of 2 seconds; a KILL signal is sent to remaining processes when the grace period expires. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)
+[^2]: Kubernetes, "Container Lifecycle Hooks": the `PreStop` hook must complete before the TERM signal can be sent, the Pod's termination grace period countdown begins before the hook is executed, hook delivery is intended to be at least once, a failed hook kills the container and emits a `FailedPreStopHook` event, and the worked example shows a 60 second grace period with a 55 second hook and a 10 second container stop being killed before it finishes normally. [kubernetes.io](https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/)
+[^3]: Kubernetes, "EndpointSlices": the three endpoint conditions are `serving`, `terminating` and `ready`; `terminating` is set when a backing Pod is first deleted; service proxies normally ignore terminating endpoints but may route traffic to endpoints that are both serving and terminating if all available endpoints are terminating, which preserves traffic during rolling updates. [kubernetes.io](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/)
+[^4]: Kubernetes, "Explore Termination Behavior for Pods And Their Endpoints": a terminating endpoint keeps `serving` true and `ready` false so that clients can implement connection draining, and the tutorial Deployment sets `terminationGracePeriodSeconds: 120` with a `preStop` sleep of 180 seconds, noting that nginx keeps processing requests for that duration. [kubernetes.io](https://kubernetes.io/docs/tutorials/services/pods-and-endpoint-termination-flow/)
+[^5]: AWS, "Target groups for your Application Load Balancers": the `deregistration_delay.timeout_seconds` attribute is the amount of time Elastic Load Balancing waits before deregistering a target, has a range of 0 to 3600 seconds, and defaults to 300 seconds; a deregistered target enters the `draining` state until in-flight requests have completed. [docs.aws.amazon.com](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups.html)
+[^6]: Istio, "Global Mesh Options," the ProxyConfig `terminationDrainDuration` field: the time allowed for connections to complete on proxy shutdown; on receiving `SIGTERM` or `SIGINT` the istio-agent tells the active Envoy to start gracefully draining, discouraging new connections and allowing existing ones to complete, then sleeps for the drain duration and kills any remaining Envoy processes; a default of 5 seconds applies when unset. [istio.io](https://istio.io/latest/docs/reference/config/istio.mesh.v1alpha1/)
+[^7]: Kubernetes, "Disruptions": involuntary disruptions include hardware failure, a node disappearing from the cluster, and eviction under node pressure, while voluntary disruptions include deleting a controller, updating a pod template, and draining a node for repair or upgrade; a PodDisruptionBudget limits the number of Pods of a replicated application that are down simultaneously from voluntary disruptions; involuntary disruptions cannot be prevented by PDBs but do count against the budget; rolling upgrades are not limited by PDBs; setting `AlwaysAllow` as the unhealthy pod eviction policy is recommended because the default waits for pods to become healthy before a drain can proceed. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/pods/disruptions/)
+[^8]: Kubernetes, "Specifying a Disruption Budget for your Application": percentage values are rounded up, so with 7 Pods a `minAvailable` of 50 percent means 4 Pods must remain available; a disruption budget cannot guarantee availability against involuntary failures; and setting `maxUnavailable` to 0 percent or 0 means zero voluntary evictions are required, so a node running those Pods cannot be drained and the drain never completes. [kubernetes.io](https://kubernetes.io/docs/tasks/run-application/configure-pdb/)
+[^9]: Docker, "Dockerfile reference," the `ENTRYPOINT` and `STOPSIGNAL` sections: the shell form of `ENTRYPOINT` starts the executable as a subcommand of `/bin/sh -c`, which does not pass signals, so the executable is not the container's PID 1 and does not receive the `SIGTERM` from `docker stop`; `STOPSIGNAL` sets the signal sent to the container to exit, defaults to `SIGTERM`, and applies to the signal sent by `docker stop`. [docs.docker.com](https://docs.docker.com/reference/dockerfile/)
+[^10]: Go, "package os/signal": the default behavior of a Go program on `SIGHUP`, `SIGINT` or `SIGTERM` is to exit; `Notify` disables that default behavior and delivers the signals on a registered channel, and `NotifyContext` returns a copy of a context marked done when one of the listed signals arrives. [pkg.go.dev](https://pkg.go.dev/os/signal)
+[^11]: Node.js, "Net," `server.close()`: stops the server from accepting new connections and keeps existing connections; the function is asynchronous and the server is finally closed when all connections are ended. [nodejs.org](https://nodejs.org/api/net.html)
+[^12]: Kubernetes, "Safely Drain a Node": `kubectl drain` evicts the Pods on a node so their containers can gracefully terminate, respects the PodDisruptionBudgets you have specified, and multiple concurrent drains still respect the budget so that any drain which would take healthy replicas below the specified budget is blocked. [kubernetes.io](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/)

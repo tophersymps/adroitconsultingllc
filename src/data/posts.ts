@@ -26,6 +26,29 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "graceful-shutdown-deploy-path-2026",
+    "title": "Your Deploy Has Two Paths. You Tested One.",
+    "excerpt": "Every rollout rehearsal exercises startup. The shutdown path runs on every deploy too, and it is where zero-downtime deploys quietly drop requests.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "14 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "Kubernetes",
+      "CI/CD",
+      "Platform Engineering",
+      "Reliability"
+    ],
+    "bannerImage": "/banners/graceful-shutdown-deploy-path-2026.webp",
+    "ogImage": "/banners/graceful-shutdown-deploy-path-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "post-response-side-effects-2026",
     "title": "Your Response Went Out. The Rest Is Best-Effort.",
     "excerpt": "Next.js after() and waitUntil run side effects on the invocation's clock, with no queue and no retry. Here is how to tell which work can afford to be lost.",
