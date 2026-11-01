@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "agent-tool-catalog-selection-2026",
+    "title": "Your Agent Has 200 Tools and Picks the Wrong One",
+    "excerpt": "Five MCP servers put about 55,000 tokens of tool definitions in front of the request. Past a certain catalog size, more tools mean worse choices.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "AI Agents",
+      "MCP",
+      "Tool Use",
+      "AI Infrastructure",
+      "Context Engineering",
+      "LLM Engineering"
+    ],
+    "bannerImage": "/banners/agent-tool-catalog-selection-2026.webp",
+    "ogImage": "/banners/agent-tool-catalog-selection-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "post-response-side-effects-2026",
     "title": "Your Response Went Out. The Rest Is Best-Effort.",
     "excerpt": "Next.js after() and waitUntil run side effects on the invocation's clock, with no queue and no retry. Here is how to tell which work can afford to be lost.",

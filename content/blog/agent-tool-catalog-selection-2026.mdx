@@ -1,0 +1,114 @@
+---
+title: "Your Agent Has 200 Tools and Picks the Wrong One"
+slug: agent-tool-catalog-selection-2026
+excerpt: "Five MCP servers put about 55,000 tokens of tool definitions in front of the request. Past a certain catalog size, more tools mean worse choices."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 01, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [AI Agents, MCP, Tool Use, AI Infrastructure, Context Engineering, LLM Engineering]
+bannerImage: /banners/agent-tool-catalog-selection-2026.webp
+ogImage: /banners/agent-tool-catalog-selection-2026-og.jpg
+---
+
+A support agent connects to five MCP servers: GitHub, Slack, Sentry, Grafana, and Splunk. Before it reads a word of the user's request, 58 tool definitions sit in its context window at a cost of roughly 55,000 tokens. Anthropic measured that exact five-server arrangement when it shipped the Tool Search Tool, and put its own internal worst case at 134,000 tokens of tool definitions loaded before any conversation started.[^1]
+
+That number usually prompts a request for a bigger context window. The window matters, but it is not what fails first. What fails first is the agent's ability to choose.
+
+An agent holding fifteen tools routes cleanly. An agent holding three hundred is a visitor with a phrasebook. Somewhere between those points decision quality slips, and the slippage is invisible in the dashboards most teams already have: no errors, no timeouts, no failed calls, just a slightly wrong action taken confidently.
+
+## The bill arrives before the work starts
+
+Tool definitions are the most expensive context an agent carries, because unlike a retrieved document they must be present on every request. Anthropic's five-server breakdown is a useful yardstick. GitHub contributes 35 tools at about 26,000 tokens. Slack contributes 11 tools at about 21,000. Sentry and Grafana contribute 5 tools each at roughly 3,000 apiece, and Splunk 2 tools at about 2,000.[^1] The size of a tool has little to do with the size of what it does. Slack's eleven tools cost almost as much as GitHub's thirty-five.
+
+Add a project tracker and the arithmetic gets uncomfortable. Jira alone runs about 17,000 tokens in that counting, which is how a five-server agent acquires a hundred-thousand-token preamble before the user says anything.[^1]
+
+Anthropic's remedy was to stop loading definitions the model does not need. Its engineering team measured the change internally at 77,000 tokens consumed before work began on the traditional path against 8,700 with on-demand tool discovery, an 85% reduction that preserved 95% of the context window.[^1]
+
+The ceiling itself is lower than the model marketing suggests. Alibaba Cloud's engineering team measured how many tools actually fit in each frontier model's window, using a real tool set drawn from VPC, ECS, and related services. A 1M-token window held 774 tools on Gemini-3-Flash or 627 on Qwen-Plus. GPT-5.2's 400k window held 270. Claude Opus 4.5's 200k window held 125. DeepSeek-V3.2's 128k window held 98.[^5] Even a million tokens saturates between 600 and 800 tools, and that is before dialogue history and reasoning take their share. One service category on Alibaba Cloud, Security Center, exposes more than 921 operations on its own.[^5]
+
+The token tab has a latency twin. Inlining 120 VPC tools cost more than 166,000 tokens on Qwen-Plus and Qwen3-MAX, or more than 56,000 with efficient tokenization. Mounting 120 tools pushed Qwen3-MAX past 100 seconds of end-to-end latency across prompting, selection, and argument generation; 180 tools pushed it past 200 seconds.[^5] The same team's VPC agent needed about ten tool-selection rounds for a task that merely repeated an established query, and on Claude Opus 4.5 each round consumed 92,924 tokens. That is roughly a dollar of model spend for something a script could have answered.[^5]
+
+![Tool definition tax: five MCP servers contribute 58 tool definitions and about 55,000 tokens before the request, and on-demand discovery cuts the preamble from 77,000 tokens to 8,700](</diagrams/agent-tool-catalog-selection-2026/1-tool-definition-tax.png>)
+
+## Selection erodes, then the model stops calling tools at all
+
+The same measurements show what happens to accuracy as the catalog grows. On ToolBench, Alibaba Cloud's baseline that inlines every tool degraded from 92.4% selection accuracy at 15 tools to 78.2% at 640, at which point it fell below every retrieval-based method it was tested against.[^5] The most telling number is not the wrong-tool rate. It is the no-call rate. As tool schemas filled more of the window, the model went from refusing to call any tool 8.0% of the time to 19.0%.[^5] The agent stops acting. In production that surfaces as a model that "didn't do anything," which teams then chase as a prompt problem, or as a model that keeps calling a search tool instead of the tool that does the work.
+
+Anthropic reports the same shape from the other direction. Its most common tool-use failures are wrong tool selection and incorrect parameters, and near-duplicate names make it concrete: a tool called notification-send-user and a tool called notification-send-channel differ by one word and land in the same fuzzy region for a model choosing under pressure.[^1] This is a routing problem wearing a naming costume, and it is distinct from the schema problem that the [reliability gap](/field-notes/structured-output-tool-calling-reliability-2026) covers, where the call is well formed but the arguments do not mean what the agent assumed.
+
+Retrieval fixes it, and the effect size is large. RAG-MCP retrieved the most relevant MCP tools from an external index and passed only those descriptions to the model. Selection accuracy went from 13.62% to 43.13%, more than tripled, with prompt tokens cut by over half.[^7]
+
+![Context capacity cliff: the largest tool catalogs that fit frontier model windows, from 774 tools on a 1M window down to 98 tools on a 128k window](</diagrams/agent-tool-catalog-selection-2026/2-capacity-cliff.png>)
+
+## The shortlist should be adaptive, not fixed
+
+Once you accept that the model should see a subset, the next question is how big that subset should be. Most systems pick a constant and never revisit it. A 2026 paper argues that the shortlist length is itself the thing worth evaluating, and it introduces a chance-corrected metric, Bits-over-Random, which asks whether success at a given depth beats what random selection would have achieved at that same depth. The authors evaluated registries from 20 to 3,251 tools, then learned a per-query depth as a reinforcement-learning reward.[^6]
+
+Two results matter for anyone building this. On BFCL, a 370-tool benchmark, the learned policy averaged seven tools per query while nearly matching the coverage of always showing 50: 90.3% against 90.8%.[^6] Fewer tools, nearly the same reach. On ToolBench, with 3,251 tools, a fixed shortlist of five achieved higher aggregate coverage than the adaptive policy, 64.7% against 61.9%, but found nothing at all on hard queries where the correct tool ranked between sixth and twentieth. The adaptive policy, searching deeper when the shallow pass looked weak, found the right tool 16.7% of the time on those same queries.[^6]
+
+The downstream effect is the part worth taking into a client conversation. The authors validated with Claude Sonnet 4.6 and found that the shorter adaptive lists improved the model's ability to pick the right tool: 93.1% against 87.1% when it was always shown five tools, and the gap widened to 76.8% against 60.9% on medium-difficulty queries where the correct tool was present but not ranked first.[^6]
+
+Sit with the second pair. The baseline here is already a shortlist of five, and the adaptive list is on average even shorter, yet it wins by almost sixteen points when the right answer is present but not at the top. Mildly relevant neighbours do not help the model find the target among them. They add noise to a decision the model was already going to get right or wrong on the strength of the top candidate.
+
+![Fixed versus adaptive shortlist: a fixed list of five tops out at 61.9 percent aggregate coverage and zero on hard queries, while a learned adaptive list averages seven tools and still finds the right tool on hard queries](</diagrams/agent-tool-catalog-selection-2026/3-fixed-vs-adaptive.png>)
+
+## Three ways to show the model fewer tools
+
+The remedies sort into a ladder, and each rung costs more engineering than the one below it.
+
+**Retrieve before you prompt.** Build an index of your tool catalog and shortlist per query. The result that justifies the work: a hybrid retriever that matches semantic embeddings and lexical terms together held 98.2% Recall@15 at a catalog of 3,616 tools, where dense-only retrieval dropped to 83.1% and plain BM25 to 67.7%.[^5] The lexical half matters because tool names encode function, which generic embeddings often miss for domain-specific queries. The same team added automated query rewriting against extracted domain rules and moved recommendation accuracy from 80.8% to 99.7%, and kept the retriever deterministic and gateway-side so it returns in under 250 milliseconds instead of calling a model to pick the tools.[^5] One detail worth copying: they mapped each API operation to exactly one tool, because one-to-one mapping minimizes ambiguity in both selection and argument generation.[^5]
+
+**Defer the long tail.** Keep the handful of tools that run in every session loaded, and mark everything else discoverable on demand. Anthropic's implementation marks deferred tools with a `defer_loading` flag so they never enter the initial prompt; the model then calls a search tool, which resolves references into full definitions only for the matches.[^1] Anthropic puts the threshold at definitions over 10,000 tokens, evidence of selection-accuracy problems, a multi-server MCP setup, or 10 or more tools, and says the feature is not worth its extra step below 10 tools or when every tool is used in every session.[^1] It also notes that deferral does not break prompt caching, because deferred tools are excluded from the prompt in the first place.[^1]
+
+**Present the catalog as code.** Cloudflare's Code Mode converts an MCP server's tools into a TypeScript API and asks the model to write code against it instead of emitting tool calls. The published result is an 81% cut in token usage from the conversion alone, and Cloudflare's own MCP server now exposes the entire Cloudflare API through two tools, search and execute, in under 1,000 tokens.[^3][^4] The argument behind it is a training-data argument: models have read an enormous amount of real code and only a contrived sample of tool-call syntax, so they compose functions better than they compose calls. Anthropic's version of the same idea generates a file tree of connected servers and tools, so the agent imports the function it needs instead of being handed every definition. It also keeps intermediate results inside the sandbox, where a two-hour meeting transcript that used to pass through the model twice at more than 50,000 tokens now stays put and only the final result enters context.[^2] Anthropic's Programmatic Tool Calling is the same pattern inside its own API: a budget-compliance workflow that previously pushed 200KB of expense line items through the model reduced that to 1KB of results, and average usage on complex research tasks fell from 43,588 tokens to 27,297.[^1]
+
+The cost on this rung is real. Generated code has to run somewhere isolated, and that sandbox is infrastructure you now own, which is a topic the [agent sandbox](/field-notes/agent-sandbox-scope-egress-state-2026) covers properly. Cloudflare's own answer is a V8 isolate per request, which it measures at milliseconds of start time and roughly 100 times faster than a container.[^4]
+
+![Tool presentation ladder: inline everything under ten tools, keep a hot set and defer the rest from ten to one hundred tools, add retrieval shortlisting in the hundreds, and move to a typed code API beyond a thousand](</diagrams/agent-tool-catalog-selection-2026/4-presentation-ladder.png>)
+
+## Where each one breaks
+
+None of these is free, and the failure modes are specific.
+
+Retrieval has a precision floor. Retrieval-based methods stay far more stable than inlining, but they still decay: dense-only retrieval fell to 83.1% Recall@15 at 3,616 tools in the same test where the hybrid held 98.2%.[^5] And a shortlist can lose the correct tool outright, which is exactly the hard-query case above: zero hits when the right tool sits below the cut. An agent that cannot see a tool cannot ask for it.
+
+Shortlists also break on chains. Tool dependencies matter more than tool count for multi-step work. In the Alibaba Cloud evaluation, iterative discovery achieved 30.5% prerequisite completeness on dependency chains of complexity four and 0% at complexity five or higher, because the compound probability of resolving every hop falls with each additional step. A cached map of prerequisite chains returned complete tool chains with no extra round-trips or tokens.[^5] If your agent's work is a workflow rather than a question, precompute the chain.
+
+Deferral requires knowing your hot set, and it adds a turn. The model has to guess the right search keywords before it can call anything, which is a new way to fail that did not exist when everything was loaded.
+
+Code presentation requires a typed, well-documented API. A service whose documentation lives only in prose loses most of the advantage, and generated code that runs against your systems is a new attack surface that the [tool-layer threat model](/field-notes/agent-tool-attack-surface-2026) is the right place to reason about.
+
+Then there is governance, which is easy to forget while optimizing tokens. The MCP specification treats tools as model-controlled and puts the guidance bluntly: for trust and safety there should always be a human in the loop with the ability to deny an invocation, and clients must treat tool annotations as untrusted unless they come from trusted servers.[^8] The protocol also gives you two primitives that matter at catalog scale. `tools/list` supports pagination, and a server that declares the `listChanged` capability emits `notifications/tools/list_changed` so a client can refresh without polling.[^8] Pair that with per-identity visibility, where the gateway decides which tools an agent may even discover based on who is asking, which is the pattern the [model gateway](/field-notes/llm-gateway-model-routing-2026) already provides for routing and failover.[^5]
+
+![Failure modes by approach: retrieval loses precision at thousands of tools, shortlists fail on dependency chains, deferred discovery needs guessable keywords, and code presentation needs a typed API and a sandbox](</diagrams/agent-tool-catalog-selection-2026/5-failure-modes.png>)
+
+## An order of operations
+
+1. Instrument the choice, not just the call. Log which tool the model selected at each step and have a grader, human or automated, mark whether it was the right one. Selection accuracy is the metric that moves before anything else does, and the no-call rate is the second one to watch.
+2. Cap the mounted set per task. Start at five to eight tools for a focused agent and add only when the logs justify it.
+3. Make the names carry the semantics. Qualify names with their server or domain, and delete near-duplicates, because a pair like send-user and send-channel is a decision you are forcing the model to make on one word.
+4. Keep the hot set eager and defer the rest once definitions pass roughly 10,000 tokens or the catalog passes 10 tools.
+5. Add retrieval when the catalog reaches the low hundreds, or the moment selection accuracy starts drifting. Use a hybrid index rather than embeddings alone.
+6. Move chained workflows to a code API, where a single generated function replaces a dozen round-trips and intermediate data never enters the model.
+7. Put a gateway in front when more than one identity or tenant shares the catalog, so visibility, access control, and shortlisting happen in one deterministic place.
+
+Two neighbours are worth reading alongside this one. The [effective context budget](/field-notes/effective-context-budget-2026) explains why a bigger window does not rescue a crowded one, and [the glue is the agent](/field-notes/agent-middleware-deterministic-glue-2026) makes the case that the deterministic layer around the model is where reliability actually lives. Tool shortlisting belongs in that layer.
+
+## The tool count is a design decision
+
+Nobody ships an agent with 200 tools because the task needs 200. They ship it because connecting a server is cheap, and a catalog that grows by connection is a catalog nobody chose. Anthropic spent 134,000 tokens on definitions before it optimized, which is a large company admitting that it happened to them too.
+
+The practical test is simple. Ask what the agent could not do with eight tools, and if the honest answer is "nothing today, but it might want the others later," then the other 192 belong behind a search step, not in the prompt. Capability is not the same as exposure. An agent that can reach 200 tools through retrieval and sees eight of them is more capable than one that sees all 200, and the published numbers say so plainly: seven tools matching the coverage of fifty, and shorter lists beating longer ones when the right answer is not at the top.[^6]
+
+[^1]: Anthropic, Introducing advanced tool use for Claude, [anthropic.com](https://www.anthropic.com/research/advanced-tool-use)
+[^2]: Anthropic, Code execution with MCP, [anthropic.com](https://www.anthropic.com/research/code-execution-with-mcp)
+[^3]: Cloudflare, Code Mode: the better way to use MCP, [blog.cloudflare.com](https://blog.cloudflare.com/code-mode/)
+[^4]: Cloudflare, Sandboxing AI agents, 100x faster, [blog.cloudflare.com](https://blog.cloudflare.com/dynamic-workers)
+[^5]: Mingxin Li et al., Scalable LLM Agent Tool Access in the Cloud, [arxiv.org](https://arxiv.org/abs/2607.15593)
+[^6]: Vyzantinos Repantis et al., How Many Tools Should an LLM Agent See? A Chance-Corrected Answer, [arxiv.org](https://arxiv.org/abs/2605.24660)
+[^7]: Tiantian Gan and Qiyao Sun, RAG-MCP: Mitigating Prompt Bloat in LLM Tool Selection, [arxiv.org](https://arxiv.org/abs/2505.03275)
+[^8]: Model Context Protocol, Server Features: Tools, [modelcontextprotocol.io](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)
