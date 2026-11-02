@@ -550,9 +550,18 @@ describe("input conformance — every check file carries a Lessons A–B range",
       });
   });
 
-  it("finds exactly the 90 check files across the 12 series", () => {
-    expect(files).toHaveLength(90);
-    expect(new Set(files.map((f) => f.series)).size).toBe(12);
+  it("finds check files for every series, with no duplicate index within a series", () => {
+    // The file total is content-driven: it grows as lessons are published, so it
+    // is deliberately NOT a frozen number. Assert the invariants that matter:
+    // every series carries at least one check, and no series repeats an index.
+    expect(new Set(files.map((f) => f.series)).size).toBe(CHECK_SERIES.length);
+    for (const series of CHECK_SERIES) {
+      const indexes = files
+        .filter((f) => f.series === series)
+        .map((f) => Number(/^check-(\d+)\.json$/.exec(f.file)?.[1]));
+      expect(indexes.length).toBeGreaterThan(0);
+      expect(new Set(indexes).size).toBe(indexes.length);
+    }
   });
 
   it("every title matches `Lessons A–B`, so quiz.ts's 5n fallback stays dormant", () => {
