@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "component-api-design-2026",
+    "title": "Your Button Has Fourteen Props. That Is the Bug.",
+    "excerpt": "A prop list is an API, and most teams never review it. How to design component APIs with variants, composition, and clear state ownership.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "November 2, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Design Systems",
+      "Component Libraries",
+      "Design Engineering",
+      "TypeScript",
+      "React",
+      "UI/UX"
+    ],
+    "bannerImage": "/banners/component-api-design-2026.webp",
+    "ogImage": "/banners/component-api-design-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "agent-tool-catalog-selection-2026",
     "title": "Your Agent Has 200 Tools and Picks the Wrong One",
     "excerpt": "Five MCP servers put about 55,000 tokens of tool definitions in front of the request. Past a certain catalog size, more tools mean worse choices.",
@@ -26,6 +50,80 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "design-system-governance-operating-model-2026",
+    "title": "The Operating Model Is What Scales a Design System",
+    "excerpt": "Design systems rarely fail on components. They fail on the operating model around them: token drift, a governance vacuum, and contribution friction.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "Governance",
+      "Adoption",
+      "Design Engineering",
+      "Design Tokens",
+      "Component Libraries"
+    ],
+    "bannerImage": "/banners/design-system-governance-operating-model-2026.webp",
+    "ogImage": "/banners/design-system-governance-operating-model-2026-og.jpg",
+    "status": "published"
+  },
+  {
+    "slug": "fine-tune-rag-prompt-decision-2026",
+    "title": "Fine-Tune the Behavior, Retrieve the Facts",
+    "excerpt": "RAG is for knowledge that changes; fine-tuning is for behavior that should not. The decision rule, the real cost model, and the hybrid that wins in production.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "LLM",
+      "Fine-Tuning",
+      "RAG",
+      "Local Models",
+      "Agentic Frameworks"
+    ],
+    "bannerImage": "/banners/fine-tune-rag-prompt-decision-2026.webp",
+    "ogImage": "/banners/fine-tune-rag-prompt-decision-2026-og.jpg",
+    "status": "published"
+  },
+  {
+    "slug": "fixed-fee-margin-scope-control-2026",
+    "title": "The Fixed-Fee Margin Leak: Scope Control Is a Profit Problem",
+    "excerpt": "Fixed-fee work converts every unpriced scope concession from lost revenue into direct margin erosion. The fix is a change-control system, not a bigger buffer.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Fixed Fee",
+      "Scope Control",
+      "Change Control",
+      "Margin",
+      "Consulting Delivery",
+      "Delivery"
+    ],
+    "bannerImage": "/banners/fixed-fee-margin-scope-control-2026.webp",
+    "ogImage": "/banners/fixed-fee-margin-scope-control-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "graceful-shutdown-deploy-path-2026",
     "title": "Your Deploy Has Two Paths. You Tested One.",
     "excerpt": "Every rollout rehearsal exercises startup. The shutdown path runs on every deploy too, and it is where zero-downtime deploys quietly drop requests.",
@@ -46,6 +144,30 @@ export const posts: BlogPost[] = [
     ],
     "bannerImage": "/banners/graceful-shutdown-deploy-path-2026.webp",
     "ogImage": "/banners/graceful-shutdown-deploy-path-2026-og.jpg",
+    "status": "published"
+  },
+  {
+    "slug": "platform-engineering-golden-paths-2026",
+    "title": "AI Writes the Code. The Platform Keeps Delivery Stable.",
+    "excerpt": "AI writes 41% of code, yet delivery stability is falling. The answer is the platform as a product: golden paths that make the safe path the easy path.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Platform Engineering",
+      "Internal Developer Platform",
+      "Golden Paths",
+      "DevOps",
+      "Developer Experience",
+      "AI"
+    ],
+    "bannerImage": "/banners/platform-engineering-golden-paths-2026.webp",
+    "ogImage": "/banners/platform-engineering-golden-paths-2026-og.jpg",
     "status": "published"
   },
   {
