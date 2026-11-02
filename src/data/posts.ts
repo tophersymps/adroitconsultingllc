@@ -26,6 +26,31 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "design-system-governance-operating-model-2026",
+    "title": "The Operating Model Is What Scales a Design System",
+    "excerpt": "Design systems rarely fail on components. They fail on the operating model around them: token drift, a governance vacuum, and contribution friction.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "Governance",
+      "Adoption",
+      "Design Engineering",
+      "Design Tokens",
+      "Component Libraries"
+    ],
+    "bannerImage": "/banners/design-system-governance-operating-model-2026.webp",
+    "ogImage": "/banners/design-system-governance-operating-model-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "fine-tune-rag-prompt-decision-2026",
     "title": "Fine-Tune the Behavior, Retrieve the Facts",
     "excerpt": "RAG is for knowledge that changes; fine-tuning is for behavior that should not. The decision rule, the real cost model, and the hybrid that wins in production.",
