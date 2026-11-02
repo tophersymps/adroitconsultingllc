@@ -69,6 +69,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "feature-flags-deploy-release-2026", voice: "af_heart", storagePath: "blog/feature-flags-deploy-release-2026/af_heart.mp3", timingsStoragePath: "blog/feature-flags-deploy-release-2026/af_heart.timing.json" },
   { slug: "figma-mcp-design-to-code-2026", voice: "af_heart", storagePath: "blog/figma-mcp-design-to-code-2026/af_heart.mp3", timingsStoragePath: "blog/figma-mcp-design-to-code-2026/af_heart.timing.json" },
   { slug: "fine-tune-rag-prompt-decision-2026", voice: "af_heart", storagePath: "blog/fine-tune-rag-prompt-decision-2026/af_heart.mp3", timingsStoragePath: "blog/fine-tune-rag-prompt-decision-2026/af_heart.timing.json" },
+  { slug: "fixed-fee-margin-scope-control-2026", voice: "af_heart", storagePath: "blog/fixed-fee-margin-scope-control-2026/af_heart.mp3", timingsStoragePath: "blog/fixed-fee-margin-scope-control-2026/af_heart.timing.json" },
   { slug: "flow-metrics-consulting-delivery-2026", voice: "af_heart", storagePath: "blog/flow-metrics-consulting-delivery-2026/af_heart.mp3", timingsStoragePath: "blog/flow-metrics-consulting-delivery-2026/af_heart.timing.json" },
   { slug: "flow-orchestrates-agentforce", voice: "af_heart", storagePath: "blog/flow-orchestrates-agentforce/af_heart.mp3", timingsStoragePath: "blog/flow-orchestrates-agentforce/af_heart.timing.json" },
   { slug: "form-ux-design-2026", voice: "af_heart", storagePath: "blog/form-ux-design-2026/af_heart.mp3", timingsStoragePath: "blog/form-ux-design-2026/af_heart.timing.json" },
