@@ -1,0 +1,126 @@
+---
+title: "Your Button Has Fourteen Props. That Is the Bug."
+slug: component-api-design-2026
+excerpt: "A prop list is an API, and most teams never review it. How to design component APIs with variants, composition, and clear state ownership."
+category: "UI/UX"
+categoryColor: ux
+categoryGradient: "from-violet to-violet-dark"
+date: "November 2, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [Design Systems, Component Libraries, Design Engineering, TypeScript, React, UI/UX]
+bannerImage: "/banners/component-api-design-2026.webp"
+ogImage: "/banners/component-api-design-2026-og.jpg"
+---
+
+A button component never picks up fourteen props in one commit. It picks them up one at a time, each one reasonable, each one approved in a pull request that showed a screenshot and little else.
+
+The first boolean arrives because one page needed a quieter button next to the loud one. The second because the delete flow needed red. The third because the save button could not sit there looking clickable while a request was in flight. Then an icon-only case, a full-width case, and a pill shape. Every addition was defensible on its own. The list was never defensible, because nobody ever looked at the list. Seven booleans later the signature carried `isSecondary`, `isDestructive`, `isLoading`, `isIconOnly`, `isFullWidth`, `hasLeftIcon`, and `isPill`.
+
+Seven booleans do not behave like seven decisions. They behave like 128 combinations, and the component has to survive every one of them. Three of those combinations exist in the design file. The other 125 ship anyway, and how they look is decided by whichever branch runs first.
+
+![Each boolean prop doubles the state matrix: seven booleans produce 128 combinations, of which only a handful were ever designed, leaving the component to render the rest unsupervised](</diagrams/component-api-design-2026/1-boolean-combinations.png>)
+
+That is the shape of most component API debt. It is not one bad decision, it is an unreviewed accumulation of good ones. The prop table is the interface your team will maintain for years, and in most design systems it is the one artifact nobody reads end to end.
+
+The React documentation is unusually direct about what props are: they are the only argument a component function receives, and you can think of them as knobs the parent adjusts[^1]. Knobs are a fine metaphor, and a control panel with 128 positions is a design failure rather than a feature.
+
+## Booleans describe mechanism. Variants describe intent.
+
+Three booleans came from one design question. The question was which emphasis a button carries: primary, secondary, or quiet. The component answered it with three independent flags, `isPrimary`, `isSecondary`, and `isGhost`, which means it has to tolerate all three being true at once and then pick a winner. Three flags is eight combinations. Exactly three of them are designs, and the other five are contradictions the component resolves by branch order. That winner is now undocumented behaviour, and the day someone flips two booleans in a CMS config, the button will silently do something no designer has seen.
+
+The same intent fits in one prop:
+
+```tsx
+type ButtonProps = {
+  variant: "primary" | "secondary" | "ghost";
+  size: "sm" | "md" | "lg";
+};
+
+function Button({ variant, size = "md", ...props }: ButtonProps) {
+  return <button data-variant={variant} data-size={size} {...props} />;
+}
+```
+
+A union is not decoration. The TypeScript handbook walks through discriminated unions and the exhaustiveness check that falls out of the `never` type: handle every case in a `switch`, assign the remaining value to a variable typed `never` in the default branch, and adding a new member to the union becomes a compile error at every place that forgot to handle it[^2]. That is the difference between a new variant and a new bug. With booleans, adding `isGhost` compiles everywhere and does nothing in half the branches it reaches.
+
+![Three boolean flags allow eight combinations, five of them contradictory, against a single variant union with three unambiguous states where a fourth variant becomes a compile error at every branch that forgot to handle it](</diagrams/component-api-design-2026/2-variant-versus-boolean.png>)
+
+Two rules keep variants from becoming booleans with better spelling. The first is that axes should be independent. Emphasis, size, and tone are genuinely separate choices, so they get separate props. A prop that mixes two axes, such as `variant="primary-ghost"`, means you actually had two, and one of them is hiding inside a string.
+
+The second rule is that a prop you can derive is not a prop. If a loading button is always non-interactive, then loading implies disabled and the caller should not be able to express "loading and clickable". Two props that can never legally differ are one prop with a clearer name. Every derived prop you delete removes a row from the test matrix, and the matrix is where the cost lands: a variant-based component needs one visual snapshot per variant, while the boolean version needs one per combination you care about, and you have to decide which of the 128 those are. The [visual regression practice for design systems](/field-notes/visual-regression-testing-design-systems-2026) runs into exactly this, which is why its snapshot matrix has to be chosen deliberately rather than generated.
+
+## Composition is cheaper than configuration
+
+The second way a prop list grows is layout. A card with `hasHeader`, `headerTitle`, `hasFooter`, `footerAlign`, `bodyPadding`, and `isScrollable` is not a component, it is a form. The React docs offer the alternative in one sentence: a component with a `children` prop has a hole that a parent fills with arbitrary JSX, and you will use it for visual wrappers like panels and grids[^1].
+
+That turns the card into `Card`, `Card.Header`, `Card.Body`, and `Card.Footer`, where the arrangement lives at the call site instead of inside a conditional tree. The prop list shrinks and the shapes the component can take grow, which is the trade you want. It also matches how teams already talk about the UI in review: nobody says "footer aligned left with scroll body", they sketch a card.
+
+![Three composition shapes for the same problem: one children hole when the component has a single region to fill, named slots when it has several fixed regions, and an element swap that keeps the behaviour while letting the caller choose the tag](</diagrams/component-api-design-2026/3-composition-shapes.png>)
+
+The third shape handles the case where the caller needs a different element rather than different content. Radix Primitives solves it with an `asChild` prop: when it is set, the part does not render its own DOM element, it clones its single child and passes down the props and behaviour that make that child functional[^3]. A tooltip trigger stops being a button and becomes a link without losing the tooltip.
+
+The merge rules behind that are worth knowing, because they define what "composable" actually promises. Radix's Slot utility merges its props onto its immediate child, concatenating class names, merging style objects, and composing event handlers so both run, with the child handler taking precedence[^4]. Refs get composed too. If you build your own equivalent, those four behaviours are the contract.
+
+`asChild` also transfers responsibility, and Radix says so plainly: change the underlying element type and it becomes your job to keep it accessible and functional, because a tooltip trigger rendered as a `div` can no longer receive focus or respond to the keyboard[^3]. Swapping the tag is a real capability with a real footgun, which is why it should be an explicit opt-in on one part rather than a default everywhere.
+
+For any of this to work on your own components, they have to spread props and accept a ref, and Radix recommends both for leaf components as a rule rather than a case-by-case decision[^3]. React 19 made half of that easier: `ref` is now a normal prop on function components, and the documentation for `forwardRef` marks it as no longer necessary and slated for deprecation in a future release[^5]. The current release on npm is React 19.3.1[^6].
+
+The migration detail is the interesting part. MUI found that once `ref` is also a prop, spreading props after it can overwrite the ref, and the presence of a `ref` key that is sometimes `undefined` makes the props object referentially unstable, which breaks memoization downstream. Their fix was a compatibility shim that enforces prop ordering at the type level[^7]. The lesson generalizes past refs: spread order is API, not formatting.
+
+One caution on the whole composition approach. The React docs recommend using spread syntax with restraint, and note that reaching for it in every other component usually means you should split the component and pass children as JSX instead[^1]. Composition is the better default, not a substitute for deciding where the boundary is.
+
+## Decide who owns each piece of state
+
+Two versions of the same component can be different products depending on who holds the state. React frames this as controlled (driven by props) and uncontrolled (driven by internal state), and pairs it with the ownership rule that matters: for each unique piece of state, you choose the component that owns it[^8].
+
+The controlled contract is specific. Pass `value`, or `checked` for a checkbox, and you must also pass an `onChange` handler that updates that value, because the input will not update itself[^9]. The uncontrolled contract is the mirror image: `defaultValue` and `defaultChecked` set the starting point and nothing else[^9].
+
+Most of the pain in this area comes from components that try to accept both without saying which one they are doing. React's own error is worth memorizing, because teams hit it on real code: a component that receives `undefined` for `value` on first render and a string later throws "A component is changing an uncontrolled input to be controlled", because React cannot know which behaviour was intended. The documented fix is to initialize to an empty string, or coalesce with a fallback, so `value` is a string for the component's whole life[^9].
+
+Defaults have a trap of their own. A destructured default fires when the prop is missing or explicitly `undefined`, and does not fire for `null` or `0`[^1]. If your API treats `null` as "use the default", you have to implement that yourself, because the language will hand the component a null and let it fail somewhere further down.
+
+Refs deserve a paragraph as the escape hatch that should stay rare. The React docs say it bluntly: if you can express something as a prop, do not use a ref, and the example they pick is the one teams reach for most often. Exposing an imperative `{ open, close }` handle from a modal is worse than taking `isOpen` as a prop[^5]. An imperative handle is a promise about internals, and it also puts focus placement, escape handling, and background inertness into the hands of whoever calls it. A prop is a promise about behaviour, which is the thing you actually want to test. Focus is the same argument from the other direction, and it is why the [focus work behind keyboard navigation](/field-notes/keyboard-navigation-focus-management-2026) is easier to keep correct at the component boundary than at the call site.
+
+![Where each piece of state lives under the two contracts: a controlled component receives value and reports changes through a callback, while an uncontrolled component keeps the value itself and exposes only a starting default](</diagrams/component-api-design-2026/4-state-ownership.png>)
+
+## Behaviour the consumer should never have to remember
+
+Accessibility is mostly behaviour, and behaviour is mostly the component's job, which makes it an API question before it is an implementation question.
+
+The W3C authoring practices for a modal dialog state the contract precisely. When a dialog opens, focus moves to an element inside it. Tab and Shift plus Tab cycle within the dialog and do not escape it. Escape closes it. When it closes, focus returns to the element that invoked it[^10]. The same page is strict about the modal flag: `aria-modal` should be set to true only when application code prevents every user from interacting with the content outside the dialog and the visuals obscure that content[^10]. Marking a dialog modal while leaving the page behind it reachable is worse than not marking it at all, because assistive technology will trust the claim.
+
+The background half of that contract has a native answer now. The `inert` attribute removes an element and its descendants from the tab order and from the accessibility tree, so links, buttons, and form controls inside it cannot be focused or clicked, and the browser will not even offer them to find-in-page[^11]. MDN reports it as widely available across browsers, with support dating to April 2023[^11]. There is no reason to hand-roll a focus trap over a scroll-locked overlay when the platform can make the rest of the page genuinely unreachable.
+
+![The modal contract split in two: what the component owns, which is focus placement, the contained tab sequence, escape handling, focus return, and the inert background, against what the call site supplies, which is open state, a title, and content](</diagrams/component-api-design-2026/5-modal-contract.png>)
+
+The API consequence is a counting exercise. If the modal takes `isOpen`, `onOpenChange`, a title, and children, then it can own initial focus, the trap, Escape, focus return, and the inert attribute. If it takes `initialFocusRef`, `closeOnEscape`, `trapFocus`, `returnFocusOnClose`, and `lockScroll`, then every call site is responsible for the accessibility of a dialog, and the one that forgets is the one nobody tested.
+
+Platform change makes the same case. Base UI's setup notes that starting with iOS 26, Safari allows content beneath the browser UI chrome to be visible, so a dialog backdrop must use absolute positioning rather than fixed, with a relative body added so the backdrop still covers the viewport after the page scrolls[^12]. A primitive layer that absorbed that change fixed every dialog in every application that consumed it, once. The alternative is forty teams each discovering the same Safari behaviour through a bug report. That is the real argument for building on a maintained primitive layer, and it is a maintenance argument rather than a styling one, which is roughly where [the headless library decision](/field-notes/headless-ui-component-libraries-2026) lands.
+
+## Versioning is part of the API
+
+Every prop you add is a commitment, and the commitment is bigger than the semver number suggests, because a component API can break in ways a version string cannot express.
+
+Renaming a prop is visible. A changed default is not, and it will be discovered by whichever user flow depended on the old one. A changed DOM structure breaks the CSS selectors customers wrote against your internals. A changed focus target breaks a screen reader flow that was working. Removing a variant breaks a config somewhere. Adding a required prop breaks every call site on upgrade. We went through the release-discipline half of this in [the versioning piece on breaking changes](/field-notes/design-system-release-discipline-2026), and the component-level version of the rule is the same: define breaking before you ship, not when someone complains.
+
+There is a way to sidestep part of the problem. shadcn/ui describes itself as not a component library but a way to build one, distributing component source that you own and edit rather than a package you import[^13]. When the component is your code, there is no upgrade drift, because there is nothing to upgrade. The trade is honest and should be made deliberately: you inherit the maintenance too, and the primitive underneath still moves. shadcn's pre-styled components sit on Base UI as their unstyled foundation[^12], so platform behaviour keeps arriving even when the styling layer does not. If you would rather inherit fixes than own them, a headless primitive plus your own styling layer is the other end of the same dial.
+
+Whichever side you choose, write the prop table down where reviewers can see it. Most API debt is invisible precisely because the props are scattered across a signature, a story file, and four call sites, and the sum is never on screen.
+
+Two questions are worth putting into the next component pull request. Which of these props is a choice a designer actually made, and which is a mechanism that could be derived, composed, or handled by the component itself? And the blunt one: can you name the states this component allows today? If answering that takes a spreadsheet, the prop table is the bug, not the implementation.
+
+[^1]: React, "Passing Props to a Component." [react.dev](https://react.dev/learn/passing-props-to-a-component)
+[^2]: TypeScript, "Narrowing," TypeScript Handbook. [typescriptlang.org](https://www.typescriptlang.org/docs/handbook/2/narrowing.html)
+[^3]: Radix Primitives, "Composition." [radix-ui.com](https://www.radix-ui.com/primitives/docs/guides/composition)
+[^4]: Radix Primitives, "Slot." [radix-ui.com](https://www.radix-ui.com/primitives/docs/utilities/slot)
+[^5]: React, "forwardRef." [react.dev](https://react.dev/reference/react/forwardRef)
+[^6]: npm, "react," release 19.3.1. [npmjs.com](https://www.npmjs.com/package/react)
+[^7]: MUI, "How we migrated MUI X to React 19." [mui.com](https://mui.com/blog/react-19-update/)
+[^8]: React, "Sharing State Between Components." [react.dev](https://react.dev/learn/sharing-state-between-components)
+[^9]: React, "input," React DOM Components reference. [react.dev](https://react.dev/reference/react-dom/components/input)
+[^10]: W3C Web Accessibility Initiative, "Dialog (Modal) Pattern," ARIA Authoring Practices Guide. [w3.org](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)
+[^11]: MDN Web Docs, "inert HTML global attribute." [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Global_attributes/inert)
+[^12]: Base UI, "Quick start." [base-ui.com](https://base-ui.com/react/overview/quick-start)
+[^13]: shadcn/ui, "Introduction." [ui.shadcn.com](https://ui.shadcn.com/docs)

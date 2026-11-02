@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "component-api-design-2026",
+    "title": "Your Button Has Fourteen Props. That Is the Bug.",
+    "excerpt": "A prop list is an API, and most teams never review it. How to design component APIs with variants, composition, and clear state ownership.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "November 2, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Design Systems",
+      "Component Libraries",
+      "Design Engineering",
+      "TypeScript",
+      "React",
+      "UI/UX"
+    ],
+    "bannerImage": "/banners/component-api-design-2026.webp",
+    "ogImage": "/banners/component-api-design-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "agent-tool-catalog-selection-2026",
     "title": "Your Agent Has 200 Tools and Picks the Wrong One",
     "excerpt": "Five MCP servers put about 55,000 tokens of tool definitions in front of the request. Past a certain catalog size, more tools mean worse choices.",
