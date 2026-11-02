@@ -73,6 +73,30 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "platform-engineering-golden-paths-2026",
+    "title": "AI Writes the Code. The Platform Keeps Delivery Stable.",
+    "excerpt": "AI writes 41% of code, yet delivery stability is falling. The answer is the platform as a product: golden paths that make the safe path the easy path.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Platform Engineering",
+      "Internal Developer Platform",
+      "Golden Paths",
+      "DevOps",
+      "Developer Experience",
+      "AI"
+    ],
+    "bannerImage": "/banners/platform-engineering-golden-paths-2026.webp",
+    "ogImage": "/banners/platform-engineering-golden-paths-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "post-response-side-effects-2026",
     "title": "Your Response Went Out. The Rest Is Best-Effort.",
     "excerpt": "Next.js after() and waitUntil run side effects on the invocation's clock, with no queue and no retry. Here is how to tell which work can afford to be lost.",
