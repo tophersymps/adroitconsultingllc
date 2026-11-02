@@ -26,6 +26,29 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "portfolio-resource-contention-2026",
+    "title": "Every Project Plan Was Fine. The Portfolio Was Not.",
+    "excerpt": "A consulting project runs late because of a project its own team cannot see. Allocation is a portfolio decision, and it needs a record, a rule, and a cadence.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "November 02, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Resource Management",
+      "Capacity Planning",
+      "Portfolio",
+      "Delivery Practice"
+    ],
+    "bannerImage": "/banners/portfolio-resource-contention-2026.webp",
+    "ogImage": "/banners/portfolio-resource-contention-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "agent-tool-catalog-selection-2026",
     "title": "Your Agent Has 200 Tools and Picks the Wrong One",
     "excerpt": "Five MCP servers put about 55,000 tokens of tool definitions in front of the request. Past a certain catalog size, more tools mean worse choices.",
