@@ -26,6 +26,30 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "fine-tune-rag-prompt-decision-2026",
+    "title": "Fine-Tune the Behavior, Retrieve the Facts",
+    "excerpt": "RAG is for knowledge that changes; fine-tuning is for behavior that should not. The decision rule, the real cost model, and the hybrid that wins in production.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "11 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "LLM",
+      "Fine-Tuning",
+      "RAG",
+      "Local Models",
+      "Agentic Frameworks"
+    ],
+    "bannerImage": "/banners/fine-tune-rag-prompt-decision-2026.webp",
+    "ogImage": "/banners/fine-tune-rag-prompt-decision-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "graceful-shutdown-deploy-path-2026",
     "title": "Your Deploy Has Two Paths. You Tested One.",
     "excerpt": "Every rollout rehearsal exercises startup. The shutdown path runs on every deploy too, and it is where zero-downtime deploys quietly drop requests.",
