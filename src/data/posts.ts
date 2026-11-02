@@ -75,6 +75,31 @@ export const posts: BlogPost[] = [
     "status": "published"
   },
   {
+    "slug": "fixed-fee-margin-scope-control-2026",
+    "title": "The Fixed-Fee Margin Leak: Scope Control Is a Profit Problem",
+    "excerpt": "Fixed-fee work converts every unpriced scope concession from lost revenue into direct margin erosion. The fix is a change-control system, not a bigger buffer.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "November 01, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Fixed Fee",
+      "Scope Control",
+      "Change Control",
+      "Margin",
+      "Consulting Delivery",
+      "Delivery"
+    ],
+    "bannerImage": "/banners/fixed-fee-margin-scope-control-2026.webp",
+    "ogImage": "/banners/fixed-fee-margin-scope-control-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "graceful-shutdown-deploy-path-2026",
     "title": "Your Deploy Has Two Paths. You Tested One.",
     "excerpt": "Every rollout rehearsal exercises startup. The shutdown path runs on every deploy too, and it is where zero-downtime deploys quietly drop requests.",
