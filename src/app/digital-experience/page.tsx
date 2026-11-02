@@ -11,7 +11,7 @@ import MarketingPage from "@/components/Marketing/MarketingPage";
 const pageSEO = buildMetadata({
   title: "Digital Experience",
   description:
-    "Build digital experiences that earn trust, drive conversion, and connect directly to your operational systems, with AI-enhanced personalization and performance.",
+    "Build digital experiences that drive conversion and connect directly to your operational systems, backed by AI-enhanced personalization.",
   path: "/digital-experience",
 });
 
@@ -38,7 +38,7 @@ const MODULES = [
   {
     title: "Design & Front-End Development",
     items: [
-      "Premium visual language with accessible, responsive UX",
+      "Distinctive visual design with accessible, responsive UX",
       "Component systems built for maintainability and scale",
       "Performance optimization for Core Web Vitals and mobile",
     ],
@@ -74,15 +74,15 @@ const OUTCOMES = [
   "Higher quality inbound leads through optimized conversion flows",
   "Lower content publishing friction for internal teams",
   "Clean handoff from marketing to sales operations via Salesforce integration",
-  "Digital experiences that adapt, personalize, and perform",
+  "Digital experiences that personalize to each visitor and hold their performance under real traffic",
 ];
 
 export default function DigitalExperience() {
   return (
     <MarketingPage>
       <HeroSection
-        title="Build Digital Experiences That Earn Trust and Drive Conversion"
-        subtitle="We build secure, performant digital experiences that communicate authority, generate qualified demand, and connect directly to your business systems."
+        title="Build Digital Experiences That Drive Conversion and Connect to Your Systems"
+        subtitle="We build secure, performant digital experiences that generate qualified demand and connect directly to your business systems."
         primaryCta={{
           label: "Discuss Your Digital Strategy",
           href: "/contact",
@@ -98,9 +98,7 @@ export default function DigitalExperience() {
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-[var(--ink-muted)]">
               Your digital experience should work as both a brand asset and an
-              operational system. Adroit designs and builds experiences that are
-              fast, maintainable, and aligned with security and governance that
-              fit your business. We build sites that do more than inform: they
+              operational system. Adroit designs and builds experiences that stay fast under load and are maintainable, with the security and governance your business requires. We build sites that do more than inform: they
               adapt, personalize, and connect directly to your operational
               systems.
             </p>
@@ -145,7 +143,7 @@ export default function DigitalExperience() {
 
       <ScrollReveal direction="none">
         <CTABlock
-          headline="Build a digital presence that reflects serious, dependable delivery."
+          headline="Build a digital presence backed by the same delivery process we hold ourselves to on every build."
           ctaLabel="Request a Digital Strategy Session"
           ctaHref="/contact"
         />
