@@ -99,8 +99,7 @@ export default function OperationalIntelligence() {
             <p className="mt-6 text-lg leading-relaxed text-[var(--ink-muted)]">
               Automation pays off when it improves decision quality and
               execution speed, not task completion alone. Adroit maps processes
-              end to end, finds the high-friction bottlenecks, and builds
-              automation that runs reliably and observably. We embed
+              end to end, finds the high-friction bottlenecks, and builds automation you can monitor, not a black box. We embed
               intelligence into your workflows so systems handle the routine,
               flag the exceptions, and surface the insights your teams need to
               act.

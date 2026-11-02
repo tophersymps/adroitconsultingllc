@@ -1,0 +1,9 @@
+### Site copy refresh: trim AI-slop and evidence the delivery chain (copy-refresh-2026-11-01)
+
+**What** - 13 string-level edits across the marketing copy, from the Daily Planet site-copy register of 2026-11-01. Home: meta description drops "built"; the Digital Experience pillar drops the unmeasurable "earn trust" and names operational systems; the intro closer no longer repeats its own heading. Home WHY_ITEMS[2] and the footer tagline now evidence the audited delivery chain (security, accessibility, performance) instead of a generic "juggling vendors" line. Operational Intelligence opening paragraph swaps "runs reliably and observably" for plain English. Digital Experience page: meta description drops "earn trust" and "performance"; hero title, hero subtitle, opening paragraph, the "premium visual language" bullet, the last outcome, and the CTA headline are reworded. No structure, href, route, or logic changes.
+
+**Why** - The register flagged 13 rows of AI-slop tells on the live marketing copy: unmeasurable claims ("earn trust", "communicate authority", "serious, dependable"), a stacked-adjective opener ("fast, maintainable, and aligned with security and governance"), a triple-verb stack ("adapt, personalize, and perform"), a redundant heading echo, and one hype adjective ("premium"). It also found the strongest differentiator (an audited, multi-stage delivery chain) absent from client copy, and added it reader-outwardly in two places.
+
+**Verified** - Asserted before edit: all 13 current strings present in the source (whitespace-flexible match, exactly one occurrence each). Lint, test, and build run in CI on the pull request (required check `lint-test-build`).
+
+**Known Issues** - None. The register's own summary tallied 18 change rows; the concrete proposals are 13, which are the 13 applied here.
