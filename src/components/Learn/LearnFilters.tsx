@@ -102,7 +102,7 @@ export default function LearnFilters({
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Search courses…"
-            className="w-full min-h-[44px] rounded-full border border-[var(--border-default)] bg-[var(--surface-card)] text-[13px] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] pl-9 pr-4 outline-none focus:border-[var(--accent)] transition-colors"
+            className="w-full min-h-[44px] rounded-full border border-[var(--border-default)] bg-[var(--surface-card)] text-[13px] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] pl-9 pr-4 focus:border-[var(--accent)] focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)] transition-colors"
           />
         </label>
       </div>

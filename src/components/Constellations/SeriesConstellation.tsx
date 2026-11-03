@@ -17,6 +17,7 @@ export function SeriesConstellation({
 
   return (
     <div
+      role="region"
       className="flex flex-col gap-3"
       data-testid="series-constellation"
       aria-label={`${name} constellation — ${litStars} of ${totalStars} stars lit`}
@@ -53,6 +54,7 @@ export function SeriesConstellation({
                 className="min-w-0 truncate text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink-primary)] transition-colors duration-150 no-underline"
               >
                 {star.label}
+                <span className="sr-only">{star.lit ? " (completed)" : " (not completed)"}</span>
               </Link>
             )}
           </li>

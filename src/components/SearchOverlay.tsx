@@ -264,7 +264,7 @@ export default function SearchOverlay() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search posts, series & lessons…"
                 aria-label="Search query"
-                className="flex-1 h-[52px] bg-transparent border-none outline-none text-[15px] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)]"
+                className="flex-1 h-[52px] bg-transparent border-none text-[15px] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--focus-ring)] rounded-md"
               />
               {query && (
                 <button

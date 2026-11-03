@@ -56,6 +56,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const check = getKnowledgeCheck(series, parseInt(n, 10));
   const s = getSeriesBySlug(series);
   if (!check || !s) return {};
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Knowledge Check | Adroit Learn",
+      description: "Knowledge checks for Adroit Learn courses.",
+      path: `/atlas/${series}/check/${n}`,
+      noindex: true,
+    });
+  }
   return buildMetadata({
     title: `${check.title} | Adroit Learn`,
     description: check.description ?? `Knowledge check for ${s.name}.`,

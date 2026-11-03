@@ -1,11 +1,14 @@
 import fs from "fs";
 import path from "path";
 
+const SAFE_SLUG_RE = /^[a-zA-Z0-9_-]+$/;
+
 /**
  * Read the raw MDX content for a blog post by slug.
  * Returns null if the file doesn't exist.
  */
 export function getMDXContent(slug: string): string | null {
+  if (!SAFE_SLUG_RE.test(slug)) return null;
   const mdxPath = path.join(
     process.cwd(),
     "content",

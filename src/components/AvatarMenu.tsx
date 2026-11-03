@@ -329,22 +329,15 @@ export default function AvatarMenu({ user, onSignOut, isSigningOut = false }: Av
 
             <hr className="mx-1.5 border-t border-[var(--border-subtle)]" />
 
-            {/* Theme quick-toggle row. The row itself is the roving-focus target;
-                Enter/Space forward to the real button so the toggle stays keyboard
-                operable (WCAG 2.1.1). */}
+            {/* Theme quick-toggle row. The button itself carries role="menuitem"
+                and tabIndex={-1} so there is no nested interactive control inside
+                a menuitem (WCAG 4.1.2 / 2.1.1). */}
             <div
-              role="menuitem"
-              tabIndex={-1}
+              role="none"
               onClick={() => setOpen(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  (e.currentTarget.querySelector("button") as HTMLButtonElement | null)?.click();
-                }
-              }}
               className="cursor-pointer"
             >
-              <ThemeToggle authed compact />
+              <ThemeToggle authed compact role="menuitem" tabIndex={-1} />
             </div>
 
             <hr className="mx-1.5 border-t border-[var(--border-subtle)]" />

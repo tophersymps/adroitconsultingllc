@@ -251,7 +251,7 @@ export default async function LearnLandingPage() {
         {jsonLd.itemListElement.length > 0 && (
           <script
             type="application/ld+json"
-            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
           />
         )}
       </main>

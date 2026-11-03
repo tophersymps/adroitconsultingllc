@@ -140,11 +140,14 @@ export function getAllCanonicalLessonSlugs(): Set<string> {
   return slugs;
 }
 
+const SAFE_SLUG_RE = /^[a-zA-Z0-9_-]+$/;
+
 /** Read the raw MDX content for a learn lesson (mirrors lib/mdx.ts). */
 export function getLearnMDXContent(
   series: string,
   slug: string,
 ): string | null {
+  if (!SAFE_SLUG_RE.test(series) || !SAFE_SLUG_RE.test(slug)) return null;
   const mdxPath = path.join(
     process.cwd(),
     "content",

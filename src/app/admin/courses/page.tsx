@@ -123,7 +123,7 @@ export default function AdminCoursesPage() {
                 <th scope="col" className="px-4 py-3">Status</th>
                 <th scope="col" className="px-4 py-3">Access model</th>
                 <th scope="col" className="px-4 py-3 hidden md:table-cell">Entitlements</th>
-                <th scope="col" className="px-4 py-3"></th>
+                <th scope="col" className="px-4 py-3"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>

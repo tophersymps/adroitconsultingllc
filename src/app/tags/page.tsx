@@ -55,10 +55,10 @@ export default function TagsPage() {
               <Link
                 key={tag.slug}
                 href={`/tags/${tag.slug}`}
-                className={`group inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white shadow-card text-gray-700 no-underline hover:bg-navy hover:text-white hover:border-navy hover:-translate-y-0.5 hover:shadow-card-hover transition-all duration-150 ${sizeStyles[tag.sizeClass]}`}
+                className={`group inline-flex items-center gap-2 rounded-full border border-gray-200 dark:border-[var(--border-default)] bg-white dark:bg-[var(--surface-card)] shadow-card text-gray-700 no-underline hover:bg-navy hover:text-white hover:border-navy hover:-translate-y-0.5 hover:shadow-card-hover transition-all duration-150 ${sizeStyles[tag.sizeClass]}`}
               >
                 {tag.tag}
-                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-gray-100 text-[0.65rem] font-mono font-bold text-gray-600 transition-colors duration-150 group-hover:bg-white/15 group-hover:text-white/80">
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-gray-100 dark:bg-[var(--surface-sunken)] text-[0.65rem] font-mono font-bold text-gray-600 transition-colors duration-150 group-hover:bg-white/15 group-hover:text-white/80">
                   {tag.count}
                 </span>
               </Link>

@@ -503,6 +503,7 @@ export default function QuizWidget({
                     )}
                   </svg>
                   <span className="text-gray-600 leading-relaxed">
+                    <span className="sr-only">{correct ? "Correct: " : "Incorrect: "}</span>
                     {i + 1}. {q.question}
                   </span>
                 </div>

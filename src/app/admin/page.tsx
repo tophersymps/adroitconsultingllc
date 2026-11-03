@@ -114,6 +114,7 @@ export default function AdminOverviewPage() {
 
   return (
     <div>
+      <h1 className="sr-only">Overview</h1>
       {/* pending-needs-launch banner */}
       {pendingCourses.length > 0 && (
         <div className="admin-banner mb-[22px]">
@@ -168,7 +169,7 @@ export default function AdminOverviewPage() {
       {/* effective-access coverage */}
       <div className="rounded-2xl border overflow-hidden mb-5" style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card, #FFFFFF)" }}>
         <div className="flex items-center gap-3 px-5 py-3.5 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
-          <h3 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Effective-access coverage</h3>
+          <h2 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Effective-access coverage</h2>
           <span className="font-mono text-[10.5px] text-[var(--ink-faint)] bg-[var(--surface-sunken)] px-2 py-0.5 rounded-full">
             {(data?.users?.length ?? 0)} × {(data?.courses?.length ?? 0)}
           </span>
@@ -209,7 +210,7 @@ export default function AdminOverviewPage() {
         {/* subscriber pulse */}
         <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card, #FFFFFF)" }}>
           <div className="flex items-center gap-3 px-5 py-3.5 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
-            <h3 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Subscriber pulse</h3>
+            <h2 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Subscriber pulse</h2>
             <span className="font-mono text-[10.5px] text-[var(--ink-faint)]">by subscriptions.status</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4">
@@ -238,7 +239,7 @@ export default function AdminOverviewPage() {
         {/* entitlements per course */}
         <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card, #FFFFFF)" }}>
           <div className="flex items-center gap-3 px-5 py-3.5 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
-            <h3 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Entitlements per course</h3>
+            <h2 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Entitlements per course</h2>
             <span className="font-mono text-[10.5px] text-[var(--ink-faint)]">who holds what</span>
             <div className="flex-1" />
             <Link href="/admin/access/courses" className="text-[12px] font-semibold no-underline hover:underline" style={{ color: "var(--color-red)" }}>
@@ -269,7 +270,7 @@ export default function AdminOverviewPage() {
       {/* recent admin activity */}
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card, #FFFFFF)" }}>
         <div className="flex items-center gap-3 px-5 py-3.5 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
-          <h3 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Recent admin activity</h3>
+          <h2 className="text-[13.5px] font-bold text-[var(--ink-primary)]">Recent admin activity</h2>
           <span className="font-mono text-[10px] text-[var(--ink-faint)]">admin_audit_log</span>
           <div className="flex-1" />
           <Link href="/admin/audit" className="text-[12px] font-semibold no-underline hover:underline" style={{ color: "var(--color-red)" }}>

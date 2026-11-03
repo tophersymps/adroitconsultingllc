@@ -49,12 +49,12 @@ export default function DraftLocked({ state, nextPath = "/field-notes" }: DraftL
 
   return (
     <section aria-label={copy.ariaLabel} className="draft-locked">
-      <div className="max-w-[640px] rounded-[20px] border border-gray-200 bg-white p-7 shadow-sm">
+      <div className="max-w-[640px] rounded-[20px] border border-gray-200 dark:border-[var(--border-default)] bg-white dark:bg-[var(--surface-card)] p-7 shadow-sm">
         <div className="flex items-start gap-4">
           {/* Lock glyph */}
           <div
             aria-hidden="true"
-            className="flex-shrink-0 w-11 h-11 rounded-xl bg-navy/[0.04] text-navy flex items-center justify-center"
+            className="flex-shrink-0 w-11 h-11 rounded-xl bg-navy/[0.04] dark:bg-[var(--surface-sunken)] text-navy flex items-center justify-center"
           >
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2">
               <rect x="5" y="11" width="14" height="9" rx="2" />

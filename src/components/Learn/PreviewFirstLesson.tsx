@@ -154,7 +154,7 @@ export default function PreviewFirstLesson({
             }}
           />
           <div className="relative">
-            <h3 className="text-[1.45rem] font-extrabold tracking-[-0.02em] mb-2">Unlock the full course</h3>
+            <h2 className="text-[1.45rem] font-extrabold tracking-[-0.02em] mb-2">Unlock the full course</h2>
             <p className="text-[14px] text-white/70 mb-5 max-w-[520px] mx-auto">
               Read all {totalLessons} lessons, run the practice checks, and earn
               the certificate — with the access plan that fits how you learn.

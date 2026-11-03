@@ -359,6 +359,7 @@ export default function ExamWidget({
                       )}
                     </svg>
                     <span className="text-gray-600 leading-relaxed flex-1">
+                      <span className="sr-only">{isCorrect ? "Correct: " : "Incorrect: "}</span>
                       Q{i + 1} — {q.question}
                     </span>
                     {isFlagged && (

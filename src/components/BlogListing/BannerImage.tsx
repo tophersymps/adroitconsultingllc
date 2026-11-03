@@ -58,6 +58,7 @@ export default function BannerImage({
       ) : (
         <>
           <div
+            aria-hidden="true"
             className="absolute inset-0"
             style={{
               background:
@@ -65,13 +66,13 @@ export default function BannerImage({
             }}
           />
           {watermark && (
-            <span className="absolute inset-0 flex items-center justify-center text-white/15 text-6xl md:text-7xl font-extrabold select-none">
+            <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center text-white/15 text-6xl md:text-7xl font-extrabold select-none">
               {post.category === "AI & Consulting" ? "AI" : "AC"}
             </span>
           )}
         </>
       )}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/15" />
+      <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-transparent to-black/15" />
     </div>
   );
 }

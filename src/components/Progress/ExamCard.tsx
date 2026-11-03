@@ -65,14 +65,14 @@ export default function ExamCard({
             <div className="font-mono text-[10.5px] font-bold text-navy uppercase tracking-[0.09em] mb-1 dark:text-[var(--ink-muted)]">
               {labels.short}
             </div>
-            <h3 className="text-[1.15rem] font-extrabold text-navy tracking-[-0.02em] dark:text-[var(--ink-primary)]">
+            <h2 className="text-[1.15rem] font-extrabold text-navy tracking-[-0.02em] dark:text-[var(--ink-primary)]">
               {labels.full}
-            </h3>
+            </h2>
           </div>
           <span
             className={`font-mono text-[10.5px] font-bold px-3 py-1 rounded-full ${
               unlocked
-                ? "bg-emerald/10 text-emerald-800"
+                ? "bg-emerald/10 text-emerald-800 dark:text-emerald-300"
                 : "bg-gray-100 text-gray-500 dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-muted)]"
             }`}
           >
@@ -82,7 +82,7 @@ export default function ExamCard({
         <p className="text-[12.5px] text-gray-500 dark:text-[var(--ink-muted)] mb-4">
           {questionCount} questions · {minutes} minutes · pass ≥ {passPct}%
           {examBest > 0 && (
-            <span className="font-mono text-emerald-800 font-bold"> · best {examBest}%</span>
+            <span className="font-mono text-emerald-800 dark:text-emerald-300 font-bold"> · best {examBest}%</span>
           )}
         </p>
 

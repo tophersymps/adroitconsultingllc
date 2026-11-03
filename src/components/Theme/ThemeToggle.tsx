@@ -25,6 +25,10 @@ interface ThemeToggleProps {
   iconOnly?: boolean;
   /** Server-derived account theme (user_profiles.theme_pref) to adopt on mount. */
   accountPref?: ThemeMode;
+  /** Optional role for menu embedding (e.g. role="menuitem" inside AvatarMenu). */
+  role?: React.AriaRole;
+  /** Optional tabIndex for roving focus management inside menus. */
+  tabIndex?: number;
 }
 
 export default function ThemeToggle({
@@ -32,6 +36,8 @@ export default function ThemeToggle({
   compact = false,
   iconOnly = false,
   accountPref,
+  role,
+  tabIndex,
 }: ThemeToggleProps) {
   const { mode, setMode, resolvedDark } = useThemeContext();
   const [isPending, startTransition] = useTransition();
@@ -66,13 +72,14 @@ export default function ThemeToggle({
   if (compact) {
     const cycle = (): ThemeMode =>
       mode === "system" ? "dark" : mode === "dark" ? "light" : "system";
-    const label = mode === "dark" ? "Light" : mode === "light" ? "Dark" : "Dark";
+    const label = mode === "dark" ? "Dark" : mode === "light" ? "Light" : "system";
     return (
       <button
         type="button"
+        role={role}
+        tabIndex={tabIndex}
         onClick={() => handleChange(cycle())}
         className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] font-medium text-[var(--ink-body)] hover:bg-[var(--surface-card-soft)] hover:text-[var(--ink-primary)] transition-colors duration-150 cursor-pointer bg-none border-none no-underline"
-        aria-pressed={mode === "dark"}
         disabled={isPending}
       >
         <svg

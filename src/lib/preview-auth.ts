@@ -15,7 +15,7 @@ const FALLBACK_ALLOWED_EMAILS = process.env.PREVIEW_ALLOWED_EMAILS
   ? process.env.PREVIEW_ALLOWED_EMAILS.split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean)
-  : ["chris@adroit.io", "perry@adroit.io"];
+  : ["chris@adroit.io"];
 
 /** Normalized allowlist — lowercase, trimmed. */
 const ALLOWED_EMAILS: ReadonlySet<string> = new Set(FALLBACK_ALLOWED_EMAILS);

@@ -145,6 +145,7 @@ export default function ResetPasswordForm({ token }: { token: string }) {
 
             {error && (
               <div
+                id="reset-error"
                 role="alert"
                 className="rounded-xl border border-red/25 bg-red/5 px-4 py-3 text-[12.5px] text-red-dark mb-4 dark:bg-red/10 dark:text-[var(--accent-hover)]"
               >
@@ -153,6 +154,7 @@ export default function ResetPasswordForm({ token }: { token: string }) {
             )}
             {fieldError && (
               <div
+                id="reset-field-error"
                 role="alert"
                 className="rounded-xl border border-red/25 bg-red/5 px-4 py-3 text-[12.5px] text-red-dark mb-4 dark:bg-red/10 dark:text-[var(--accent-hover)]"
               >
@@ -169,6 +171,16 @@ export default function ResetPasswordForm({ token }: { token: string }) {
                   type="password"
                   autoComplete="new-password"
                   minLength={6}
+                  aria-invalid={Boolean(error || fieldError) || undefined}
+                  aria-describedby={
+                    [
+                      "reset-password-hint",
+                      error ? "reset-error" : "",
+                      fieldError ? "reset-field-error" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                  }
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-[14px] text-gray-800 placeholder:text-gray-500 focus:border-navy transition-colors duration-150 dark:border-[var(--border-default)] dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-body)] dark:placeholder:text-[var(--ink-muted)]"
@@ -183,13 +195,23 @@ export default function ResetPasswordForm({ token }: { token: string }) {
                   type="password"
                   autoComplete="new-password"
                   minLength={6}
+                  aria-invalid={Boolean(error || fieldError) || undefined}
+                  aria-describedby={
+                    [
+                      "reset-password-hint",
+                      error ? "reset-error" : "",
+                      fieldError ? "reset-field-error" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                  }
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-[14px] text-gray-800 placeholder:text-gray-500 focus:border-navy transition-colors duration-150 dark:border-[var(--border-default)] dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-body)] dark:placeholder:text-[var(--ink-muted)]"
                   placeholder="••••••••"
                 />
               </label>
-              <p className="text-[11.5px] text-gray-500 -mt-2 dark:text-[var(--ink-faint)]">
+              <p id="reset-password-hint" className="text-[11.5px] text-gray-500 -mt-2 dark:text-[var(--ink-faint)]">
                 At least 6 characters, and make sure both match.
               </p>
               <button
