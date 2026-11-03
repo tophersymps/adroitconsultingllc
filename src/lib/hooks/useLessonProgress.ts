@@ -111,9 +111,13 @@ export function useLessonProgress(
         setIsCompleted(false);
       } else if (initialCompleted !== undefined) {
         setIsCompleted(initialCompleted);
+        if (initialCompleted) {
+          setCompletedInStorage(lessonSlug, true);
+        }
       } else {
         setIsCompleted(false);
       }
+      setIsLoading(false);
     };
     // Mount-gate hydration read (QA M-2 pattern): read AFTER mount so the
     // server HTML and the client's first paint both render the incomplete
@@ -129,15 +133,8 @@ export function useLessonProgress(
 
   useEffect(() => {
     // When initialCompleted is provided (e.g. from parent batch summary),
-    // synchronize directly and skip single-lesson Supabase queries.
-    if (initialCompleted !== undefined) {
-      setIsCompleted(initialCompleted);
-      if (initialCompleted) {
-        setCompletedInStorage(lessonSlug, true);
-      }
-      setIsLoading(false);
-      return;
-    }
+    // skip redundant single-lesson Supabase queries.
+    if (initialCompleted !== undefined) return;
 
     const checkSupabase = async () => {
       try {

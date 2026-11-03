@@ -41,7 +41,6 @@ const TIER_TITLES = [
 
 export function SeriesTronRoadmap({
   constellation,
-  isGuest = false,
   className = "",
 }: SeriesTronRoadmapProps) {
   const reducedMotion = usePrefersReducedMotion();
