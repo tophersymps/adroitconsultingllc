@@ -149,7 +149,7 @@ describe("AudioPlayer Follow-along", () => {
 
   it("snap-scrolls to the active spoken paragraph while following (timeupdate -> scrollTo)", async () => {
     renderAuthed();
-    await waitFor(() => expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: /Follow along/i })).toBeChecked());
     const scrollTo = window.scrollTo as unknown as ReturnType<typeof vi.fn>;
     scrollTo.mockClear();
 
