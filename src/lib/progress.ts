@@ -33,6 +33,16 @@ export function getFlagFromStorage(key: string): boolean {
   }
 }
 
+/** Check if a key was explicitly marked false in localStorage (e.g. uncomplete). */
+export function isExplicitlyFalseInStorage(key: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(key) === "false";
+  } catch {
+    return false;
+  }
+}
+
 /** Custom event fired after any progress write (read/complete/quiz). */
 export const PROGRESS_CHANGED_EVENT = "adroit-blog:progress-changed";
 
@@ -89,9 +99,18 @@ export function mergeProgressFromSummary(
 
   // Supabase merge (authenticated) — DB stores the same canonical forms
   if (summary) {
-    (summary.readContent?.blog ?? []).forEach((slug) => read.add(slug));
-    (summary.readContent?.lesson ?? []).forEach((slug) => read.add(slug));
-    (summary.completedLessons ?? []).forEach((slug) => lessons.add(slug));
+    (summary.readContent?.blog ?? []).forEach((slug) => {
+      if (isExplicitlyFalseInStorage(readKey(slug))) return;
+      read.add(slug);
+    });
+    (summary.readContent?.lesson ?? []).forEach((slug) => {
+      if (isExplicitlyFalseInStorage(readKey(slug))) return;
+      read.add(slug);
+    });
+    (summary.completedLessons ?? []).forEach((slug) => {
+      if (isExplicitlyFalseInStorage(lessonKey(slug))) return;
+      lessons.add(slug);
+    });
   }
 
   return { read, lessons };

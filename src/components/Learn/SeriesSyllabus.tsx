@@ -294,7 +294,11 @@ export default function SeriesSyllabus({
                           <span className="hidden min-[430px]:inline font-mono text-[10px] font-bold text-[var(--ink-muted)] uppercase tracking-[0.07em]">
                             {state === "completed" ? "Completed" : "Mark complete"}
                           </span>
-                          <MarkComplete lessonSlug={lesson.slug} label={`lesson ${lesson.slug}`} />
+                          <MarkComplete
+                            lessonSlug={lesson.slug}
+                            label={`lesson ${lesson.slug}`}
+                            isCompleted={merge.lessons.has(lesson.slug)}
+                          />
                         </span>
                       }
                     />

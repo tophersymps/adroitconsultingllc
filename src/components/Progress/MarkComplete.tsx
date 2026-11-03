@@ -12,10 +12,19 @@ interface MarkCompleteProps {
   lessonSlug: string;
   /** Accessible label prefix (defaults to the slug). */
   label?: string;
+  /** Authoritative completion state from batch summary / parent (avoids redundant queries & races). */
+  isCompleted?: boolean;
 }
 
-export default function MarkComplete({ lessonSlug, label }: MarkCompleteProps) {
-  const { isCompleted, markComplete, isLoading } = useLessonProgress(lessonSlug);
+export default function MarkComplete({
+  lessonSlug,
+  label,
+  isCompleted: initialCompleted,
+}: MarkCompleteProps) {
+  const { isCompleted, markComplete, isLoading } = useLessonProgress(
+    lessonSlug,
+    initialCompleted,
+  );
 
   return (
     <button

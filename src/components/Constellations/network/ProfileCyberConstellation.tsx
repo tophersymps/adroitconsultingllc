@@ -45,7 +45,6 @@ const NETWORK_POSITIONS: NexusPosition[] = [
 
 export function ProfileCyberConstellation({
   constellations,
-  isGuest = false,
   onOpenCourse,
   className = "",
 }: ProfileCyberConstellationProps) {
