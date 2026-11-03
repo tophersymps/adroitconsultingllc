@@ -27,7 +27,7 @@ const LESSON: LearnLesson = {
 describe("LessonCard", () => {
   it("hover motion uses transform, not a layout property (no hover:pl-4)", () => {
     render(<LessonCard lesson={LESSON} totalLessons={5} />);
-    const link = screen.getByRole("link");
+    const link = screen.getByRole("article");
     const cls = link.getAttribute("class") ?? "";
 
     // The previous hover:pl-4 animated padding — a layout property that
@@ -40,3 +40,4 @@ describe("LessonCard", () => {
     expect(cls).toContain("transition-[background-color,transform]");
   });
 });
+
