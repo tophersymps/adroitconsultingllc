@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "nextjs-bundle-import-graph-2026",
+    "title": "The Import Graph Decides What Your Next.js Bundle Ships",
+    "excerpt": "Next.js 16.4 gives you and your agent a queryable view of the module graph. A deferred component still ships if one other module imports it.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "8 min read",
+    "featured": false,
+    "tags": [
+      "Next.js",
+      "React",
+      "Turbopack",
+      "Performance",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/nextjs-bundle-import-graph-2026.webp",
+    "ogImage": "/banners/nextjs-bundle-import-graph-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "component-api-design-2026",
     "title": "Your Button Has Fourteen Props. That Is the Bug.",
     "excerpt": "A prop list is an API, and most teams never review it. How to design component APIs with variants, composition, and clear state ownership.",

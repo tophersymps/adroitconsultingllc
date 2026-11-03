@@ -1,0 +1,90 @@
+---
+title: "The Import Graph Decides What Your Next.js Bundle Ships"
+slug: nextjs-bundle-import-graph-2026
+excerpt: "Next.js 16.4 gives you and your agent a queryable view of the module graph. A deferred component still ships if one other module imports it."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "November 3, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "8 min read"
+tags: [Next.js, React, Turbopack, Performance, Web Development]
+bannerImage: /banners/nextjs-bundle-import-graph-2026.webp
+ogImage: /banners/nextjs-bundle-import-graph-2026-og.jpg
+---
+
+The Next.js team spent part of October cutting JavaScript out of its own products, and the write-up on 28 October reports the total: agents removed nearly two megabytes of compressed JavaScript across v0 and vercel.com, with individual pages recovering 150 to 255 kilobytes.[^1]
+
+Not one of those fixes was a slow component. They were import relationships nobody had read. That distinction is the work. A bundle treemap tells you which packages are large; it rarely tells you which module dragged a package onto the route a reader is waiting for. Next.js 16.4 shipped tooling that answers the second question directly.
+
+## Deferring a component is not the same as not shipping it
+
+`React.lazy` defers loading a component's code until it is first rendered, and it needs a Suspense boundary to show something in the meantime.[^4] What it does not do is take code out of the payload. `next/dynamic` is the same idea packaged as one call, composing React.lazy and Suspense together; it changes when a module loads, not whether the bundler has to include it.[^5]
+
+The Next.js write-up gives the smallest version of the trap:
+
+```
+'use client';
+import { lazy } from 'react';
+export const HeavyLoader = lazy(() => import('./HeavyComponent'));
+```
+
+If that loader is the only module importing `HeavyComponent`, the code is deferred. If any other module in the same bundle imports it with a static `import`, the code still loads upfront, and the lazy call quietly changes nothing.[^1]
+
+The cause is structural. A chunk is a set of modules that must be able to load together, and a static import is an edge that says "this one, at the same time." One edge is enough to hold a module on the initial path. The bundler is following the graph you wrote.
+
+Vercel's audit shows how ordinary the shape is. On v0, a centralized dialog registry imported every dialog up front, which cost 40 to 650 KB depending on the page. An unused trace viewer was reachable from most route modules and shipped 7 to 61 KB on each of them.[^1] Neither is a heavy dependency anyone chose on purpose. Both are import statements in a shared file that grew one entry at a time.
+
+![Two import graphs for the same deferred component: on the left only a loader reaches it through a dynamic import so it stays in a separate chunk, on the right a sidebar also imports it statically so it lands in the initial chunk anyway](</diagrams/nextjs-bundle-import-graph-2026/1-deferred-vs-defeated.png>)
+
+## What the analyzer shows that a treemap does not
+
+Next.js 16.1 shipped the first version of the Turbopack Bundle Analyzer, and 16.4 added both the agent-facing pieces and new tools for reading it yourself.[^1][^2] Running `next analyze` opens on a route summary that ranks your largest client routes, which is a better starting point than a package list: a route is what a reader waits for, and it is the unit you can change.
+
+Three things in the newer analyzer matter more than the sizes.
+
+It traces import chains. Selecting a module shows where it is imported from, across client and server environments, so the second importer is visible instead of inferred.[^2]
+
+It separates the lanes. Modules are labeled by how they can load: initial load, initial plus async paths, or behind an async boundary. Filtering to initial load hides everything that only loads when a later path renders, which is code you cannot improve by rewriting it.[^1]
+
+It keeps snapshots. Analyses are saved automatically, so a before-and-after comparison becomes a diff rather than an argument. `next analyze --output --snapshot before` writes the analysis to `.next/diagnostics/analyze`, and `next analyze export --snapshot before` streams a saved snapshot as JSON Lines, so a script or an agent can query the module and chunk graphs without rebuilding the app.[^2]
+
+One constraint: the analyzer is built on Turbopack's module graph, and Turbopack has been the default bundler since Next.js 16. On a webpack build you still have the older `@next/bundle-analyzer` plugin, which reports package sizes without the import tracing.[^2]
+
+![Five-step bundle workflow: open the route summary with next analyze, save a before snapshot to disk, make one import-boundary change, save an after snapshot, then compare the two before keeping the change](</diagrams/nextjs-bundle-import-graph-2026/2-snapshot-workflow.png>)
+
+## Fix the boundary, not the component
+
+Most avoidable JavaScript in a Next.js app falls into three shapes, and each one has a different fix.
+
+Rendering-only work inside a Client Component. Markdown parsing, syntax highlighting and chart drawing produce markup, and they only need the browser if you made them run there. Moving the same work into a Server Component sends finished HTML and keeps the library out of the client bundle entirely; the Next.js docs walk through a Prism highlighter in a client component replaced by server-rendered Shiki.[^2] On Vercel's dashboard, the markdown, highlighting and chart code for the agent panel loaded whether or not the panel was open: 255 KB.[^1] That trade, running a transform once on the server instead of shipping the library, is the same client and server boundary we described in [the architecture piece on scalable React](/field-notes/scalable-react-2026).
+
+A shared module that reaches further than the route needs. On the deployments page, URL parsing was imported through a utility file that also pulled in an entire observability query engine, 125 KB, on routes that never query it.[^1] The fix is to import from the leaf module instead of the convenience barrel, or to load it at the interaction rather than at module scope. Next.js also covers the package-level version of this problem: `optimizePackageImports` resolves named imports from libraries with hundreds of exports so only the modules an app uses are bundled.[^2][^3]
+
+A component gated at render time instead of at import. v0's experimental code editor was imported on nearly every page and then hidden for users outside the experiment, which shipped 150 KB to people who could never see it.[^1] Hiding a component does not unload it. The gate has to sit on the import.
+
+The same audit surfaces two more categories worth grepping for: a large dependency installed at two versions and bundled twice, and code that tree shaking could not remove because something kept a side effect alive.[^1] Both appear as modules the graph cannot explain, which is the tell that nothing about them was a design decision.
+
+![Three causes of avoidable JavaScript beside their fixes and measured savings: rendering work in a client component cost 255 kB on the dashboard, a shared module reaching too far cost 125 kB on the deployments page, and a component gated at render time cost 150 kB on most v0 pages](</diagrams/nextjs-bundle-import-graph-2026/3-three-causes.png>)
+
+## Set the budget where the reader pays
+
+Bundle size is a proxy. The resource being spent is main-thread time, and the metric that comes closest to it for an interaction-heavy app is Interaction to Next Paint: measured at the 75th percentile of page views, 200 milliseconds or less is good, and over 500 milliseconds is poor.[^6]
+
+Lead with the critical path, because that is what competes for the budget. Work that only ever renders behind an async boundary can sit there indefinitely without costing a reader anything, and rewriting it is not an optimization. The analyzer's lane labels make that distinction visible, which is the main reason to read them instead of a total.
+
+Then keep the number moving in one direction. Three habits do most of the work. Look at the route summary before a release rather than after a complaint. Take a snapshot when a feature starts and diff it when the feature ships, the same way you would for a dependency upgrade, because bundle growth is usually a side effect rather than a decision.[^1] Keep the change only when the initial load shrinks; a change that moves weight from one module to another without lowering the total has not paid for itself.
+
+The agent skill is worth installing if you already run a coding agent in the repo. `npx skills add vercel/next.js --skill next-bundle-optimizer` adds it, it reports without touching anything by default, and `/next-bundle-optimizer fix` applies the proposed changes, reruns the analysis and compares the snapshots.[^1] Treat it as a faster reader of the module graph rather than a verdict. The graph says what is reachable and what it costs; whether a module belongs on a route remains a product decision, and that is the part no analyzer can make for you.
+
+Start with one route. Run `next analyze`, open your largest client route, and read the import chain of the top row. In most Next.js apps that single read finds one of the three shapes above, and the fix is a moved import rather than a rewrite.
+
+![Three places a module can sit, and only two of them cost the reader: initial load and initial plus async paths are on the critical path, while anything behind an async boundary is free until it is used, with Interaction to Next Paint thresholds of 200 milliseconds for good and over 500 milliseconds for poor](</diagrams/nextjs-bundle-import-graph-2026/4-three-lanes.png>)
+
+[^1]: Next.js blog, "Ship less JavaScript in Next.js with your AI agent" (28 October 2026), which describes the Turbopack Bundle Analyzer shipped in 16.1, the agent and human tooling added in 16.4, the static import that defeats a lazy call, the v0 and vercel.com audits with their per-page savings, and the next-bundle-optimizer skill. See the [Next.js blog](https://nextjs.org/blog/ship-less-javascript-with-ai).
+[^2]: Next.js documentation, "Optimizing package bundling", which covers the analyzer from v16.1, the route and environment filters, `next analyze --output` writing to `.next/diagnostics/analyze`, `next analyze export` in v16.4, the move from a Prism client component to server-rendered Shiki, `optimizePackageImports`, `serverExternalPackages`, and the Turbopack requirement. See the [package bundling guide](https://nextjs.org/docs/app/guides/package-bundling).
+[^3]: Next.js configuration reference for `optimizePackageImports`, the option that loads only the modules an application actually uses from libraries with many named exports. See the [config reference](https://nextjs.org/docs/app/api-reference/config/next-config-js/optimizePackageImports).
+[^4]: React documentation for `lazy`, which defers loading a component's code until it is first rendered and requires a Suspense boundary while that code loads. See the [React docs](https://react.dev/reference/react/lazy).
+[^5]: Next.js guide to lazy loading Client Components and libraries, which defines `next/dynamic` as a composition of React.lazy and Suspense, and notes that Server Components are code split automatically. See the [lazy loading guide](https://nextjs.org/docs/app/guides/lazy-loading).
+[^6]: Web.dev, "Interaction to Next Paint (INP)", by Jeremy Wagner and Barry Pollard, for the 200 millisecond and 500 millisecond field thresholds at the 75th percentile of page views. See the [INP guide](https://web.dev/articles/inp).
