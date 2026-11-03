@@ -125,18 +125,30 @@ interface Bucket {
   timestamps: number[];
 }
 
+const MAX_BUCKETS = 10_000;
 const buckets = new Map<string, Bucket>();
 
 /** Returns `true` if the request is allowed, `false` if rate-limited. */
 export function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+  const cutoff = now - WINDOW_MS;
   let bucket = buckets.get(ip);
   if (!bucket) {
+    if (buckets.size >= MAX_BUCKETS) {
+      for (const [k, b] of buckets) {
+        if (b.timestamps.every((t) => t <= cutoff)) {
+          buckets.delete(k);
+        }
+      }
+      if (buckets.size >= MAX_BUCKETS) {
+        const oldestKey = buckets.keys().next().value;
+        if (oldestKey !== undefined) buckets.delete(oldestKey);
+      }
+    }
     bucket = { timestamps: [] };
     buckets.set(ip, bucket);
   }
   // Prune entries older than the window
-  const cutoff = now - WINDOW_MS;
   bucket.timestamps = bucket.timestamps.filter((t) => t > cutoff);
   if (bucket.timestamps.length >= MAX_REQUESTS) {
     return false;

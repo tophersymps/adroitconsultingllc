@@ -230,8 +230,8 @@ describe("handler() proxy mount", () => {
 
   it("refuses a cross-origin redirect and answers a fixed 502 (QA F1)", async () => {
     const realFetch = globalThis.fetch;
-    const fetchStub = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    const fetchStub = vi.fn<typeof fetch>(
+      async () =>
         new Response(null, {
           status: 302,
           headers: { location: "https://evil.example/landed" },
@@ -316,8 +316,8 @@ describe("origin-locked fetch that the proxy mount installs", () => {
 
   it("returns a non-redirect upstream response untouched", async () => {
     const state = guard();
-    const fetchStub = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    const fetchStub = vi.fn<typeof fetch>(
+      async () =>
         Response.json({ session: null }),
     );
 
@@ -422,8 +422,8 @@ describe("origin-locked fetch that the proxy mount installs", () => {
 
   it("leaves a fetch to a non-auth origin completely alone", async () => {
     const state = guard();
-    const fetchStub = vi.fn(
-      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    const fetchStub = vi.fn<typeof fetch>(
+      async () =>
         new Response(null, { status: 302, headers: { location: `${origin}/x` } }),
     );
 

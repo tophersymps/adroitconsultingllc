@@ -31,12 +31,12 @@ export default function LessonCard({
       {/* Sequence badge */}
       <div
         className="flex-shrink-0 w-14 h-10 rounded-xl bg-navy flex flex-col items-center justify-center font-mono transition-colors duration-150 group-hover:bg-red"
-        aria-label={`Lesson ${lesson.lesson} of ${totalLessons}`}
       >
-        <span className="text-[15px] font-bold leading-none text-red group-hover:text-white">
+        <span className="sr-only">Lesson {lesson.lesson} of {totalLessons}: </span>
+        <span aria-hidden="true" className="text-[15px] font-bold leading-none text-white group-hover:text-white">
           {lesson.lesson}
         </span>
-        <span className="text-[7.5px] uppercase tracking-[0.06em] text-white/55 mt-0.5">
+        <span aria-hidden="true" className="text-[7.5px] uppercase tracking-[0.06em] text-white/75 mt-0.5">
           Lesson
         </span>
       </div>

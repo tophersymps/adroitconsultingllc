@@ -23,11 +23,14 @@ export default function SortToggle({
 }: SortToggleProps) {
   return (
     <div
-      className={`inline-flex items-center rounded-full border border-gray-200 bg-white p-0.5 ${
+      role="group"
+      aria-label="Sort order"
+      className={`inline-flex items-center rounded-full border border-gray-200 dark:border-[var(--border-default)] bg-white dark:bg-[var(--surface-card)] p-0.5 ${
         compact ? "text-[0.7rem]" : "text-xs"
       } font-semibold`}
     >
       <button
+        type="button"
         onClick={() => onChange("newest")}
         aria-pressed={sort === "newest"}
         className={`px-3 py-1 rounded-full cursor-pointer transition-all duration-150 active:scale-[0.98] ${
@@ -39,6 +42,7 @@ export default function SortToggle({
         Newest
       </button>
       <button
+        type="button"
         onClick={() => onChange("oldest")}
         aria-pressed={sort === "oldest"}
         className={`px-3 py-1 rounded-full cursor-pointer transition-all duration-150 active:scale-[0.98] ${

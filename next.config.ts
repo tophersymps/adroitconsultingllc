@@ -142,7 +142,11 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Strict-Transport-Security",
-            value: "max-age=63072000",
+            value: "max-age=63072000; includeSubDomains",
+          },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), browsing-topics=()",
           },
           {
             key: "Content-Security-Policy",

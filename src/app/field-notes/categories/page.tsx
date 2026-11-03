@@ -159,21 +159,21 @@ export default function CategoriesPage() {
 
                 {/* Body */}
                 <div className="p-[20px_22px_22px]">
-                  <h3 className="text-[1.25rem] font-extrabold text-gray-900 tracking-[-0.02em] mb-2 group-hover:text-navy transition-colors duration-200">
+                  <h2 className="text-[1.25rem] font-extrabold text-gray-900 tracking-[-0.02em] mb-2 group-hover:text-navy transition-colors duration-200">
                     {cat.name}
-                  </h3>
+                  </h2>
                   <p className="text-[13px] text-gray-500 leading-relaxed mb-4">
                     {cat.description}
                   </p>
                   <span className="inline-flex items-center gap-1.5">
                     <span
-                      className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-white/90 font-mono text-[10.5px] font-bold tabular-nums ${cat.countColor}`}
+                      className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-white/90 dark:bg-[var(--surface-sunken)] font-mono text-[10.5px] font-bold tabular-nums ${cat.countColor}`}
                     >
                       {cat.postCount}
                     </span>
                     <span className="text-xs font-semibold flex items-center gap-1 text-gray-600">
                       posts
-                      <span className="transition-transform duration-200 group-hover:translate-x-0.5">
+                      <span aria-hidden="true" className="transition-transform duration-200 group-hover:translate-x-0.5">
                         &rarr;
                       </span>
                     </span>

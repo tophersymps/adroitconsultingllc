@@ -10,6 +10,10 @@ import { AdminShell } from "@/components/Admin/AdminShell";
  * (t_d2dfc405 SEO finding). robots.ts also disallows /admin/.
  */
 export const metadata: Metadata = {
+  title: {
+    default: "Admin Console | Adroit",
+    template: "%s | Admin Console — Adroit",
+  },
   robots: { index: false, follow: false },
 };
 

@@ -46,13 +46,13 @@ function FieldLabel({
   return (
     <label htmlFor={htmlFor} className="block text-sm font-medium text-[var(--ink-heading)]">
       {children}
-      {required && <span className="ml-1 text-[var(--accent-band)]">*</span>}
+      {required && <span aria-hidden="true" className="ml-1 text-[var(--accent-band)]">*</span>}
     </label>
   );
 }
 
 const inputClass =
-  "mt-1.5 block w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] px-4 py-3 text-base text-[var(--ink-body)] placeholder:text-[var(--ink-faint)] transition-colors focus:border-[var(--ink-icon-chip)] focus:ring-2 focus:ring-[var(--ink-icon-chip)]/20 focus:outline-none";
+  "mt-1.5 block w-full rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] px-4 py-3 text-base text-[var(--ink-body)] placeholder:text-[var(--ink-faint)] transition-colors focus:border-[var(--ink-icon-chip)] focus:ring-2 focus:ring-[var(--ink-icon-chip)]/40 focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]";
 
 type Status = "idle" | "submitting" | "success" | "error";
 
@@ -207,7 +207,10 @@ export default function Contact() {
                       id="fullName"
                       name="fullName"
                       type="text"
+                      autoComplete="name"
                       required
+                      aria-invalid={status === "error" || undefined}
+                      aria-describedby={status === "error" ? "contact-form-error" : undefined}
                       disabled={isSubmitting}
                       className={inputClass}
                       placeholder="Jane Smith"
@@ -219,7 +222,10 @@ export default function Contact() {
                       id="email"
                       name="email"
                       type="email"
+                      autoComplete="email"
                       required
+                      aria-invalid={status === "error" || undefined}
+                      aria-describedby={status === "error" ? "contact-form-error" : undefined}
                       disabled={isSubmitting}
                       className={inputClass}
                       placeholder="jane@company.com"
@@ -234,7 +240,10 @@ export default function Contact() {
                       id="company"
                       name="company"
                       type="text"
+                      autoComplete="organization"
                       required
+                      aria-invalid={status === "error" || undefined}
+                      aria-describedby={status === "error" ? "contact-form-error" : undefined}
                       disabled={isSubmitting}
                       className={inputClass}
                       placeholder="Acme Corp"
@@ -246,6 +255,7 @@ export default function Contact() {
                       id="role"
                       name="role"
                       type="text"
+                      autoComplete="organization-title"
                       disabled={isSubmitting}
                       className={inputClass}
                       placeholder="VP Operations"
@@ -256,7 +266,15 @@ export default function Contact() {
                 <div className="grid gap-6 sm:grid-cols-2">
                   <div>
                     <FieldLabel htmlFor="service" required>Service Interest</FieldLabel>
-                    <select id="service" name="service" required disabled={isSubmitting} className={inputClass}>
+                    <select
+                      id="service"
+                      name="service"
+                      required
+                      aria-invalid={status === "error" || undefined}
+                      aria-describedby={status === "error" ? "contact-form-error" : undefined}
+                      disabled={isSubmitting}
+                      className={inputClass}
+                    >
                       <option value="">Select a service</option>
                       {SERVICE_OPTIONS.map((opt) => (
                         <option key={opt} value={opt}>{opt}</option>
@@ -288,6 +306,7 @@ export default function Contact() {
 
                 {status === "error" && (
                   <div
+                    id="contact-form-error"
                     role="alert"
                     className="rounded-lg border border-[var(--accent-band)]/20 bg-[var(--accent-band)]/5 px-4 py-3 text-sm text-[var(--accent-band)]"
                   >

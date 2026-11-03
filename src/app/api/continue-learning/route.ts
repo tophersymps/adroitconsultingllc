@@ -27,7 +27,10 @@ export async function GET() {
       data: { user },
     } = await supabase.auth.getUser();
     if (!user) {
-      return NextResponse.json({ items: [] });
+      return NextResponse.json(
+        { items: [] },
+        { headers: { "Cache-Control": "private, no-store" } },
+      );
     }
 
     const series = getAllSeries();
@@ -101,8 +104,14 @@ export async function GET() {
       return a.seriesSlug.localeCompare(b.seriesSlug);
     });
 
-    return NextResponse.json({ items });
+    return NextResponse.json(
+      { items },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch {
-    return NextResponse.json({ items: [] });
+    return NextResponse.json(
+      { items: [] },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 }

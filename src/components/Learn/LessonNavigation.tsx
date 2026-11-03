@@ -49,21 +49,21 @@ export default function LessonNavigation({
       : undefined;
 
   return (
-    <div className="max-w-[720px] mx-auto px-6 py-8 grid grid-cols-2 gap-4">
+    <nav aria-label="Lesson navigation" className="max-w-[720px] mx-auto px-6 py-8 grid grid-cols-2 gap-4">
       {prev ? (
         <Link
           href={`/atlas/${prev.series}/${prev.slug}`}
           className="group p-5 border border-[var(--border-default)] rounded-xl hover:border-[var(--border-strong)] hover:bg-[var(--surface-card-soft)] hover:shadow-md hover:shadow-navy/5 hover:-translate-y-0.5 transition-all duration-200 no-underline"
         >
           <div className="flex items-center gap-1 font-mono text-[10.5px] text-[var(--ink-muted)] uppercase tracking-[0.06em] font-bold mb-2 transition-colors duration-150 group-hover:text-[var(--accent)]">
-            <span className="transition-transform duration-200 group-hover:-translate-x-0.5">
+            <span aria-hidden="true" className="transition-transform duration-200 group-hover:-translate-x-0.5">
               &larr;
             </span>
             Lesson {prev.lesson}
           </div>
-          <h4 className="text-sm font-semibold text-[var(--ink-primary)] leading-snug transition-colors duration-150 group-hover:text-[var(--accent)]">
+          <span className="block text-sm font-semibold text-[var(--ink-primary)] leading-snug transition-colors duration-150 group-hover:text-[var(--accent)]">
             {prev.title}
-          </h4>
+          </span>
         </Link>
       ) : (
         <div />
@@ -75,17 +75,17 @@ export default function LessonNavigation({
         >
           <div className="flex items-center justify-end gap-1 font-mono text-[10.5px] text-[var(--ink-muted)] uppercase tracking-[0.06em] font-bold mb-2 transition-colors duration-150 group-hover:text-[var(--accent)]">
             {nextTarget.kicker}
-            <span className="transition-transform duration-200 group-hover:translate-x-0.5">
+            <span aria-hidden="true" className="transition-transform duration-200 group-hover:translate-x-0.5">
               &rarr;
             </span>
           </div>
-          <h4 className="text-sm font-semibold text-[var(--ink-primary)] leading-snug transition-colors duration-150 group-hover:text-[var(--accent)]">
+          <span className="block text-sm font-semibold text-[var(--ink-primary)] leading-snug transition-colors duration-150 group-hover:text-[var(--accent)]">
             {nextTarget.title}
-          </h4>
+          </span>
         </Link>
       ) : (
         <div />
       )}
-    </div>
+    </nav>
   );
 }

@@ -41,11 +41,13 @@ import argparse
 import base64
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS: list[dict] = []
@@ -98,11 +100,38 @@ def http(method: str, url: str, *, body=None, headers=None, timeout=30):
         return err.code, parsed, dict(err.headers)
 
 
+def split_dsn(dsn: str) -> tuple[str, str | None]:
+    if "://" in dsn:
+        parts = urlsplit(dsn)
+        netloc = parts.netloc
+        password = None
+        if "@" in netloc:
+            userinfo, host = netloc.rsplit("@", 1)
+            if ":" in userinfo:
+                user, raw_password = userinfo.split(":", 1)
+                password = unquote(raw_password)
+                userinfo = quote(user, safe="")
+            netloc = f"{userinfo}@{host}"
+        target = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+        return target, password
+    match = re.search(r"(?:^|\s)password=('(?:[^']|'')*'|\S+)", dsn)
+    if match:
+        password = match.group(1).strip("'")
+        target = (dsn[:match.start()] + dsn[match.end():]).strip()
+        return target, password
+    return dsn, None
+
+
 def db_uuid_for_email(db_url: str, email: str) -> str | None:
+    target, password = split_dsn(db_url)
+    env = dict(os.environ)
+    if password:
+        env["PGPASSWORD"] = password
+    safe_email = email.replace("'", "''")
     proc = subprocess.run(
-        ["psql", db_url, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
-         f"SELECT id::text FROM neon_auth.\"user\" WHERE lower(email) = lower('{email}')"],
-        capture_output=True, text=True, timeout=30,
+        ["psql", target, "-X", "-q", "-A", "-t", "-v", "ON_ERROR_STOP=1", "-c",
+         f"SELECT id::text FROM neon_auth.\"user\" WHERE lower(email) = lower('{safe_email}')"],
+        capture_output=True, text=True, timeout=30, env=env,
     )
     if proc.returncode != 0:
         return None

@@ -80,12 +80,18 @@ export async function GET(req: NextRequest) {
       data = inserted;
     }
 
-    return NextResponse.json({
-      user: { id: user.id, email: user.email ?? "" },
-      profile: toProfile(data as ProfileRow),
-    });
+    return NextResponse.json(
+      {
+        user: { id: user.id, email: user.email ?? "" },
+        profile: toProfile(data as ProfileRow),
+      },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch {
-    return NextResponse.json({ user: null });
+    return NextResponse.json(
+      { user: null },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   }
 }
 
@@ -147,6 +153,16 @@ export async function PATCH(req: NextRequest) {
       body.displayName === undefined
         ? undefined
         : (body.displayName ?? "").trim() || null;
+    if (
+      displayName !== undefined &&
+      displayName !== null &&
+      displayName.length > 80
+    ) {
+      return NextResponse.json(
+        { error: "Display name must be 80 characters or fewer" },
+        { status: 400 },
+      );
+    }
     const username =
       body.username === undefined
         ? undefined

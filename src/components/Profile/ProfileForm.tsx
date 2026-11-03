@@ -88,6 +88,9 @@ export default function ProfileForm() {
           <input
             id="displayName"
             type="text"
+            autoComplete="nickname"
+            aria-describedby={error ? "displayNameHint profileFormError" : "displayNameHint"}
+            aria-invalid={Boolean(error) || undefined}
             value={displayName}
             onChange={(e) => {
               setDisplayName(e.target.value);
@@ -95,9 +98,9 @@ export default function ProfileForm() {
             }}
             placeholder="How you appear on the site"
             disabled={!loaded || isPending}
-            className="w-full px-3.5 py-2.5 min-h-[44px] rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] text-[14px] text-[var(--ink-body)] focus:outline-none focus:border-[var(--accent)] focus:ring-[3px] focus:ring-[var(--accent)]/[0.25] disabled:opacity-50 placeholder:text-[var(--ink-faint)]"
+            className="w-full px-3.5 py-2.5 min-h-[44px] rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] text-[14px] text-[var(--ink-body)] focus:border-[var(--accent)] focus:ring-[3px] focus:ring-[var(--accent)]/[0.25] focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)] disabled:opacity-50 placeholder:text-[var(--ink-faint)]"
           />
-          <div className="text-[11.5px] text-[var(--ink-faint)] mt-1">
+          <div id="displayNameHint" className="text-[11.5px] text-[var(--ink-faint)] mt-1">
             Shown in the avatar menu and on your profile.
           </div>
         </div>
@@ -108,6 +111,9 @@ export default function ProfileForm() {
           <input
             id="username"
             type="text"
+            autoComplete="username"
+            aria-describedby={error ? "usernameHint profileFormError" : "usernameHint"}
+            aria-invalid={Boolean(error) || undefined}
             value={username}
             onChange={(e) => {
               setUsername(e.target.value);
@@ -115,9 +121,9 @@ export default function ProfileForm() {
             }}
             placeholder="janedoe"
             disabled={!loaded || isPending}
-            className="w-full px-3.5 py-2.5 min-h-[44px] rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] text-[14px] text-[var(--ink-body)] focus:outline-none focus:border-[var(--accent)] focus:ring-[3px] focus:ring-[var(--accent)]/[0.25] disabled:opacity-50 placeholder:text-[var(--ink-faint)]"
+            className="w-full px-3.5 py-2.5 min-h-[44px] rounded-lg border border-[var(--border-default)] bg-[var(--surface-card)] text-[14px] text-[var(--ink-body)] focus:border-[var(--accent)] focus:ring-[3px] focus:ring-[var(--accent)]/[0.25] focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)] disabled:opacity-50 placeholder:text-[var(--ink-faint)]"
           />
-          <div className="text-[11.5px] text-[var(--ink-faint)] mt-1">
+          <div id="usernameHint" className="text-[11.5px] text-[var(--ink-faint)] mt-1">
             <span className="font-mono text-[10.5px]">@{username || "username"}</span>
             {" · "}lower-case letters, numbers, underscores. Social features arrive later.
           </div>
@@ -125,7 +131,7 @@ export default function ProfileForm() {
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 text-[12.5px] font-semibold text-[var(--accent)]">
+        <p id="profileFormError" role="alert" className="mt-3 text-[12.5px] font-semibold text-[var(--accent)]">
           {error}
         </p>
       )}

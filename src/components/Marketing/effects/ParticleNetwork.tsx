@@ -3,6 +3,7 @@
 import { Particles, ParticlesProvider } from "@tsparticles/react";
 import { loadSlim } from "@tsparticles/slim";
 import type { ISourceOptions } from "@tsparticles/engine";
+import { useReducedMotion } from "framer-motion";
 
 const OPTIONS: ISourceOptions = {
   fullScreen: false,
@@ -35,7 +36,6 @@ const OPTIONS: ISourceOptions = {
     },
   },
   detectRetina: true,
-  pauseOnOutsideViewport: true,
 };
 
 /**
@@ -48,6 +48,9 @@ const OPTIONS: ISourceOptions = {
  * ready flag) loses the context and the canvas never appears. (t_d4138a75)
  */
 export default function ParticleNetwork() {
+  const reducedMotion = useReducedMotion();
+  if (reducedMotion) return null;
+
   return (
     <ParticlesProvider
       init={async (engine) => {
@@ -55,6 +58,7 @@ export default function ParticleNetwork() {
       }}
     >
       <Particles
+        aria-hidden="true"
         className="absolute inset-0 transition-opacity duration-1000"
         id="hero-particles"
         options={OPTIONS}

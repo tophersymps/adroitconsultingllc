@@ -67,6 +67,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const exam = getCertExam(series);
   const s = getSeriesBySlug(series);
   if (!exam || !s) return {};
+  if (!isPubliclyLaunchedSeries(series)) {
+    return buildMetadata({
+      title: "Exam | Adroit Learn",
+      description: "Timed assessments for Adroit Learn courses.",
+      path: `/atlas/${series}/exam`,
+      noindex: true,
+    });
+  }
   // ADR-309: the head is composed from the kind's labels, never from
   // exam.json `title` (that field is the exam document's own heading).
   const labels = examLabels(s.examKind);

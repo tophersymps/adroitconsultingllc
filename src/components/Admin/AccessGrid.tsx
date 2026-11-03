@@ -171,8 +171,14 @@ export function AccessGrid({
                     {activeCell?.userId === u.user_id &&
                       activeCell.courseId === course.id && (
                         <div
-                          className="absolute z-20 mt-1 rounded-lg border shadow-md bg-[var(--admin-popover-bg, #FFFFFF)] text-left"
+                          className="absolute z-20 mt-1 rounded-lg border shadow-md bg-[var(--admin-popover-bg,#FFFFFF)] text-left"
                           style={{ borderColor: "var(--admin-popover-border, var(--border-subtle))" }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              setActiveCell(null);
+                            }
+                          }}
                         >
                           <div className="px-2.5 py-2 text-[11px] font-semibold flex items-center gap-2">
                             <EffectiveAccessChip state={state} />

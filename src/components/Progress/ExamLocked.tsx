@@ -87,7 +87,7 @@ export default function ExamLocked({
               <span
                 className={`flex-shrink-0 w-10 h-8 rounded-lg font-mono text-[11px] font-bold flex items-center justify-center transition-colors duration-150 ${
                   check.passed
-                    ? "bg-emerald/15 text-emerald-800 group-hover:bg-emerald/25"
+                    ? "bg-emerald/15 text-emerald-800 dark:text-emerald-300 group-hover:bg-emerald/25"
                     : "bg-gray-100 text-gray-500 group-hover:bg-navy group-hover:text-white"
                 }`}
               >
@@ -99,7 +99,7 @@ export default function ExamLocked({
                 </span>
               </span>
               {check.passed ? (
-                <span className="font-mono text-[10.5px] font-bold text-emerald-800 bg-emerald/10 px-2.5 py-1 rounded-full">
+                <span className="font-mono text-[10.5px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald/10 px-2.5 py-1 rounded-full">
                   Passed · {check.bestScore}%
                 </span>
               ) : check.attempts > 0 ? (

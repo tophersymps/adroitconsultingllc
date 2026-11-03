@@ -131,6 +131,7 @@ function ForgotPasswordForm() {
 
             {error && (
               <div
+                id="forgot-password-error"
                 role="alert"
                 className="rounded-xl border border-red/25 bg-red/5 px-4 py-3 text-[12.5px] text-red-dark mb-4 dark:bg-red/10 dark:text-[var(--accent-hover)]"
               >
@@ -148,7 +149,8 @@ function ForgotPasswordForm() {
                   autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  aria-describedby="emailHint"
+                  aria-invalid={Boolean(error) || undefined}
+                  aria-describedby={error ? "emailHint forgot-password-error" : "emailHint"}
                   className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-[14px] text-gray-800 placeholder:text-gray-500 focus:border-navy transition-colors duration-150 dark:border-[var(--border-default)] dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-body)] dark:placeholder:text-[var(--ink-muted)]"
                   placeholder="you@company.com"
                 />

@@ -73,15 +73,17 @@ export default function ShareBar() {
           target="_blank"
           rel="noopener noreferrer"
           title={btn.label}
+          aria-label={`Share on ${btn.label}`}
           className="min-w-[44px] min-h-[44px] rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-600 dark:border-[var(--border-default)] dark:bg-[var(--surface-card)] dark:text-[var(--ink-muted)] cursor-pointer hover:bg-navy hover:text-white hover:border-navy hover:-translate-y-0.5 transition-all duration-150 no-underline"
         >
           {btn.icon}
         </a>
       ))}
       <button
+        type="button"
         onClick={copyLink}
         title="Copy link"
-        aria-label="Copy link to clipboard"
+        aria-label={copied ? "Link copied to clipboard" : "Copy link to clipboard"}
         className={`min-w-[44px] min-h-[44px] rounded-full border flex items-center justify-center cursor-pointer transition-all duration-150 ${
           copied
             ? "bg-emerald-700 text-white border-emerald-700 dark:bg-emerald-600 dark:border-emerald-600"
@@ -89,16 +91,19 @@ export default function ShareBar() {
         }`}
       >
         {copied ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" aria-hidden="true">
             <path d="M20 6L9 17l-5-5" />
           </svg>
         ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
           </svg>
         )}
       </button>
+      <span className="sr-only" aria-live="polite">
+        {copied ? "Link copied to clipboard" : ""}
+      </span>
     </div>
   );
 }

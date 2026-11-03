@@ -45,6 +45,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 
 const BASE = process.env.QA_TEST_EMAIL_BASE || "kelex1812@gmail.com";
@@ -70,10 +71,25 @@ function lit(v) {
   return `'${String(v).replace(/'/g, "''")}'`;
 }
 
+function splitDsn(dsn) {
+  try {
+    const parsed = new URL(dsn);
+    const password = parsed.password ? decodeURIComponent(parsed.password) : null;
+    parsed.password = "";
+    return { target: parsed.toString(), password };
+  } catch {
+    return { target: dsn, password: null };
+  }
+}
+
 function sql(env, statement) {
   const dsn = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL;
-  return execFileSync("psql", [dsn, "-X", "-q", "-A", "-t", "-c", statement], {
+  const { target, password } = splitDsn(dsn);
+  const childEnv = { ...process.env };
+  if (password) childEnv.PGPASSWORD = password;
+  return execFileSync("psql", [target, "-X", "-q", "-A", "-t", "-c", statement], {
     encoding: "utf-8",
+    env: childEnv,
   }).trim();
 }
 
@@ -140,7 +156,7 @@ async function main() {
     return;
   }
 
-  const password = `Qa-${label}-2026!`;
+  const password = process.env.QA_TEST_PASSWORD || `Qa-${label}-${crypto.randomBytes(9).toString("base64url")}!2`;
   let id = sql(env, `SELECT id FROM neon_auth."user" WHERE email = ${lit(email)} ORDER BY "createdAt" LIMIT 1;`);
   let created = false;
   let emailsSent = 0;

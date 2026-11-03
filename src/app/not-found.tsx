@@ -40,7 +40,7 @@ export default function NotFound() {
             </Link>
             <Link
               href="/field-notes"
-              className="inline-flex items-center gap-2 bg-[var(--accent)] text-white text-[13.5px] font-semibold px-6 h-12 rounded-sm hover:bg-[var(--accent-hover)] hover:-translate-y-px transition-all duration-150 no-underline"
+              className="inline-flex items-center gap-2 bg-[var(--accent-bg)] text-white text-[13.5px] font-semibold px-6 h-12 rounded-sm hover:bg-[var(--accent-hover)] hover:-translate-y-px transition-all duration-150 no-underline"
             >
               Browse the blog <span aria-hidden>&rarr;</span>
             </Link>

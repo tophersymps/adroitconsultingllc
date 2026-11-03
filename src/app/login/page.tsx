@@ -140,6 +140,7 @@ function LoginForm() {
 
             {error && (
               <div
+                id="login-error"
                 role="alert"
                 className="rounded-xl border border-red/25 bg-red/5 px-4 py-3 text-[12.5px] text-red-dark mb-4 dark:bg-red/10 dark:text-[var(--accent-hover)]"
               >
@@ -147,6 +148,7 @@ function LoginForm() {
                 {unconfirmed && (
                   <div className="mt-2">
                     <button
+                      type="button"
                       onClick={handleResend}
                       disabled={isPending}
                       className="font-semibold text-navy underline underline-offset-2 decoration-red/40 hover:decoration-red cursor-pointer bg-none border-none text-[12.5px]"
@@ -176,6 +178,8 @@ function LoginForm() {
                   type="email"
                   required
                   autoComplete="email"
+                  aria-invalid={Boolean(error) || undefined}
+                  aria-describedby={error ? "login-error" : undefined}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-[14px] text-gray-800 placeholder:text-gray-500 focus:border-navy transition-colors duration-150 dark:border-[var(--border-default)] dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-body)] dark:placeholder:text-[var(--ink-muted)]"
@@ -192,6 +196,8 @@ function LoginForm() {
                   required
                   minLength={6}
                   autoComplete={mode === "signin" ? "current-password" : "new-password"}
+                  aria-invalid={Boolean(error) || undefined}
+                  aria-describedby={error ? "login-error" : undefined}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-11 rounded-xl border border-gray-200 bg-white px-4 text-[14px] text-gray-800 placeholder:text-gray-500 focus:border-navy transition-colors duration-150 dark:border-[var(--border-default)] dark:bg-[var(--surface-sunken)] dark:text-[var(--ink-body)] dark:placeholder:text-[var(--ink-muted)]"

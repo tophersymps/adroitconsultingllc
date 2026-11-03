@@ -93,6 +93,11 @@ export default function Header() {
                 key={link.href}
                 className="relative"
                 onMouseLeave={() => setServicesOpen(false)}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                    setServicesOpen(false);
+                  }
+                }}
                 onKeyDown={(e: KeyboardEvent<HTMLDivElement>) => {
                   if (e.key === "Escape" && servicesOpen) {
                     e.preventDefault();
@@ -107,7 +112,6 @@ export default function Header() {
                   onClick={() => setServicesOpen((o) => !o)}
                   onMouseEnter={() => setServicesOpen(true)}
                   aria-expanded={servicesOpen}
-                  aria-haspopup="true"
                   className="relative text-[var(--ink-muted)] text-sm font-medium hover:text-[var(--ink-primary)] transition-colors duration-150 no-underline inline-flex items-center gap-1 cursor-pointer bg-none border-none"
                 >
                   Services

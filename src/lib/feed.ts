@@ -7,6 +7,19 @@
 import { posts } from "@/data/posts";
 import { siteConfig } from "./seo";
 
+function escapeXml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function escapeCdata(str: string): string {
+  return str.replace(/\]\]>/g, "]]]]><![CDATA[>");
+}
+
 export function generateFeedXml(): string {
   const blogUrl = `${siteConfig.url}${siteConfig.blogPath}`;
   const now = new Date().toUTCString();
@@ -14,18 +27,18 @@ export function generateFeedXml(): string {
   const items = posts
     .slice(0, 20)
     .map((post) => {
-      const postUrl = `${blogUrl}/${post.slug}`;
+      const postUrl = escapeXml(`${blogUrl}/${post.slug}`);
       const pubDate = post.date
         ? new Date(post.date).toUTCString()
         : now;
 
       return `    <item>
-      <title><![CDATA[${post.title}]]></title>
+      <title><![CDATA[${escapeCdata(post.title)}]]></title>
       <link>${postUrl}</link>
       <guid isPermaLink="true">${postUrl}</guid>
-      <description><![CDATA[${post.excerpt}]]></description>
-      <pubDate>${pubDate}</pubDate>
-      <category>${post.category}</category>
+      <description><![CDATA[${escapeCdata(post.excerpt)}]]></description>
+      <pubDate>${escapeXml(pubDate)}</pubDate>
+      <category>${escapeXml(post.category)}</category>
     </item>`;
     })
     .join("\n");

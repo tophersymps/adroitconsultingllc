@@ -54,7 +54,7 @@ export function AccessPanel({
       {/* Roster */}
       <div className="rounded-2xl border overflow-hidden" style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card, #FFFFFF)" }}>
         <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
-          <h3 className="text-[13.5px] font-bold text-[var(--ink-primary)]">People</h3>
+          <h2 className="text-[13.5px] font-bold text-[var(--ink-primary)]">People</h2>
           <span className="font-mono text-[10.5px] text-[var(--ink-faint)] bg-[var(--surface-sunken)] px-2 py-0.5 rounded-full">
             {users.length}
           </span>
@@ -65,7 +65,7 @@ export function AccessPanel({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search name or email…"
             aria-label="Search people"
-            className="w-full rounded-lg border text-[12.5px] px-3 py-2 bg-[var(--surface-sunken)] outline-none"
+            className="w-full rounded-lg border text-[12.5px] px-3 py-2 bg-[var(--surface-sunken)] focus-visible:outline-2 focus-visible:outline-[var(--focus-ring)]"
             style={{ borderColor: "var(--admin-table-border)" }}
           />
         </div>

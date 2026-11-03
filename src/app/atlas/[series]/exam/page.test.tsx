@@ -174,11 +174,11 @@ describe("/atlas/[series]/exam — kind-aware SEO head (ADR-309)", () => {
 
   it("a certification-prep series keeps the certification naming", async () => {
     mocks.getSeriesBySlug.mockReturnValue(
-      seriesInfo("salesforce-data-architect", "Platform Data Architect Certification", "certification-prep"),
+      seriesInfo("salesforce-architect", "Platform Data Architect Certification", "certification-prep"),
     );
-    mocks.getCertExam.mockReturnValue({ series: "salesforce-data-architect", title: "x", questions: [{ question: "q" }] });
+    mocks.getCertExam.mockReturnValue({ series: "salesforce-architect", title: "x", questions: [{ question: "q" }] });
 
-    const m = (await meta("salesforce-data-architect")) as { title: string; description: string };
+    const m = (await meta("salesforce-architect")) as { title: string; description: string };
     expect(m.title).toBe(
       "Platform Data Architect Certification: Certification Prep Exam | Adroit Learn",
     );
@@ -186,6 +186,17 @@ describe("/atlas/[series]/exam — kind-aware SEO head (ADR-309)", () => {
       "Timed certification prep exam for Platform Data Architect Certification.",
     );
     expect(m.title).not.toMatch(/course completion/i);
+  });
+
+  it("does not disclose an unlaunched series in the head", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      seriesInfo("salesforce-data-architect", "Platform Data Architect Certification", "certification-prep"),
+    );
+    mocks.getCertExam.mockReturnValue({ series: "salesforce-data-architect", title: "x", questions: [{ question: "q" }] });
+
+    const m = (await meta("salesforce-data-architect")) as { title: string; description: string };
+    expect(m.title).toBe("Exam | Adroit Learn");
+    expect(JSON.stringify(m)).not.toMatch(/Platform Data Architect/i);
   });
 
   it("returns an empty head when the series has no exam", async () => {

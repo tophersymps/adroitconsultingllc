@@ -38,15 +38,8 @@ export const dynamic = "force-dynamic";
 export default async function PreviewBlogPage({ params }: Props) {
   const { slug } = await params;
 
-  // Read raw MDX at request time (dynamic — never statically optimized).
-  const mdxContent = getMDXContent(slug);
-  if (!mdxContent) notFound();
-
-  const [fm] = parseMDXFrontmatter(mdxContent);
-  const status: "draft" | "published" =
-    fm?.status === "draft" ? "draft" : "published";
-
-  // Auth gate — cookie session + email allowlist.
+  // Auth gate — cookie session + email allowlist (runs before filesystem access
+  // so unauthenticated callers cannot probe which draft slugs exist on disk).
   const supabase = await getSupabaseServerClient();
   const {
     data: { user },
@@ -80,6 +73,14 @@ export default async function PreviewBlogPage({ params }: Props) {
       </div>
     );
   }
+
+  // Read raw MDX at request time (dynamic — never statically optimized).
+  const mdxContent = getMDXContent(slug);
+  if (!mdxContent) notFound();
+
+  const [fm] = parseMDXFrontmatter(mdxContent);
+  const status: "draft" | "published" =
+    fm?.status === "draft" ? "draft" : "published";
 
   // Allowlisted editor — render the draft preview.
   const mdxBody = linkifySourceCitations(stripMDXFrontmatter(mdxContent));

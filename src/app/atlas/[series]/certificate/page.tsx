@@ -234,6 +234,7 @@ export default async function CertificatePage({ params }: Props) {
               </p>
               <div className="flex items-center gap-2.5 text-[13px] text-gray-600">
                 <span
+                  aria-hidden="true"
                   className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${
                     allDone ? "bg-[var(--signal-done-bg)] text-[var(--signal-done)]" : "bg-gray-100 text-gray-500"
                   }`}
@@ -249,19 +250,25 @@ export default async function CertificatePage({ params }: Props) {
                     </svg>
                   )}
                 </span>
-                <span>All {totalLessons} lessons completed</span>
+                <span>
+                  <span className="sr-only">{allDone ? "Completed: " : "Incomplete: "}</span>
+                  All {totalLessons} lessons completed
+                </span>
                 <span className="font-mono text-[11px] text-gray-500 ml-auto">
                   {completedCount}/{totalLessons}
                 </span>
               </div>
               <div className="flex items-center gap-2.5 text-[13px] text-gray-600 mt-3">
-                <span className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-100 text-gray-500">
+                <span aria-hidden="true" className="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center bg-gray-100 text-gray-500">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </span>
-                <span>{labels.short} (coming soon)</span>
+                <span>
+                  <span className="sr-only">Incomplete: </span>
+                  {labels.short} (coming soon)
+                </span>
                 <span className="font-mono text-[11px] text-gray-500 ml-auto">Not available</span>
               </div>
             </div>
@@ -439,6 +446,7 @@ export default async function CertificatePage({ params }: Props) {
               <div className="flex flex-col gap-2.5">
                 <div className="flex items-center gap-2.5 text-[13px] text-gray-600">
                   <span
+                    aria-hidden="true"
                     className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${
                       lessonsDone
                         ? "bg-[var(--signal-done-bg)] text-[var(--signal-done)]"
@@ -448,6 +456,7 @@ export default async function CertificatePage({ params }: Props) {
                     {lessonsDone ? OkIcon : NoIcon}
                   </span>
                   <span>
+                    <span className="sr-only">{lessonsDone ? "Completed: " : "Incomplete: "}</span>
                     All {eligibility.lessonsTotal} lessons completed
                   </span>
                   <span className="font-mono text-[11px] text-gray-500 ml-auto">
@@ -456,6 +465,7 @@ export default async function CertificatePage({ params }: Props) {
                 </div>
                 <div className="flex items-center gap-2.5 text-[13px] text-gray-600">
                   <span
+                    aria-hidden="true"
                     className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${
                       eligibility.examPassed
                         ? "bg-[var(--signal-done-bg)] text-[var(--signal-done)]"
@@ -465,12 +475,14 @@ export default async function CertificatePage({ params }: Props) {
                     {eligibility.examPassed ? OkIcon : NoIcon}
                   </span>
                   <span>
+                    <span className="sr-only">{eligibility.examPassed ? "Completed: " : "Incomplete: "}</span>
                     {labels.short} passed (≥ {CERT_EXAM_PASS_PCT}%)
                   </span>
                   <span className="font-mono text-[11px] text-gray-500 ml-auto">{examStatus}</span>
                 </div>
                 <div className="flex items-center gap-2.5 text-[13px] text-gray-600">
                   <span
+                    aria-hidden="true"
                     className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center ${
                       checksDone ? "bg-[var(--signal-done-bg)] text-[var(--signal-done)]" : "bg-gray-100 text-gray-500"
                     }`}
@@ -478,6 +490,7 @@ export default async function CertificatePage({ params }: Props) {
                     {checksDone ? OkIcon : NoIcon}
                   </span>
                   <span>
+                    <span className="sr-only">{checksDone ? "Completed: " : "Incomplete: "}</span>
                     <b className="text-gray-800">Exam unlocked</b> — all {eligibility.checksTotal}{" "}
                     knowledge checks ≥ {CERT_CHECK_PASS_PCT}%
                   </span>

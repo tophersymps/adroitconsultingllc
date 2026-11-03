@@ -56,11 +56,17 @@ async function verifyRecaptcha(
 // ---------------------------------------------------------------------------
 function validate(data: ContactLeadPayload): string | null {
   if (!data.fullName?.trim()) return "Full name is required.";
+  if (data.fullName.length > 200) return "Full name is too long.";
   if (!data.email?.trim()) return "Email is required.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))
+  if (data.email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))
     return "Please provide a valid email address.";
   if (!data.company?.trim()) return "Company is required.";
+  if (data.company.length > 200) return "Company name is too long.";
   if (!data.service?.trim()) return "Please select a service interest.";
+  if (data.service.length > 200) return "Service selection is too long.";
+  if (data.role && data.role.length > 200) return "Role is too long.";
+  if (data.timeline && data.timeline.length > 200) return "Timeline is too long.";
+  if (data.message && data.message.length > 5000) return "Message must be 5,000 characters or fewer.";
   return null;
 }
 
@@ -109,6 +115,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<ContactSu
       );
     }
 
+    // Rate limiting (keyed on the trusted proxy-provided client IP, not a
+    // client-spoofable header; see getClientIp in lib/api-security). Checked
+    // before outbound reCAPTCHA verification so rate-limited floods do not
+    // consume external API quota.
+    const ip = getClientIp(request);
+    if (isRateLimited(ip)) {
+      return NextResponse.json(
+        { ok: false, error: "Too many submissions. Please try again later.", status: 429 },
+        { status: 429 },
+      );
+    }
+
     if (!isDev) {
       if (!body.recaptchaToken) {
         return NextResponse.json(
@@ -124,16 +142,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<ContactSu
           { status: 403 },
         );
       }
-    }
-
-    // Rate limiting (keyed on the trusted proxy-provided client IP, not a
-    // client-spoofable header; see getClientIp in lib/api-security).
-    const ip = getClientIp(request);
-    if (isRateLimited(ip)) {
-      return NextResponse.json(
-        { ok: false, error: "Too many submissions. Please try again later.", status: 429 },
-        { status: 429 },
-      );
     }
 
     // Validate

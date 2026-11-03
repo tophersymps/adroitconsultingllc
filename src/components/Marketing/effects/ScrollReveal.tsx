@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, type Variants } from "framer-motion";
+import { motion, useReducedMotion, type Variants } from "framer-motion";
 import { type ReactNode } from "react";
 
 type Direction = "up" | "down" | "left" | "right" | "none";
@@ -30,6 +30,11 @@ export default function ScrollReveal({
   className = "",
   once = true,
 }: Props) {
+  const reduceMotion = useReducedMotion();
+  if (reduceMotion) {
+    return <div className={className}>{children}</div>;
+  }
+
   const offset = offsets[direction];
 
   const variants: Variants = {

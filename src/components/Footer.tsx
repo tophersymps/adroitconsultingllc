@@ -46,10 +46,10 @@ export default function Footer() {
           </div>
 
           {/* Blog Links */}
-          <div>
-            <h4 className="text-[var(--ink-band)] text-xs font-semibold uppercase tracking-[0.06em] mb-3.5">
+          <nav aria-label="Field Notes">
+            <h2 className="text-[var(--ink-band)] text-xs font-semibold uppercase tracking-[0.06em] mb-3.5">
               Field Notes
-            </h4>
+            </h2>
             <ul className="list-none space-y-2">
               {NAV.footer.blog.map((link) => (
                 <FooterLink key={link.href} href={link.href}>
@@ -57,30 +57,34 @@ export default function Footer() {
                 </FooterLink>
               ))}
             </ul>
-          </div>
+          </nav>
 
           {/* Services */}
           <div>
-            <h4 className="text-[var(--ink-band)] text-xs font-semibold uppercase tracking-[0.06em] mb-3.5">
-              Services
-            </h4>
-            <ul className="list-none space-y-2">
-              {NAV.footer.services.map((link) => (
-                <FooterLink key={link.href} href={link.href}>
-                  {link.label}
-                </FooterLink>
-              ))}
-            </ul>
-            <h4 className="text-[var(--ink-band)] text-xs font-semibold uppercase tracking-[0.06em] mb-3.5 mt-6">
-              Company
-            </h4>
-            <ul className="list-none space-y-2">
-              {NAV.footer.company.map((link) => (
-                <FooterLink key={link.href} href={link.href}>
-                  {link.label}
-                </FooterLink>
-              ))}
-            </ul>
+            <nav aria-label="Services">
+              <h2 className="text-[var(--ink-band)] text-xs font-semibold uppercase tracking-[0.06em] mb-3.5">
+                Services
+              </h2>
+              <ul className="list-none space-y-2">
+                {NAV.footer.services.map((link) => (
+                  <FooterLink key={link.href} href={link.href}>
+                    {link.label}
+                  </FooterLink>
+                ))}
+              </ul>
+            </nav>
+            <nav aria-label="Company" className="mt-6">
+              <h2 className="text-[var(--ink-band)] text-xs font-semibold uppercase tracking-[0.06em] mb-3.5">
+                Company
+              </h2>
+              <ul className="list-none space-y-2">
+                {NAV.footer.company.map((link) => (
+                  <FooterLink key={link.href} href={link.href}>
+                    {link.label}
+                  </FooterLink>
+                ))}
+              </ul>
+            </nav>
           </div>
         </div>
 

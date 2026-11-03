@@ -27,12 +27,12 @@ describe("isPreviewEmailAllowed (draft preview allowlist)", () => {
   });
 
   it("allows an exact allowlisted email", async () => {
-    const check = await loadAllowlist("chris@adroit.io, perry@adroit.io, editor@adroit.io");
+    const check = await loadAllowlist("chris@adroit.io, editor@adroit.io");
     expect(check("chris@adroit.io")).toBe(true);
   });
 
   it("allows case-insensitive matches on the input side", async () => {
-    const check = await loadAllowlist("chris@adroit.io, Perry@adroit.io, Editor@Adroit.io");
+    const check = await loadAllowlist("chris@adroit.io, Editor@Adroit.io");
     expect(check("CHRIS@ADROIT.IO")).toBe(true);
     expect(check("editor@adroit.io")).toBe(true);
   });
