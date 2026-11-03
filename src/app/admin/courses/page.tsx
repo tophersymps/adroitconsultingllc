@@ -361,8 +361,8 @@ function AdminCoursesContent() {
           <button
             type="button"
             onClick={() => setOrgDialogOpen(true)}
-            className="rounded-lg border px-3 py-1.5 text-[12px] font-semibold text-[var(--ink-primary)] bg-[var(--surface-card, #FFFFFF)] hover:bg-[var(--surface-sunken)] transition-colors"
-            style={{ borderColor: "var(--admin-table-border)" }}
+            className="rounded-lg border border-[var(--admin-table-border)] px-3 py-1.5 text-[12px] font-semibold text-[var(--ink-primary)] bg-[var(--surface-card)] hover:bg-[var(--surface-sunken)] transition-colors shadow-xs"
+            style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
           >
             🗂️ Sections &amp; Groups
           </button>
@@ -460,8 +460,8 @@ function AdminCoursesContent() {
                 {unprovisionedSeries.map((s) => (
                   <div
                     key={s.slug}
-                    className="flex items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 bg-[var(--surface-card, #FFFFFF)]"
-                    style={{ borderColor: "var(--admin-table-border)" }}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-[var(--admin-table-border)] px-3.5 py-2.5 bg-[var(--surface-card)]"
+                    style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
                   >
                     <div className="min-w-0">
                       <div className="text-[12.5px] font-semibold text-[var(--ink-primary)] truncate">
@@ -488,8 +488,8 @@ function AdminCoursesContent() {
 
           {/* Catalog Toolbar: Filters + Cards/Table Switcher */}
           <div
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 bg-[var(--surface-card, #FFFFFF)]"
-            style={{ borderColor: "var(--admin-table-border)" }}
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--admin-table-border)] px-4 py-3 bg-[var(--surface-card)]"
+            style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
           >
             <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
               <input
@@ -595,8 +595,8 @@ function AdminCoursesContent() {
                 }) => (
                   <div
                     key={course.id}
-                    className="rounded-2xl border bg-[var(--surface-card, #FFFFFF)] p-5 flex flex-col justify-between transition-all hover:shadow-md"
-                    style={{ borderColor: "var(--admin-table-border)" }}
+                    className="rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-5 flex flex-col justify-between transition-all hover:shadow-md"
+                    style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
@@ -682,8 +682,8 @@ function AdminCoursesContent() {
           {/* TABLE VIEW */}
           {rows && viewMode === "table" && (
             <div
-              className="rounded-xl border overflow-hidden bg-[var(--surface-card, #FFFFFF)]"
-              style={{ borderColor: "var(--admin-table-border)" }}
+              className="rounded-xl border border-[var(--admin-table-border)] overflow-hidden bg-[var(--surface-card)]"
+              style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
             >
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
@@ -902,8 +902,8 @@ function AdminCoursesContent() {
       {activeTab === "sections" && (
         <div className="space-y-4">
           <div
-            className="flex items-center justify-between p-5 rounded-2xl border bg-[var(--surface-card, #FFFFFF)]"
-            style={{ borderColor: "var(--admin-table-border)" }}
+            className="flex items-center justify-between p-5 rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)]"
+            style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
           >
             <div>
               <h2 className="text-base font-bold text-[var(--ink-primary)]">
@@ -1034,8 +1034,8 @@ function AdminCoursesContent() {
         <div className="space-y-4">
           {effectiveData ? (
             <div
-              className="rounded-2xl border overflow-hidden bg-[var(--surface-card, #FFFFFF)]"
-              style={{ borderColor: "var(--admin-table-border)" }}
+              className="rounded-2xl border border-[var(--admin-table-border)] overflow-hidden bg-[var(--surface-card)]"
+              style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
             >
               <div
                 className="flex items-center justify-between px-5 py-3 border-b flex-wrap gap-2"

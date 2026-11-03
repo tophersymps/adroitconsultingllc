@@ -255,8 +255,8 @@ export function RosterPanel({
             onChange={(e) => setRosterSearch(e.target.value)}
             placeholder="Filter people in roster…"
             aria-label="Filter people in roster"
-            className="rounded-md border px-2.5 py-1 text-[12px] bg-[var(--surface-card, #FFFFFF)]"
-            style={{ borderColor: "var(--admin-table-border)" }}
+            className="rounded-md border border-[var(--admin-table-border)] px-2.5 py-1 text-[12px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
+            style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
           />
           <div className="flex-1" />
           <button

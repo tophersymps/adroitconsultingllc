@@ -39,17 +39,21 @@ export function BulkGrantCourseDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
       <div
-        className="w-full max-w-md rounded-2xl border bg-[var(--surface-card)] p-6 shadow-xl"
-        style={{ borderColor: "var(--admin-table-border)" }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Grant Course Access in Bulk"
+        className="w-full max-w-md rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-xl"
+        style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
       >
-        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--admin-table-border)]" style={{ borderColor: "var(--admin-table-border)" }}>
           <h3 className="text-base font-bold text-[var(--ink-primary)]">
             Grant Course Access in Bulk
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+            aria-label="Close dialog"
+            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-primary)]"
           >
             ✕
           </button>
@@ -177,17 +181,21 @@ export function BulkFreezeDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
       <div
-        className="w-full max-w-md rounded-2xl border bg-[var(--surface-card)] p-6 shadow-xl"
-        style={{ borderColor: "var(--admin-table-border)" }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Batch Freeze Accounts"
+        className="w-full max-w-md rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-xl"
+        style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
       >
-        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--admin-table-border)]" style={{ borderColor: "var(--admin-table-border)" }}>
           <h3 className="text-base font-bold text-amber-700 dark:text-amber-400">
             Batch Freeze Accounts
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+            aria-label="Close dialog"
+            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-primary)]"
           >
             ✕
           </button>
@@ -270,17 +278,21 @@ export function BulkDeleteDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
       <div
-        className="w-full max-w-lg rounded-2xl border bg-[var(--surface-card)] p-6 shadow-xl"
-        style={{ borderColor: "var(--admin-table-border)" }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Batch Delete Users (${userCount})`}
+        className="w-full max-w-lg rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-xl"
+        style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
       >
-        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--admin-table-border)]" style={{ borderColor: "var(--admin-table-border)" }}>
           <h3 className="text-base font-bold text-red-700 dark:text-red-400">
             Batch Delete Users ({userCount})
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+            aria-label="Close dialog"
+            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-primary)]"
           >
             ✕
           </button>
@@ -408,17 +420,21 @@ export function BulkResetPasswordDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
       <div
-        className="w-full max-w-md rounded-2xl border bg-[var(--surface-card)] p-6 shadow-xl space-y-4"
-        style={{ borderColor: "var(--admin-table-border)" }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Send Password Reset Emails"
+        className="w-full max-w-md rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-xl space-y-4"
+        style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
       >
-        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: "var(--admin-table-border)" }}>
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--admin-table-border)]" style={{ borderColor: "var(--admin-table-border)" }}>
           <h3 className="text-base font-bold text-[var(--ink-primary)]">
             Send Password Reset Emails
           </h3>
           <button
             type="button"
             onClick={onClose}
-            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+            aria-label="Close dialog"
+            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-primary)]"
           >
             ✕
           </button>

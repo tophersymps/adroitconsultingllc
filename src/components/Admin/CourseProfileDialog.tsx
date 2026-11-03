@@ -203,7 +203,7 @@ export default function CourseProfileDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
@@ -211,10 +211,11 @@ export default function CourseProfileDialog({
         role="dialog"
         aria-modal="true"
         aria-label={`Edit profile for ${course.title}`}
-        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border bg-[var(--surface-card)] p-6 shadow-2xl"
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-2xl"
+        style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-4 border-b border-[var(--admin-table-border)] pb-3" style={{ borderColor: "var(--admin-table-border)" }}>
           <div>
             <h2 className="text-lg font-extrabold tracking-tight text-[var(--ink-primary)]">
               Edit course profile
@@ -227,8 +228,8 @@ export default function CourseProfileDialog({
             ref={closeBtnRef}
             type="button"
             onClick={onClose}
-            aria-label="Close"
-            className="rounded-md px-2 py-1 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+            aria-label="Close dialog"
+            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-primary)]"
           >
             ✕
           </button>
@@ -249,7 +250,7 @@ export default function CourseProfileDialog({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Course display title"
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
               </label>
@@ -262,7 +263,7 @@ export default function CourseProfileDialog({
                   step="0.01"
                   min={0}
                   placeholder="e.g. 149.00"
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 font-mono text-[13px] bg-transparent"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 font-mono text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
               </label>
@@ -281,7 +282,7 @@ export default function CourseProfileDialog({
                     setSectionId(e.target.value);
                     setGroupId("");
                   }}
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 >
                   <option value="">— uncategorized —</option>
@@ -298,7 +299,7 @@ export default function CourseProfileDialog({
                   value={groupId}
                   onChange={(e) => setGroupId(e.target.value)}
                   disabled={!sectionId}
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent disabled:opacity-50"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden disabled:opacity-50"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 >
                   <option value="">— standalone —</option>
@@ -315,7 +316,7 @@ export default function CourseProfileDialog({
                   value={track}
                   onChange={(e) => setTrack(e.target.value)}
                   placeholder="agentic-ai"
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
               </label>
@@ -328,7 +329,7 @@ export default function CourseProfileDialog({
                     type="number"
                     min={1}
                     max={10}
-                    className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                    className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                     style={{ borderColor: "var(--admin-table-border)" }}
                   />
                 </label>
@@ -339,7 +340,7 @@ export default function CourseProfileDialog({
                     onChange={(e) => setSortOrder(e.target.value)}
                     type="number"
                     min={0}
-                    className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                    className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                     style={{ borderColor: "var(--admin-table-border)" }}
                   />
                 </label>
@@ -357,7 +358,7 @@ export default function CourseProfileDialog({
                   <select
                     value={difficulty}
                     onChange={(e) => setDifficulty(e.target.value)}
-                    className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                    className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                     style={{ borderColor: "var(--admin-table-border)" }}
                   >
                     <option value="">— set difficulty —</option>
@@ -374,7 +375,7 @@ export default function CourseProfileDialog({
                     value={audience}
                     onChange={(e) => setAudience(e.target.value)}
                     placeholder="Consultants, Developers…"
-                    className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                    className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                     style={{ borderColor: "var(--admin-table-border)" }}
                   />
                 </label>
@@ -386,7 +387,7 @@ export default function CourseProfileDialog({
                   onChange={(e) => setBackground(e.target.value)}
                   rows={2}
                   placeholder="comfortable with the command line and basic Python"
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
               </label>
@@ -397,7 +398,7 @@ export default function CourseProfileDialog({
                   onChange={(e) => setOutcomesText(e.target.value)}
                   rows={3}
                   placeholder="What you'll be able to do after…"
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
               </label>
@@ -407,7 +408,7 @@ export default function CourseProfileDialog({
                   value={tagsText}
                   onChange={(e) => setTagsText(e.target.value)}
                   placeholder="Salesforce, Certification"
-                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
               </label>
@@ -447,11 +448,11 @@ export default function CourseProfileDialog({
               )}
             </fieldset>
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2 pt-3 border-t border-[var(--admin-table-border)] mt-4">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-md border px-4 py-2 text-[13px] font-semibold text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+                className="rounded-md border border-[var(--admin-table-border)] px-4 py-2 text-[13px] font-semibold text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
               >
                 Cancel
               </button>
