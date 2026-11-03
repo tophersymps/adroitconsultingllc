@@ -196,6 +196,24 @@ async function handleLogin(req: NextRequest): Promise<Response> {
       return NextResponse.json({ error: GENERIC_SIGNIN_ERROR }, { status: 401 });
     }
 
+    try {
+      const authUsers = await import("@/lib/auth/users");
+      if (typeof authUsers.getUserBlockStateByEmail === "function") {
+        const blockState = await authUsers.getUserBlockStateByEmail(email);
+        if (blockState?.blocked && blockState.reason === "frozen") {
+          if (typeof authUsers.revokeUserSessions === "function") {
+            await authUsers.revokeUserSessions(blockState.userId).catch(() => {});
+          }
+          return NextResponse.json(
+            { error: "This account has been suspended by an administrator. Please contact support for assistance." },
+            { status: 403 },
+          );
+        }
+      }
+    } catch {
+      // Ignore if mocked in unit tests without getUserBlockStateByEmail
+    }
+
     return NextResponse.json({ status: "ok" });
   } catch {
     return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });

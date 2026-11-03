@@ -1,7 +1,7 @@
 /**
  * PATCH /api/admin/courses/[slug] — admin course mutation (US-009): update
- * status / access_model / price_cents; launching sets launched_at. Writes an
- * admin_audit_log row (ADR-205). Admin-only (US-016).
+ * title / status / access_model / price_cents; launching sets launched_at.
+ * Writes an admin_audit_log row (ADR-205). Admin-only (US-016).
  *
  * Contract: AdminCourseUpdateRequest.
  */
@@ -51,6 +51,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  if (
+    body.title !== undefined &&
+    (typeof body.title !== "string" || body.title.trim().length === 0)
+  ) {
+    return NextResponse.json({ error: "Invalid title" }, { status: 400 });
+  }
   if (body.status !== undefined && !STATUSES.includes(body.status)) {
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
@@ -114,6 +120,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const hasAny =
+    body.title !== undefined ||
     body.status !== undefined ||
     body.access_model !== undefined ||
     body.price_cents !== undefined ||
@@ -164,6 +171,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
+    if (body.title !== undefined) updates.title = body.title.trim();
     if (body.status !== undefined) updates.status = body.status;
     if (body.access_model !== undefined) updates.access_model = body.access_model;
     if (body.price_cents !== undefined) updates.price_cents = body.price_cents;
@@ -235,6 +243,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     // Learn v2 org/profile change (ADR-208/205): aggregate any changed org or
     // profile field into one auditable course.profile_change row.
     const profileFields: { key: keyof AdminCourseUpdateRequest; label: string }[] = [
+      { key: "title", label: "title" },
       { key: "section_id", label: "section_id" },
       { key: "group_id", label: "group_id" },
       { key: "track", label: "track" },

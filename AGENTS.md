@@ -28,3 +28,23 @@ the work as done. `.github/CODEOWNERS` requests it automatically on PR creation.
 
 Work is not "done" until its commit is on `main` and deployed. Until then the honest state is
 "awaiting review" or "awaiting merge".
+
+## Development database: Neon branch `dev-admin-ux`, never `production`
+
+All local development and testing runs against the Neon branch `dev-admin-ux`
+(`br-silent-sunset-b7g7vvph`, project `dawn-darkness-89797362`), a copy-on-write fork of `production`.
+Do not point `.env.local` at the `production` branch, and do not run migrations, QA-user scripts or
+destructive admin actions against it from a dev machine.
+
+- `.env.local` (gitignored) must have `NEON_BRANCH=dev-admin-ux` and the branch's `DATABASE_URL`,
+  `DATABASE_URL_UNPOOLED`, `NEON_AUTH_BASE_URL`, `NEON_DATA_API_URL` and `NEXT_PUBLIC_NEON_DATA_API_URL`.
+  Verify with `npx neonctl branches get dev-admin-ux --project-id dawn-darkness-89797362`.
+- Migrations in `supabase/migrations/neon/` are applied to `dev-admin-ux` first and tested there. They go
+  to `production` only at deploy time, after the PR is approved and merged.
+- QA accounts: `node scripts/qa-create-test-user.cjs <label>` (and `--delete` afterwards) against the dev
+  branch only. The dev branch holds a copy of real user rows and uses the production email sender, so never
+  trigger password-reset or invite emails for real users from it.
+- Refresh the branch from production when it drifts:
+  `npx neonctl branches reset dev-admin-ux --parent --project-id dawn-darkness-89797362`. This discards
+  dev-only data and migrations, so re-apply pending migrations and re-create QA users afterwards.
+- `http://localhost:3000` is a trusted Neon Auth domain on the dev branch only.

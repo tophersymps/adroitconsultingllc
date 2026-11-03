@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       source: "granted" as const,
       grant_note: note,
       granted_by: gate.userId,
+      revoked_at: null,
     }));
 
     if (rows.length > 0) {
@@ -103,9 +104,9 @@ export async function POST(req: NextRequest) {
 
 /**
  * DELETE /api/admin/entitlements/bulk — bulk soft-revoke a course from many
- * users (Access · Courses roster). Sets revoked_at on each active granted
- * entitlement. Writes ONE admin_audit_log row (entitlement.bulk_revoke) and
- * revokes one row per matched user (row kept for audit). Admin-only.
+ * users (Access · Courses roster). Sets revoked_at on each active entitlement
+ * (`granted` or `one-time`). Writes ONE admin_audit_log row
+ * (entitlement.bulk_revoke) and revokes matched active rows. Admin-only.
  * Body: BulkGrantRequest (userIds + courseId).
  */
 export async function DELETE(req: NextRequest) {
@@ -154,13 +155,11 @@ export async function DELETE(req: NextRequest) {
     );
     const note = typeof body.note === "string" ? body.note.trim() || null : null;
 
-    // Soft-revoke active granted entitlements for the selected users. Only
-    // rows that actually match (and were active) are revoked.
+    // Soft-revoke active entitlements (granted or one-time) for the selected users.
     const { data: revokedRows, error } = await service
       .from("user_entitlements")
       .update({ revoked_at: new Date().toISOString() })
       .eq("course_id", body.courseId)
-      .eq("source", "granted")
       .in("user_id", userIds)
       .is("revoked_at", null)
       .select("user_id");

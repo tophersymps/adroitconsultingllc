@@ -166,7 +166,7 @@ const nextConfig: NextConfig = {
               // script is CSP-blocked and the anti-bot control either breaks
               // the form (site key set) or is inert (key unset). See
               // src/app/contact/page.tsx:139. (t_fd9f68c2)
-              "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com",
+              `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""} https://www.googletagmanager.com https://www.google-analytics.com https://www.google.com https://www.gstatic.com`,
               // connect-src must carry the Neon Data API origin: the browser
               // client fetches it directly for signed-in progress reads
               // (src/lib/db/client.ts). See neonDataApiOrigins() above.

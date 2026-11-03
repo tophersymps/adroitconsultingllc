@@ -36,7 +36,7 @@ npm install          # install dependencies
 npm run dev          # development server (default :3000)
 ```
 
-Requires the Neon env vars (`NEON_AUTH_BASE_URL`, `NEON_DATA_API_URL`, `NEXT_PUBLIC_NEON_DATA_API_URL`, `NEON_AUTH_COOKIE_SECRET`) - see `.env.example` for names and shapes.
+Requires the Neon env vars (`NEON_AUTH_BASE_URL`, `NEON_DATA_API_URL`, `NEXT_PUBLIC_NEON_DATA_API_URL`, `NEON_AUTH_COOKIE_SECRET`) - see `.env.example` for names and shapes. **Local development points at the Neon branch `dev-admin-ux`, never `production`** (see "Development database" in `AGENTS.md`).
 
 Production build:
 
@@ -87,6 +87,7 @@ Full documentation lives in the **repo wiki**:
 - [Development Setup](https://github.com/tophersymps/adroitconsultingllc/wiki/Development-Setup)
 - [Testing](https://github.com/tophersymps/adroitconsultingllc/wiki/Testing)
 - [Changelog](https://github.com/tophersymps/adroitconsultingllc/wiki/Changelog)
+- In-repo: [Admin user lifecycle](docs/admin-user-lifecycle.md) (freeze, reset password, soft/hard delete, restore, invite)
 
 For AI agents: read the Next.js version docs in `node_modules/next/dist/docs/` before writing code; this version has breaking changes vs older Next.js.
 

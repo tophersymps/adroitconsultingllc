@@ -215,7 +215,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </svg>
           </button>
           <span className="font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--admin-table-head)] truncate">
-            Course Catalog &amp; Access Control
+            Course Catalog &amp; Access Control · {pathname}
           </span>
         </div>
         <main id="main" className="flex-1 px-4 py-6 sm:px-6">
