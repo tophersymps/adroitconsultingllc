@@ -13,13 +13,29 @@
 
 import { useEffect, useRef, useState } from "react";
 import type {
+  AccessModel,
   CatalogGroup,
   CatalogSection,
   CourseRow,
+  CourseStatus,
   Difficulty,
 } from "@/shared/contracts-course-catalog";
 
 const DIFFICULTIES: Difficulty[] = ["Beginner", "Intermediate", "Advanced"];
+
+const ACCESS_MODELS: { value: AccessModel; label: string }[] = [
+  { value: "free", label: "Free (open access)" },
+  { value: "subscription", label: "Subscription" },
+  { value: "one-time", label: "One-Time purchase" },
+  { value: "sub-or-one-time", label: "Sub or One-Time" },
+  { value: "granted", label: "Admin grant only" },
+];
+
+const COURSE_STATUSES: { value: CourseStatus; label: string }[] = [
+  { value: "pending", label: "Pending (Draft)" },
+  { value: "live", label: "Live (Published)" },
+  { value: "archived", label: "Archived" },
+];
 
 interface CourseProfileDialogProps {
   course: CourseRow;
@@ -43,6 +59,8 @@ export default function CourseProfileDialog({
   const [saving, setSaving] = useState(false);
 
   const [title, setTitle] = useState<string>(course.title ?? "");
+  const [status, setStatus] = useState<CourseStatus>(course.status ?? "pending");
+  const [accessModel, setAccessModel] = useState<AccessModel>(course.access_model ?? "subscription");
   const [priceDollars, setPriceDollars] = useState<string>(
     course.price_cents != null ? (course.price_cents / 100).toFixed(2) : "",
   );
@@ -111,6 +129,8 @@ export default function CourseProfileDialog({
 
       const profileBody: Record<string, unknown> = {
         ...(title.trim() ? { title: title.trim() } : {}),
+        status,
+        access_model: accessModel,
         price_cents: priceCents,
         section_id: sectionId || null,
         group_id: groupId || null,
@@ -239,12 +259,12 @@ export default function CourseProfileDialog({
           <p className="text-sm text-[var(--ink-muted)]">Loading…</p>
         ) : (
           <div className="space-y-4">
-            {/* Identity & Commercial */}
-            <fieldset className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <legend className="font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)] mb-1">
-                Identity &amp; Pricing
+            {/* Identity, Access & Commercial */}
+            <fieldset className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <legend className="col-span-full font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)] mb-1">
+                Course Settings, Access &amp; Pricing
               </legend>
-              <label className="sm:col-span-2 block text-[12px] font-semibold text-[var(--ink-primary)]">
+              <label className="col-span-full block text-[12px] font-semibold text-[var(--ink-primary)]">
                 Course Title
                 <input
                   value={title}
@@ -254,7 +274,42 @@ export default function CourseProfileDialog({
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />
               </label>
+
               <label className="block text-[12px] font-semibold text-[var(--ink-primary)]">
+                Access Model
+                <select
+                  value={accessModel}
+                  onChange={(e) => setAccessModel(e.target.value as AccessModel)}
+                  aria-label="Access model"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden cursor-pointer"
+                  style={{ borderColor: "var(--admin-table-border)" }}
+                >
+                  {ACCESS_MODELS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-[12px] font-semibold text-[var(--ink-primary)]">
+                Lifecycle Status
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as CourseStatus)}
+                  aria-label="Course status"
+                  className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden cursor-pointer"
+                  style={{ borderColor: "var(--admin-table-border)" }}
+                >
+                  {COURSE_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="sm:col-span-2 block text-[12px] font-semibold text-[var(--ink-primary)]">
                 One-time Price (USD)
                 <input
                   value={priceDollars}
@@ -262,7 +317,7 @@ export default function CourseProfileDialog({
                   type="number"
                   step="0.01"
                   min={0}
-                  placeholder="e.g. 149.00"
+                  placeholder="e.g. 149.00 (blank for free/subscription)"
                   className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 font-mono text-[13px] bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 />

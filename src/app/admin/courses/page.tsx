@@ -599,20 +599,69 @@ function AdminCoursesContent() {
                     style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                        <StatusBadge status={course.status} />
-                        <AccessModelChip model={course.access_model} />
-                        <span className="font-mono text-xs font-bold text-[var(--ink-primary)] ml-auto">
+                      <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <StatusBadge status={course.status} />
+                          <select
+                            value={course.status}
+                            disabled={saving === course.series_slug}
+                            aria-label={`Status for ${course.title}`}
+                            onChange={(e) =>
+                              onStatusChange(
+                                course.series_slug,
+                                e.target.value as CourseStatus,
+                                course,
+                              )
+                            }
+                            className="rounded-md border border-[var(--admin-table-border)] text-[11px] font-semibold px-2 py-1 bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden disabled:opacity-50 cursor-pointer"
+                            style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
+                          >
+                            {STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          <AccessModelChip model={course.access_model} />
+                          <select
+                            value={course.access_model}
+                            disabled={saving === course.series_slug}
+                            aria-label={`Access model for ${course.title}`}
+                            onChange={(e) =>
+                              onModelChange(
+                                course.series_slug,
+                                e.target.value as AccessModel,
+                              )
+                            }
+                            className="rounded-md border border-[var(--admin-table-border)] text-[11px] font-semibold px-2 py-1 bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden disabled:opacity-50 cursor-pointer"
+                            style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
+                          >
+                            {MODELS.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="text-[15px] font-bold text-[var(--ink-primary)] tracking-tight">
+                            {course.title}
+                          </h3>
+                          <div className="font-mono text-[11px] text-[var(--ink-faint)] mt-0.5 truncate">
+                            {course.series_slug}
+                            {course.track ? ` · track: ${course.track}` : ""}
+                            {course.difficulty ? ` · ${course.difficulty}` : ""}
+                          </div>
+                        </div>
+                        <span className="font-mono text-xs font-bold text-[var(--ink-primary)] shrink-0 px-2 py-1 rounded border border-[var(--admin-table-border)] bg-[var(--surface-sunken)]">
                           {formatPriceCents(course.price_cents)}
                         </span>
-                      </div>
-                      <h3 className="text-[15px] font-bold text-[var(--ink-primary)] tracking-tight">
-                        {course.title}
-                      </h3>
-                      <div className="font-mono text-[11px] text-[var(--ink-faint)] mt-1 truncate">
-                        {course.series_slug}
-                        {course.track ? ` · track: ${course.track}` : ""}
-                        {course.difficulty ? ` · ${course.difficulty}` : ""}
                       </div>
 
                       <div className="flex items-center gap-3 mt-4 text-[12px] text-[var(--ink-muted)]">
@@ -753,8 +802,8 @@ function AdminCoursesContent() {
                                     e.target.value as CourseStatus,
                                   )
                                 }
-                                className="rounded-md border text-[12.5px] px-2 py-1.5 min-h-[44px] md:min-h-0 bg-transparent disabled:opacity-50"
-                                style={{ borderColor: "var(--admin-table-border)" }}
+                                className="rounded-md border border-[var(--admin-table-border)] text-[12.5px] px-2 py-1.5 min-h-[44px] md:min-h-0 bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden disabled:opacity-50 cursor-pointer"
+                                style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
                               >
                                 {STATUSES.map((s) => (
                                   <option key={s} value={s}>
@@ -777,8 +826,8 @@ function AdminCoursesContent() {
                                     e.target.value as AccessModel,
                                   )
                                 }
-                                className="rounded-md border text-[12.5px] px-2 py-1.5 min-h-[44px] md:min-h-0 bg-transparent disabled:opacity-50"
-                                style={{ borderColor: "var(--admin-table-border)" }}
+                                className="rounded-md border border-[var(--admin-table-border)] text-[12.5px] px-2 py-1.5 min-h-[44px] md:min-h-0 bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden disabled:opacity-50 cursor-pointer"
+                                style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
                               >
                                 {MODELS.map((m) => (
                                   <option key={m} value={m}>
