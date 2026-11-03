@@ -85,7 +85,10 @@ async function unmarkCompleteAPI(lessonSlug: string): Promise<void> {
   }
 }
 
-export function useLessonProgress(lessonSlug: string): UseLessonProgressReturn {
+export function useLessonProgress(
+  lessonSlug: string,
+  initialCompleted?: boolean,
+): UseLessonProgressReturn {
   // Hydration-safe (same class as QA M-2 on useReadProgress): localStorage
   // is NEVER read in the useState initializer — a stored completion record
   // would make the client's first paint differ from the server HTML and
@@ -93,11 +96,25 @@ export function useLessonProgress(lessonSlug: string): UseLessonProgressReturn {
   // client render start incomplete; the mounted effect below reads the
   // stored value after hydration.
   const [isCompleted, setIsCompleted] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(initialCompleted === undefined);
 
   // Sync from other hook instances (same-tab + cross-tab).
   useEffect(() => {
-    const onChanged = () => setIsCompleted(getCompletedFromStorage(lessonSlug));
+    const onChanged = () => {
+      const stored = getCompletedFromStorage(lessonSlug);
+      if (stored) {
+        setIsCompleted(true);
+      } else if (
+        typeof window !== "undefined" &&
+        localStorage.getItem(`${STORAGE_KEY_PREFIX}${lessonSlug}`) === "false"
+      ) {
+        setIsCompleted(false);
+      } else if (initialCompleted !== undefined) {
+        setIsCompleted(initialCompleted);
+      } else {
+        setIsCompleted(false);
+      }
+    };
     // Mount-gate hydration read (QA M-2 pattern): read AFTER mount so the
     // server HTML and the client's first paint both render the incomplete
     // state. The setState runs inside the callback, so the rule stays clean.
@@ -108,9 +125,20 @@ export function useLessonProgress(lessonSlug: string): UseLessonProgressReturn {
       window.removeEventListener(PROGRESS_CHANGED_EVENT, onChanged);
       window.removeEventListener("storage", onChanged);
     };
-  }, [lessonSlug]);
+  }, [lessonSlug, initialCompleted]);
 
   useEffect(() => {
+    // When initialCompleted is provided (e.g. from parent batch summary),
+    // synchronize directly and skip single-lesson Supabase queries.
+    if (initialCompleted !== undefined) {
+      setIsCompleted(initialCompleted);
+      if (initialCompleted) {
+        setCompletedInStorage(lessonSlug, true);
+      }
+      setIsLoading(false);
+      return;
+    }
+
     const checkSupabase = async () => {
       try {
         const { data: { user } } = await getSupabaseClient().auth.getUser();
@@ -127,7 +155,7 @@ export function useLessonProgress(lessonSlug: string): UseLessonProgressReturn {
     };
 
     checkSupabase();
-  }, [lessonSlug]);
+  }, [lessonSlug, initialCompleted]);
 
   const markComplete = useCallback(() => {
     const newState = !isCompleted;

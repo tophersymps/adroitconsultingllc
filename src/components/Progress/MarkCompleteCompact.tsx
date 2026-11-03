@@ -34,10 +34,19 @@ export interface MarkCompleteCompactProps {
    * replacing it: the words on screen stay the first words announced.
    */
   label?: string;
+  /** Authoritative completion state from batch summary / parent (avoids redundant queries & races). */
+  isCompleted?: boolean;
 }
 
-export default function MarkCompleteCompact({ lessonSlug, label }: MarkCompleteCompactProps) {
-  const { isCompleted, markComplete, isLoading } = useLessonProgress(lessonSlug);
+export default function MarkCompleteCompact({
+  lessonSlug,
+  label,
+  isCompleted: initialCompleted,
+}: MarkCompleteCompactProps) {
+  const { isCompleted, markComplete, isLoading } = useLessonProgress(
+    lessonSlug,
+    initialCompleted,
+  );
   const chipRef = useRef<HTMLSpanElement>(null);
   // Set ONLY by the button's click handler: the sanctioned focus move is the
   // button→chip swap that removes the pressed element. The hook starts
