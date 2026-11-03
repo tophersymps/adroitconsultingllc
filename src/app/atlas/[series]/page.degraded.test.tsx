@@ -84,6 +84,7 @@ vi.mock("@/lib/seo", () => ({
 
 vi.mock("@/lib/quiz", () => ({
   getKnowledgeChecks: () => [],
+  getQuizForLesson: () => null,
 }));
 
 vi.mock("@/lib/access", () => ({

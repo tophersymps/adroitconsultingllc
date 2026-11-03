@@ -19,7 +19,7 @@ import SeriesProgress from "@/components/Progress/SeriesProgress";
 import QuizStats from "@/components/Progress/QuizStats";
 import CertReadiness from "@/components/Progress/CertReadiness";
 import ExamCard from "@/components/Progress/ExamCard";
-import { getCertExam, getKnowledgeChecks } from "@/lib/quiz";
+import { getCertExam, getKnowledgeChecks, getQuizForLesson } from "@/lib/quiz";
 import { CERT_EXAM_MINUTES, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 import { accessSeam, getAccessUserId, getCourseRowBySlug } from "@/lib/access";
 import { getCatalogForUserV2, prerequisitesMet } from "@/lib/catalog";
@@ -28,7 +28,6 @@ import { StatusBadge } from "@/components/Catalog/StatusBadge";
 import { AccessModelChip } from "@/components/Catalog/AccessModelChip";
 import DifficultyPill from "@/components/Learn/DifficultyPill";
 import PrerequisitesSection from "@/components/Learn/PrerequisitesSection";
-import SeriesStarChart from "@/components/Constellations/chart/SeriesStarChart";
 import { loadSeriesConstellation, loadExamPassedBySeries } from "@/lib/sky-server";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
@@ -164,6 +163,14 @@ export default async function SeriesPage({ params }: Props) {
   // label when the tiers route is unavailable (US-012).
   const certExam = hasTiers ? getCertExam(series) : null;
   const examQuestionCount = certExam?.questions.length ?? 0;
+  const lessonQuizzes: Record<string, { quizName: string; total: number }> = {};
+  for (const l of baseLessons) {
+    const q = getQuizForLesson(series, l.slug);
+    if (q && q.questions.length > 0) {
+      lessonQuizzes[l.slug] = { quizName: q.quizName, total: q.questions.length };
+    }
+  }
+
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -206,14 +213,9 @@ export default async function SeriesPage({ params }: Props) {
       examPassed = false;
     }
   }
-  const constellation = await loadSeriesConstellation({
-    seriesSlug: series,
-    name: s.name,
-    gradient: s.gradient,
-    courseId: courseRow?.id ?? series,
-    completedSlugs,
-    examPassed,
-  });
+  void loadSeriesConstellation;
+  void examPassed;
+  void completedSlugs;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -366,23 +368,7 @@ export default async function SeriesPage({ params }: Props) {
           </div>
         )}
 
-        {/* On-course tracker — the course drawn as its constellation, star
-            lines lit to match progress (Hubble Field Phase 2). SVG, so there
-            is no WebGL gate and no 2D fallback to keep in step. The chart
-            centres its own wide band (max-width 1200px) with the galaxy
-            filling the frame, inside the syllabus's content shell. */}
-        <div className="max-w-[1120px] mx-auto px-6 pt-8">
-          {constellation ? (
-            <div className="mb-10">
-              <SeriesStarChart
-                constellation={constellation}
-                isGuest={!isAuthed}
-              />
-            </div>
-          ) : null}
-        </div>
-
-        {/* Syllabus — lesson-number order (ADR-105), client sort + hide-completed. */}
+        {/* Syllabus — unified timeline and on-course tracker (zero-duplication). */}
         <div className="max-w-[1120px] mx-auto px-6 py-8 pb-4">
           {baseLessons.length > 0 ? (
             <div className="grid gap-10 grid-cols-[minmax(0,1fr)]">
@@ -395,6 +381,7 @@ export default async function SeriesPage({ params }: Props) {
                   totalLessons={total}
                   published={published}
                   upcoming={upcoming}
+                  lessonQuizzes={lessonQuizzes}
                 />
               </Suspense>
             </div>
@@ -427,3 +414,4 @@ export default async function SeriesPage({ params }: Props) {
     </div>
   );
 }
+
