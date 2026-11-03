@@ -26,6 +26,11 @@ them to `changelog.d/.shipped/`. See `changelog.d/README.md` for the entry shape
 (`gh pr create --reviewer tophersymps`), and never leave a PR sitting green but unreviewed while reporting
 the work as done. `.github/CODEOWNERS` requests it automatically on PR creation.
 
+Agents author PRs as the GitHub account `kelex1812` (the agent account); `tophersymps` is the owner's
+personal account and is always the reviewer. An author cannot approve their own PR, so never open a PR
+as `tophersymps` or request `kelex1812` as reviewer. Check that `gh auth status` shows `kelex1812` as the
+active account before `gh pr create`.
+
 Work is not "done" until its commit is on `main` and deployed. Until then the honest state is
 "awaiting review" or "awaiting merge".
 
