@@ -32,8 +32,7 @@ type NavSection = { section?: string; href: string; label: string; exact?: boole
 const NAV: NavSection[] = [
   { section: "Access", href: "/admin", label: "Overview", exact: true },
   { href: "/admin/users", label: "People" },
-  { href: "/admin/access/courses", label: "Courses" },
-  { section: "Content", href: "/admin/courses", label: "Catalog" },
+  { href: "/admin/courses", label: "Courses" },
   { section: "System", href: "/admin/analytics", label: "Analytics" },
   { href: "/admin/audit", label: "Audit Log" },
   { href: "/admin/offers", label: "Offers · Coupons" },

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type {
+  AdminBulkUsersRequest,
+  AdminBulkUsersResult,
   AdminUserListRow,
   EntitlementSource,
   GrantEntitlementRequest,
@@ -275,6 +277,38 @@ export function useAdminUsers() {
       return { ok: false, error: "Network error while restoring user" };
     }
   }
+  async function bulkMutateUsers(
+    input: AdminBulkUsersRequest,
+  ): Promise<AdminBulkUsersResult> {
+    try {
+      const res = await fetch("/api/admin/users/bulk", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = (await res.json()) as AdminBulkUsersResult & { error?: string };
+      if (!res.ok) {
+        return {
+          ok: false,
+          action: input.action,
+          total: input.userIds.length,
+          succeeded: 0,
+          failed: input.userIds.length,
+          errors: [{ userId: "all", error: json.error ?? "Bulk mutation failed" }],
+        };
+      }
+      return json;
+    } catch {
+      return {
+        ok: false,
+        action: input.action,
+        total: input.userIds.length,
+        succeeded: 0,
+        failed: input.userIds.length,
+        errors: [{ userId: "all", error: "Network error during bulk operation" }],
+      };
+    }
+  }
 
   return {
     rows,
@@ -291,6 +325,7 @@ export function useAdminUsers() {
     sendPasswordReset,
     deleteUser,
     restoreUser,
+    bulkMutateUsers,
   };
 }
 

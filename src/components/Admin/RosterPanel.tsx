@@ -37,6 +37,7 @@ export function RosterPanel({
   onRevoke,
   onAdjust,
   onChangeAccessModel,
+  hideMatrix = false,
 }: {
   courses: AdminCourseListRow[];
   users: AdminUserListRow[];
@@ -56,6 +57,7 @@ export function RosterPanel({
     seriesSlug: string,
     nextModel: AccessModel,
   ) => Promise<boolean>;
+  hideMatrix?: boolean;
 }) {
   const initialId = useMemo(() => {
     if (initialCourseSlugOrId) {
@@ -362,8 +364,9 @@ export function RosterPanel({
       </div>
 
       {/* AccessGrid — the honest matrix */}
-      <div
-        className="rounded-2xl border overflow-hidden"
+      {!hideMatrix && (
+        <div
+          className="rounded-2xl border overflow-hidden"
         style={{
           borderColor: "var(--admin-table-border)",
           background: "var(--surface-card, #FFFFFF)",
@@ -409,6 +412,7 @@ export function RosterPanel({
           <Legend color="var(--access-none)" label="None — locked" />
         </div>
       </div>
+      )}
     </div>
   );
 }

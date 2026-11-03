@@ -10,7 +10,10 @@ import {
 } from "@/lib/hooks/useAdminUsers";
 import { AccessPanel } from "@/components/Admin/AccessPanel";
 import AdminToast, { type AdminToastMessage } from "@/components/Admin/AdminToast";
-import type { EntitlementSource, UserRole } from "@/shared/contracts-course-catalog";
+import type { EntitlementSource, UserRole,
+  AdminBulkUsersRequest,
+  AdminBulkUsersResult,
+} from "@/shared/contracts-course-catalog";
 
 /**
  * /admin/users — Access · People (person-first lens, ADR-222) + User Lifecycle.
@@ -190,6 +193,27 @@ export default function AdminUsersPage() {
     return res;
   }
 
+  async function onBulkMutate(
+    input: AdminBulkUsersRequest,
+  ): Promise<AdminBulkUsersResult> {
+    const res = await usersHook.bulkMutateUsers(input);
+    if (res.ok) {
+      await refresh?.();
+      setToast({
+        text: `Batch ${input.action} succeeded for ${res.succeeded} user(s)`,
+        tone: "success",
+      });
+    } else {
+      await refresh?.();
+      const firstErr = res.errors?.[0]?.error;
+      setToast({
+        text: firstErr ?? `Batch ${input.action} finished with ${res.failed} error(s)`,
+        tone: "error",
+      });
+    }
+    return res;
+  }
+
   if (loading && !data) {
     return (
       <p role="status" className="text-sm text-gray-500">
@@ -237,6 +261,7 @@ export default function AdminUsersPage() {
           onSendPasswordReset={onSendPasswordReset}
           onDeleteUser={onDeleteUser}
           onRestoreUser={onRestoreUser}
+          onBulkMutate={onBulkMutate}
         />
       )}
     </div>

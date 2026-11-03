@@ -268,6 +268,35 @@ export interface SetRoleRequest {
   role: UserRole;
 }
 
+/** Bulk users operation request. */
+export interface AdminBulkUsersRequest {
+  userIds: string[];
+  action:
+    | "freeze"
+    | "unfreeze"
+    | "reset-password"
+    | "delete"
+    | "role"
+    | "grant-course"
+    | "revoke-course";
+  reason?: string;
+  mode?: "soft" | "hard";
+  role?: UserRole;
+  courseId?: string;
+  source?: "granted" | "one-time";
+}
+
+/** Bulk users operation result. */
+export interface AdminBulkUsersResult {
+  ok: boolean;
+  action: string;
+  total: number;
+  succeeded: number;
+  failed: number;
+  skipped?: number;
+  errors?: Array<{ userId: string; error: string }>;
+}
+
 /** Admin API success envelope. */
 export interface AdminApiResponse<T> {
   ok: true;

@@ -389,11 +389,11 @@ export default function AdminOverviewPage() {
             </span>
             <div className="flex-1" />
             <Link
-              href="/admin/access/courses"
+              href="/admin/courses?tab=roster"
               className="text-[12px] font-semibold no-underline hover:underline"
               style={{ color: "var(--color-red)" }}
             >
-              Access · Courses →
+              Courses · Rosters →
             </Link>
           </div>
           {entitlementRanked.length === 0 ? (
