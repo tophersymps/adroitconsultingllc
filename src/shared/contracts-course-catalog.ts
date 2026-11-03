@@ -218,6 +218,8 @@ export interface AdminCourseListRow {
   course: CourseRow;
   /** Number of active (non-revoked) granted/one-time entitlements. */
   activeEntitlementCount: number;
+  publishedLessonCount?: number;
+  totalLessonCount?: number;
 }
 
 /** Admin user list row (US-010) — role + entitlements + subscription for the matrix. */
@@ -234,6 +236,16 @@ export interface AdminUserListRow {
    * writes are out of scope (ADR-204, billing on hold).
    */
   subscription: SubscriptionRow | null;
+  email_verified?: boolean;
+  provider?: string;
+  created_at?: string | null;
+  last_seen_at?: string | null;
+  active_session_count?: number;
+  frozen_at?: string | null;
+  frozen_reason?: string | null;
+  deleted_at?: string | null;
+  status?: "active" | "frozen" | "tombstoned";
+  lessons_completed_count?: number;
 }
 
 /** Grant/revoke request (US-012). */
@@ -445,6 +457,7 @@ export interface AdminCourseUpdateRequest {
   access_model?: AccessModel;
   price_cents?: number | null;
   /* ---- Learn v2 (migration 009) ---- */
+  title?: string;
   section_id?: string | null;
   group_id?: string | null;
   track?: string | null;

@@ -2,8 +2,8 @@
  * GET /api/admin/access/effective — consolidated five-state accessor read
  * (ADR-223). One round-trip that powers the AccessGrid, People panel, Courses
  * roster, and Access Overview: live courses + every user's entitlements +
- * active subscription + the resolved effective-access matrix + the subscriber
- * pulse. Admin-only, read-only (no writes, no audit log).
+ * active subscription + lifecycle metadata + the resolved effective-access
+ * matrix + the subscriber pulse. Admin-only, read-only (no writes, no audit log).
  *
  * Contract: AdminAccessEffectiveResponse (shape below). Reuses
  * AdminCourseListRow + AdminUserListRow (the latter carries .subscription from
@@ -13,8 +13,9 @@
 import { NextResponse } from "next/server";
 import { activeSubscriptionOf, requireAdminApi } from "@/lib/admin";
 import { getSupabaseServerClient } from "@/lib/db/server";
-import { listAuthUsers } from "@/lib/auth/users";
+import * as authUsersModule from "@/lib/auth/users";
 import { effectiveAccessState } from "@/lib/access";
+import { getAllSeries } from "@/lib/learn";
 import type {
   AdminCourseListRow,
   AdminUserListRow,
@@ -56,7 +57,7 @@ export async function GET() {
     const service = await getSupabaseServerClient();
     const [authUsers, coursesRes, rolesRes, profilesRes, entRes, subsRes] =
       await Promise.all([
-        listAuthUsers(),
+        authUsersModule.listAuthUsers(),
         service.from("courses").select("*").order("created_at", { ascending: true }),
         service.from("user_roles").select("user_id, role"),
         service.from("user_profiles").select("user_id, display_name"),
@@ -73,6 +74,35 @@ export async function GET() {
     if (profilesRes.error) throw profilesRes.error;
     if (entRes.error) throw entRes.error;
     if (subsRes.error) throw subsRes.error;
+
+    // Optional enrichment: lifecycle metadata (email_verified, provider,
+    // sessions, frozen/tombstoned status) and lesson completion counts.
+    const [lifecycleList, completionsRes] = await Promise.all([
+      (async () => {
+        try {
+          const fn = authUsersModule.listAdminUserDetails;
+          return typeof fn === "function" ? await fn() : [];
+        } catch {
+          return [];
+        }
+      })(),
+      Promise.resolve(
+        service.from("lesson_completion")?.select?.("user_id"),
+      ).catch(() => ({ data: [], error: null })),
+    ]);
+
+    const lifecycleByUser = new Map(
+      (lifecycleList ?? []).map((item) => [item.id, item]),
+    );
+    const completionCountByUser = new Map<string, number>();
+    for (const c of ((completionsRes as { data?: { user_id: string }[] } | null)?.data ?? [])) {
+      if (c?.user_id) {
+        completionCountByUser.set(
+          c.user_id,
+          (completionCountByUser.get(c.user_id) ?? 0) + 1,
+        );
+      }
+    }
 
     const courses = (coursesRes.data ?? []) as CourseRow[];
     const roleByUser = new Map<string, UserRole>();
@@ -100,29 +130,61 @@ export async function GET() {
     }
     const now = new Date().toISOString();
 
-    // Entitlement count per course (reuse the /api/admin/courses shape).
+    // Entitlement count + disk lesson counts per course.
     const countByCourse = new Map<string, number>();
     for (const e of (entRes.data ?? []) as UserEntitlementRow[]) {
       countByCourse.set(e.course_id, (countByCourse.get(e.course_id) ?? 0) + 1);
     }
+    const diskBySlug = new Map(getAllSeries().map((s) => [s.slug, s]));
 
-    const courseRows: AdminCourseListRow[] = courses.map((course) => ({
-      course,
-      activeEntitlementCount: countByCourse.get(course.id) ?? 0,
-    }));
+    const courseRows: AdminCourseListRow[] = courses.map((course) => {
+      const series = diskBySlug.get(course.series_slug);
+      return {
+        course,
+        activeEntitlementCount: countByCourse.get(course.id) ?? 0,
+        publishedLessonCount: series?.lessons.length ?? 0,
+        totalLessonCount: series?.totalLessons ?? series?.lessons.length ?? 0,
+      };
+    });
 
-    const userRows: AdminUserListRow[] = authUsers.map((u) => {
+    // Combine live auth users with any tombstoned users from lifecycleList
+    const combinedUsers: { id: string; email: string }[] = [...(authUsers ?? [])];
+    const seenIds = new Set(combinedUsers.map((u) => u.id));
+    for (const detail of lifecycleList ?? []) {
+      if (!seenIds.has(detail.id)) {
+        combinedUsers.push({ id: detail.id, email: detail.email });
+        seenIds.add(detail.id);
+      }
+    }
+
+    const userRows: AdminUserListRow[] = combinedUsers.map((u) => {
       const entitlements: Record<string, EntitlementSource> = {};
       for (const e of entsByUser.get(u.id) ?? []) {
         entitlements[e.course_id] = e.source;
       }
+      const detail = lifecycleByUser.get(u.id);
+      const profileName = nameByUser.get(u.id) ?? detail?.name ?? null;
       return {
         user_id: u.id,
-        email: u.email,
-        display_name: nameByUser.get(u.id) ?? null,
+        email: u.email || detail?.email || "",
+        display_name: profileName,
         role: roleByUser.get(u.id) ?? ("member" as UserRole),
         entitlements,
         subscription: activeSubscriptionOf(subsByUser.get(u.id) ?? [], now),
+        ...(detail
+          ? {
+              email_verified: detail.emailVerified,
+              provider: detail.provider,
+              created_at: detail.createdAt,
+              last_seen_at: detail.lastSeenAt,
+              active_session_count: detail.activeSessionCount,
+              frozen_at: detail.frozenAt,
+              frozen_reason: detail.frozenReason,
+              deleted_at: detail.deletedAt,
+              status: detail.status,
+            }
+          : {}),
+        lessons_completed_count: completionCountByUser.get(u.id) ?? 0,
       };
     });
 
@@ -162,12 +224,6 @@ export async function GET() {
       },
     } satisfies AdminAccessEffectiveResponse);
   } catch (err) {
-    // Log the true failure server-side (structured, no internals leaked to the
-    // client). The current admin request cannot be completed without a readable
-    // root cause; the client must never see the internal error, so the response
-    // stays opaque while Vercel logs carry the exact cause. Covers the missing
-    // NEON_DATA_API_URL / NEON_AUTH_BASE_URL env failure (the Data API client
-    // fails closed), a GoTrue listAuthUsers failure, or a PostgREST read error.
     console.error("[admin-access-effective] failed to load effective access", {
       message: err instanceof Error ? err.message : String(err),
       name: err instanceof Error ? err.name : undefined,

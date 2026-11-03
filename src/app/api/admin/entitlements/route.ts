@@ -86,7 +86,8 @@ export async function POST(req: NextRequest) {
 
 /**
  * DELETE /api/admin/entitlements — soft-revoke an entitlement (US-012,
- * ADR-203): sets revoked_at on the active granted row (row kept for audit).
+ * ADR-203): sets revoked_at on any active entitlement row (`granted` or
+ * `one-time`) for `(user_id, course_id)` (row kept for audit).
  * Writes an admin_audit_log row (entitlement.revoke). Admin-only.
  * Body: GrantEntitlementRequest.
  */
@@ -120,12 +121,11 @@ export async function DELETE(req: NextRequest) {
       .update({ revoked_at: new Date().toISOString() })
       .eq("user_id", body.userId)
       .eq("course_id", body.courseId)
-      .eq("source", "granted")
       .is("revoked_at", null)
-      .select("user_id");
+      .select("user_id, source");
     if (error) throw error;
 
-    // Row-affected check (t_10214e52 / CWE-778): no active granted row
+    // Row-affected check (t_10214e52 / CWE-778): no active entitlement row
     // matched (never granted, or already revoked) → don't claim a revoke and
     // don't write a misleading audit row.
     if (!revokedRows || revokedRows.length === 0) {
@@ -135,12 +135,19 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    const revokedSources = (revokedRows as { source?: string }[])
+      .map((r) => r.source)
+      .filter(Boolean);
+
     await writeAuditLog({
       actorUserId: gate.userId,
       action: "entitlement.revoke",
       targetType: "entitlement",
       targetId: `${body.userId}:${body.courseId}`,
-      details: { note: typeof body.note === "string" ? body.note : null },
+      details: {
+        note: typeof body.note === "string" ? body.note : null,
+        ...(revokedSources.length > 0 ? { sources: revokedSources } : {}),
+      },
     });
 
     return NextResponse.json({ ok: true, data: { revoked: true } });

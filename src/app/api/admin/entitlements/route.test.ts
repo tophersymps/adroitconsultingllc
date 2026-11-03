@@ -1,8 +1,9 @@
 /**
- * route.test.ts — DELETE /api/admin/entitlements row-affected check (t_10214e52).
+ * route.test.ts — DELETE /api/admin/entitlements row-affected check (t_10214e52)
+ * + one-time entitlement revoke support.
  *
- * A revoke that matches no active granted row must not claim success nor
- * write a misleading entitlement.revoke audit row (CWE-778).
+ * A revoke that matches no active row must not claim success nor write a
+ * misleading entitlement.revoke audit row (CWE-778).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -45,21 +46,18 @@ function admin() {
   mocks.isAdmin.mockResolvedValue(true);
 }
 
-/** user_entitlements chain: update().eq().eq().eq().is().select() → rows. */
-function revokeChain(rows: unknown) {
-  return {
-    update: () => ({
-      eq: () => ({
-        eq: () => ({
-          eq: () => ({
-            is: () => ({
-              select: async () => ({ data: rows, error: null }),
-            }),
-          }),
-        }),
-      }),
-    }),
+/** user_entitlements chain: update().eq()...is().select() → rows. */
+function revokeChain(rows: unknown, eqCalls: [string, unknown][] = []) {
+  const builder = {
+    update: () => builder,
+    eq: (col: string, val: unknown) => {
+      eqCalls.push([col, val]);
+      return builder;
+    },
+    is: () => builder,
+    select: async () => ({ data: rows, error: null }),
   };
+  return builder;
 }
 
 beforeEach(() => {
@@ -88,12 +86,13 @@ describe("DELETE /api/admin/entitlements — row-affected check (t_10214e52)", (
     expect(mocks.service.from).not.toHaveBeenCalledWith("admin_audit_log");
   });
 
-  it("revokes and writes an entitlement.revoke audit row when a row matched", async () => {
+  it("revokes and writes an entitlement.revoke audit row when a row matched (including one-time)", async () => {
     admin();
     const auditInserts: unknown[] = [];
+    const eqCalls: [string, unknown][] = [];
     mocks.service.from.mockImplementation((table: string) =>
       table === "user_entitlements"
-        ? revokeChain([{ user_id: "u2" }])
+        ? revokeChain([{ user_id: "u2", source: "one-time" }], eqCalls)
         : {
             insert: async (row: unknown) => {
               auditInserts.push(row);
@@ -105,6 +104,11 @@ describe("DELETE /api/admin/entitlements — row-affected check (t_10214e52)", (
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.data.revoked).toBe(true);
+    // Does not restrict to source="granted", so one-time entitlements revoke cleanly
+    expect(eqCalls).toEqual([
+      ["user_id", "u2"],
+      ["course_id", "c1"],
+    ]);
     expect(mocks.service.from).toHaveBeenCalledWith("admin_audit_log");
     expect(auditInserts).toHaveLength(1);
     expect(auditInserts[0]).toMatchObject({ action: "entitlement.revoke" });

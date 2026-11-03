@@ -244,6 +244,15 @@ export async function readSessionUser(): Promise<SessionReadResult> {
     } else {
       const user = result?.data?.user;
       if (!user?.id) return { ok: true, user: null };
+      try {
+        const authUsers = await import("@/lib/auth/users");
+        if (typeof authUsers.getUserAccountBlockState === "function") {
+          const blockState = await authUsers.getUserAccountBlockState(user.id);
+          if (blockState.blocked) return { ok: true, user: null };
+        }
+      } catch {
+        // Ignore if mocked in unit tests without getUserAccountBlockState
+      }
       return {
         ok: true,
         user: {

@@ -1,12 +1,13 @@
 /**
  * CourseProfileDialog — Learn v2 course profile + org editor (ADR-208/209).
  *
- * Admin form for the migration-009 fields: section/group/track/level/sort_order
- * (org) + difficulty/recommended_background/audience/learning_outcomes/
- * course_tags (profile) + structured prerequisites. Saves via
+ * Admin form for title + price_cents + the migration-009 fields:
+ * section/group/track/level/sort_order (org) + difficulty/recommended_background/
+ * audience/learning_outcomes/course_tags (profile) + structured prerequisites.
+ * Saves via:
  *   PATCH /api/admin/courses/[slug]                     (org + profile fields)
  *   PUT   /api/admin/courses/[slug]/prerequisites       (prerequisite set)
- * every mutation server-side audited (course.profile_change).
+ * every mutation server-side audited (course.profile_change / course.price_change).
  */
 "use client";
 
@@ -41,10 +42,10 @@ export default function CourseProfileDialog({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Local form state, initialized from the course row. section/group MUST
-  // seed from the stored course.section_id/group_id — initializing to "" left
-  // the dropdowns blank and the Group list empty (filtered against ""), so a
-  // course's existing org never showed. (Chris report, 2026-08-29.)
+  const [title, setTitle] = useState<string>(course.title ?? "");
+  const [priceDollars, setPriceDollars] = useState<string>(
+    course.price_cents != null ? (course.price_cents / 100).toFixed(2) : "",
+  );
   const [sectionId, setSectionId] = useState<string>(course.section_id ?? "");
   const [groupId, setGroupId] = useState<string>(course.group_id ?? "");
   const [track, setTrack] = useState<string>(course.track ?? "");
@@ -101,7 +102,16 @@ export default function CourseProfileDialog({
   async function onSave() {
     setSaving(true);
     try {
+      const parsedDollars =
+        priceDollars.trim() === "" ? null : Number.parseFloat(priceDollars);
+      const priceCents =
+        parsedDollars != null && Number.isFinite(parsedDollars) && parsedDollars >= 0
+          ? Math.round(parsedDollars * 100)
+          : null;
+
       const profileBody: Record<string, unknown> = {
+        ...(title.trim() ? { title: title.trim() } : {}),
+        price_cents: priceCents,
         section_id: sectionId || null,
         group_id: groupId || null,
         track: track.trim() || null,
@@ -228,6 +238,36 @@ export default function CourseProfileDialog({
           <p className="text-sm text-[var(--ink-muted)]">Loading…</p>
         ) : (
           <div className="space-y-4">
+            {/* Identity & Commercial */}
+            <fieldset className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <legend className="font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)] mb-1">
+                Identity &amp; Pricing
+              </legend>
+              <label className="sm:col-span-2 block text-[12px] font-semibold text-[var(--ink-primary)]">
+                Course Title
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Course display title"
+                  className="mt-1 w-full rounded-md border px-2 py-1.5 text-[13px] bg-transparent"
+                  style={{ borderColor: "var(--admin-table-border)" }}
+                />
+              </label>
+              <label className="block text-[12px] font-semibold text-[var(--ink-primary)]">
+                One-time Price (USD)
+                <input
+                  value={priceDollars}
+                  onChange={(e) => setPriceDollars(e.target.value)}
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  placeholder="e.g. 149.00"
+                  className="mt-1 w-full rounded-md border px-2 py-1.5 font-mono text-[13px] bg-transparent"
+                  style={{ borderColor: "var(--admin-table-border)" }}
+                />
+              </label>
+            </fieldset>
+
             {/* Org */}
             <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <legend className="font-mono text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--ink-faint)] mb-1">

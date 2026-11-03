@@ -89,6 +89,23 @@ const requestCookieHeader = cache(async (): Promise<string | null> => {
   }
 });
 
+/**
+ * Local-dev only. Over plain `http://localhost` the auth SDK writes the session
+ * cookie as `neon-auth.session_token`, but the Managed Better Auth service only
+ * recognises the HTTPS name `__Secure-neon-auth.session_token`, so `/token`
+ * answers 401 and every user (admins included) degrades to a guest. Re-label
+ * the same cookie value for the upstream call. Never active in production
+ * (HTTPS already uses the `__Secure-` name), and it forwards only the caller's
+ * own cookie, so no identity or access check is changed.
+ */
+export function localDevSessionCookie(cookieHeader: string): string {
+  if (process.env.NODE_ENV !== "development") return cookieHeader;
+  return cookieHeader.replace(
+    /(^|;\s*)neon-auth\.session_token=/,
+    "$1__Secure-neon-auth.session_token=",
+  );
+}
+
 /** Conservative cache lifetime when the token's `exp` claim cannot be read. */
 const FALLBACK_TTL_MS = 5 * 60_000;
 
@@ -218,7 +235,7 @@ async function fetchTokenResult(
   // (SEC-R2-5-L1). Never attach it there.
   if (path === "/token") {
     const cookie = await requestCookieHeader();
-    if (cookie) headers.Cookie = cookie;
+    if (cookie) headers.Cookie = localDevSessionCookie(cookie);
   }
 
   // The endpoint burned the budget moments ago: do not spend the render's
