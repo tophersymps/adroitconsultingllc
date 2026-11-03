@@ -74,7 +74,6 @@ describe("AdminShell back-nav (t_f94e01d5)", () => {
       "Overview",
       "People",
       "Courses",
-      "Catalog",
       "Analytics",
       "Audit Log",
       "Offers · Coupons",
@@ -89,7 +88,7 @@ describe("AdminShell back-nav (t_f94e01d5)", () => {
 
   it("marks the active admin route with aria-current", () => {
     render(<AdminShell>content</AdminShell>);
-    expect(screen.getByRole("link", { name: "Catalog" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Courses" })).toHaveAttribute(
       "aria-current",
       "page",
     );
