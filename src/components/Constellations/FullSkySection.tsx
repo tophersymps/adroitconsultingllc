@@ -3,30 +3,19 @@
  * starfield": no marketing hero, no feature cards — just the sky, the
  * rank-ladder rung list, the stat block, and the Chronicle feed.
  *
- * The hero is the 2D celestial chart (`StarChart`): every course is a
- * constellation carrying an engraved figure of what it depicts, and progress
- * lights its star lines. It replaced the immersive 3D galaxy in the Hubble
- * Field Phase 2 port — see `docs/implementation-plan-hubble-field.md` §0 for
- * why the WebGL studies lost. Because the chart is SVG there is no WebGL to
- * fall back from, so the old 3D-plus-2D-fallback split collapses into one
- * surface and the header chrome is a plain sibling rather than an overlay.
- *
- * `ProfileGalaxy3D` is deliberately left in tree and unmounted for one release
- * so the port can be rolled back cheaply.
- *
- * Presentational: the server loader passes a ready ProfileSky payload.
+ * Upgraded in the Adroit Tron Progression overhaul: replaces the static
+ * 17th-century SVG engravings with the Grand Cyber-Constellation Network
+ * (`ProfileCyberConstellation`), color-matched to the Adroit Consulting brand.
  */
 "use client";
 
-import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChronicleFeed } from "@/components/Constellations/ChronicleFeed";
 import { StreakCounter } from "@/components/Constellations/StreakCounter";
 import { RANK_LADDER } from "@/shared/rank-ladder";
 import type { FullSkySectionProps, RankId } from "@/shared/contracts-constellations";
-import { buildChartFigures } from "@/lib/chart";
-import { StarChart } from "./chart/StarChart";
+import { ProfileCyberConstellation } from "./network/ProfileCyberConstellation";
 
 /** Star magnitude color for a rank band (display-only; thresholds live in code). */
 const MAGNITUDE_VAR: Record<RankId, string> = {
@@ -104,26 +93,15 @@ export function FullSkySection({ sky }: FullSkySectionProps) {
   const currentId = stats.rank?.id ?? "starseed";
   const router = useRouter();
 
-  /*
-   * Focus lives here rather than in the chart so the chart stays
-   * presentational. Clicking a figure focuses it and stays on /profile; the
-   * inspect panel's CTA is the only thing that navigates.
-   */
-  const [focusSlug, setFocusSlug] = useState<string | null>(null);
-  const figures = useMemo(() => buildChartFigures(sky), [sky]);
-
   return (
     <section className="cx-sky overflow-hidden" data-testid="full-sky-section">
       <SkyHeroChrome sky={sky} />
 
-      {/* The hero: every course as a constellation figure. The chart centres its
-          own wide band (max-width 1500px) with the galaxy filling the frame. */}
-      {figures.length > 0 ? (
+      {/* The Tron-Grid Grand Constellation Network */}
+      {constellations.length > 0 ? (
         <div className="px-6 pb-6 md:px-10">
-          <StarChart
-            figures={figures}
-            focusSlug={focusSlug}
-            onFocusChange={setFocusSlug}
+          <ProfileCyberConstellation
+            constellations={constellations}
             onOpenCourse={(slug) => router.push(`/atlas/${slug}`)}
             isGuest={sky.isGuest}
           />
@@ -185,14 +163,7 @@ export function FullSkySection({ sky }: FullSkySectionProps) {
         </ol>
       </div>
 
-      {/*
-        Constellation list + Chronicle.
-
-        The dot grid predates the chart and survives it: the chart draws the
-        *figure*, which has as many members as the real constellation has, so it
-        cannot show one node per lesson. This list can, and it carries the course
-        links and the lit/total counts. It is also the chart's text alternative.
-      */}
+      {/* Constellation list + Chronicle */}
       <div className="relative grid gap-10 border-t border-white/10 bg-black/25 px-6 py-10 md:grid-cols-2 md:px-10">
         <div>
           <p className="mb-4 font-mono text-[10.5px] font-bold uppercase tracking-[0.12em] text-[var(--sky-ink-muted)]">

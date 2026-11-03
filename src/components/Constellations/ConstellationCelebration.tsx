@@ -1,17 +1,14 @@
 /**
- * ConstellationCelebration — the P1 "star ignition" moment on lesson
- * completion. A brief full-bleed overlay: icy-blue→red bloom star pop with the
- * `check-pop` spring, the course's progress, and a live streak chip. When this
- * lesson completes the course, the constellation pulses ≤1.2s and the label
- * reads "Constellation complete."
+ * ConstellationCelebration — the P1 milestone celebration on lesson completion.
+ *
+ * Upgraded to the Adroit Tron visual aesthetic: glowing Adroit Crimson ignition
+ * flare, neon Icy Cyan border accents, live streak multiplier, and clear
+ * next-step action.
  *
  * Trigger: the local lesson-completion flag flipping to true + a
- * PROGRESS_CHANGED_EVENT broadcast (the same seam every progress hook uses).
- * Auto-dismisses (~3s), on click, or on Escape. Rendered as a transient
- * `role="status"` / `aria-live="polite"` region (not a modal dialog) because
- * it is auto-dismissing and non-interactive — no focus trap/restore needed.
- * Reduced motion flattens to a static confirmation. Guests are skipped (no
- * persistent completion).
+ * PROGRESS_CHANGED_EVENT broadcast.
+ * Auto-dismisses, on click, or on Escape. Rendered as a transient role="status"
+ * region with full keyboard accessibility.
  */
 "use client";
 
@@ -20,7 +17,7 @@ import { lessonKey } from "@/lib/progress";
 import { StreakCounter } from "@/components/Constellations/StreakCounter";
 import type { ConstellationCelebrationProps } from "@/shared/contracts-constellations";
 
-const AUTO_DISMISS_MS = 3200;
+const AUTO_DISMISS_MS = 4500;
 
 export function ConstellationCelebration({
   courseName,
@@ -41,10 +38,6 @@ export function ConstellationCelebration({
         window.matchMedia("(prefers-reduced-motion: reduce)").matches),
   );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // The pulse timers must outlive `show()` so the unmount cleanup can cancel
-  // them. Held in refs (not locals) because a timer that fires after teardown
-  // calls setState on a dead tree — in jsdom that throws
-  // `ReferenceError: window is not defined`.
   const pulseOnRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pulseOffRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const celebrated = useRef(false);
@@ -54,7 +47,6 @@ export function ConstellationCelebration({
     celebrated.current = true;
     setVisible(true);
     if (courseJustCompleted) {
-      // Constellation pulse on course-complete (≤1.2s).
       pulseOnRef.current = setTimeout(() => setPulse(true), 60);
       pulseOffRef.current = setTimeout(() => setPulse(false), 1200);
     }
@@ -98,57 +90,111 @@ export function ConstellationCelebration({
 
   if (!visible) return null;
 
+  const pct = totalStars > 0 ? Math.round((litStars / totalStars) * 100) : 0;
+
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(6,15,31,0.72)] backdrop-blur-[2px]"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-[#060F1F]/80 backdrop-blur-md p-4"
       data-testid="constellation-celebration"
       onClick={() => setVisible(false)}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="mx-4 flex max-w-[380px] flex-col items-center gap-4 rounded-[20px] border border-white/10 bg-[#0B1D3A]/90 px-8 py-9 text-center shadow-2xl"
-        style={{ background: "var(--sky-bg)" }}
+        className="relative mx-auto w-full max-w-md rounded-2xl border border-cyan-500/30 bg-gradient-to-b from-[#09152B] via-[#0B1D3A] to-[#060F1F] p-6 text-center shadow-[0_0_50px_rgba(79,195,247,0.2)] overflow-hidden"
       >
-        <div className="relative flex h-16 w-16 items-center justify-center">
+        {/* Ambient Grid Background */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(to_right,#4FC3F708_1px,transparent_1px),linear-gradient(to_bottom,#4FC3F708_1px,transparent_1px)] bg-[size:24px_24px] opacity-60 pointer-events-none"
+        />
+
+        {/* Close Button */}
+        <button
+          type="button"
+          aria-label="Close milestone notification"
+          onClick={() => setVisible(false)}
+          className="absolute top-4 right-4 text-slate-400 hover:text-white transition font-mono text-sm p-1 z-10"
+        >
+          ✕
+        </button>
+
+        {/* Ignition Node — Crimson Flare */}
+        <div className="relative mx-auto my-3 flex h-20 w-20 items-center justify-center z-10">
+          {!reduceMotion && (
+            <span
+              aria-hidden="true"
+              className="absolute inset-0 rounded-full bg-[#C8102E]/30 animate-ping"
+            />
+          )}
           <span
-            aria-hidden
-            className={`h-14 w-14 rounded-full ${reduceMotion ? "" : "cx-ignite"} ${
-              pulse ? "cx-flare" : ""
-            }`}
-            style={{
-              background: "var(--constellation-star-lit)",
-              boxShadow: "0 0 0 6px var(--constellation-halo), 0 0 24px var(--constellation-halo)",
-            }}
-          />
+            aria-hidden="true"
+            className={`relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-tr from-[#C8102E] to-[#E8354A] text-white font-extrabold text-2xl shadow-[0_0_30px_#C8102E] ${
+              reduceMotion ? "" : "cx-ignite"
+            } ${pulse ? "cx-flare" : ""}`}
+          >
+            ★
+          </span>
         </div>
 
-        <p className="font-mono text-[10.5px] font-bold uppercase tracking-[0.1em] text-[var(--sky-ink-muted)]">
-          Constellation · {courseName}
-        </p>
+        {/* Milestone Kicker */}
+        <div className="relative z-10 mt-2">
+          <span className="font-mono text-[10.5px] font-bold uppercase tracking-widest text-[#4FC3F7] px-2.5 py-0.5 rounded bg-[#4FC3F7]/10 border border-[#4FC3F7]/25">
+            Node Mastered · {courseName}
+          </span>
+        </div>
+
+        {/* Headline */}
         <h2
-          className={`text-[1.35rem] font-extrabold leading-tight tracking-[-0.02em] text-[var(--sky-ink)] ${
+          className={`relative z-10 mt-3 text-xl md:text-2xl font-extrabold leading-tight tracking-tight text-white ${
             reduceMotion ? "" : "cx-ignite"
           }`}
         >
           {courseJustCompleted ? "Constellation complete." : `${lessonLabel} — lit.`}
         </h2>
 
-        <div className="flex items-center gap-2 font-mono text-[12px] text-[var(--sky-ink-muted)]">
-          <span className="text-[var(--constellation-star-lit)]">★</span>
-          {litStars}/{totalStars} {totalStars === 1 ? "star" : "stars"} in this course
+        {/* Telemetry Stats Strip */}
+        <div className="relative z-10 my-5 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-[#060F1F]/60 p-3">
+          <div className="flex flex-col items-center justify-center border-r border-white/10 pr-2">
+            <span className="font-mono text-[10px] uppercase font-bold text-slate-400">
+              Mastery
+            </span>
+            <span className="font-mono text-sm font-bold text-white flex items-center gap-1.5 mt-0.5">
+              <span className="text-[#C8102E]">★</span>
+              <span>
+                {litStars}/{totalStars}
+              </span>
+              <span className="text-xs text-slate-400 font-normal">({pct}%)</span>
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center pl-2">
+            <span className="font-mono text-[10px] uppercase font-bold text-slate-400">
+              Habit Momentum
+            </span>
+            {streakDays > 0 ? (
+              <div className="mt-0.5">
+                <StreakCounter streakDays={streakDays} />
+              </div>
+            ) : (
+              <span className="font-mono text-xs text-slate-300 font-semibold mt-0.5">
+                Active Session
+              </span>
+            )}
+          </div>
         </div>
 
-        {streakDays > 0 && (
-          <div className="rounded-full bg-white/5 px-3 py-1.5">
-            <StreakCounter streakDays={streakDays} />
-          </div>
-        )}
-
-        <p className="font-mono text-[11px] text-[var(--sky-ink-muted)]">
-          Continue to {courseName}
-        </p>
+        {/* CTA Button */}
+        <div className="relative z-10 space-y-2">
+          <button
+            type="button"
+            onClick={() => setVisible(false)}
+            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#4FC3F7] to-[#0284C7] hover:from-[#38BDF8] hover:to-[#0369A1] text-slate-950 font-bold text-xs tracking-wide shadow-lg shadow-cyan-500/25 transition active:scale-95"
+          >
+            Continue Journey in {courseName} →
+          </button>
+        </div>
       </div>
     </div>
   );
