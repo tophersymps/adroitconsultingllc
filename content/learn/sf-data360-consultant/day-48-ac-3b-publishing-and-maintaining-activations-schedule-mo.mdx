@@ -1,0 +1,117 @@
+---
+title: "Lesson 48: Publishing and Maintaining Activations: Schedule, Monitoring, Consent, and Safe Deactivation"
+slug: day-48-ac-3b-publishing-and-maintaining-activations-schedule-mo
+series: sf-data360-consultant
+lesson: 48
+excerpt: "An activation is a production integration, and production integrations fail quietly. Lesson 48 of the Salesforce Data 360 Consultant course covers the publish schedule, reading the job history and verifying at the destination, consent enforced at activation time, and the exact order for retiring an activation safely."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Activation, Consent Management, Data Governance]
+---
+
+# Lesson 48: Publishing and Maintaining Activations: Schedule, Monitoring, Consent, and Safe Deactivation
+
+A marketing team reports that an activation has stopped working, and they are right that nobody is receiving the audience. The job history, however, says every publish succeeded. The truth was in neither place on its own: the publishes ran and reported success, but a credential on the destination had expired and the records never landed, while a consent filter quietly excluded half the audience on the way out. Two failures, one of them invisible inside Data 360, and the only way to have caught either was to verify at the destination.
+
+Requirement ac-3b, in the Data Activations and Utilization domain worth 20% of the Salesforce Data 360 Consultant exam, asks you to publish activations within Data 360, covering scheduling and publishing, monitoring success and failures, consent and governance at activation time, and deactivating safely. This lesson treats the activation as a running production integration: how it schedules, how to read whether it worked, the consent it must honor, and the order for taking it down.
+
+## Deep Dive
+
+### An activation publishes on the schedule of its target, bounded by segment type and publish type
+
+An activation publishes on the schedule defined for its activation target, and the schedule is bounded by the combination of segment type and publish type. A standard segment on a standard publish supports longer intervals such as 12 or 24 hours, while a rapid publish supports shorter intervals such as 1 or 4 hours on the destinations that accept them.[^1][^2] Publishing can also be triggered manually for supported segments, and a manual publish takes priority over a scheduled one.[^3]
+
+The schedule is effectively a freshness contract. The destination receives whatever the last completed publish produced, so any downstream use of the audience, a journey, a warehouse load, or a reporting model, has to respect the cadence you promised. When the business asks why the audience is a day old, the answer is usually the schedule, not a failure. Name the cadence in the design and nobody is surprised later.
+
+One practical wrinkle is concurrency. When the publish concurrency limit is reached, Data 360 defers other segments, and the deferral continues until the number of simultaneously running segments falls below the limit, which means a segment scheduled for a specific time sometimes does not start at that time.[^3] The next publish date and time is an estimate for this reason.[^3] Build a margin into anything that depends on the audience being exactly fresh at a fixed moment.
+
+There is a second reason the schedule is a contract rather than a preference. Publishing consumes platform resources, and the platform defers segments when the publish concurrency limit is reached, so a segment publishes at its scheduled time only when the queue has room.[^3] A consultant who promises that the audience refreshes at exactly 06:00 every morning is promising something the platform estimates rather than guarantees. Promise a cadence the platform supports, and accept that the exact minute can shift under load.
+
+### Monitoring means reading the job history and then verifying at the destination
+
+After an activation runs, the record home is where you look first. The activation record home shows activation details, linked activation-triggered flows, and activation history, so you can validate configuration and monitor publish results in one place.[^4] The details section exposes the activation target, segment, data model object, activation status, and last publish status, which is enough to confirm the activation is configured as expected.[^4]
+
+The history is where the numbers live. The general activation history shows the segment or DMO profile count, the number sent to the target, the last publish completion time, the publish type, and the publish status.[^4] For a Marketing Cloud Engagement target the history adds accepted and rejected counts with rejection reasons, plus the number of active profiles in the destination data extension, which is a detailed view of what the pipeline actually did.[^4]
+
+Reading those numbers answers the success question, but it does not prove the audience arrived. A first publish that creates a new destination object should be verified at the destination, not only in Data 360, because a created data extension or file is the proof that the pipeline worked end to end. When an activation job reports success but the marketing team sees no new audience, the reliable next step is to verify the destination object such as the data extension or file, and compare the activation count to the segment count. A large gap between the two points at contact point filtering or consent exclusions rather than at the integration.
+
+The gap itself is a diagnostic. When the segment count is large and the activation count is small, the contact point filter and consent handling are removing people, which is often correct and sometimes a mistake. When the activation count is healthy but the destination shows fewer records, the loss happened after the payload left Data 360, which points at the destination rather than the source. Reading the two gaps separately turns a vague report that the numbers look wrong into a specific place to look.
+
+Failures trace to a short list of causes. A target whose credentials expired, a segment that went into an error, a data space mismatch, or a mapping change that removed an attribute the activation depended on. Working that list is faster than rebuilding anything, and none of the causes is fixed by rewriting the segment.
+
+### Consent is checked at activation time, using ingested and modeled preferences
+
+Consent is a first class part of activation, and the timing is the exam point. Consent is enforced at activation time, using ingested and modeled consent preferences, not only when the segment is built. Data 360 provides consent management so you can ingest consent preferences from their sources, configure them in the data model, use them in segmentation, and check them at activation, and Salesforce recommends checking for consent before the data is used in any marketing platform.[^5][^6]
+
+That sequence is the mechanism. Preferences are ingested from wherever they live, often data extensions, CRM objects, or external storage, modeled so segmentation can read them, applied as filters when the audience is defined, and then verified again when the audience activates.[^5] Compliance is not a checkbox on the segment; it is a check on the way out the door. If a use case requires honoring an opt out or a channel preference, confirm that the preferences are ingested and modeled and that the activation respects them before any audience leaves the platform.
+
+Governance is also data space based. The activation target and the segment must live where the right users can see them, so access follows the governance boundary rather than convenience. A consultant who builds a compliant segment in one data space and an activation in another, with users who cannot see both, has created a governance gap even though every individual setting looks correct.
+
+A practical check pairs consent with contact points. Consent determines whether you may reach a person on a channel, and the contact point determines whether you have an address to reach them at, and the two filters compound. An audience filtered by both is smaller than either filter alone suggests, which is why a channel preference change can move the activation count without any visible rule edit. When a campaign team questions the audience size, walk both filters before you question the data.
+
+### Data subject rights run through the Consent API, and deletion has limits
+
+Data 360 supports data subject rights such as the right to be forgotten and restriction of processing, and requests are submitted through the Consent API.[^7] The Consent API supports actions for processing, portability, and the right to be forgotten, and it is the supported route for reading and writing consent on a Data 360 profile.[^8]
+
+The deletion behavior is specific and worth knowing precisely. A data deletion request removes the individual's record from the Individual data model object and the individual's related records from the DMOs directly related to it through the individual's ID, such as Contact Point Address, Contact Point Email, and Contact Point Phone, plus the mapped data lake objects and related calculated insights.[^7] It does not delete records from DMOs that are not directly related to the Individual DMO through the individual's ID.[^7] Deletion is not immediate, typically completing within hours, and the requests are reprocessed after 30, 60, and 90 days to delete any added data and verify full deletion.[^7] You must submit deletion requests in every connected system and Salesforce cloud.[^7]
+
+The operational lesson follows from the last point. An activation that already delivered an audience to an external system cannot recall it, so plan for deletion upstream and in every connected system rather than assuming one request cleans up every copy. Consent and deletion are design inputs, not cleanup tasks.
+
+### Deactivating safely is a sequence, and the order matters
+
+Deactivating an activation stops the flow of members to its destination, and the order of operations is the exam point. First pause or delete the activation so no further publishes leave the platform. Then decide the fate of the destination object, such as a data extension or a file, which may still be used by live campaigns. Only then stop or edit the underlying segment schedule, because other activations may depend on the same segment. The correct order is to pause or delete the activation, then handle the destination object, then adjust the segment schedule.
+
+The reason the order matters is shared infrastructure. The segment can feed more than one activation, so stopping the schedule first would cut off an audience that another activation still needs. Deleting the segment before deactivating its activations is the classic mistake, and it leaves destinations expecting data that will never arrive, which can break live campaigns. Handled in the right order, no destination is left waiting and no shared audience is disrupted.
+
+Document the deactivation. A campaign team can be surprised when an audience they relied on quietly stops updating, so record what was turned off and why. The record is cheap, and it prevents the next consultant from re-diagnosing a deliberate change as a failure.
+
+The same care applies to a destination object that is shared. A data extension at Marketing Cloud Engagement may feed journeys that outlive the campaign you are ending, so the question of whether to keep or remove the destination object is a question about the downstream consumers, not about the activation alone. Answer it with the team that owns those consumers, then act. The sequence is unchanged, but the decision inside the second step needs a name attached to it.
+
+### Treat activations as production integrations
+
+The mindset that prevents most of these failures is to treat an activation as a production integration rather than a one time setup. Production integrations get monitored, their credentials expire and get rotated, their record counts are watched against expectations, and their compatibility is rechecked when an input changes. An activation deserves the same discipline.
+
+A short periodic review catches the two expensive failures. Sending to people who should be excluded is a consent and priority problem, and sending nothing at all because a credential or a mapping broke is a silent failure that only a destination check reveals. Monitor the job history, watch the record counts against the segment count, verify credentials are current, and recheck compatibility whenever a segment type or publish cadence changes. When the business changes its consent policy or adds a new source of contact points, revisit the activation's contact point priority and consent handling rather than assuming it still does the right thing.
+
+## Config Walkthrough
+
+Reviewing and retiring an activation is a six step sequence.
+
+1. In the Data 360 app, open the segment and go to Activations to review the activation and its target.
+2. Confirm the segment is active or published, and confirm the target publish schedule matches the freshness the destination needs.[^3]
+3. Open the activation record home and read the history to check the last publish status and the number of records sent.[^4]
+4. Verify the destination object, such as a data extension or file, still holds the expected records, and compare the activation count to the segment count.[^4]
+5. Review consent preferences and contact point source priority, and confirm the activation honors them before members leave the platform.[^5]
+6. To deactivate, pause or delete the activation first, then handle the destination object, then adjust the segment schedule, and record the change.
+
+## Try it
+
+Pick one running activation and run the production check. Open its record home and read the last publish status and the counts. Open the destination object and confirm the records are there and match the activation count, not just the segment count. Confirm the channel's consent preferences are ingested and reflected in the audience. Then write down the deactivation order you would follow if the campaign ended tomorrow. If any step surprises you, the activation was being trusted rather than monitored.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, believing consent is handled when the segment is built. Consent is checked at activation time, so preferences must be ingested and modeled, and the activation must respect them before the audience leaves.
+
+Second, deleting the segment before deactivating its activations, which leaves destinations expecting data that will never arrive and can break live campaigns. Pause the activation first, then handle the destination, then touch the shared schedule.
+
+Third, trusting the Data 360 job history alone. A successful publish should be verified at the destination, because a created data extension or file is the real proof the pipeline worked end to end, and a count gap between the activation and the segment points at filtering or consent rather than at the integration.
+
+## Decision rules to carry forward
+
+Run an activation as a contract and a production integration. Its schedule is the freshness promise, so name the cadence and respect it. Read the job history for status and counts, then verify at the destination, because the destination object is the only end to end proof. Compare the activation count to the segment count, and treat a large gap as contact point or consent filtering. Enforce consent at activation time from ingested and modeled preferences, and submit data subject rights through the Consent API, knowing that deletion does not reach records unrelated through the individual ID and must be requested in every connected system. When you retire an activation, pause it first, handle the destination object second, and adjust the shared segment schedule last. Do those things and the activation either works visibly or fails visibly, which is the only state a production integration should ever be in.
+
+## What's next
+
+The next lesson is Lesson 49 - Acting Inside the Platform: Data Actions and Write-Back (ac-4a). Activations push an audience out to a destination; the next lesson keeps the action inside the Salesforce platform, where data triggers flows, writes back to a record, and responds to an event in motion.
+
+[^1]: Salesforce Help, "Publish a Segment in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_publish_segment.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Increase Segment Refresh from Data 360 to the Activation Targets," (https://help.salesforce.com/s/articleView?id=data.c360_a_rapid_segment_publish.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Segment Types and Statuses," (https://help.salesforce.com/s/articleView?id=data.c360_a_segment_types_statuses.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Activation Record Home in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_activations_publish_history.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Consent Management," (https://help.salesforce.com/s/articleView?id=data.c360_a_consent_management.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Checking Consent Preferences at Activation," (https://help.salesforce.com/s/articleView?id=data.c360_a_checking_consent_preferences_activation.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Requesting Data Deletion or Right to Be Forgotten," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_deletion_request.htm&language=en_US&type=5)
+[^8]: Salesforce Developers, "Use the Consent API with Data 360," (https://developer.salesforce.com/docs/platform/api-rest/guide/resources-consent-cdp-params.html)
