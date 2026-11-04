@@ -1,0 +1,113 @@
+---
+title: "Lesson 24: Zero Copy Mechanics and Limits: Query vs File Federation, Caching, and Refresh"
+slug: day-24-ing-3b-zero-copy-mechanics-and-limits-query-vs-file-feder
+series: sf-data360-consultant
+lesson: 24
+excerpt: "Requirement ing-3b in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe the mechanics and limits of federated integrations: what must exist on both sides, what is cached versus queried, and what that means for latency and refresh. Lesson 24 covers query versus file federation, acceleration, and the three freshness behaviors."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Data 360, Zero Copy, Data Federation]
+---
+
+# Lesson 24: Zero Copy Mechanics and Limits: Query vs File Federation, Caching, and Refresh
+
+A team federates a two terabyte warehouse table and ships it into a segment that runs twenty times a day. The first week is fine. The second week the warehouse is busy with its own month-end load, and the segment that used to open in seconds now times out. Nothing in Data 360 changed, no rows moved, and the team is stuck, because the thing that got slower lives entirely outside Salesforce. That is the failure this lesson exists to prevent: a federated design that works in a demo and collapses under a real query load, because nobody planned where the work would run.
+
+Requirement ing-3b sits in the Data Source Connection and Ingestion domain, worth 18 percent of the Salesforce Certified Data 360 Consultant exam, and it asks you to describe Data 360's data collaboration capabilities, including Zero Copy, covering the mechanics and limits of federated integrations: what must exist on both sides, what is cached versus queried, and what that means for latency and refresh. Lesson 23 defined collaboration and the two halves of Zero Copy; this lesson gets under the hood of the data in half, federation, and asks who pays the compute and how fresh the answer is.
+
+You will cover the bilateral setup, query federation's push outward, file federation's move inward, acceleration as the cache between them, the three freshness behaviors the exam tests, and the guarantees federation does not give you.
+
+## Deep Dive
+
+### A zero copy integration is bilateral, so setup on one side is only half the work
+
+A zero copy integration is bilateral, so setup on the Data 360 side is only half the work. That single sentence explains most real failures, because a connection can save cleanly in Data 360 while every query against it fails on the far side.
+
+Inside Data 360 you need access to Data 360 Setup, permissions to create connections and data streams, the credentials of the external system such as its database name and connection URL, and a data space in which the virtual object will live. The connecting user typically holds the Data Cloud Architect permission set, or the Manage External Connections permission, to build the connection. On the external side an administrator has to grant the matching access, which means a warehouse role that can read the relevant schema, or an account that accepts the share, plus the network path that lets the query arrive. Miss either half and the connection can still save while the queries fail.
+
+The share direction is where the second half bites hardest. Data Shares connect Data 360 to an external system through a data share target, and the data does not appear in the receiving account until that side is set up to accept it. A team that creates a data share and waits for the Snowflake account to see it, without having configured the target on the receiving side, will wait a long time for something the receiving account was never wired to look for. Plan both ends of the boundary before either goes live.
+
+### Query federation pushes the work outward
+
+Query federation pushes the work outward, and that is its defining trait. When a workflow needs federated rows, Data 360 sends SQL to the external system's compute engine, that engine reads its own storage, and the relevant records are returned to the Data 360 workflow. The external system does the reading, and Data 360 receives the result.
+
+The consequence is the one the opening scenario punishes. The external system's performance, its concurrency limits, and its cost become part of the Data 360 runtime. A busy or undersized warehouse can make a Data 360 segment slow even though the delay lives entirely outside Salesforce. When the exam describes a slow federated segment and asks why, the answer is usually that the source system is the bottleneck, not that Data 360 is misconfigured. Query federation is at its best when predicates and aggregations can be pushed down to the source, because then the source filters before it returns anything.
+
+Query federation hands rows back to the workflow, and they are not retained after the workflow completes, so the next workflow queries the source again rather than reusing anything.[^2] Live query federation is optimized for infrequent queries, and its performance is highly dependent on the external source, which is why frequent queries against slow-changing data tend to be the expensive case rather than the cheap one.[^1]
+
+### File federation takes the external compute engine out of the path
+
+File federation takes the external compute engine out of the path. In file federation, Data 360 uses metadata from the data source to build virtual tables, then uses its own query engine to read files in the source's storage layer, which is possible only when the data is organized in a supported open table format.[^2] The external system never runs a query on Data 360's behalf; Data 360 runs the scan itself.
+
+Fewer moving parts is the benefit. The external system does not have to run SQL for you, so a busy warehouse cannot stall a file federated read the way it can stall a query federated one. Salesforce notes the accompanying simplification: with file-based federation Data 360's compute handles the processing because it accesses the underlying storage directly, which removes the need for query pushdown and the SQL dialect management that query-based federation often requires.[^4]
+
+The requirement is the cost. File federation needs the data in a supported open table format, so a warehouse that stores its tables in a proprietary format is not a candidate, and the open table format requirement narrows the sources you can point at. The scanning work is also now billed as Data 360 compute rather than external compute, so the bill moves rather than vanishing. Both federation types still produce the same external DLO that points at the physical table, so the difference is entirely about where the work runs, not about what the object looks like downstream.
+
+The exam question here is a definition in disguise. The statement about file federation that is correct is that Data 360 queries the storage layer with its own query engine and the data must be in a supported open table format. An answer that puts the external compute engine in the path is describing query federation, and an answer that claims file federation caches a copy is describing acceleration instead.
+
+### File federation is always live, but query federation can be accelerated
+
+File federation is always live queried, but a query federation data stream can be accelerated. That asymmetry is easy to miss and the exam will test it.
+
+You turn on acceleration while creating the data stream, and Data 360 retrieves the data and temporarily stores it in a data lake object, refreshing it at a frequency you choose.[^2] Caching is the recommended option for large data sets and for data that changes frequently, because it lowers query latency in exchange for storing a copy and paying to refresh it. The cache interval is configurable from fifteen minutes to seven days, so the freshness window is a dial rather than a fixed property.[^1] Acceleration supports incremental refresh, but deletion of records during an incremental refresh is not supported, so a cache that has to drop rows needs a full refresh.[^5] Every cache refresh and every cached read consumes credits, so acceleration lowers query latency but does not make federation free.[^3]
+
+When to turn it on is a decision about the access pattern. Accelerated data federation is best when queries are frequent and the data does not change frequently: the cache absorbs the repeated reads that would otherwise hammer the source, which suits dashboards and segmentation.[^1] Choose acceleration when predictable query latency matters more than strict freshness, and leave it off when the source must always be the version you get back. The opening scenario is a textbook reason to accelerate: a two terabyte table queried twenty times a day with changes that arrive once a day is exactly the pattern a cache is built for.
+
+The exam question that pairs with this is the one about latency and accepted staleness. A team that needs Data 360 to read a very large external warehouse table with the lowest possible query latency, and that accepts data a few hours old, should choose query federation with acceleration enabled and a refresh interval of a few hours. Live query federation with no caching is slower per read, and file federation needs a supported open table format the warehouse's proprietary format does not provide.
+
+### Expect three freshness behaviors, not one
+
+Expect three freshness behaviors rather than one, and match the scenario language to the right one. This is the single most testable idea in the objective.
+
+A live federated query returns the source's state at the moment of the query, so freshness is the source's own commit timing, and live query federation can support sub-second decisioning when the source keeps up.[^1] An accelerated query returns whatever the cache last loaded, so you inherit a staleness window equal to the refresh interval, which is why acceleration is not suitable for sub-second decisions when the data changes faster than the cache refreshes.[^1] File federation returns live storage state, but it pays scan cost on every query, so freshness is not the constraint; throughput is.[^1]
+
+The translation is mechanical. A requirement for the latest possible data points at live query. A requirement for predictable performance on a very large table, where slightly stale results are acceptable, points at acceleration. A requirement for large-scale batch processing, AI and machine learning model training, or petabyte-scale historical analytics points at file federation, which is not suitable for real-time dashboarding. If a scenario names a dashboard that must be current to the second, acceleration is out. If it names a nightly model training run over a data lake, file federation is in.
+
+### Federated objects do the Data 360 work, but they carry no guarantees of landed data
+
+Federated objects support the Data 360 work you would expect, including identity resolution, calculated insights, segments, data graphs, and agent actions, and you can share Data 360 objects back out to external systems. The capability is broad. The guarantees are not.
+
+Three specific gaps are worth knowing. There is no persisted copy to fall back on when the source is unreachable, so a live federated segment that runs while the warehouse is down returns nothing. Transformation work runs against the virtual object rather than a stored table, so heavy transforms repeat their scans. And schema changes on the source can break the mapping you built, in the same way they break an ingested stream, except that there is no DLO with old rows to fall back on while you fix it.
+
+There is a fourth gap the exam likes, tied to audit. Federation cannot stand in for retention when an audit needs the exact rows a process consumed. A live query returns rows and forgets them, so if a regulator wants to know which records a decision used, federation alone will not produce them. When retention is the requirement, the rows have to be landed. Live federation retains nothing once the workflow finishes, so the next workflow queries the source again, and the record of what the earlier workflow saw is gone.
+
+## Config Walkthrough
+
+Wire up a federated integration and prove its behavior in six steps.
+
+1. In Data 360 Setup, open Connections and create the connection to the external system, choosing query federation or file federation based on what the source supports and where you want the query compute to run.
+
+2. Supply the external system details such as the database name, connection URL, and credentials, and confirm the external administrator has granted the read access or accepted the share that queries need to succeed.
+
+3. Create a data stream from the connection and note the default behavior: Data 360 federates the data when it is requested at runtime, a mode called live query, with zero data persisted.
+
+4. If the connection is query federation, decide at stream creation whether to enable acceleration, which caches the data in a data lake object, and set the refresh frequency to the freshness the business will accept, anywhere from fifteen minutes to seven days.
+
+5. Confirm the external data lake object contains no rows, then map it to the data model object used by your insight, segment, or agent action.
+
+6. Validate latency and freshness by querying the federated object, changing a row in the source, and re-querying to compare live results against the cache refresh interval when acceleration is on.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, choosing file federation for a source whose data is not in a supported open table format. File federation requires that format, so when it is absent query federation is the only option available. If a scenario names a proprietary warehouse format and file federation, it has asked you to spot the mismatch.
+
+Second, enabling acceleration and then promising real time freshness. A cached object serves whatever the last refresh loaded, so freshness is capped by the refresh interval rather than by the source. An answer that pairs acceleration with up to the second accuracy has promised two things the design cannot hold at once.
+
+Third, planning only the Data 360 half of the setup. The external system must also grant read access or accept a share, and outbound sharing will not appear until the receiving account accepts the share. An answer that stops at the Data 360 connection, with no mention of the far side, has skipped the bilateral requirement.
+
+## Decision rules to take away
+
+Ask where the query compute runs before anything else. Query federation runs it in the external system, so external performance, concurrency, and cost become part of the Data 360 runtime. File federation runs it inside Data 360 against external storage, so it needs a supported open table format and moves the compute bill inward. Acceleration does not change the direction of the query; it changes only latency and freshness, caching a copy in a data lake object on an interval from fifteen minutes to seven days. Expect three freshness behaviors, not one: live query is as fresh as the source, an accelerated query is as fresh as the last cache load, and file federation is live but pays scan cost every time. Plan both sides of the boundary, because a connection can save while the queries still fail. And know the gaps: no persisted copy to fall back on, no cheap repeated transforms, schema drift breaks federated mappings too, and no retention for an audit that needs the exact rows a process consumed.
+
+## What's next
+
+Next is Lesson 25 - Choosing and Governing Collaboration: Data Shares, Cross-Boundary Permissions, and When to Ingest (ing-3c). It moves from the mechanics of federation to the governance around it, covering how data shares are set up and controlled across a boundary, what permissions have to travel with the data, and how to decide when a requirement that looked federated should be ingested instead.
+
+[^1]: Salesforce Help, "Compare Data Federation Methods," (https://help.salesforce.com/s/articleView?id=data.c260_a_data_federation_compare_methods.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Zero Copy Data Federation," (https://help.salesforce.com/s/articleView?id=sf.c360_a_byol_data_federation.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Billing Considerations for Data Federation," (https://help.salesforce.com/s/articleView?id=data.c360_a_billing_considerations_for_data_federation.htm&language=en_US&type=5)
+[^4]: Salesforce Architects, "Data 360 Architecture," (https://architect.salesforce.com/docs/architect/fundamentals/guide/data-360-architecture.html)
+[^5]: Salesforce Help, "Data Stream Settings and Refresh Modes," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_stream_edit_settings.htm&language=en_US&type=5)
