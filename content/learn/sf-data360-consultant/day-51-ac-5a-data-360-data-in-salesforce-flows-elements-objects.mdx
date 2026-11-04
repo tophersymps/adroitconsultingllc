@@ -1,0 +1,104 @@
+---
+title: "Lesson 51: Data 360 Data in Salesforce Flows: Elements, Objects, and Limits"
+slug: day-51-ac-5a-data-360-data-in-salesforce-flows-elements-objects
+series: sf-data360-consultant
+lesson: 51
+excerpt: "Requirement ac-5a in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks how a flow reads unified and calculated Data 360 data. Lesson 51 covers the flow elements, the Data 360 objects and permissions involved, and the design limits to respect."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Salesforce Flow, Data Model Objects, Permissions]
+---
+
+# Lesson 51: Data 360 Data in Salesforce Flows: Elements, Objects, and Limits
+
+A developer builds a record-triggered flow that fires when a Contact is created. On the immediate path the flow does a Get Records against a Data 360 data model object to pull the harmonized email address, then creates a Lead with the merged value. The flow saves without complaint. At runtime it errors every time, and the developer spends an afternoon checking the object, the condition, and the running user before realizing the problem is structural: a Data 360 read cannot run inside the synchronous transaction that is still saving the record. The element is fine. The path is wrong.
+
+That is the kind of failure requirement ac-5a trains you to prevent. The requirement sits in the Data Activations and Utilization domain, which is 20% of the Salesforce Data 360 Consultant exam, and it asks how a flow reads unified and calculated Data 360 data: the flow elements, the Data 360 objects and permissions involved, and the design limits to respect. The exam tests the shape of a correct flow, not just the name of an element, so a design that reads Data 360 in the wrong place is a wrong answer even when every menu pick looks right.
+
+This lesson covers the Get Records element and its Data Cloud Object data source, the objects that carry the ssot namespace and the data space that scopes them, Data Cloud-triggered flows as a distinct type, the permissions that gate every Data 360 read, the execution constraints on a Get Records against Data 360, and the production-org requirement that decides whether a flow is testable at all. The closing decision rules are exactly what ac-5a checks.
+
+## Deep Dive
+
+### Flows read Data 360 data through the Get Records element
+
+A flow reaches Data 360 through the Get Records element. You add the element, set its Data Source to Data Cloud Object, choose a Data Space, and then pick the data model object or calculated insight object you want to read.[^1][^6] From there the element behaves like any other Get Records: you set the condition requirements, choose whether to return only the first record or all records, and store the result in a variable the flow can use.
+
+The direction of the read is the part the exam cares about most. A flow reads Data 360 data, but it cannot create, update, or delete Data 360 data.[^1] There is no Update Records element that writes a data model object, and there is no Delete Records element that removes one. Data 360 is read-only from a flow. So the correct pattern is that Data 360 data is read into the flow, the flow makes a decision with the unified or calculated values, and then the flow acts on CRM records with the result. The harmonized value informs the decision; the CRM object receives the write.
+
+That means a flow can read DMO and CIO data but cannot create, update, or delete Data 360 data, and the action after the read has to land on a Salesforce object. If a requirement says "store the harmonized score back for the next flow to read," the correct answer is a write-back enrichment on the CRM record or a value the flow writes to a CRM field, not a Data 360 write. Any option that has a flow updating, inserting, or deleting a data model object is wrong by construction.
+
+A worked example makes the shape concrete. A Contact is created, and the flow needs the harmonized lifetime value from a calculated insight object before it decides whether to create a follow-up task for the account team. The flow reads the calculated insight with a Get Records element on the asynchronous path, stores the value in a variable, and a Decision element branches on the threshold. The flow then creates a Task on the CRM record. Data 360 supplied the number and Salesforce received the action. Nothing was written back to the calculated insight, because a flow cannot write Data 360 data, and the design would be wrong the moment it tried.
+
+### The objects carry the ssot namespace and live in a data space
+
+When you search for an object in the Get Records element, Data 360 objects do not live in a separate silo. They are alphabetized with the standard and custom objects in the same picker, so a data model object shows up beside Account and Contact rather than under a Data 360 heading.[^1] You choose the DMO or CIO and then choose its fields, for example ssot__EmailAddress__c on the Contact Point Email object.
+
+The ssot namespace is worth knowing by sight. Standard data model objects carry the ssot prefix on their API names, so the Contact Point Email object is ssot__ContactPointEmail__dlm and its email field is ssot__EmailAddress__c.[^5] DMOs map to the C360 Data Model and reference the data stored in data lake objects, while calculated insight objects contain data aggregated or calculated from DMOs.[^4] Data lake objects are where ingested data physically sits, in the schema of the source system.[^4] Flows read DMOs and CIOs, not DLOs, because the DMO and the CIO are the harmonized and calculated layers a flow is meant to consume.
+
+Selecting the correct data space scopes the read to that space's harmonized data. A Multi-Data Space org can hold the same object type in more than one space, and the value a flow reads depends on which space you chose in the element.[^6] When a flow returns an empty result and the data clearly exists, check the data space before you check the condition. The read is scoped to the space, so a flow pointed at the wrong space returns the wrong rows, or none.
+
+### Data Cloud-triggered flows are a distinct flow type
+
+A flow that reacts to a Data 360 change is its own flow type. To build one, you click New Flow, choose Start From Scratch, select Data Cloud-Triggered Flow, and in the Start element you select the Data Cloud object and the conditions that start the flow.[^2] The start object is a data model object or a calculated insight object, and the conditions describe the change you care about.
+
+The trigger has a rule that trips up developers. For a DMO, the flow triggers only if that DMO is mapped as part of a data stream.[^2] A DMO that no data stream feeds will not fire the flow, no matter how the conditions read. Changes to the DMO, driven by the data stream refresh, are what start the flow, and a calculated insight object can start it when its result meets the condition.[^2] So a Data Cloud-triggered flow uses a DMO change or a calculated insight object result meeting a condition as its start, and a raw data lake object insert is never a valid start because flows do not read DLOs at all.
+
+This is how a harmonized profile change, not a CRM record change, becomes the automation trigger. A record-triggered flow watches a Salesforce record. A Data Cloud-triggered flow watches the harmonized layer, so it fires when the unified value changes even if no Salesforce record moved. When a scenario describes automation that should run the moment a unified profile or a calculated score changes, it is describing a Data Cloud-triggered flow, and the start condition is a DMO or CIO condition, not a CRM record change.
+
+### Permissions gate every flow that touches Data 360
+
+Permissions are load-bearing here, and the exam tests the combination. To use a DMO in a Get Records element, a user needs Read object permissions for the data model object plus Manage Flows permissions.[^1] Reading alone is not enough, and Manage Flow alone is not enough, because the read needs object-level access on the Data 360 object.
+
+Viewing, saving, and activating a Data Cloud-triggered flow needs more. The user needs the legacy Data Cloud Marketing Admin permission set, or a combination that includes Manage Flow, View Setup, View All Data, Data Cloud User, full access on the data action configuration objects, and Read on Data Model Object, Data Model Field, and Calculated Insights Object.[^2] Grants are additive, so a missing one shows up as a save or activation failure rather than a helpful message.
+
+The practical consequence is that permission design comes before flow design. Confirm the running user has Read on the data model object, Data Model Field, and Calculated Insights Object plus Manage Flow before you save and activate, because a flow that reads Data 360 without those grants fails at the point of activation.[^2] Granting Manage Flow alone is a common mistake: it lets a user build flows but does not open the Data 360 objects the flow needs to read.
+
+### Get Records against Data Cloud has execution constraints
+
+This is the constraint that produces the runtime error in the opening scenario. A record-triggered flow fails if it accesses external data, such as Data Cloud objects, during its synchronous run path, because Salesforce prevents callouts to external services while a record is saving.[^3] To run flow logic that queries an external data source, you use an asynchronous path, created by turning on the Add Asynchronous Path toggle under Actions and Related Records on the Start element.[^3] The asynchronous path runs in the background after the original record save is committed, which is what enables the external callout.
+
+From that same documentation you get the design rule: the flow must be optimized for Actions and Related Records, and the Data 360 read must run on an asynchronous or scheduled path, not the Run Immediately path.[^3] So when a developer adds a Get Records element that reads a DMO to the Run Immediately path of a record-triggered flow and the element errors, the fix is to move the Data 360 read to a Run Asynchronously or scheduled path and optimize the flow for Actions and Related Records. Changing the object, widening permissions, or dropping the data space does not touch the actual constraint.
+
+Design the flow shape around the constraint from the start. If the scenario is "react to a CRM record change, then enrich with harmonized Data 360 data," the correct shape is a record-triggered flow optimized for Actions and Related Records with the Data 360 read on the asynchronous path. If you place that read on the immediate path, you have built a flow that cannot run, and no amount of field-level tuning will save it.
+
+### Data Cloud data is available only in production orgs connected to Data 360
+
+A flow that reads Data 360 objects depends on a connection that a bare org does not have. Data Cloud data is available only in production orgs that are connected to Data Cloud.[^1] A flow that reads DMOs cannot be exercised in an org without that connection, so the data itself lives in the connected Data 360 even though the flow metadata can be moved around like any other metadata. Data Cloud-triggered flow changes can be deployed from sandbox to production, but the values the flow reads come from the connected Data 360 in that environment.[^2]
+
+Treat the connection, the data space, and the permissions as prerequisites to test, because a missing one shows up as a failed run rather than a validation message. Before you promise a demo, confirm the org is connected, the data space the element points at holds the data, and the running user holds the reads the element needs. A flow that reads Data 360 is only as testable as those three prerequisites, and checking them first saves the afternoon the opening developer lost.
+
+There is also a timing reality to state plainly. Depending on the volume of data changes, the complexity of the flow, and your data stream refresh schedule, there can be delays in the processing of a Data Cloud-triggered flow, and a data stream's refresh history is visible on its record page.[^2] A Data Cloud-triggered flow is not instant, and a gap between the underlying change and the flow firing is expected behavior, not a defect. Set the expectation with the business the same way you would for a data action.
+
+## Config Walkthrough
+
+1. In Flow Builder, add a Get Records element, set Data Source to Data Cloud Object, choose the Data Space, and pick the data model object or calculated insight object.
+2. Set the condition requirements and fields (for example ssot__EmailAddress__c equals a record value), then choose whether to return only the first record or all records.
+3. For a Data Cloud-triggered flow, click New Flow, choose Start From Scratch, select Data Cloud-Triggered Flow, and in the Start element select the Data Cloud object and its conditions.
+4. Set the flow to optimize for Actions and Related Records, and place the Data 360 read on a Run Asynchronously or scheduled path rather than the Run Immediately path.
+5. Confirm the running user has Read on the data model object, Data Model Field, and Calculated Insights Object plus Manage Flow, and save and activate only when those grants exist.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, placing the Data 360 Get Records read on the Run Immediately path. Reads against Data Cloud objects must run on an asynchronous or scheduled path, so the element errors in the immediate transaction. Move the read off the synchronous path and optimize the flow for Actions and Related Records.
+
+Second, trying to read a raw data lake object. Flows can read DMOs and calculated insight objects, not DLOs, and they cannot create, update, or delete Data 360 data. Any answer that has a flow reading a DLO or writing a DMO is wrong, because neither is supported.
+
+Third, granting Manage Flow alone. Reading Data 360 in a flow also needs Read on the data model object, plus Data Model Field and Calculated Insights Object for the trigger, and activating a Data Cloud-triggered flow needs the broader permission combination or the Data Cloud Marketing Admin permission set. Manage Flow by itself builds flows that fail at activation.
+
+## Decision rules to carry forward
+
+For any Data 360 read in a flow, expect a Get Records element with its Data Source set to Data Cloud Object, reading a DMO or CIO and never a DLO, on an asynchronous or scheduled path. Expect a Data Cloud-triggered flow to start on a DMO change or a calculated insight object result meeting a condition, with the DMO mapped as part of a data stream. Read Data 360, decide, then write to CRM, because the flow cannot write Data 360. Confirm the connection, the data space, and the permissions before you test, and state the refresh latency instead of promising instant reaction. Those rules are what ac-5a tests.
+
+## What's next
+
+Lesson 52 - Flow-Driven Data 360 Scenarios End to End: Read, Decide, Write Back (ac-5b)
+
+[^1]: Salesforce Help, "Get Records from Data Cloud Objects in Flow Builder," (https://help.salesforce.com/s/articleView?id=release-notes.rn_automate_flow_builder_access_data_cloud_objects_from_get_records_element.htm&language=en_US&release=244&type=5)
+[^2]: Salesforce Help, "Trigger Flows with Data 360 Data," (https://help.salesforce.com/s/articleView?id=platform.flow_concepts_trigger_data_cloud.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Record-Triggered Flow Considerations," (https://help.salesforce.com/s/articleView?id=platform.flow_considerations_trigger_record.htm&language=en_US&type=5)
+[^4]: Salesforce Developers, "Salesforce Data Cloud Objects," (https://developer.salesforce.com/docs/atlas.en-us.object_reference.meta/object_reference/sforce_api_concepts_data_cloud_objects.htm)
+[^5]: Salesforce Developers, "Contact Point Email DMO," (https://developer.salesforce.com/docs/data/data-cloud-dmo-mapping/guide/c360dm-contact-point-email-dmo.html)
+[^6]: Salesforce Help, "Add Flow Merge Fields with Data 360 Objects to a Sales Email Prompt Template," (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_add_flows_with_data_cloud_sales_email.htm&language=en_US&type=5)
