@@ -1,0 +1,114 @@
+---
+title: "Lesson 28: Match and Reconciliation Rules in Practice: Criteria, Methods, and Conflict Resolution"
+slug: day-28-hu-1c-match-and-reconciliation-rules-in-practice-criteri
+series: sf-data360-consultant
+lesson: 28
+excerpt: "Requirement hu-1c in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) covers how match criteria and reconciliation rules behave when sources agree and when they conflict. This lesson works the ruleset in the order the platform runs it, from AND within a rule to the three reconciliation settings."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Data 360, Identity Resolution, Match Rules, Reconciliation]
+---
+
+# Lesson 28: Match and Reconciliation Rules in Practice: Criteria, Methods, and Conflict Resolution
+
+An analyst builds a ruleset with a single match rule, then drops first name and last name into it as two criteria, expecting that either one will help. The email addresses in the source systems are identical, so the analyst is certain the profiles will unify. They do not. The consolidation rate comes back near zero, and the analyst spends an afternoon hunting for a mapping bug that does not exist.
+
+The mistake is structural, not a mapping error. Two criteria inside one match rule are joined with AND, so both must be true before that rule can link two records. The analyst wanted the OR behavior that comes from two separate rules. Requirement hu-1c, part of the Harmonization and Unification domain worth 17% of the Salesforce Certified Data 360 Consultant exam, asks you to define the purpose, process, and supported use cases of unification, focusing on how match criteria and reconciliation rules behave when sources agree and when they conflict.
+
+This lesson works through that requirement in the order the platform applies it. Match rules decide which records belong together. Match methods decide how strictly values are compared. Reconciliation rules decide which single value lands on the unified profile when sources disagree. Get the operators and the order right and identity resolution becomes predictable. Get them wrong and the failure is quiet: fewer profiles than you expected, or the wrong people joined together.
+
+## Deep Dive
+
+### Criteria inside one rule are AND, and separate rules are OR
+
+A match rule is a promise about what counts as the same person. Each match rule contains one or more criteria, and profiles are matched when all criteria within a match rule are satisfied.[^1] That single sentence is the most tested detail in this requirement. Criteria inside a rule are combined with AND. Two criteria in one rule demand both to be true. The same two criteria split into two separate rules link on either one, because the ruleset creates a unified profile if any single match rule is activated.[^1]
+
+Read the platform's own framing: each match rule is an opportunity for records to be matched, and records must match the criteria of only one match rule to get matched by the ruleset. The more match rules you create, the more opportunities you give your records to be matched.[^2] So the shape is AND within a rule and OR across rules. A single rule with two criteria links two source profiles only when both criteria are satisfied. That is the answer the analyst was missing.
+
+The operators pull the consolidation rate in opposite directions, and knowing which lever does what is how you tune a ruleset deliberately. Adding more rules to a ruleset raises the consolidation rate, because you are widening the number of ways records can connect. Adding more criteria to a single match rule lowers the consolidation rate, because it makes the rule stricter and harder to satisfy.[^2] If your unified profiles are too fragmented, you add rules or loosen methods. If you are merging people who should stay apart, you add criteria or tighten methods.
+
+Match criteria can also carry a modifier that allows matches between blank fields when the use case calls for it. Salesforce lets you refine custom match criteria by allowing matches to be made between blank fields.[^3] That is a deliberate choice for a specific case, not a default you leave on. If both source records have an empty value in a field and the modifier is active, the blank-to-blank comparison counts toward the match. Turn it on where missing data is itself meaningful, and leave it off where a blank is simply a record that never filled the field in.
+
+### Match methods set how strictly values compare
+
+A criterion is only half a decision. The other half is the match method, which defines how strictly source data is compared before the platform decides two values are the same. Five methods are available for custom match rules: Exact, Exact Normalized, and Fuzzy at high, medium, or low precision.[^3] The methods available for each object and field vary, and that variation matters when you design a rule.
+
+Exact is available for all objects and fields, and it is case insensitive. Maryanne, maryanne, MARYANNE, and MaryAnne are all an exact match, because the comparison ignores letter case.[^3] Exact is your deterministic backbone: an enterprise identifier or a loyalty number compared exactly will only link records that genuinely share the value.
+
+Exact Normalized goes further. Before comparing, it cleans trailing spaces, inconsistent formatting, and special characters, and it is supported on specific fields rather than everywhere: email address on the Contact Point Email object, formatted phone number on Contact Point Phone, the address lines, state, and country on Contact Point Address, and first name on Individual.[^3] An email like `<MichelleNoris@gmail.com>` and `"MichelleNoris"@gmail.com` both normalize to `michellenoris@gmail.com`, so they match. A phone number written as `+1 (650) 277-9500` and as `+1 650 277-9500` both normalize to `+16502779500`. Exact Normalized matches formatting differences that Exact would reject.
+
+Fuzzy is the permissive family. It uses an AI language model, built on a bidirectional encoder language model and trained on data from over 150 countries, to match common misspellings, diacritical marks, nicknames, and cultural variants.[^3] The model works against a confidence threshold, and the three precision levels let you choose how loose the comparison runs. Low precision matches only loose similarities, like Lisa and Liza. Medium precision adds initials, gender variants, and shuffled names. High precision reaches across nicknames, punctuation, and cross-cultural spellings, so Catherine matches Katherine and William matches Bill.
+
+Two facts about Fuzzy trip people up. First, fuzzy match methods are not available on fields from the Account object, so an account matching design leans on exact and normalized comparisons.[^3] Second, more precise methods mean fewer matches, and less precise methods raise the consolidation rate at the cost of quality. The platform states the trade directly: the anticipated consolidation rate is lower when precision matching is required, and a less precise method can produce undesirable matches.[^3] Tune methods per field, not per ruleset.
+
+### Reconciliation picks one value for fields that cannot hold many
+
+Matching answers who belongs together. Reconciliation answers what the unified profile shows once they are together. A reconciliation rule selects a single value to save to a unified field that cannot have multiple values, such as an individual's name, during identity resolution.[^4] First Name and Last Name can hold one value each, so when three sources disagree on how to spell a name, something has to choose.
+
+Reconciliation rules are set at the object level and can be overridden by field specific reconciliation rules.[^4] You pick a default for the whole object, then reach in and set a different rule for the handful of fields where the general choice is wrong. That two-level structure is how you keep the ruleset readable: one sensible default, plus targeted overrides for names and identifiers.
+
+The exclusion that the exam leans on is contact points. Reconciliation does not apply to contact points, so all emails and phones remain on the unified profile, and source priority in activation decides which one is delivered.[^4] Every email address and every phone number collected across every source stays attached to the unified profile. Nothing is thrown away at reconciliation time. The choice of which contact point actually goes out the door happens later, at activation, through the source priority order you set.
+
+It is worth stating what reconciliation is not. The reconciliation process determines only what information is shown in the unified profile; it is not intended to determine a best value for a field across all applications.[^4] Reconciled values are shorthand used to summarize and label a customer profile. And the process never deletes or changes source profile data, never updates your connected source systems, and never tells you which source data to use when you work with the customer directly.[^4] If you expected reconciliation to fix your source records, you are asking a display rule to do a data management job.
+
+### The three reconciliation settings
+
+The platform gives you three settings, and the exam expects you to know when each one wins.[^4]
+
+Last Updated selects the value from the most recently updated record. It works only when the Last Modified Date field is mapped from the data stream, because the rule reads the Last Modified Date field on your primary data model object to decide which record is newest. If two matching records carry the same last updated date and time, the value is chosen alphabetically.[^4] Reach for Last Updated on fields where recency really signals correctness, such as a current address that people update when they move.
+
+Most Frequent selects the value that occurs most often across the matching records. It supports an Ignore Empty Values option, so the process will not select null even when null is the most frequently occurring value for the field. If values occur at identical rates, the last updated value is selected as the tiebreaker.[^4] Most Frequent suits stable descriptive fields where the majority of sources are likely right and no single system is the authority.
+
+Source Priority sorts your data lake objects in the order of most to least preferred for inclusion in the unified profile.[^4] You are declaring which system of record the business trusts for a value. The platform guidance is specific: to stabilize ID values, use the Source Priority reconciliation rule on ID fields.[^4] An identifier that a downstream system keys on must not flip around as source data changes. For an identifier that must stay stable, Source Priority applied to the ID field is the recommended fit.[^4] If Ignore Empty Values is selected, the process selects the highest-priority non-null value, so a preferred source with a blank does not blank out the profile. When two records from the same source match, individual fields are reconciled by field-level rules, and if the field-level rule is also Source Priority, the last updated value is selected.[^4]
+
+Here is the walkthrough for configuring the whole thing in Data 360.
+
+1. Open Data 360, then Identity Resolutions, then your ruleset, and open Match Rules to add a rule with the criteria that define a match.
+2. For each criterion, choose the match method: Exact, Exact Normalized, or Fuzzy at high, medium, or low precision, confirming the method is available for that object and field.
+3. Open Reconciliation Rules, set the default object level rule, then add field specific overrides for fields such as name or an identifier.
+4. For ID fields, prefer Source Priority so identifiers stay stable, and use Last Updated only when the Last Modified Date field is mapped.
+5. Publish and run the ruleset, then compare the consolidation rate, tightening criteria or precision for false merges and loosening them for duplicates.
+
+A worked example ties the settings together. Suppose a unified profile pulls a first name from three sources: Samantha from a billing system, Sam from a mobile app, and Samantha from a support system. If the field's rule is Last Updated and the mobile app record was touched most recently, the profile shows Sam. If the rule is Source Priority and billing is ranked above the app, the profile shows Samantha, and it keeps showing Samantha until the priority order changes, not until someone edits a record.
+
+### Normalization for matching is not the same as data cleaning
+
+Two ideas get confused here, and separating them prevents a whole class of wrong answers. Exact Normalized and the fuzzy methods transform values for comparison only. Salesforce is explicit: data is transformed for matching purposes when the Fuzzy and Exact Normalized match methods are selected, but the reformatted data is not stored in unified profiles, and the format of the value stored in a unified profile is based on source data and determined by reconciliation rules.[^3] A match method does not reformat what the customer sees. It reformats only the copy that gets compared.
+
+Data cleaning during harmonization is the other step entirely. Cleaning happens earlier, when you shape the stream before it becomes a data model object, and it changes the data that actually lands in Data 360. The practical risk runs both ways. Expecting a match method to fix what is displayed is wrong, because display comes from source data plus reconciliation. Expecting reconciliation to explain why two records did not match is also wrong, because matching is governed by match rules and methods, a different engine with different settings. When someone asks why a profile looks a certain way, ask whether they mean the match set or the displayed value, and route the question to the right rule.
+
+### Match rules do not stack by priority
+
+A tempting mental model is that match rules have an order, and the first rule that fires wins and suppresses the rest. That is not how a ruleset works. The ruleset links records when any rule activates, and the grouping is the union of those links. If rule one links A to B and rule two links B to C, the unified profile contains A, B, and C, because both links are real and the profile is the joined group. Rules widen coverage; they do not compete.
+
+Attribute conflicts are resolved per field by reconciliation, not by match order. The rule that happened to connect two records does not get to decide whose name or address survives on the profile. That is the job of the reconciliation setting on each field. This matters in a design review, because a stakeholder will often ask to make one system's values win by putting its rule first. The correct answer is to leave the rule order alone and set Source Priority on the fields that system should own.
+
+Source Priority is applied per data lake object, not globally across the whole ruleset. When no source holds a conflicting value for a field, the non null value simply flows through to the profile, because there is nothing to reconcile. The reconciliation engine only has to intervene when sources actually disagree on a field that cannot hold many values.
+
+### Try it
+
+Take a ruleset you own and read the Match Rules page out loud as a sentence: this rule links two records when criterion one AND criterion two are both true, and that rule links them when this other pair is both true, and the ruleset links them when either rule fires. If you cannot say it cleanly, the ruleset is carrying a structural mistake that no amount of method tuning will fix. Then check the Reconciliation Rules page for any field that looks like an identifier and confirm whether it is on Source Priority.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+The first is treating multiple match rules as a ranking. A unified profile forms when any single rule activates, so separate rules widen coverage, while criteria inside one rule are the strict AND.[^1] The tempting wrong answer says the first rule that matches keeps other rules from matching. It does not. Rules are independent opportunities, and their links union together.
+
+The second is expecting reconciliation to apply to email and phone. All contact points stay on the unified profile, and source priority at activation chooses which one is delivered.[^4] The wrong answers here describe the platform deleting or discarding contact points, or forcing a single surviving email. Reconciliation does none of that, because it never touched contact points in the first place. If a question asks how to control which email goes out, the answer lives in activation source priority, not in a reconciliation rule.
+
+The third is assuming fuzzy or Exact Normalized methods enforce the stored value. They transform values for comparison only, and the displayed value on the profile comes from source data and reconciliation.[^3] The wrong answer treats a normalized match method as a formatter that rewrites the customer's stored data. It does not, and looking for that behavior in the wrong place is how a design lands on the wrong control.
+
+## The decision rules
+
+Carry four rules into the exam and into the next design review. First, read every match rule as AND inside the rule and OR across rules, and remember that adding rules raises the consolidation rate while adding criteria lowers it. Second, pick a match method per field based on how much formatting and variation you need to absorb, remembering that Exact is case insensitive, Exact Normalized cleans formatting on specific fields, and Fuzzy runs on a language model that is not available on Account object fields. Third, set reconciliation at the object level with field specific overrides, and treat reconciliation as display only, never as a source data fix and never as the reason records did not match. Fourth, exclude contact points from your reconciliation thinking entirely, and reach for Source Priority on any field you cannot afford to see drift.
+
+## What's next
+
+Lesson 29 - When to Unify: Use Cases, Identity Sprawl Risk, Consent, and Segmentation and Activation (hu-1d). That lesson takes the mechanics you just learned and asks the harder consulting question: which use cases actually justify turning unification on, what identity sprawl costs when the criteria are too loose, and how consent and data spaces shape what you are allowed to combine.
+
+[^1]: Salesforce Help, "Identity Resolution Match Rules," (https://help.salesforce.com/s/articleView?id=data.c360_a_match_rules.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Identity Resolution Match Rule Terminology," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_match_rule_terms.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Identity Resolution Match Methods," (https://help.salesforce.com/s/articleView?id=data.c360_a_match_rules_criteria_fuzzy_normalized.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Identity Resolution Reconciliation Rules," (https://help.salesforce.com/s/articleView?id=sf.c360_a_reconciliation_rules.htm&language=en_US&type=5)
