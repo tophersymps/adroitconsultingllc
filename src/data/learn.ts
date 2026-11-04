@@ -8,6 +8,888 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "sf-data360-consultant",
+    "name": "Salesforce Data 360 Consultant",
+    "description": "Prep course for the Salesforce Certified Data 360 Consultant certification, formerly the Data Cloud Consultant credential. Covers solution positioning, setup and administration, data source connection and ingestion, harmonization and unification, data enhancements, sharing and analysis, and data activations and utilization.",
+    "gradient": "from-cyan to-sky-600",
+    "examKind": "certification-prep",
+    "lessons": [
+      {
+        "slug": "day-01-sp-1a-data-360-terminology-data-streams-data-lake-object",
+        "title": "Lesson 1: Data 360 Terminology: Data Streams, Data Lake Objects, Data Model Objects, and the Three Stages",
+        "series": "sf-data360-consultant",
+        "lesson": 1,
+        "excerpt": "Requirement sp-1a in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to describe Data 360's core constructs and the three stages they live in. Lesson 1 of the Salesforce Data 360 Consultant Certification course maps each term to its stage and shows why a stream, a DLO, and a DMO are not the same thing.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Terminology",
+          "Data Streams",
+          "Unified Profiles"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-sp-1b-data-360-business-value-and-positioning-cdp-data-s",
+        "title": "Lesson 2: Data 360 Business Value and Positioning: CDP, Data Silos, Credits, and Data Cloud One",
+        "series": "sf-data360-consultant",
+        "lesson": 2,
+        "excerpt": "Requirement sp-1b in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to make the business case for Data 360: the data silo problem, the Salesforce-native CDP position, consumption credits, and the Data Cloud One multi-org model. Lesson 2 of the Salesforce Data 360 Consultant Certification course shows you how to frame that case.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Solution Positioning",
+          "CDP",
+          "Data Cloud One"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-sp-2a-grounding-generative-ai-einstein-trust-layer-retri",
+        "title": "Lesson 3: Grounding Generative AI: Einstein Trust Layer, Retrieval Augmented Generation, and Unstructured Data",
+        "series": "sf-data360-consultant",
+        "lesson": 3,
+        "excerpt": "Requirement sp-2a in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to explain how Data 360 grounds generative AI through the Einstein Trust Layer and retrieval augmented generation. Lesson 3 of the Salesforce Data 360 Consultant Certification course covers zero data retention, secure data retrieval, and the unstructured data pipeline.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Generative AI",
+          "Einstein Trust Layer",
+          "Retrieval Augmented Generation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-sp-2b-predictive-ai-in-data-360-model-builder-bring-your",
+        "title": "Lesson 4: Predictive AI in Data 360: Model Builder, Bring Your Own Model, and Activating Models",
+        "series": "sf-data360-consultant",
+        "lesson": 4,
+        "excerpt": "Requirement sp-2b in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to explain predictive AI in Data 360: Model Builder, Bring Your Own Model, AI Models, and why a model must be activated before its predictions can be consumed. Lesson 4 covers the three paths into predictive AI and the activation gate.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Predictive AI",
+          "Model Builder",
+          "AI Models"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-sp-3a-initial-use-cases-customer-360-real-time-personali",
+        "title": "Lesson 5: Initial Use Cases: Customer 360, Real-Time Personalization, and Next Best Action",
+        "series": "sf-data360-consultant",
+        "lesson": 5,
+        "excerpt": "Requirement sp-3a in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to identify the highest-value starting use cases for Data 360: Customer 360 unified profiles, real-time personalization, and next best action. Lesson 5 covers each pattern, the prerequisite that gates them all, and how to sequence a first use case.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Customer 360",
+          "Real-Time Personalization",
+          "Activation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-sp-3b-choosing-a-first-use-case-sales-service-analytics",
+        "title": "Lesson 6: Choosing a First Use Case: Sales, Service, Analytics, and Advertising Patterns",
+        "series": "sf-data360-consultant",
+        "lesson": 6,
+        "excerpt": "Requirement sp-3b in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to choose a first use case across sales, service, analytics, and advertising and to sequence a low-risk start. Lesson 6 covers the four patterns, how to score candidates, and why boiling the ocean burns credits without proving value.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Use Cases",
+          "Analytics",
+          "Advertising"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-sp-4a-data-governance-in-data-360-data-spaces-rbac-vs-ab",
+        "title": "Lesson 7: Data Governance in Data 360: Data Spaces, RBAC vs ABAC, Tags, and Masking",
+        "series": "sf-data360-consultant",
+        "lesson": 7,
+        "excerpt": "Data 360 governance is a control plane you design in from ingestion, not a manual oversight step. This lesson covers the three control layers, data spaces as the coarse boundary, RBAC for features and platform capability, ABAC with tags and policies for the data itself, and dynamic masking for sensitive values.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Data Governance",
+          "Data Spaces",
+          "ABAC"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-sp-4b-data-ethics-and-consent-trusted-ai-principles-cons",
+        "title": "Lesson 8: Data Ethics and Consent: Trusted AI Principles, Consent Management, and Data Subject Rights",
+        "series": "sf-data360-consultant",
+        "lesson": 8,
+        "excerpt": "Ethics in Data 360 is a design input, not a final checklist. This lesson covers the Trusted AI principles, the Consent Data Model, consent enforcement at activation, the Salesforce Consent API, and how Privacy Center operationalizes data subject rights.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Ethics",
+          "Consent Management",
+          "Trusted AI"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-sa-1a-data-360-standard-permission-sets-and-permission-s",
+        "title": "Lesson 9: Data 360 Standard Permission Sets and Permission Set Licenses",
+        "series": "sf-data360-consultant",
+        "lesson": 9,
+        "excerpt": "Data 360 access comes from permission sets, not profiles, and the sets you can assign depend on the licenses your org holds. This lesson covers the standard Data 360 permission sets, permission set licenses, and choosing between a standard set and a cloned custom one.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Permission Sets",
+          "Access Control",
+          "Administration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-sa-1b-data-cloud-setup-home-data-spaces-and-organization",
+        "title": "Lesson 10: Data Cloud Setup Home, Data Spaces, and Organization-Wide Settings",
+        "series": "sf-data360-consultant",
+        "lesson": 10,
+        "excerpt": "Objective sa-1b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to configure Data 360 permissions, permission sets, and organization-wide settings. Lesson 10 covers provisioning, the Data Cloud Setup Home details you record for support, data space creation and its limits, and the Feature Manager.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Cloud Setup",
+          "Data Spaces",
+          "Feature Manager"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-sa-2a-data-governance-basics-tags-classifications-and-me",
+        "title": "Lesson 11: Data Governance Basics: Tags, Classifications, and Metadata",
+        "series": "sf-data360-consultant",
+        "lesson": 11,
+        "excerpt": "Objective sa-2a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to apply data governance requirements to platform configuration. Lesson 11 covers tagging and classifying data objects and fields so policy-based governance applies at scale.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Governance",
+          "Tags",
+          "Classifications"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-sa-2b-data-access-policies-ols-fls-rls-and-dynamic-data",
+        "title": "Lesson 12: Data Access Policies: OLS, FLS, RLS, and Dynamic Data Masking",
+        "series": "sf-data360-consultant",
+        "lesson": 12,
+        "excerpt": "Objective sa-2b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to build object, field, and record level access policies and dynamic data masking with correct policy precedence. Lesson 12 covers OLS, FLS, RLS, masking methods, and the deny-beats-allow rule.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Governance",
+          "Access Policies",
+          "Data Masking"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-sa-3a-data-kits-packaging-data-360-metadata-for-deployme",
+        "title": "Lesson 13: Data Kits: Packaging Data 360 Metadata for Deployment",
+        "series": "sf-data360-consultant",
+        "lesson": 13,
+        "excerpt": "Objective sa-3a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to manage the development lifecycle with the two data kit types, what they package, and how data kits pair with packages. Lesson 13 covers standard versus DevOps kits, the packaging boundaries, the per-save limits, and how managed packages lock metadata.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Kits",
+          "Deployment",
+          "Packaging"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-sa-3b-sandbox-to-production-lifecycle-cli-change-sets-an",
+        "title": "Lesson 14: Sandbox-to-Production Lifecycle: CLI, Change Sets, and Environment Parity",
+        "series": "sf-data360-consultant",
+        "lesson": 14,
+        "excerpt": "Objective sa-3b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to manage the development lifecycle with the CLI, change sets, and API based deployment. Lesson 14 covers provisioning Data 360 in a sandbox, reactivating dormant connections, promoting a DevOps data kit three ways, and the environment parity discipline that prevents most failures.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Sandbox",
+          "Deployment",
+          "Salesforce CLI"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-sa-4a-diagnosing-data-stream-and-ingestion-errors",
+        "title": "Lesson 15: Diagnosing Data Stream and Ingestion Errors",
+        "series": "sf-data360-consultant",
+        "lesson": 15,
+        "excerpt": "Objective sa-4a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to diagnose common issues with tooling, focused on reading refresh history, decoding common ingestion error codes, and using problem record DLOs. Lesson 15 covers the refresh history surface, the CRM and SFTP error codes, zero copy volume ceilings, and problem records.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Troubleshooting",
+          "Data Streams",
+          "Ingestion"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-sa-4b-monitoring-and-investigation-tooling-across-data-3",
+        "title": "Lesson 16: Monitoring and Investigation Tooling Across Data 360",
+        "series": "sf-data360-consultant",
+        "lesson": 16,
+        "excerpt": "Requirement sa-4b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to use tooling to diagnose and troubleshoot common issues. Lesson 16 of the Salesforce Data 360 Consultant Certification course covers the monitoring surfaces, the exploratory tools, and the audit trails, and shows you which one answers which question.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Monitoring",
+          "Setup Audit Trail"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-ing-1a-data-transform-types-batch-vs-streaming-and-when-e",
+        "title": "Lesson 17: Data Transform Types: Batch vs Streaming and When Each Applies",
+        "series": "sf-data360-consultant",
+        "lesson": 17,
+        "excerpt": "Requirement ing-1a in the Data Source Connection and Ingestion domain (18% of the Salesforce Data 360 Consultant exam) asks you to explain data transformation capabilities within Data 360. Lesson 17 of the Salesforce Data 360 Consultant Certification course covers the two transform types, batch and streaming, and the latency and complexity trade-offs that decide which one a scenario needs.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Transforms",
+          "Ingestion"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-ing-1b-batch-data-transforms-canvas-nodes-and-scheduling",
+        "title": "Lesson 18: Batch Data Transforms: Canvas, Nodes, and Scheduling",
+        "series": "sf-data360-consultant",
+        "lesson": 18,
+        "excerpt": "Requirement ing-1b in the Data Source Connection and Ingestion domain (18% of the Salesforce Data 360 Consultant exam) asks you to explain data transformation capabilities within Data 360. Lesson 18 of the Salesforce Data 360 Consultant Certification course covers creating a batch data transform, building its graph of nodes on the canvas, and scheduling it.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Batch Transforms",
+          "Ingestion"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-ing-1c-streaming-data-transforms-and-real-time-preparatio",
+        "title": "Lesson 19: Streaming Data Transforms and Real-Time Preparation",
+        "series": "sf-data360-consultant",
+        "lesson": 19,
+        "excerpt": "A streaming data transform cleans and reshapes each record as it arrives, then writes it to a different target object. This lesson covers source and target selection, the SQL expression that is the whole logic, the settings that lock the moment you save, and the traps the exam sets.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Streaming Transforms",
+          "Data Ingestion"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-ing-2a-connectors-and-data-streams-crm-mulesoft-ingestion",
+        "title": "Lesson 20: Connectors and Data Streams: CRM, MuleSoft, Ingestion API, File and Federated Sources",
+        "series": "sf-data360-consultant",
+        "lesson": 20,
+        "excerpt": "Every source enters Data 360 through a connector that becomes a data stream. This lesson maps the connector families, CRM objects and bundles, the Ingestion API, files and cloud storage, MuleSoft, and federation, and shows which one fits each delivery pattern.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Connectors",
+          "Data Streams",
+          "Ingestion"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-ing-2b-data-stream-categories-refresh-modes-and-mapping-a",
+        "title": "Lesson 21: Data Stream Categories, Refresh Modes, and Mapping at Ingestion",
+        "series": "sf-data360-consultant",
+        "lesson": 21,
+        "excerpt": "Category, refresh mode, and mapping are decided at ingestion time, and two of them lock the moment you save. This lesson covers Profile, Engagement, and Other, the three refresh modes and how each handles deletes, and how mapping turns a data lake object into something usable.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Streams",
+          "Refresh Modes",
+          "Data Mapping"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-ing-2c-ingestion-considerations-source-choice-volume-sche",
+        "title": "Lesson 22: Ingestion Considerations: Source Choice, Volume, Schema Drift, and Failure Handling",
+        "series": "sf-data360-consultant",
+        "lesson": 22,
+        "excerpt": "Requirement ing-2c sits in the Data Source Connection and Ingestion domain, worth 18 percent of the Salesforce Data 360 Consultant exam. Lesson 22 covers how to pick an ingestion path from the use case, how volume and cadence shape the refresh, why schema drift breaks a stream quietly, and how Refresh History, deletes, and boundary reprocessing really behave.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Ingestion",
+          "Data Streams"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-ing-3a-data-collaboration-in-data-360-what-zero-copy-mean",
+        "title": "Lesson 23: Data Collaboration in Data 360: What Zero Copy Means and Which Sources Support It",
+        "series": "sf-data360-consultant",
+        "lesson": 23,
+        "excerpt": "Requirement ing-3a in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe Data 360 collaboration and Zero Copy, including which sources and connector types support it. Lesson 23 covers the two halves of Zero Copy, the external systems it targets, the virtual data lake object, and when to ingest instead.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Zero Copy",
+          "Data Federation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-ing-3b-zero-copy-mechanics-and-limits-query-vs-file-feder",
+        "title": "Lesson 24: Zero Copy Mechanics and Limits: Query vs File Federation, Caching, and Refresh",
+        "series": "sf-data360-consultant",
+        "lesson": 24,
+        "excerpt": "Requirement ing-3b in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe the mechanics and limits of federated integrations: what must exist on both sides, what is cached versus queried, and what that means for latency and refresh. Lesson 24 covers query versus file federation, acceleration, and the three freshness behaviors.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Data 360",
+          "Zero Copy",
+          "Data Federation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-ing-3c-choosing-and-governing-collaboration-data-shares-c",
+        "title": "Lesson 25: Choosing and Governing Collaboration: Data Shares, Cross-Boundary Permissions, and When to Ingest",
+        "series": "sf-data360-consultant",
+        "lesson": 25,
+        "excerpt": "Requirement ing-3c in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe Data 360's collaboration capabilities, including Zero Copy, covering how to choose and govern collaboration patterns: outbound data shares, permissions across the sharing boundary, and when ingestion is the better design. Lesson 25 covers the share and target mechanics, the governance split at the boundary, curation, bilateral provisioning, and the workload tests that argue for ingestion.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Shares",
+          "Zero Copy"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-hu-1a-what-unification-is-many-source-records-one-unifie",
+        "title": "Lesson 26: What Unification Is: Many Source Records, One Unified Profile, and the Unified Link",
+        "series": "sf-data360-consultant",
+        "lesson": 26,
+        "excerpt": "Requirement hu-1a in the Harmonization and Unification domain (17 percent of the Salesforce Data 360 Consultant exam) asks you to define the purpose, process, and supported use cases of unification, starting with what unification produces and the problem it solves when many source records describe the same person. Lesson 26 covers the fragmentation problem, why a unified profile is a system of reference rather than a golden record, the unified link, the mapping that unification depends on, and the downstream cost of getting matches wrong.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Unification",
+          "Identity Resolution"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-hu-1b-the-unification-process-end-to-end-harmonize-map-m",
+        "title": "Lesson 27: The Unification Process End to End: Harmonize, Map, Match, Reconcile, Unify",
+        "series": "sf-data360-consultant",
+        "lesson": 27,
+        "excerpt": "Requirement hu-1b in the Harmonization and Unification domain (17 percent of the Salesforce Data 360 Consultant exam) asks you to define the purpose, process, and supported use cases of unification, tracing the process in order from harmonizing and mapping to matching, reconciling, and producing the unified profile. Lesson 27 walks the pipeline step by step, from the data lake object through match rules and reconciliation to the unified profile and the unified link, and explains how each step consumes the one before it.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Identity Resolution",
+          "Match and Reconciliation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-hu-1c-match-and-reconciliation-rules-in-practice-criteri",
+        "title": "Lesson 28: Match and Reconciliation Rules in Practice: Criteria, Methods, and Conflict Resolution",
+        "series": "sf-data360-consultant",
+        "lesson": 28,
+        "excerpt": "Requirement hu-1c in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) covers how match criteria and reconciliation rules behave when sources agree and when they conflict. This lesson works the ruleset in the order the platform runs it, from AND within a rule to the three reconciliation settings.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Identity Resolution",
+          "Match Rules",
+          "Reconciliation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-hu-1d-when-to-unify-use-cases-identity-sprawl-risk-conse",
+        "title": "Lesson 29: When to Unify: Use Cases, Identity Sprawl Risk, Consent, and Segmentation and Activation",
+        "series": "sf-data360-consultant",
+        "lesson": 29,
+        "excerpt": "Requirement hu-1d in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) asks which use cases justify unification and which privacy and governance tradeoffs a consultant must weigh. This lesson gives you the decision framework, the identity sprawl risk, and the activation membership that avoids duplicate counts.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Identity Resolution",
+          "Consent",
+          "Segmentation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-hu-2a-the-standard-customer-360-data-model-and-its-objec",
+        "title": "Lesson 30: The Standard Customer 360 Data Model and Its Object Families",
+        "series": "sf-data360-consultant",
+        "lesson": 30,
+        "excerpt": "Requirement hu-2a in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) covers how to model data in Data 360 using the standard Customer 360 data model. This lesson maps its profile, contact point, engagement, and vertical object families so every source lands in the right home.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Customer 360 Data Model",
+          "Data Modeling",
+          "Engagement"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-hu-2b-data-lake-objects-vs-data-model-objects-and-mappin",
+        "title": "Lesson 31: Data Lake Objects vs Data Model Objects and Mapping Streams to the Model",
+        "series": "sf-data360-consultant",
+        "lesson": 31,
+        "excerpt": "Raw data lands in a data lake object and usable data lives in a data model object, and only mapping turns one into the other. This lesson separates the two layers, explains the mapping rules, and shows why a single unmapped key leaves an entire stream inert.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Model Objects",
+          "Data Mapping",
+          "Identity Resolution"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-hu-2c-extending-the-model-with-custom-data-model-objects",
+        "title": "Lesson 32: Extending the Model with Custom Data Model Objects and Relationships",
+        "series": "sf-data360-consultant",
+        "lesson": 32,
+        "excerpt": "The standard Customer 360 model covers common subjects, and organization-specific data needs its own object. This lesson shows how to create a custom data model object, wire it into the model with a relationship to Individual, and make it count in identity resolution and segments.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Custom Data Model Objects",
+          "Data Model",
+          "Identity Resolution"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-hu-2d-modeling-decisions-that-decide-unification-quality",
+        "title": "Lesson 33: Modeling Decisions That Decide Unification Quality",
+        "series": "sf-data360-consultant",
+        "lesson": 33,
+        "excerpt": "Most bad segments are really bad keys. This lesson covers the modeling decisions that decide unification quality: primary keys, Individual ID consistency, mapping time normalization, timestamps and record currency, multi currency and locale, and how a model error surfaces late as an off audience.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Unification",
+          "Data Modeling",
+          "Identity Resolution"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-en-1a-what-data-enhancement-means-after-unification-and",
+        "title": "Lesson 34: What Data Enhancement Means After Unification and the Insight Calculator Family",
+        "series": "sf-data360-consultant",
+        "lesson": 34,
+        "excerpt": "Enhancement is the layer above harmonization and unification: turning stored, unified data into computed metrics and materialized views. Lesson 34 of the Salesforce Data 360 Consultant course covers what enhancement means after unification and the family of calculators that build it, including calculated, streaming, and real-time insights and data transforms.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Calculated Insights",
+          "Streaming Insights",
+          "Real-Time Insights"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-en-1b-calculated-insights-in-practice-dimensions-measure",
+        "title": "Lesson 35: Calculated Insights in Practice: Dimensions, Measures, and Where Results Are Used",
+        "series": "sf-data360-consultant",
+        "lesson": 35,
+        "excerpt": "A calculated insight describes one set of numbers over one base object, computed from measures grouped by dimensions. Lesson 35 of the Salesforce Data 360 Consultant course walks the build in practice: choosing the base object, defining measures and dimensions, picking the metric level, and the places a calculated insight result can be used.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Calculated Insights",
+          "Dimensions",
+          "Personalization Attributes"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-en-1c-choosing-between-calculated-streaming-and-real-tim",
+        "title": "Lesson 36: Choosing Between Calculated, Streaming, and Real-Time Insights, Data Actions, and Enrichments",
+        "series": "sf-data360-consultant",
+        "lesson": 36,
+        "excerpt": "A scenario can ask you to compute a number, act on a signal, or show data in another system, and the three answers are different features. Lesson 36 of the Salesforce Data 360 Consultant course sorts calculated, streaming, and real-time insights by freshness, then separates that compute step from data actions, which act, and enrichments, which display.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Actions",
+          "Enrichments",
+          "Insights"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-37-en-2a-surfacing-data-360-data-in-other-systems-enrichmen",
+        "title": "Lesson 37: Surfacing Data 360 Data in Other Systems: Enrichments, Related Lists, Data Cloud Objects, and APIs",
+        "series": "sf-data360-consultant",
+        "lesson": 37,
+        "excerpt": "Requirement en-2a in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) asks how to reference Data 360 data from other systems. Lesson 37 covers the four reference paths, the identity key each one needs, and the traps that make a build return nothing.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Enrichments",
+          "APIs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-38-en-2b-design-and-governance-for-cross-system-reference-s",
+        "title": "Lesson 38: Design and Governance for Cross-System Reference: Source of Truth, Sync versus Query, Permissions, and Duplication",
+        "series": "sf-data360-consultant",
+        "lesson": 38,
+        "excerpt": "Requirement en-2b in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) covers the design and governance consequences of referencing Data 360 data: who owns each element, copy versus live read, permissions, and the risk of duplicating unified data.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Data Governance",
+          "Enrichments"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-39-en-3a-reporting-on-unified-data-report-types-dmos-and-wh",
+        "title": "Lesson 39: Reporting on Unified Data: Report Types, DMOs, and What to Configure First",
+        "series": "sf-data360-consultant",
+        "lesson": 39,
+        "excerpt": "Requirement en-3a in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) asks how to view and build reports on Data 360 data. Lesson 39 covers where Data 360 data appears in reports, the report types exposed, and the configuration that has to be in place before a report will run.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "13 min read",
+        "tags": [
+          "Data 360",
+          "Reporting",
+          "Report Types"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-40-en-3b-dashboards-versus-tableau-next-analytics-choosing",
+        "title": "Lesson 40: Dashboards Versus Tableau Next Analytics: Choosing and Sharing the Right Surface",
+        "series": "sf-data360-consultant",
+        "lesson": 40,
+        "excerpt": "An analytics surface is a consulting decision, not a preference. This lesson walks the Data 360 report, the Lightning dashboard, and the Tableau Next stack, and shows how to match the surface and its sharing model to the stakeholder in front of you.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Analytics",
+          "Dashboards",
+          "Tableau Next"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-41-en-4a-predictive-ai-in-data-360-model-creation-training",
+        "title": "Lesson 41: Predictive AI in Data 360: Model Creation, Training, Scoring, and Activation",
+        "series": "sf-data360-consultant",
+        "lesson": 41,
+        "excerpt": "A trained model has no business effect until its predictions live on an object and a segment can filter on them. This lesson walks AI Models, creating and evaluating a predictive model, and the train, score, consume chain.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "AI Models",
+          "Predictive AI",
+          "Model Builder"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-42-en-4b-generative-ai-grounded-on-data-360-rag-prompts-and",
+        "title": "Lesson 42: Generative AI Grounded on Data 360: RAG, Prompts, and the Trust Layer",
+        "series": "sf-data360-consultant",
+        "lesson": 42,
+        "excerpt": "Generative AI in Data 360 grounds prompts on your own data so the answer is about this customer. This lesson covers retrieval augmented generation, the search index, Prompt Builder merge fields, and the Einstein Trust Layer.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Generative AI",
+          "RAG",
+          "Einstein Trust Layer"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-43-ac-1a-what-a-segment-is-audiences-from-the-unified-profi",
+        "title": "Lesson 43: What a Segment Is: Audiences from the Unified Profile and Batch vs Streaming Decisions",
+        "series": "sf-data360-consultant",
+        "lesson": 43,
+        "excerpt": "Data 360 segments are rule sets that run against mapped data model objects, not saved lists of source rows. This lesson covers what a segment evaluates, how it reads the unified profile, and when batch or streaming segmentation fits a use case.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Segmentation",
+          "Unified Profile",
+          "Activation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-44-ac-1b-designing-a-segment-for-a-business-goal-audience-c",
+        "title": "Lesson 44: Designing a Segment for a Business Goal: Audience, Criteria, and Testing Before Publish",
+        "series": "sf-data360-consultant",
+        "lesson": 44,
+        "excerpt": "Turning a business goal into a segment is a method, not a menu. This lesson designs a segment from the goal down: choosing the audience grain, selecting direct and related criteria, building exclusions, and testing with preview before it ships.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Segmentation",
+          "Audience Design",
+          "Segment Preview"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-45-ac-2a-creating-segments-types-filters-calculated-insight",
+        "title": "Lesson 45: Creating Segments: Types, Filters, Calculated Insights, and Engagement Data as Criteria",
+        "series": "sf-data360-consultant",
+        "lesson": 45,
+        "excerpt": "Creating a segment means choosing a type, bounding the data with a lookback window, and building criteria from direct attributes, related attributes, calculated insights, and engagement data. This lesson covers each choice and the mistakes that recur.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Segmentation",
+          "Calculated Insights",
+          "Engagement Data"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-46-ac-2b-operating-segments-refresh-membership-counts-editi",
+        "title": "Lesson 46: Operating Segments: Refresh, Membership Counts, Editing and Versioning, and Sharing",
+        "series": "sf-data360-consultant",
+        "lesson": 46,
+        "excerpt": "A segment keeps changing after you build it: counts move, schedules fire, and other teams go looking for it. Lesson 46 of the Salesforce Data 360 Consultant course covers the operating side of segments, from post-publish membership and count drivers to safe edits, data space access, and retirement.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Segments",
+          "Activation",
+          "Data Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-47-ac-3a-activation-targets-and-setup-what-an-activation-is",
+        "title": "Lesson 47: Activation Targets and Setup: What an Activation Is and Connecting a Destination",
+        "series": "sf-data360-consultant",
+        "lesson": 47,
+        "excerpt": "A finished audience is useless until it is wired to a destination, and the wiring is where compatibility is decided. Lesson 47 of the Salesforce Data 360 Consultant course defines what an activation is, maps the target families and the destinations each accepts, and walks a segment to a live marketing or advertising target.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Activation",
+          "Activation Targets",
+          "Marketing Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-48-ac-3b-publishing-and-maintaining-activations-schedule-mo",
+        "title": "Lesson 48: Publishing and Maintaining Activations: Schedule, Monitoring, Consent, and Safe Deactivation",
+        "series": "sf-data360-consultant",
+        "lesson": 48,
+        "excerpt": "An activation is a production integration, and production integrations fail quietly. Lesson 48 of the Salesforce Data 360 Consultant course covers the publish schedule, reading the job history and verifying at the destination, consent enforced at activation time, and the exact order for retiring an activation safely.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Activation",
+          "Consent Management",
+          "Data Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-49-ac-4a-acting-inside-the-platform-data-actions-and-write",
+        "title": "Lesson 49: Acting Inside the Platform: Data Actions and Write-Back",
+        "series": "sf-data360-consultant",
+        "lesson": 49,
+        "excerpt": "Requirement ac-4a in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks you to act on data inside the platform. Lesson 49 covers data actions, write-back to CRM records, and why the unified profile is a different trigger than a CRM record.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Data Actions",
+          "Enrichments",
+          "Activation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-50-ac-4b-acting-outside-the-platform-activation-data-shares",
+        "title": "Lesson 50: Acting Outside the Platform: Activation, Data Shares, and Downloads",
+        "series": "sf-data360-consultant",
+        "lesson": 50,
+        "excerpt": "Requirement ac-4b in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks you to act on data outside the platform. Lesson 50 covers activation to external destinations, data shares and downloads as delivery, and how to choose the mechanism that fits a business goal.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Activation",
+          "Data Shares",
+          "Zero Copy"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-51-ac-5a-data-360-data-in-salesforce-flows-elements-objects",
+        "title": "Lesson 51: Data 360 Data in Salesforce Flows: Elements, Objects, and Limits",
+        "series": "sf-data360-consultant",
+        "lesson": 51,
+        "excerpt": "Requirement ac-5a in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks how a flow reads unified and calculated Data 360 data. Lesson 51 covers the flow elements, the Data 360 objects and permissions involved, and the design limits to respect.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "14 min read",
+        "tags": [
+          "Data 360",
+          "Salesforce Flow",
+          "Data Model Objects",
+          "Permissions"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-52-ac-5b-flow-driven-data-360-scenarios-end-to-end-read-dec",
+        "title": "Lesson 52: Flow-Driven Data 360 Scenarios End to End: Read, Decide, Write Back",
+        "series": "sf-data360-consultant",
+        "lesson": 52,
+        "excerpt": "The capstone of the Salesforce Data 360 Consultant course: an end to end flow that reads unified data from Data 360, decides on a threshold, and writes the decision back to the CRM record, with the testing, error handling and governance that make it safe to run in production.",
+        "date": "November 3, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "15 min read",
+        "tags": [
+          "Data 360",
+          "Flow",
+          "Activation",
+          "Governance"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 52,
+    "curriculumLessons": 52
+  },
+  {
     "slug": "agentic-ai",
     "name": "Agentic AI Implementation Path",
     "description": "From single-agent prototypes to multi-agent orchestration, a practitioner's curriculum for shipping agentic systems.",
@@ -9327,21 +10209,882 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
-  },
-  {
-    "slug": "sf-data360-consultant",
-    "name": "Salesforce Data 360 Consultant",
-    "description": "Prep course for the Salesforce Certified Data 360 Consultant certification, formerly the Data Cloud Consultant credential. Covers solution positioning, setup and administration, data source connection and ingestion, harmonization and unification, data enhancements, sharing and analysis, and data activations and utilization.",
-    "gradient": "from-cyan to-sky-600",
-    "examKind": "certification-prep",
-    "lessons": [],
-    "totalLessons": 0,
-    "curriculumLessons": 52
   }
 ];
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "day-01-sp-1a-data-360-terminology-data-streams-data-lake-object",
+    "title": "Lesson 1: Data 360 Terminology: Data Streams, Data Lake Objects, Data Model Objects, and the Three Stages",
+    "series": "sf-data360-consultant",
+    "lesson": 1,
+    "excerpt": "Requirement sp-1a in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to describe Data 360's core constructs and the three stages they live in. Lesson 1 of the Salesforce Data 360 Consultant Certification course maps each term to its stage and shows why a stream, a DLO, and a DMO are not the same thing.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Terminology",
+      "Data Streams",
+      "Unified Profiles"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-02-sp-1b-data-360-business-value-and-positioning-cdp-data-s",
+    "title": "Lesson 2: Data 360 Business Value and Positioning: CDP, Data Silos, Credits, and Data Cloud One",
+    "series": "sf-data360-consultant",
+    "lesson": 2,
+    "excerpt": "Requirement sp-1b in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to make the business case for Data 360: the data silo problem, the Salesforce-native CDP position, consumption credits, and the Data Cloud One multi-org model. Lesson 2 of the Salesforce Data 360 Consultant Certification course shows you how to frame that case.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Solution Positioning",
+      "CDP",
+      "Data Cloud One"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-03-sp-2a-grounding-generative-ai-einstein-trust-layer-retri",
+    "title": "Lesson 3: Grounding Generative AI: Einstein Trust Layer, Retrieval Augmented Generation, and Unstructured Data",
+    "series": "sf-data360-consultant",
+    "lesson": 3,
+    "excerpt": "Requirement sp-2a in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to explain how Data 360 grounds generative AI through the Einstein Trust Layer and retrieval augmented generation. Lesson 3 of the Salesforce Data 360 Consultant Certification course covers zero data retention, secure data retrieval, and the unstructured data pipeline.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Generative AI",
+      "Einstein Trust Layer",
+      "Retrieval Augmented Generation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-04-sp-2b-predictive-ai-in-data-360-model-builder-bring-your",
+    "title": "Lesson 4: Predictive AI in Data 360: Model Builder, Bring Your Own Model, and Activating Models",
+    "series": "sf-data360-consultant",
+    "lesson": 4,
+    "excerpt": "Requirement sp-2b in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to explain predictive AI in Data 360: Model Builder, Bring Your Own Model, AI Models, and why a model must be activated before its predictions can be consumed. Lesson 4 covers the three paths into predictive AI and the activation gate.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Predictive AI",
+      "Model Builder",
+      "AI Models"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-05-sp-3a-initial-use-cases-customer-360-real-time-personali",
+    "title": "Lesson 5: Initial Use Cases: Customer 360, Real-Time Personalization, and Next Best Action",
+    "series": "sf-data360-consultant",
+    "lesson": 5,
+    "excerpt": "Requirement sp-3a in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to identify the highest-value starting use cases for Data 360: Customer 360 unified profiles, real-time personalization, and next best action. Lesson 5 covers each pattern, the prerequisite that gates them all, and how to sequence a first use case.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Customer 360",
+      "Real-Time Personalization",
+      "Activation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-06-sp-3b-choosing-a-first-use-case-sales-service-analytics",
+    "title": "Lesson 6: Choosing a First Use Case: Sales, Service, Analytics, and Advertising Patterns",
+    "series": "sf-data360-consultant",
+    "lesson": 6,
+    "excerpt": "Requirement sp-3b in the Solution Positioning domain (14% of the Salesforce Data 360 Consultant exam) asks you to choose a first use case across sales, service, analytics, and advertising and to sequence a low-risk start. Lesson 6 covers the four patterns, how to score candidates, and why boiling the ocean burns credits without proving value.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Use Cases",
+      "Analytics",
+      "Advertising"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-07-sp-4a-data-governance-in-data-360-data-spaces-rbac-vs-ab",
+    "title": "Lesson 7: Data Governance in Data 360: Data Spaces, RBAC vs ABAC, Tags, and Masking",
+    "series": "sf-data360-consultant",
+    "lesson": 7,
+    "excerpt": "Data 360 governance is a control plane you design in from ingestion, not a manual oversight step. This lesson covers the three control layers, data spaces as the coarse boundary, RBAC for features and platform capability, ABAC with tags and policies for the data itself, and dynamic masking for sensitive values.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Data Governance",
+      "Data Spaces",
+      "ABAC"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-08-sp-4b-data-ethics-and-consent-trusted-ai-principles-cons",
+    "title": "Lesson 8: Data Ethics and Consent: Trusted AI Principles, Consent Management, and Data Subject Rights",
+    "series": "sf-data360-consultant",
+    "lesson": 8,
+    "excerpt": "Ethics in Data 360 is a design input, not a final checklist. This lesson covers the Trusted AI principles, the Consent Data Model, consent enforcement at activation, the Salesforce Consent API, and how Privacy Center operationalizes data subject rights.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Ethics",
+      "Consent Management",
+      "Trusted AI"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-09-sa-1a-data-360-standard-permission-sets-and-permission-s",
+    "title": "Lesson 9: Data 360 Standard Permission Sets and Permission Set Licenses",
+    "series": "sf-data360-consultant",
+    "lesson": 9,
+    "excerpt": "Data 360 access comes from permission sets, not profiles, and the sets you can assign depend on the licenses your org holds. This lesson covers the standard Data 360 permission sets, permission set licenses, and choosing between a standard set and a cloned custom one.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Permission Sets",
+      "Access Control",
+      "Administration"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-10-sa-1b-data-cloud-setup-home-data-spaces-and-organization",
+    "title": "Lesson 10: Data Cloud Setup Home, Data Spaces, and Organization-Wide Settings",
+    "series": "sf-data360-consultant",
+    "lesson": 10,
+    "excerpt": "Objective sa-1b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to configure Data 360 permissions, permission sets, and organization-wide settings. Lesson 10 covers provisioning, the Data Cloud Setup Home details you record for support, data space creation and its limits, and the Feature Manager.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Cloud Setup",
+      "Data Spaces",
+      "Feature Manager"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-11-sa-2a-data-governance-basics-tags-classifications-and-me",
+    "title": "Lesson 11: Data Governance Basics: Tags, Classifications, and Metadata",
+    "series": "sf-data360-consultant",
+    "lesson": 11,
+    "excerpt": "Objective sa-2a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to apply data governance requirements to platform configuration. Lesson 11 covers tagging and classifying data objects and fields so policy-based governance applies at scale.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Governance",
+      "Tags",
+      "Classifications"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-12-sa-2b-data-access-policies-ols-fls-rls-and-dynamic-data",
+    "title": "Lesson 12: Data Access Policies: OLS, FLS, RLS, and Dynamic Data Masking",
+    "series": "sf-data360-consultant",
+    "lesson": 12,
+    "excerpt": "Objective sa-2b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to build object, field, and record level access policies and dynamic data masking with correct policy precedence. Lesson 12 covers OLS, FLS, RLS, masking methods, and the deny-beats-allow rule.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Governance",
+      "Access Policies",
+      "Data Masking"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-13-sa-3a-data-kits-packaging-data-360-metadata-for-deployme",
+    "title": "Lesson 13: Data Kits: Packaging Data 360 Metadata for Deployment",
+    "series": "sf-data360-consultant",
+    "lesson": 13,
+    "excerpt": "Objective sa-3a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to manage the development lifecycle with the two data kit types, what they package, and how data kits pair with packages. Lesson 13 covers standard versus DevOps kits, the packaging boundaries, the per-save limits, and how managed packages lock metadata.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Kits",
+      "Deployment",
+      "Packaging"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-14-sa-3b-sandbox-to-production-lifecycle-cli-change-sets-an",
+    "title": "Lesson 14: Sandbox-to-Production Lifecycle: CLI, Change Sets, and Environment Parity",
+    "series": "sf-data360-consultant",
+    "lesson": 14,
+    "excerpt": "Objective sa-3b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to manage the development lifecycle with the CLI, change sets, and API based deployment. Lesson 14 covers provisioning Data 360 in a sandbox, reactivating dormant connections, promoting a DevOps data kit three ways, and the environment parity discipline that prevents most failures.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Sandbox",
+      "Deployment",
+      "Salesforce CLI"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-15-sa-4a-diagnosing-data-stream-and-ingestion-errors",
+    "title": "Lesson 15: Diagnosing Data Stream and Ingestion Errors",
+    "series": "sf-data360-consultant",
+    "lesson": 15,
+    "excerpt": "Objective sa-4a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to diagnose common issues with tooling, focused on reading refresh history, decoding common ingestion error codes, and using problem record DLOs. Lesson 15 covers the refresh history surface, the CRM and SFTP error codes, zero copy volume ceilings, and problem records.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Troubleshooting",
+      "Data Streams",
+      "Ingestion"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-16-sa-4b-monitoring-and-investigation-tooling-across-data-3",
+    "title": "Lesson 16: Monitoring and Investigation Tooling Across Data 360",
+    "series": "sf-data360-consultant",
+    "lesson": 16,
+    "excerpt": "Requirement sa-4b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to use tooling to diagnose and troubleshoot common issues. Lesson 16 of the Salesforce Data 360 Consultant Certification course covers the monitoring surfaces, the exploratory tools, and the audit trails, and shows you which one answers which question.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Monitoring",
+      "Setup Audit Trail"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-17-ing-1a-data-transform-types-batch-vs-streaming-and-when-e",
+    "title": "Lesson 17: Data Transform Types: Batch vs Streaming and When Each Applies",
+    "series": "sf-data360-consultant",
+    "lesson": 17,
+    "excerpt": "Requirement ing-1a in the Data Source Connection and Ingestion domain (18% of the Salesforce Data 360 Consultant exam) asks you to explain data transformation capabilities within Data 360. Lesson 17 of the Salesforce Data 360 Consultant Certification course covers the two transform types, batch and streaming, and the latency and complexity trade-offs that decide which one a scenario needs.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Transforms",
+      "Ingestion"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-18-ing-1b-batch-data-transforms-canvas-nodes-and-scheduling",
+    "title": "Lesson 18: Batch Data Transforms: Canvas, Nodes, and Scheduling",
+    "series": "sf-data360-consultant",
+    "lesson": 18,
+    "excerpt": "Requirement ing-1b in the Data Source Connection and Ingestion domain (18% of the Salesforce Data 360 Consultant exam) asks you to explain data transformation capabilities within Data 360. Lesson 18 of the Salesforce Data 360 Consultant Certification course covers creating a batch data transform, building its graph of nodes on the canvas, and scheduling it.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Batch Transforms",
+      "Ingestion"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-19-ing-1c-streaming-data-transforms-and-real-time-preparatio",
+    "title": "Lesson 19: Streaming Data Transforms and Real-Time Preparation",
+    "series": "sf-data360-consultant",
+    "lesson": 19,
+    "excerpt": "A streaming data transform cleans and reshapes each record as it arrives, then writes it to a different target object. This lesson covers source and target selection, the SQL expression that is the whole logic, the settings that lock the moment you save, and the traps the exam sets.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Streaming Transforms",
+      "Data Ingestion"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-20-ing-2a-connectors-and-data-streams-crm-mulesoft-ingestion",
+    "title": "Lesson 20: Connectors and Data Streams: CRM, MuleSoft, Ingestion API, File and Federated Sources",
+    "series": "sf-data360-consultant",
+    "lesson": 20,
+    "excerpt": "Every source enters Data 360 through a connector that becomes a data stream. This lesson maps the connector families, CRM objects and bundles, the Ingestion API, files and cloud storage, MuleSoft, and federation, and shows which one fits each delivery pattern.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Connectors",
+      "Data Streams",
+      "Ingestion"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-21-ing-2b-data-stream-categories-refresh-modes-and-mapping-a",
+    "title": "Lesson 21: Data Stream Categories, Refresh Modes, and Mapping at Ingestion",
+    "series": "sf-data360-consultant",
+    "lesson": 21,
+    "excerpt": "Category, refresh mode, and mapping are decided at ingestion time, and two of them lock the moment you save. This lesson covers Profile, Engagement, and Other, the three refresh modes and how each handles deletes, and how mapping turns a data lake object into something usable.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Streams",
+      "Refresh Modes",
+      "Data Mapping"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-22-ing-2c-ingestion-considerations-source-choice-volume-sche",
+    "title": "Lesson 22: Ingestion Considerations: Source Choice, Volume, Schema Drift, and Failure Handling",
+    "series": "sf-data360-consultant",
+    "lesson": 22,
+    "excerpt": "Requirement ing-2c sits in the Data Source Connection and Ingestion domain, worth 18 percent of the Salesforce Data 360 Consultant exam. Lesson 22 covers how to pick an ingestion path from the use case, how volume and cadence shape the refresh, why schema drift breaks a stream quietly, and how Refresh History, deletes, and boundary reprocessing really behave.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Ingestion",
+      "Data Streams"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-23-ing-3a-data-collaboration-in-data-360-what-zero-copy-mean",
+    "title": "Lesson 23: Data Collaboration in Data 360: What Zero Copy Means and Which Sources Support It",
+    "series": "sf-data360-consultant",
+    "lesson": 23,
+    "excerpt": "Requirement ing-3a in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe Data 360 collaboration and Zero Copy, including which sources and connector types support it. Lesson 23 covers the two halves of Zero Copy, the external systems it targets, the virtual data lake object, and when to ingest instead.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Zero Copy",
+      "Data Federation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-24-ing-3b-zero-copy-mechanics-and-limits-query-vs-file-feder",
+    "title": "Lesson 24: Zero Copy Mechanics and Limits: Query vs File Federation, Caching, and Refresh",
+    "series": "sf-data360-consultant",
+    "lesson": 24,
+    "excerpt": "Requirement ing-3b in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe the mechanics and limits of federated integrations: what must exist on both sides, what is cached versus queried, and what that means for latency and refresh. Lesson 24 covers query versus file federation, acceleration, and the three freshness behaviors.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Data 360",
+      "Zero Copy",
+      "Data Federation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-25-ing-3c-choosing-and-governing-collaboration-data-shares-c",
+    "title": "Lesson 25: Choosing and Governing Collaboration: Data Shares, Cross-Boundary Permissions, and When to Ingest",
+    "series": "sf-data360-consultant",
+    "lesson": 25,
+    "excerpt": "Requirement ing-3c in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe Data 360's collaboration capabilities, including Zero Copy, covering how to choose and govern collaboration patterns: outbound data shares, permissions across the sharing boundary, and when ingestion is the better design. Lesson 25 covers the share and target mechanics, the governance split at the boundary, curation, bilateral provisioning, and the workload tests that argue for ingestion.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Shares",
+      "Zero Copy"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-26-hu-1a-what-unification-is-many-source-records-one-unifie",
+    "title": "Lesson 26: What Unification Is: Many Source Records, One Unified Profile, and the Unified Link",
+    "series": "sf-data360-consultant",
+    "lesson": 26,
+    "excerpt": "Requirement hu-1a in the Harmonization and Unification domain (17 percent of the Salesforce Data 360 Consultant exam) asks you to define the purpose, process, and supported use cases of unification, starting with what unification produces and the problem it solves when many source records describe the same person. Lesson 26 covers the fragmentation problem, why a unified profile is a system of reference rather than a golden record, the unified link, the mapping that unification depends on, and the downstream cost of getting matches wrong.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Unification",
+      "Identity Resolution"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-27-hu-1b-the-unification-process-end-to-end-harmonize-map-m",
+    "title": "Lesson 27: The Unification Process End to End: Harmonize, Map, Match, Reconcile, Unify",
+    "series": "sf-data360-consultant",
+    "lesson": 27,
+    "excerpt": "Requirement hu-1b in the Harmonization and Unification domain (17 percent of the Salesforce Data 360 Consultant exam) asks you to define the purpose, process, and supported use cases of unification, tracing the process in order from harmonizing and mapping to matching, reconciling, and producing the unified profile. Lesson 27 walks the pipeline step by step, from the data lake object through match rules and reconciliation to the unified profile and the unified link, and explains how each step consumes the one before it.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Identity Resolution",
+      "Match and Reconciliation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-28-hu-1c-match-and-reconciliation-rules-in-practice-criteri",
+    "title": "Lesson 28: Match and Reconciliation Rules in Practice: Criteria, Methods, and Conflict Resolution",
+    "series": "sf-data360-consultant",
+    "lesson": 28,
+    "excerpt": "Requirement hu-1c in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) covers how match criteria and reconciliation rules behave when sources agree and when they conflict. This lesson works the ruleset in the order the platform runs it, from AND within a rule to the three reconciliation settings.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Identity Resolution",
+      "Match Rules",
+      "Reconciliation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-29-hu-1d-when-to-unify-use-cases-identity-sprawl-risk-conse",
+    "title": "Lesson 29: When to Unify: Use Cases, Identity Sprawl Risk, Consent, and Segmentation and Activation",
+    "series": "sf-data360-consultant",
+    "lesson": 29,
+    "excerpt": "Requirement hu-1d in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) asks which use cases justify unification and which privacy and governance tradeoffs a consultant must weigh. This lesson gives you the decision framework, the identity sprawl risk, and the activation membership that avoids duplicate counts.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Identity Resolution",
+      "Consent",
+      "Segmentation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-30-hu-2a-the-standard-customer-360-data-model-and-its-objec",
+    "title": "Lesson 30: The Standard Customer 360 Data Model and Its Object Families",
+    "series": "sf-data360-consultant",
+    "lesson": 30,
+    "excerpt": "Requirement hu-2a in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) covers how to model data in Data 360 using the standard Customer 360 data model. This lesson maps its profile, contact point, engagement, and vertical object families so every source lands in the right home.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Customer 360 Data Model",
+      "Data Modeling",
+      "Engagement"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-31-hu-2b-data-lake-objects-vs-data-model-objects-and-mappin",
+    "title": "Lesson 31: Data Lake Objects vs Data Model Objects and Mapping Streams to the Model",
+    "series": "sf-data360-consultant",
+    "lesson": 31,
+    "excerpt": "Raw data lands in a data lake object and usable data lives in a data model object, and only mapping turns one into the other. This lesson separates the two layers, explains the mapping rules, and shows why a single unmapped key leaves an entire stream inert.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Model Objects",
+      "Data Mapping",
+      "Identity Resolution"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-32-hu-2c-extending-the-model-with-custom-data-model-objects",
+    "title": "Lesson 32: Extending the Model with Custom Data Model Objects and Relationships",
+    "series": "sf-data360-consultant",
+    "lesson": 32,
+    "excerpt": "The standard Customer 360 model covers common subjects, and organization-specific data needs its own object. This lesson shows how to create a custom data model object, wire it into the model with a relationship to Individual, and make it count in identity resolution and segments.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Custom Data Model Objects",
+      "Data Model",
+      "Identity Resolution"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-33-hu-2d-modeling-decisions-that-decide-unification-quality",
+    "title": "Lesson 33: Modeling Decisions That Decide Unification Quality",
+    "series": "sf-data360-consultant",
+    "lesson": 33,
+    "excerpt": "Most bad segments are really bad keys. This lesson covers the modeling decisions that decide unification quality: primary keys, Individual ID consistency, mapping time normalization, timestamps and record currency, multi currency and locale, and how a model error surfaces late as an off audience.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Unification",
+      "Data Modeling",
+      "Identity Resolution"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-34-en-1a-what-data-enhancement-means-after-unification-and",
+    "title": "Lesson 34: What Data Enhancement Means After Unification and the Insight Calculator Family",
+    "series": "sf-data360-consultant",
+    "lesson": 34,
+    "excerpt": "Enhancement is the layer above harmonization and unification: turning stored, unified data into computed metrics and materialized views. Lesson 34 of the Salesforce Data 360 Consultant course covers what enhancement means after unification and the family of calculators that build it, including calculated, streaming, and real-time insights and data transforms.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Calculated Insights",
+      "Streaming Insights",
+      "Real-Time Insights"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-35-en-1b-calculated-insights-in-practice-dimensions-measure",
+    "title": "Lesson 35: Calculated Insights in Practice: Dimensions, Measures, and Where Results Are Used",
+    "series": "sf-data360-consultant",
+    "lesson": 35,
+    "excerpt": "A calculated insight describes one set of numbers over one base object, computed from measures grouped by dimensions. Lesson 35 of the Salesforce Data 360 Consultant course walks the build in practice: choosing the base object, defining measures and dimensions, picking the metric level, and the places a calculated insight result can be used.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Calculated Insights",
+      "Dimensions",
+      "Personalization Attributes"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-36-en-1c-choosing-between-calculated-streaming-and-real-tim",
+    "title": "Lesson 36: Choosing Between Calculated, Streaming, and Real-Time Insights, Data Actions, and Enrichments",
+    "series": "sf-data360-consultant",
+    "lesson": 36,
+    "excerpt": "A scenario can ask you to compute a number, act on a signal, or show data in another system, and the three answers are different features. Lesson 36 of the Salesforce Data 360 Consultant course sorts calculated, streaming, and real-time insights by freshness, then separates that compute step from data actions, which act, and enrichments, which display.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Actions",
+      "Enrichments",
+      "Insights"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-37-en-2a-surfacing-data-360-data-in-other-systems-enrichmen",
+    "title": "Lesson 37: Surfacing Data 360 Data in Other Systems: Enrichments, Related Lists, Data Cloud Objects, and APIs",
+    "series": "sf-data360-consultant",
+    "lesson": 37,
+    "excerpt": "Requirement en-2a in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) asks how to reference Data 360 data from other systems. Lesson 37 covers the four reference paths, the identity key each one needs, and the traps that make a build return nothing.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Enrichments",
+      "APIs"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-38-en-2b-design-and-governance-for-cross-system-reference-s",
+    "title": "Lesson 38: Design and Governance for Cross-System Reference: Source of Truth, Sync versus Query, Permissions, and Duplication",
+    "series": "sf-data360-consultant",
+    "lesson": 38,
+    "excerpt": "Requirement en-2b in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) covers the design and governance consequences of referencing Data 360 data: who owns each element, copy versus live read, permissions, and the risk of duplicating unified data.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Data Governance",
+      "Enrichments"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-39-en-3a-reporting-on-unified-data-report-types-dmos-and-wh",
+    "title": "Lesson 39: Reporting on Unified Data: Report Types, DMOs, and What to Configure First",
+    "series": "sf-data360-consultant",
+    "lesson": 39,
+    "excerpt": "Requirement en-3a in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) asks how to view and build reports on Data 360 data. Lesson 39 covers where Data 360 data appears in reports, the report types exposed, and the configuration that has to be in place before a report will run.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "13 min read",
+    "tags": [
+      "Data 360",
+      "Reporting",
+      "Report Types"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-40-en-3b-dashboards-versus-tableau-next-analytics-choosing",
+    "title": "Lesson 40: Dashboards Versus Tableau Next Analytics: Choosing and Sharing the Right Surface",
+    "series": "sf-data360-consultant",
+    "lesson": 40,
+    "excerpt": "An analytics surface is a consulting decision, not a preference. This lesson walks the Data 360 report, the Lightning dashboard, and the Tableau Next stack, and shows how to match the surface and its sharing model to the stakeholder in front of you.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Analytics",
+      "Dashboards",
+      "Tableau Next"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-41-en-4a-predictive-ai-in-data-360-model-creation-training",
+    "title": "Lesson 41: Predictive AI in Data 360: Model Creation, Training, Scoring, and Activation",
+    "series": "sf-data360-consultant",
+    "lesson": 41,
+    "excerpt": "A trained model has no business effect until its predictions live on an object and a segment can filter on them. This lesson walks AI Models, creating and evaluating a predictive model, and the train, score, consume chain.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "AI Models",
+      "Predictive AI",
+      "Model Builder"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-42-en-4b-generative-ai-grounded-on-data-360-rag-prompts-and",
+    "title": "Lesson 42: Generative AI Grounded on Data 360: RAG, Prompts, and the Trust Layer",
+    "series": "sf-data360-consultant",
+    "lesson": 42,
+    "excerpt": "Generative AI in Data 360 grounds prompts on your own data so the answer is about this customer. This lesson covers retrieval augmented generation, the search index, Prompt Builder merge fields, and the Einstein Trust Layer.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Generative AI",
+      "RAG",
+      "Einstein Trust Layer"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-43-ac-1a-what-a-segment-is-audiences-from-the-unified-profi",
+    "title": "Lesson 43: What a Segment Is: Audiences from the Unified Profile and Batch vs Streaming Decisions",
+    "series": "sf-data360-consultant",
+    "lesson": 43,
+    "excerpt": "Data 360 segments are rule sets that run against mapped data model objects, not saved lists of source rows. This lesson covers what a segment evaluates, how it reads the unified profile, and when batch or streaming segmentation fits a use case.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Segmentation",
+      "Unified Profile",
+      "Activation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-44-ac-1b-designing-a-segment-for-a-business-goal-audience-c",
+    "title": "Lesson 44: Designing a Segment for a Business Goal: Audience, Criteria, and Testing Before Publish",
+    "series": "sf-data360-consultant",
+    "lesson": 44,
+    "excerpt": "Turning a business goal into a segment is a method, not a menu. This lesson designs a segment from the goal down: choosing the audience grain, selecting direct and related criteria, building exclusions, and testing with preview before it ships.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Segmentation",
+      "Audience Design",
+      "Segment Preview"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-45-ac-2a-creating-segments-types-filters-calculated-insight",
+    "title": "Lesson 45: Creating Segments: Types, Filters, Calculated Insights, and Engagement Data as Criteria",
+    "series": "sf-data360-consultant",
+    "lesson": 45,
+    "excerpt": "Creating a segment means choosing a type, bounding the data with a lookback window, and building criteria from direct attributes, related attributes, calculated insights, and engagement data. This lesson covers each choice and the mistakes that recur.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Segmentation",
+      "Calculated Insights",
+      "Engagement Data"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-46-ac-2b-operating-segments-refresh-membership-counts-editi",
+    "title": "Lesson 46: Operating Segments: Refresh, Membership Counts, Editing and Versioning, and Sharing",
+    "series": "sf-data360-consultant",
+    "lesson": 46,
+    "excerpt": "A segment keeps changing after you build it: counts move, schedules fire, and other teams go looking for it. Lesson 46 of the Salesforce Data 360 Consultant course covers the operating side of segments, from post-publish membership and count drivers to safe edits, data space access, and retirement.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Segments",
+      "Activation",
+      "Data Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-47-ac-3a-activation-targets-and-setup-what-an-activation-is",
+    "title": "Lesson 47: Activation Targets and Setup: What an Activation Is and Connecting a Destination",
+    "series": "sf-data360-consultant",
+    "lesson": 47,
+    "excerpt": "A finished audience is useless until it is wired to a destination, and the wiring is where compatibility is decided. Lesson 47 of the Salesforce Data 360 Consultant course defines what an activation is, maps the target families and the destinations each accepts, and walks a segment to a live marketing or advertising target.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Activation",
+      "Activation Targets",
+      "Marketing Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-48-ac-3b-publishing-and-maintaining-activations-schedule-mo",
+    "title": "Lesson 48: Publishing and Maintaining Activations: Schedule, Monitoring, Consent, and Safe Deactivation",
+    "series": "sf-data360-consultant",
+    "lesson": 48,
+    "excerpt": "An activation is a production integration, and production integrations fail quietly. Lesson 48 of the Salesforce Data 360 Consultant course covers the publish schedule, reading the job history and verifying at the destination, consent enforced at activation time, and the exact order for retiring an activation safely.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Activation",
+      "Consent Management",
+      "Data Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-49-ac-4a-acting-inside-the-platform-data-actions-and-write",
+    "title": "Lesson 49: Acting Inside the Platform: Data Actions and Write-Back",
+    "series": "sf-data360-consultant",
+    "lesson": 49,
+    "excerpt": "Requirement ac-4a in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks you to act on data inside the platform. Lesson 49 covers data actions, write-back to CRM records, and why the unified profile is a different trigger than a CRM record.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Data Actions",
+      "Enrichments",
+      "Activation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-50-ac-4b-acting-outside-the-platform-activation-data-shares",
+    "title": "Lesson 50: Acting Outside the Platform: Activation, Data Shares, and Downloads",
+    "series": "sf-data360-consultant",
+    "lesson": 50,
+    "excerpt": "Requirement ac-4b in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks you to act on data outside the platform. Lesson 50 covers activation to external destinations, data shares and downloads as delivery, and how to choose the mechanism that fits a business goal.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Activation",
+      "Data Shares",
+      "Zero Copy"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-51-ac-5a-data-360-data-in-salesforce-flows-elements-objects",
+    "title": "Lesson 51: Data 360 Data in Salesforce Flows: Elements, Objects, and Limits",
+    "series": "sf-data360-consultant",
+    "lesson": 51,
+    "excerpt": "Requirement ac-5a in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks how a flow reads unified and calculated Data 360 data. Lesson 51 covers the flow elements, the Data 360 objects and permissions involved, and the design limits to respect.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "14 min read",
+    "tags": [
+      "Data 360",
+      "Salesforce Flow",
+      "Data Model Objects",
+      "Permissions"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-52-ac-5b-flow-driven-data-360-scenarios-end-to-end-read-dec",
+    "title": "Lesson 52: Flow-Driven Data 360 Scenarios End to End: Read, Decide, Write Back",
+    "series": "sf-data360-consultant",
+    "lesson": 52,
+    "excerpt": "The capstone of the Salesforce Data 360 Consultant course: an end to end flow that reads unified data from Data 360, decides on a threshold, and writes the decision back to the CRM record, with the testing, error handling and governance that make it safe to run in production.",
+    "date": "November 3, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "15 min read",
+    "tags": [
+      "Data 360",
+      "Flow",
+      "Activation",
+      "Governance"
+    ],
+    "status": "published"
+  },
   {
     "slug": "architecture-review-presenting-your-agent-design",
     "title": "Lesson 83: Architecture Review: Presenting Your Agent Design and Defending Tradeoffs",
