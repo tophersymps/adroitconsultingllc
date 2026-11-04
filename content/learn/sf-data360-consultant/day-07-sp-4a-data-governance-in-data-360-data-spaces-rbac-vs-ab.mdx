@@ -1,0 +1,131 @@
+---
+title: "Lesson 7: Data Governance in Data 360: Data Spaces, RBAC vs ABAC, Tags, and Masking"
+slug: day-07-sp-4a-data-governance-in-data-360-data-spaces-rbac-vs-ab
+series: sf-data360-consultant
+lesson: 7
+excerpt: "Data 360 governance is a control plane you design in from ingestion, not a manual oversight step. This lesson covers the three control layers, data spaces as the coarse boundary, RBAC for features and platform capability, ABAC with tags and policies for the data itself, and dynamic masking for sensitive values."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Data 360, Data Governance, Data Spaces, ABAC]
+---
+
+# Lesson 7: Data Governance in Data 360: Data Spaces, RBAC vs ABAC, Tags, and Masking
+
+A data steward assigns the EMEA data space to a user's permission set on Monday, then files a support ticket on Tuesday because the user still cannot see a single customer record. Everything looks correct. The permission set is assigned, the data space is populated, and the user can open Data 360 and click around. The records are still invisible. There is no bug. The steward has confused scope with access, and that single confusion is the most common governance failure in Data 360.
+
+Requirement sp-4a sits in the Solution Positioning domain, worth 14% of the Salesforce Certified Data 360 Consultant exam, and it asks you to describe the principles of data ethics and governance, covering the governance mechanics: data spaces as boundaries, role-based versus attribute-based access control, tags and classification, and masking. The exam treats those mechanics as a layered system where each layer answers a different question, and it will hand you a scenario where two layers look interchangeable and only one is correct.
+
+Data 360 governance is deliberately split into what a user can reach and what a user can see. One half is about place and capability: which data space, which features, which admin screens. The other half is about data: which objects, fields, and rows, and whether the values arrive masked. Keep those two halves separate and every question on this objective becomes tractable. Merge them, and the wrong answer will always look reasonable.
+
+## Deep Dive
+
+### Data governance in Data 360 is a control plane, not a manual oversight step
+
+Data 360 governance is designed as a control plane that runs from ingestion to activation, not a manual oversight step bolted on at the end. That framing changes where you put effort. You do not approve data by hand. You configure the controls once, tag the data, and let the platform enforce the rules on every path the data travels.
+
+The coarse boundary is the data space. A data space is a logical partition that organizes data for profile unification, insights, and marketing in Data 360, and it can segregate data, metadata, and processes into categories such as brand, region, or department.[^1] The design principle is segregation within a single instance: instead of standing up a separate Data Cloud instance per brand, you bring data in once and partition it. Data is ingested first and segregated into the relevant spaces afterward, and a data lake object can be associated with a data space with or without filters, including being added to more than one space.[^1]
+
+What a data space gives you is a hard edge on visibility. Users see and work on data only in the context of their data space, and you control who reaches which space through permission sets.[^1] There are no implicit permissions inside a space, so a user granted nothing sees nothing, and there is no cross-contamination of visibility between units.
+
+Understand what a data space is not. As the official control model puts it, a data space controls the scope of data visibility, which objects or records a user can interact with, and it can grant access to a set of objects, but it does not support fine-grained or row-level control on its own.[^2] The data space sets the neighborhood. It does not decide which houses you may enter, and it does not decide which invoices you may read. Those decisions belong to the access layers above it.
+
+Alongside place, every object and process carries metadata lineage and consent awareness. Because the controls attach to metadata rather than to individual records, the same governance follows the data as it moves through transforms, identity resolution, and activation.
+
+### Role-based access control governs platform and capability access
+
+Role-based access control governs platform and capability access. RBAC decides who can use Data 360 features and admin capabilities, who can navigate the app, who can create processes, and who can work within a given data space, and it is implemented through the standard Data 360 permission sets and their permissions.[^1] When the exam says RBAC, think features and setup. When a question asks who can open Data Cloud Setup, who can map data to the model, or who can create a segment, it is asking an RBAC question.
+
+The official control model is blunt about the split: role-based access control is the base access to features and setup, covering navigation, admin tasks, configuration rights, and the assignment of access to specific objects within the data space.[^2] That last clause is easy to skim past. RBAC includes the ability to assign object access within a data space, but the assignment of a data space to a permission set is still only a scope statement.
+
+Here is the trap, stated plainly, because the scenario from the opening paragraph depends on it. Assigning a data space through a permission set sets the scope a user can work in, but it does not by itself grant access to the data inside that space.[^2] So Assigning a data space grants scope but not data access; an access policy must also grant it. The user in the opening scenario has scope and no data access, which is exactly why the records are invisible and exactly why nothing is broken.
+
+Some orgs never notice this distinction because they leave the default in place. Data 360 ships an Allow All policy, sometimes called a day zero policy, which grants users access to all objects in their assigned data spaces through their permission sets.[^3] With Allow All active, scope and access appear to be the same thing, because the policy quietly supplies the missing half. The moment an admin deletes Allow All and starts using real policies, the ones who were relying on it lose data access and conclude that governance broke their org. It did not. It revealed that they had never granted access, only scope.
+
+RBAC is also the coarse lever, not the fine one. A permission set can grant full or view access to a data space-aware feature, but the enforcement of that grant still respects the data spaces associated with that permission set.[^4] RBAC tells you what a person is allowed to do. It does not tell you which rows of regulated data they should see, and it has no mechanism to mask a value.
+
+### Attribute-based access control enforces data access
+
+Attribute-based access control enforces data access, and it is where the actual data access decision is enforced. ABAC is policy-driven and evaluates context such as data classification, sensitivity, user role, and organizational attributes to grant or deny access at object, field, and row level and to apply masking.[^2] If RBAC is the feature switch, ABAC is the value filter.
+
+The mechanics are specific, and the exam expects you to recognize the order of operations. To use it, you create tags and assign them to objects and fields, create custom permissions and add them to a custom permission set, assign those permissions to users, and create access policies.[^2] Each step is a checkpoint. Tags carry the meaning. Custom permissions carry the user attributes the policy will test. The custom permission set carries those permissions to the people who should receive the access the policy grants. The access policy is where the two sides meet and the rule fires.
+
+One constraint trips people up during the build. You cannot add custom permissions to standard permission sets or their clones, so ABAC depends on a genuine custom permission set.[^2] You can combine standard sets with your custom one, but the custom permissions that ABAC policies test have to live in a set you built for that purpose. Architects who try to attach a custom permission to a cloned standard set hit a wall and sometimes misread it as a licensing problem.
+
+The binding model is what makes ABAC scale. Rather than binding a policy to each object individually, Data 360 binds policies to tags, so correctly tagged data picks up the right controls automatically. Consider a tag named Financial Data.Account Info and a policy rule that denies access to any user who does not hold the Finance Team User permission. Tag a field, and the rule applies; tag a new field later with the same tag, and the same policy picks it up with no extra setup.[^5] You wrote the rule once and it followed the tag.
+
+ABAC also carries a precedence rule the exam likes: a deny policy always overrides an allow policy.[^5] When you read that a user is "subject to two policies," the effective answer is the restrictive one. Deny wins. That single rule resolves a whole family of scenario questions, and it is why you can add targeted deny policies without auditing every allow policy that already exists.
+
+The sequence ends with a step people skip. Once granular access is in place, delete the out-of-the-box Allow All policy.[^3] Leave the day zero policy active and your scoped rules coexist with the blanket allow, so the effective access is wider than you intended.
+
+### Tags and classification are the foundation that policies attach to
+
+Tags and classification are the foundation that policies attach to, which is why you classify before you write a single policy. In Data 360, a tag is a metadata label that describes the content, sensitivity, usage, or purpose of a data object or field.[^4] Tags are the vocabulary of your governance. Policies are the sentences you write with it, and the platform matches on the tags, not on your intentions.
+
+Tags exist at two granularities, and both matter. Object-level tags label an entire data object such as a data lake object, a data model object, or a calculated insight object, describing the overall nature or sensitivity of the dataset. Field-level tags identify individual parts of an object, such as Email, Social Security Number, or Date of Birth, marking the sensitive fields that require masking, restricted access, or special handling.[^6] Protect the sensitive fields precisely while controlling broader access at the object level.
+
+Tags can be grouped into categories and organized into taxonomies, but the hierarchy is shallow by design. The platform is explicit that Tags can have one parent and multiple child tags, but they don't support more than one level of hierarchy.[^4] A tag can have one parent and many children, and that is the whole depth. There is no grandchild. Architects who plan a three-level tag tree before reading the documentation discover this the hard way, and the recovery is a flattening exercise across every object they already tagged.
+
+Classification works alongside tagging and gives policies a shared vocabulary for meaning. A classification defines a sensitivity or usage level used to categorize data and drive governance policies such as masking and access control, and classifications can be attached to tags.[^7] The practical effect is reuse: a classification like PII, PHI, or financial information groups the tags that should receive the same policy action. If you define a masking policy for data classified as Sensitive, you configure the policy one time, and any new object that receives the Sensitive classification inherits the behavior without you recreating the rule.[^8]
+
+### Masking and encryption protect sensitive values in use
+
+Masking answers a different question than access: not whether a user may see a field, but whether they see the real value when they open it. Dynamic data masking conceals sensitive data without altering its usability, accuracy, or relationships, and it applies to all Data 360 objects and fields regardless of the access method.[^9] It obfuscates sensitive fields at query time based on user role, context, or compliance rules without changing the underlying dataset, so the data at rest is untouched and the same query returns different values for different users.
+
+Masking is sequenced after access, and the platform states the order directly. Access policies determine if users can see data; masking policies then determine if the user sees the data masked or unmasked.[^9] That is why masking complements rather than replaces ABAC. Access gets you into the room; masking decides which values on the page are legible. It is also called dynamic or query-time masking, and the supported methods for structured data are redaction, which replaces masked characters with X, nullification, which replaces data with NULL, and rounding of datetime or numeric values.[^9]
+
+Masking policy authoring lives under the Data Governance tab in the Policies area, and it requires the Data Cloud Architect permission set.[^10] You select Field in Structured Data as the resource, choose Mask as the action, pick the masking method, and then define the conditions under which the mask fires. Those conditions are usually tag-based: trigger the rule, for example, when the Financial Data.Account Info tag is present on the object. By default a rule applies across all data spaces and keeps applying to new spaces as they are added, though you can scope it to specific spaces.[^10]
+
+Two operational cautions matter. If a field a data graph uses is governed by a masking policy, users cannot access that data graph at all, so masking a join key can silently break downstream artifacts. And a masked Boolean field always displays as False regardless of its actual value.[^10] Both failures surface in production, which is the argument for testing masking against real reports and segments before rollout.
+
+Encryption adds another layer. Data 360 protects sensitive data by encrypting it at rest, and dynamic masking sits on top so authorized users see masked rather than plaintext values.[^9] Encryption secures the store; masking secures the moment of use. A serious design uses both.
+
+There is one extraction boundary worth flagging, because it is where governance designs most often spring a leak. When an extraction path sends content toward a large language model, the platform's Trust Layer detects and masks sensitive data before it leaves, using pattern-based and field-based detection, and it holds zero-data-retention agreements with external model providers.[^11] That governs the model interaction. It does not govern the output that gets stored. Extracted output objects are separate data with a separate lifecycle, so they must be governed in their own right, with their own data spaces, permission sets, and ABAC policies.
+
+### The build order: five steps from space to policy
+
+The cleanest way to hold all of this is the order in which you actually build it. Follow these five steps in sequence, and each layer lands on top of the one below it.
+
+1. In Data 360 Setup, open Data Spaces and create or scope a space for a brand, region, or business unit, then map the relevant data lake objects into it. Ingestion comes first; you bring the data in and then segregate it, associating DLOs to the space with or without filters.[^1]
+
+2. Review the Data 360 standard permission sets and assign data space scope to the intended users through permission sets, remembering that scope alone does not grant data access.[^2] This is the RBAC layer: where the user can work and which features they can use.
+
+3. Create tags and classification categories, then assign the tags to the objects and fields that carry sensitive or regulated data. Keep the taxonomy to a single level, because a tag supports one parent and multiple children and no deeper nesting.[^4]
+
+4. Create custom permissions, add them to a custom permission set, and assign the set to the users who should receive the access the policy will grant. Custom permissions cannot live in standard permission sets or their clones, so this is always a custom set.[^2]
+
+5. Create an access policy that binds object, field, or row access and any masking rules to the tags, then test as a representative user to confirm the enforcement. Then delete the Allow All policy, because a day zero policy left active will keep granting broad access underneath your rules.[^3]
+
+### The governance split a consultant must state clearly
+
+The governance split a consultant must state clearly is this: a data space and RBAC answer where a user can work and what they can configure, while ABAC with tags and policies answers what data they can actually see or change. Masking is part of the ABAC side, because it decides whether a permitted user sees a value in plaintext or masked. Keep the sentence in your exam answers, because it is the distinction every trick question targets.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, believing that assigning a data space grants data access. A permission set data space assignment defines scope but does not by itself grant access to the data, which requires an access policy. When a scenario says the user was assigned a data space and still cannot see records, the answer is the policy layer, not a publishing step, not Modify All, and not the profile. Assigning a data space grants scope but not data access; an access policy must also grant it.
+
+Second, reversing RBAC and ABAC. RBAC governs access to features and platform capabilities, while ABAC enforces data access through policies. The tempting wrong answer flips them and says RBAC enforces row-level access while ABAC manages feature access. Reverse that pair and every downstream conclusion is wrong. They are not the same mechanism under different names, and ABAC is not limited to unstructured data.
+
+Third, assuming tags nest arbitrarily deep or that policies attach to individual objects. Policies attach to tags, and the tag hierarchy is only one level deep, a parent with children. If a scenario describes a three-level taxonomy or a policy bound object by object, it is describing something Data 360 does not do. When a question asks how to hide PII fields from everyone except a compliance group, the fitting answer is to Tag the fields, classify them as PII, and bind a masking or access policy to the tag. Removing the fields from the data model is far too blunt and breaks downstream use cases, deleting them in the source system is destructive and outside the governance layer, and page layouts do not control data access in Data 360 at all.
+
+## The decision rules to carry out
+
+Walk away with four rules. A data space gives you the boundary and the scope; it never grants data access by itself. RBAC answers what a person can reach and configure; ABAC answers what data they can see and change, and masking is part of ABAC. Tags are the vocabulary and policies are the sentences, so classify first and bind policies to the tag, not to the object. And always delete the Allow All policy once real policies are in place, or the day zero default will quietly widen the access you thought you had closed.
+
+## What's next
+
+Lesson 8 - Data Ethics and Consent: Trusted AI Principles, Consent Management, and Data Subject Rights (sp-4b) takes the same governance foundation and pushes it into the ethical layer: how consent travels with the data, how data subject rights get fulfilled across Data 360, and how the Trusted AI principles show up as concrete platform behavior.
+
+[^1]: Salesforce Help, "About Data Spaces," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_spaces.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Get Started with Data Governance," (https://help.salesforce.com/s/articleView?id=data.c360_a_getting_started_data_gov.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Assign Data Access," (https://help.salesforce.com/s/articleView?id=data.c360_a_dc_access.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Create a Tag in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_tag.htm&language=en_US&type=5)
+[^5]: Trailhead, "Set Up Your Policy Frameworks," (https://trailhead.salesforce.com/content/learn/modules/data-cloud-data-governance-strategies/set-up-your-policy-frameworks)
+[^6]: Salesforce Help, "Object-Level and Field-Level Tags in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_object_level_field_level_tags.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Create a Classification in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_classification.htm&language=en_US&type=5)
+[^8]: Salesforce Help, "Classification Tags in Data Cloud," (https://help.salesforce.com/s/articleView?id=data.c360_a_assigning_classification_tags.htm&language=en_US&type=5)
+[^9]: Salesforce Help, "Dynamic Data Masking Policies in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_dynamic_data_masking_policies.htm&language=en_US&type=5)
+[^10]: Salesforce Help, "Create a Dynamic Data Masking Policy for Structured Data in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_dynamic_data_masking_policy.htm&language=en_US&type=5)
+[^11]: Salesforce Help, "Einstein Trust Layer: Designed for Trust," (https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_arch.htm&language=en_US&type=5)
