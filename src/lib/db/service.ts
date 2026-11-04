@@ -12,6 +12,7 @@
  *   | quiz_attempt      | "quiz_attempt deny client insert/update/delete"        |
  *   | quiz_run          | "quiz_run deny client insert"                          |
  *   | completion_events | "completion_events deny client insert"                 |
+ *   | contact_inquiries | 009_contact_inquiries.sql (RLS enabled, zero policies) |
  *
  * Their legitimate writers (the quiz routes and the completion log) are
  * server-side code that has already recomputed the value being written, so
@@ -63,6 +64,16 @@ export interface CompletionEventWrite {
   lesson_slug: string | null;
   metadata: Record<string, unknown> | null;
   completed_at: string;
+}
+
+export interface ContactInquiryWrite {
+  full_name: string;
+  email: string;
+  company: string;
+  role?: string | null;
+  service: string;
+  timeline?: string | null;
+  message?: string | null;
 }
 
 export interface WriteResult {
@@ -159,6 +170,32 @@ export async function insertCompletionEvent(
         row.lesson_slug,
         row.metadata === null ? null : JSON.stringify(row.metadata),
         row.completed_at,
+      ],
+    );
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
+  }
+}
+
+/** Append one contact inquiry submission. */
+export async function insertContactInquiry(
+  lead: ContactInquiryWrite,
+): Promise<WriteResult> {
+  try {
+    const sql = sqlClient();
+    await sql.query(
+      `INSERT INTO public.contact_inquiries
+         (full_name, email, company, role, service, timeline, message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        lead.full_name,
+        lead.email,
+        lead.company,
+        lead.role ?? null,
+        lead.service,
+        lead.timeline ?? null,
+        lead.message ?? null,
       ],
     );
     return { error: null };
