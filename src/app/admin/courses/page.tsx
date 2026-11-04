@@ -610,7 +610,6 @@ function AdminCoursesContent() {
                               onStatusChange(
                                 course.series_slug,
                                 e.target.value as CourseStatus,
-                                course,
                               )
                             }
                             className="rounded-md border border-[var(--admin-table-border)] text-[11px] font-semibold px-2 py-1 bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden disabled:opacity-50 cursor-pointer"
