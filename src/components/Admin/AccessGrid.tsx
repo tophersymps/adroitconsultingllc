@@ -171,8 +171,10 @@ export function AccessGrid({
                     {activeCell?.userId === u.user_id &&
                       activeCell.courseId === course.id && (
                         <div
-                          className="absolute z-20 mt-1 rounded-lg border shadow-md bg-[var(--admin-popover-bg,#FFFFFF)] text-left"
-                          style={{ borderColor: "var(--admin-popover-border, var(--border-subtle))" }}
+                          role="dialog"
+                          aria-label="Manage course entitlement"
+                          className="absolute z-20 mt-1 rounded-lg border border-[var(--admin-table-border)] shadow-xl bg-[var(--surface-card)] text-left"
+                          style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
                           onKeyDown={(e) => {
                             if (e.key === "Escape") {
                               e.preventDefault();

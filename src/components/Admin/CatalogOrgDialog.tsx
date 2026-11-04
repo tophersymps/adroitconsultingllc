@@ -135,18 +135,18 @@ export default function CatalogOrgDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Manage catalog sections and groups"
-        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border bg-[var(--surface-card, #FFFFFF)] p-6 shadow-2xl"
-        style={{ borderColor: "var(--admin-table-border)" }}
+        className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-2xl"
+        style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between mb-4 border-b pb-3" style={{ borderColor: "var(--admin-table-border)" }}>
+        <div className="flex items-start justify-between mb-4 border-b border-[var(--admin-table-border)] pb-3" style={{ borderColor: "var(--admin-table-border)" }}>
           <div>
             <h2 className="text-lg font-extrabold tracking-tight text-[var(--ink-primary)]">
               Catalog Sections &amp; Groups
@@ -158,8 +158,8 @@ export default function CatalogOrgDialog({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
-            className="rounded-md px-2 py-1 text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)]"
+            aria-label="Close dialog"
+            className="rounded px-2 py-1 font-mono text-xs text-[var(--ink-muted)] hover:bg-[var(--surface-sunken)] hover:text-[var(--ink-primary)]"
           >
             ✕
           </button>
@@ -176,7 +176,7 @@ export default function CatalogOrgDialog({
                   Top-Level Sections ({sections.length})
                 </h3>
                 <div
-                  className="rounded-xl border divide-y max-h-48 overflow-y-auto"
+                  className="rounded-xl border border-[var(--admin-table-border)] divide-y divide-[var(--admin-table-border)] max-h-48 overflow-y-auto bg-[var(--surface-card)]"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 >
                   {sections.length === 0 ? (
@@ -194,7 +194,7 @@ export default function CatalogOrgDialog({
                           setSecOrder(String(s.sort_order ?? 0));
                           setGrpSectionId(s.id);
                         }}
-                        className="w-full flex items-center justify-between px-3 py-2 text-left text-xs hover:bg-[var(--surface-sunken)]"
+                        className="w-full flex items-center justify-between px-3 py-2 text-left text-xs hover:bg-[var(--surface-sunken)] transition-colors"
                       >
                         <div>
                           <div className="font-semibold text-[var(--ink-primary)]">
@@ -213,7 +213,7 @@ export default function CatalogOrgDialog({
                 </div>
               </div>
 
-              <form onSubmit={handleSaveSection} className="space-y-2.5 rounded-xl border p-3.5 bg-[var(--surface-sunken)]/50" style={{ borderColor: "var(--admin-table-border)" }}>
+              <form onSubmit={handleSaveSection} className="space-y-2.5 rounded-xl border border-[var(--admin-table-border)] p-3.5 bg-[var(--surface-sunken)]/50" style={{ borderColor: "var(--admin-table-border)" }}>
                 <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--ink-primary)]">
                   Add / Update Section
                 </div>
@@ -228,7 +228,7 @@ export default function CatalogOrgDialog({
                       if (!secSlug) setSecSlug(slugify(e.target.value));
                     }}
                     placeholder="e.g. Cloud & Enterprise Architecture"
-                    className="mt-1 w-full rounded-md border px-2.5 py-1.5 text-xs bg-[var(--surface-card, #FFFFFF)]"
+                    className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-xs bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                     style={{ borderColor: "var(--admin-table-border)" }}
                   />
                 </label>
@@ -241,7 +241,7 @@ export default function CatalogOrgDialog({
                       value={secSlug}
                       onChange={(e) => setSecSlug(e.target.value)}
                       placeholder="cloud-architecture"
-                      className="mt-1 w-full rounded-md border px-2.5 py-1.5 font-mono text-xs bg-[var(--surface-card, #FFFFFF)]"
+                      className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 font-mono text-xs bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                       style={{ borderColor: "var(--admin-table-border)" }}
                     />
                   </label>
@@ -252,7 +252,7 @@ export default function CatalogOrgDialog({
                       min={0}
                       value={secOrder}
                       onChange={(e) => setSecOrder(e.target.value)}
-                      className="mt-1 w-full rounded-md border px-2 py-1.5 font-mono text-xs bg-[var(--surface-card, #FFFFFF)]"
+                      className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2 py-1.5 font-mono text-xs bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                       style={{ borderColor: "var(--admin-table-border)" }}
                     />
                   </label>
@@ -275,7 +275,7 @@ export default function CatalogOrgDialog({
                   Groups ({groups.length})
                 </h3>
                 <div
-                  className="rounded-xl border divide-y max-h-48 overflow-y-auto"
+                  className="rounded-xl border border-[var(--admin-table-border)] divide-y divide-[var(--admin-table-border)] max-h-48 overflow-y-auto bg-[var(--surface-card)]"
                   style={{ borderColor: "var(--admin-table-border)" }}
                 >
                   {groups.length === 0 ? (
@@ -295,7 +295,7 @@ export default function CatalogOrgDialog({
                             setGrpSlug(g.slug);
                             setGrpOrder(String(g.sort_order ?? 0));
                           }}
-                          className="w-full flex items-center justify-between px-3 py-2 text-left text-xs hover:bg-[var(--surface-sunken)]"
+                          className="w-full flex items-center justify-between px-3 py-2 text-left text-xs hover:bg-[var(--surface-sunken)] transition-colors"
                         >
                           <div>
                             <div className="font-semibold text-[var(--ink-primary)]">
@@ -315,7 +315,7 @@ export default function CatalogOrgDialog({
                 </div>
               </div>
 
-              <form onSubmit={handleSaveGroup} className="space-y-2.5 rounded-xl border p-3.5 bg-[var(--surface-sunken)]/50" style={{ borderColor: "var(--admin-table-border)" }}>
+              <form onSubmit={handleSaveGroup} className="space-y-2.5 rounded-xl border border-[var(--admin-table-border)] p-3.5 bg-[var(--surface-sunken)]/50" style={{ borderColor: "var(--admin-table-border)" }}>
                 <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--ink-primary)]">
                   Add / Update Group
                 </div>
@@ -325,7 +325,7 @@ export default function CatalogOrgDialog({
                     value={grpSectionId}
                     onChange={(e) => setGrpSectionId(e.target.value)}
                     required
-                    className="mt-1 w-full rounded-md border px-2.5 py-1.5 text-xs bg-[var(--surface-card, #FFFFFF)]"
+                    className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-xs bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                     style={{ borderColor: "var(--admin-table-border)" }}
                   >
                     <option value="">— select section —</option>
@@ -347,7 +347,7 @@ export default function CatalogOrgDialog({
                       if (!grpSlug) setGrpSlug(slugify(e.target.value));
                     }}
                     placeholder="e.g. Salesforce Ecosystem"
-                    className="mt-1 w-full rounded-md border px-2.5 py-1.5 text-xs bg-[var(--surface-card, #FFFFFF)]"
+                    className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 text-xs bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                     style={{ borderColor: "var(--admin-table-border)" }}
                   />
                 </label>
@@ -360,7 +360,7 @@ export default function CatalogOrgDialog({
                       value={grpSlug}
                       onChange={(e) => setGrpSlug(e.target.value)}
                       placeholder="salesforce"
-                      className="mt-1 w-full rounded-md border px-2.5 py-1.5 font-mono text-xs bg-[var(--surface-card, #FFFFFF)]"
+                      className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2.5 py-1.5 font-mono text-xs bg-[var(--surface-card)] text-[var(--ink-primary)] placeholder:text-[var(--ink-faint)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                       style={{ borderColor: "var(--admin-table-border)" }}
                     />
                   </label>
@@ -371,7 +371,7 @@ export default function CatalogOrgDialog({
                       min={0}
                       value={grpOrder}
                       onChange={(e) => setGrpOrder(e.target.value)}
-                      className="mt-1 w-full rounded-md border px-2 py-1.5 font-mono text-xs bg-[var(--surface-card, #FFFFFF)]"
+                      className="mt-1 w-full rounded-md border border-[var(--admin-table-border)] px-2 py-1.5 font-mono text-xs bg-[var(--surface-card)] text-[var(--ink-primary)] focus:border-[var(--ink-primary)] focus:outline-hidden"
                       style={{ borderColor: "var(--admin-table-border)" }}
                     />
                   </label>

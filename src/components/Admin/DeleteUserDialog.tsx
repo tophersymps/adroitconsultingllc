@@ -58,7 +58,10 @@ export default function DeleteUserDialog({
       aria-labelledby="delete-user-dialog-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
     >
-      <div className="w-full max-w-lg rounded-lg border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-xl">
+      <div
+        className="w-full max-w-lg rounded-lg border border-[var(--admin-table-border)] bg-[var(--surface-card)] p-6 shadow-xl"
+        style={{ borderColor: "var(--admin-table-border)", background: "var(--surface-card)" }}
+      >
         <div className="flex items-start justify-between gap-3 border-b border-[var(--admin-table-border)] pb-3">
           <div>
             <h2

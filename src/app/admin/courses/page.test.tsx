@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 
 const replaceMock = vi.fn();
 let mockParams = new Map<string, string>();
@@ -160,5 +160,34 @@ describe("/admin/courses Unified Course Administration Hub", () => {
     render(<AdminCoursesPage />);
     expect(screen.getByText(/Curriculum Structure & Organization/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /\+ Manage Sections & Groups/i })).toBeInTheDocument();
+  });
+
+  it("allows modifying course access model directly from card view", async () => {
+    render(<AdminCoursesPage />);
+    const accessSelect = screen.getByLabelText("Access model for Agentic AI");
+    expect(accessSelect).toBeInTheDocument();
+    expect(accessSelect).toHaveValue("granted");
+
+    fireEvent.change(accessSelect, { target: { value: "sub-or-one-time" } });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/admin/courses/agentic-ai",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ access_model: "sub-or-one-time" }),
+      }),
+    );
+  });
+
+  it("opens CourseProfileDialog with access model, status, and price editing", async () => {
+    render(<AdminCoursesPage />);
+    const editButtons = screen.getAllByRole("button", { name: "Edit" });
+    fireEvent.click(editButtons[0]);
+
+    const dialog = screen.getByRole("dialog", { name: /Edit profile for Agentic AI/i });
+    expect(dialog).toBeInTheDocument();
+    const dialogQueries = within(dialog);
+    expect(await dialogQueries.findByLabelText(/Access Model/i)).toHaveValue("granted");
+    expect(dialogQueries.getByLabelText(/Lifecycle Status/i)).toHaveValue("live");
+    expect(dialogQueries.getByLabelText(/One-time Price/i)).toBeInTheDocument();
   });
 });
