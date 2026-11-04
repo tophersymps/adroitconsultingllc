@@ -1,0 +1,108 @@
+---
+title: "Lesson 20: Connectors and Data Streams: CRM, MuleSoft, Ingestion API, File and Federated Sources"
+slug: day-20-ing-2a-connectors-and-data-streams-crm-mulesoft-ingestion
+series: sf-data360-consultant
+lesson: 20
+excerpt: "Every source enters Data 360 through a connector that becomes a data stream. This lesson maps the connector families, CRM objects and bundles, the Ingestion API, files and cloud storage, MuleSoft, and federation, and shows which one fits each delivery pattern."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Connectors, Data Streams, Ingestion]
+---
+
+# Lesson 20: Connectors and Data Streams: CRM, MuleSoft, Ingestion API, File and Federated Sources
+
+A partner system pushes order changes every few seconds and also drops a full CSV once a day. A team wires up an SFTP stream for the file and starts shopping for a second tool for the live updates, convinced the two patterns cannot share one pipe. They can. A single Ingestion API data stream accepts both a streaming pattern and a bulk pattern, and the team was about to build a duplicate pipeline for no reason.
+
+That mistake, confusing the connector with the data stream and the delivery pattern with the tool, is the reason this lesson exists. Requirement ing-2a sits in the Data Source Connection and Ingestion domain, worth 18% of the Salesforce Data 360 Consultant exam. It asks you to describe processes and considerations for data ingestion from varied sources into Data 360, focused on the connector families available and how each one becomes a data stream. The exam wants a consultant who can hear how a source delivers data and name the connector that fits it on the first try.
+
+This lesson works through the connector families one at a time: direct CRM objects and standard data bundles, the Ingestion API connector and its two patterns, the file and cloud storage connectors, MuleSoft as the integration layer, and data federation for data that never moves. It closes with the traps that separate a right answer from a plausible one.
+
+## Deep Dive
+
+### A data stream is the unit that brings data from a source into Data 360
+
+A data stream is the configured object that carries data from a source into Data 360. You create one by choosing a connector, pointing it at a source object or dataset, setting a category and refresh settings, and deploying it. Deploying writes the data into a data lake object (DLO) named after the source. Data streams live on the Data Streams tab, where you open a stream record page to see its refresh history and its settings.
+
+The distinction between the connector and the data stream is the first thing to get straight, because the exam trades on it. The connector is how the source is reached: the mechanism, the credentials, the shape of the connection. The data stream is the configured object built on top of that connector, and it is where the category, the refresh mode, the schedule, and the target DLO actually live. Two data streams can share one connector, and one connector can feed several streams. When a scenario asks where a refresh schedule is set, the answer is the data stream, not the connector.
+
+A stream does not ingest by magic. The method and frequency of ingestion depend on the type of connector, and the streams run on schedules you can see and drive. From a stream record page you can review refresh history and start a run on demand. The data stream is also the level at which governance attaches: the data space you deploy into travels with the stream.
+
+### CRM objects: direct data streams or a standard data bundle
+
+For Sales Cloud and Service Cloud objects you have two routes. You can create data streams directly against standard and custom CRM objects, picking the objects and fields you want. Or you can deploy a standard data bundle that provisions a set of streams, mappings, and relationships in one step. The bundle is the fast path when the source is a well known Salesforce object set, because it lands preconfigured streams and wires them to the data model so you do not hand build each mapping.
+
+Here is the rule that the exam tests directly. Mappings and relationships are set up automatically only for data streams that are deployed through standard data bundles.[^1] For custom data streams you must ensure that the required mappings and relationships are set up properly yourself.[^1] In other words, they are created automatically only for streams deployed through standard data bundles, so custom streams need them set up manually. Deploying a bundle and expecting the same convenience on a hand built custom stream is the trap. A custom CRM data stream does not inherit bundle magic; the mappings are your responsibility.
+
+The bundle approach also closes a gap that catches people late. A starter bundle carries standard mappings and standard DMOs, so objects arrive already related to each other and ready for identity resolution and segmentation. When you build custom streams instead, you own the relationships, and mapping is not optional. Only mapped fields and objects with relationships can be used for segmentation and activation, so an unmapped custom stream is inert no matter how clean the ingestion is.
+
+### The Ingestion API connector: one REST interface, two patterns
+
+The Ingestion API connector is a REST interface you use to push data in from an external system. Ingestion API is a REST API and offers two interaction patterns: bulk and streaming.[^2] The streaming pattern accepts incremental updates to a dataset as those changes are captured, while the bulk pattern accepts CSV files in cases where data syncs occur periodically.[^2] The same data stream can accept data from the streaming and the bulk interaction.[^2] So the connector does not force you to choose one pattern for the life of the stream.
+
+That last sentence answers the opening scenario. A partner that pushes near real time changes and also uploads a periodic file does not need two connectors or two streams. The Ingestion API connector, whose streaming and bulk patterns can serve the same data stream, is the single answer. You would use the streaming pattern for small micro batches of records updated in near real time, and the bulk pattern when moving large amounts of data on a daily, weekly, or monthly schedule.[^3] The two live side by side on one stream.
+
+Choosing between the patterns is a design decision, not a coin flip. Use streaming ingestion when the source is built on modern streaming architectures, when it emits change data capture events, or when you are consuming data from webhooks.[^3] Use bulk ingestion when the source is a legacy system that can only export during off peak hours, when you are moving large volumes on a periodic schedule, or when you are backfilling a new org with 30, 60, 90, or more days of history.[^3] A common real pattern is to backfill the history with bulk and then keep it current with streaming.
+
+Setting up the Ingestion API takes a small set of prerequisites that cross roles. You agree on the data and build a file, set up the Ingestion API connector and share the object endpoint details with developers, create a connected app and align on the OAuth flow, create the data streams and deploy them, make calls to the object endpoints, and map the data to standard Salesforce objects or custom objects.[^2] The connector is defined by a schema file so Data 360 knows the shape of the data it is about to receive. The connected app is what the external system authenticates with.
+
+### File and cloud storage connectors bring data in from files
+
+The file and cloud storage family covers SFTP, Amazon S3, Google Cloud Storage, and Microsoft Azure. These connectors pull structured files into Data 360 rather than talking to a live API. File based data streams use the upsert refresh mode, and they can delete records from the DLO by using a delete file in CSV or Parquet format. Cloud storage data streams such as Amazon S3 and Google Cloud Storage are refreshed on a pre defined schedule or manually from the data stream record page.[^4]
+
+The right mental model is a file inbox. The source system writes files to a location, and the data stream picks them up on its schedule. Because the files arrive in batches, the natural refresh behavior is upsert: each refresh brings in data added or changed since the last refresh, and a delete file handles removals. You plan the deletion path at the same time as ingestion, not after a compliance request lands. For SFTP, the connector brings CSV and Parquet files from the SFTP server in over SSH so the data is encrypted in transit.[^5]
+
+Two operational details are worth knowing because they change what you see in the refresh history. A file stream can be told to log an error when no file is found, or to treat a missing file as a successful run with zero records. It can be set to refresh only new files after the first run, and to retrieve the initial file immediately rather than waiting for the first scheduled slot.[^6] These flags decide whether a quiet refresh history means everything is fine or that nothing was ever delivered.
+
+### MuleSoft is the integration layer for systems Data 360 cannot reach directly
+
+MuleSoft exists in this picture for one reason: some systems have an API or a protocol that Salesforce connectors do not cover. The MuleSoft Salesforce Data Cloud connector on Anypoint Platform orchestrates those external integrations and routes the resulting data into Data 360. In practice it lands the data through the Ingestion API connector, so the same REST patterns and the same data stream setup apply on the Data 360 side.
+
+The connector is built for exactly the work you would hand to an integration layer. It supports bulk and streaming interaction patterns for loading data into Data Cloud, supports delete operations required for data governance, provides read access to data model and data lake objects, and offers a webhook listener to consume Data Cloud Data Action events.[^7] It uses standard OAuth authorization flows, with client credentials, JWT, or username and password as the connection types.[^7] It speaks the same Ingestion APIs, streaming and bulk, that a hand coded integration would call.
+
+Reach for MuleSoft when the source needs work before it arrives. If the system exposes data only over a legacy protocol, if the integration needs transformation that the connectors cannot do, or if you need to batch and schedule the pull in one place, MuleSoft is the layer. The data still enters Data 360 through a data stream, so from the platform's point of view nothing changes: there is still a stream, still a category, still a refresh setting, still a mapping. The connector on the Salesforce side is the Ingestion API; MuleSoft is what drives it.
+
+### Data federation and zero copy let you use data where it lives
+
+Not every source should be physically copied. Data federation and zero copy let you work with data that stays in the source system instead of being ingested. With data federation you query the external source directly. When you enable caching or acceleration you pull data into an accelerated data lake object that can be refreshed at your preferred frequency. So the answer to the question of how to keep a large external dataset in place while still letting Data 360 use it is: Data federation or zero copy with caching or acceleration.
+
+The trade off is freshness against cost and duplication. A live federated query always reads the current data in the source, but it fires a query each time the data is used. Caching pulls a copy into an accelerated data lake object and refreshes it on a schedule, which lowers per use latency but introduces a staleness window. The choice is about how fresh the data has to be and how often it is touched. If a table is read by many segments every day, caching or acceleration usually earns its place; if it is queried rarely and freshness is critical, live federation is the better fit.
+
+There is a hard limit to remember. Incremental refresh is supported in Zero Copy Data Federation, but deleting records during incremental refresh operations is not supported.[^6] So the accelerated path can keep new and changed rows current incrementally, but it will not carry through deletions the way an ingested stream can. A consultant designing deletes on federated data has to plan around that gap rather than assume parity with physical ingestion.
+
+### Config walkthrough: creating a data stream
+
+The general shape, whichever connector you pick:
+
+1. In Data 360, open the Data Streams tab and click New.
+2. Choose the connector: a Salesforce CRM source (standard or custom object), the Ingestion API connector, a file or cloud storage connector such as SFTP, Amazon S3, Google Cloud Storage, or Microsoft Azure, or a standard data bundle.
+3. Select the source object or dataset, then set the data stream category and, for the Engagement category, the event time field.
+4. Configure the refresh mode and the refresh schedule in the data stream settings, then name the data stream.
+5. Deploy the data stream; deploying creates the data lake object that holds the ingested rows.
+6. Open the data stream record page to review Refresh History, or click Refresh Now to run a manual refresh.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, mixing up the connector with the data stream. The connector is how the source is reached; the data stream is the configured object that holds the refresh schedule, the refresh mode, and the target DLO. A scenario that asks where you set a schedule or a category is pointing at the data stream. A scenario that asks how a source is authenticated or reached is pointing at the connector.
+
+Second, assuming a data bundle mapping is needed to connect a custom CRM object. Bundles automate mappings and relationships only for their own streams, and custom streams still need mappings checked manually. The correct statement is that they are created automatically only for streams deployed through standard data bundles, so custom streams need them set up manually.[^1] A custom CRM stream that is never mapped is not usable for segmentation or activation, no matter how well it ingests.
+
+Third, treating federation as physical ingestion. With zero copy or data federation the data can remain in the source system, so an answer that claims zero copy copies all rows into Data 360 is wrong. Federation queries the source in place, and acceleration caches a copy on a schedule. The distractor that offers a full refresh data stream is the opposite of the goal, because a full refresh physically copies the rows into a DLO.
+
+## The decision rules to carry out
+
+Match the connector to the delivery pattern. CRM objects by direct stream or by bundle, with bundles handling mappings for you and custom streams needing them done by hand. Programmatic pushes by the Ingestion API, remembering that its streaming and bulk patterns can share one data stream. Scheduled files by SFTP or cloud storage, with upsert refresh and a delete file for removals. Systems Data 360 cannot reach by MuleSoft, which lands data through the Ingestion API. And any large dataset that should stay where it lives by data federation or zero copy, with caching or acceleration when repeated reads justify a cached copy, and with the reminder that incremental federated refresh does not carry deletions.
+
+## What's next
+
+Lesson 21 - Data Stream Categories, Refresh Modes, and Mapping at Ingestion (ing-2b).
+
+[^1]: Salesforce Help, "Data Mapping Requirements in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_required_data_mappings.htm&language=en_US&type=5)
+[^2]: Salesforce Developers, "Ingestion API," (https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-ingestion-api.html)
+[^3]: Salesforce Developers, "Ingest Data into Data 360," (https://developer.salesforce.com/docs/data/data-cloud-int/references/data-cloud-ingestionapi-ref/c360-a-api-salesforce-cdp-ingestion.html)
+[^4]: Salesforce Help, "Data Stream Schedule in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_stream_schedule.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Secure File Transfer Protocol (SFTP) Structured Connector," (https://help.salesforce.com/s/articleView?id=sf.c360_a_sftp_connector.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Data Stream Settings and Refresh Modes," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_stream_edit_settings.htm&language=en_US&type=5)
+[^7]: MuleSoft Documentation, "Salesforce Data Cloud Connector 1.5," (https://docs.mulesoft.com/salesforce-data-cloud-connector/latest/)
