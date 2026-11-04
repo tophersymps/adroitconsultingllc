@@ -1,0 +1,101 @@
+---
+title: "Lesson 37: Surfacing Data 360 Data in Other Systems: Enrichments, Related Lists, Data Cloud Objects, and APIs"
+slug: day-37-en-2a-surfacing-data-360-data-in-other-systems-enrichmen
+series: sf-data360-consultant
+lesson: 37
+excerpt: "Requirement en-2a in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) asks how to reference Data 360 data from other systems. Lesson 37 covers the four reference paths, the identity key each one needs, and the traps that make a build return nothing."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Data 360, Enrichments, APIs]
+---
+
+# Lesson 37: Surfacing Data 360 Data in Other Systems: Enrichments, Related Lists, Data Cloud Objects, and APIs
+
+A support agent opens a contact record and sees the customer's last three email clicks, a loyalty tier, and a churn score stitched together from eleven systems. None of it lives in the Salesforce org. It arrives from Data 360, and the agent never leaves the record page. That quiet arrival is the subject of this lesson.
+
+Now the failure. A consultant is told to "put Data 360 data on the contact," reaches for a copy field, points it at an engagement data model object, and ships an enrichment that returns an empty list. The source object had a one-to-many relationship to the unified individual, and a copy field needs a one-to-one link. The build did not fail because the feature is unreliable. It failed because the path did not match the shape of the data and the identity key the target record could hold.
+
+This lesson covers requirement en-2a, "Explain how to reference Data 360 data from other systems," inside the Data Enhancements, Sharing, and Analysis domain, worth 18% of the Salesforce Certified Data 360 Consultant exam. The requirement is narrower than "integrate everything." It is about the specific paths that bring Data 360 data into another system: enrichments and related lists on CRM records, Data Cloud objects used in CRM and in flows, and the APIs for external access. Get the path right and the reference holds. Get it wrong and you ship an empty related list, a copy field that never fills, or an API call that filters on a key nobody stored.
+
+## Deep Dive
+
+### Data 360 data reaches other systems through four broad paths
+
+Data 360 data gets into another system through four broad paths, and the phrasing of a scenario tells you which one it wants. The first path is the enrichment: Data 360 surfaces its data on a CRM record page, either as a related list or as a copied field value. The second is the object and the flow: Salesforce objects and flows reach Data 360 through invocable actions, including a data graph that a flow reads through an invocable action. The third is the event: Data Cloud objects can drive platform events and change data events so that automation reacts when something changes. The fourth is the API: an external app or a platform app queries the unified data directly through the Data 360 Connect REST API.
+
+Read the requirement as a verb. If the scenario says display, the answer is an enrichment, a related list or a copy field. If it says act, the answer is an invocable action or a change data event that fires a flow. If it says query, the answer is an API. That single question, display, act, or query, eliminates most wrong answers before you examine the details.
+
+Every path carries one shared precondition: the target record has to hold the identity key the path matches on. A related list matches through a lookup field, a copy field matches through a one-to-one unified link, a flow reads a data graph or fires on an event, and an API call filters by a profile key such as the Unified Individual ID. Choosing a path without confirming that the target carries the matching key is the most common reason an enrichment or a query returns nothing, and it is a design error you can catch on a whiteboard.
+
+### A related list enrichment displays a one-to-many DMO
+
+A related list enrichment shows information for DMO objects that sit in a one-to-many relationship to a Data 360 Individual or Unified Individual. The mental model is simple: one contact, many engagements. A contact can have hundreds of email engagements collected from across the enterprise, and a related list lets the record page show all of them in a single list, drawn from systems the CRM itself never touched. Salesforce's own documentation uses the email engagement example, and the check on the relationship direction is what keeps the build honest. A related list is the right shape exactly when the many side belongs to the DMO. When a contact record must show every email engagement from across the enterprise, the answer is a related list enrichment on a DMO with a one-to-many relationship to the unified individual, because the engagement DMO sits on the many side of that link.
+
+You configure a related list in the object management settings for the target object. From the Contact, Lead, or Account object management settings, you select Data Cloud Related Lists, click New, choose Related List, and select the data space. The data space matters because it determines which objects are visible to the enrichment, and different data spaces expose different views of the same underlying data. You then select the Data Cloud object, enter a lookup field that identifies the ID used to retrieve matching records, and finish. The lookup field is the join: if you want records for an individual as a customer, you use the Customer ID field; if you want them as a supplier, you use the Supplier ID field.[^1]
+
+One rule overrides the rest: identity resolution must already have produced the Unified Individual or Unified Account the enrichment reads. The documentation is explicit that you must complete identity resolution and create a Unified Individual DMO or a Unified Account DMO, and that this holds even when you use a DMO related to the plain Individual. Without the unified output, the related list has nothing to hang the many records from.[^2]
+
+### Direct-DMO related lists skip unification, copy fields require a one-to-one link
+
+Not every system-to-system link needs identity resolution, and this is where directed study pays off. A direct-DMO related list shows information from any DMO connected to the Salesforce object through a direct relationship, and that direct relationship does not require identity resolution to be completed for the DMO. The documentation's example is a Vehicle object in Automotive Cloud carrying a related list of Vehicle Telematics Event records from Data 360. The vehicle has an identifier, the DMO records carry the same identifier, and the list joins on that string without any notion of a unified person. You build the relationship on the DMO itself, then add a dynamic related list to the record page and point it at the relationship you created.[^3]
+
+Copy fields are the opposite shape. A copy field enrichment shows field data copied from objects that sit in a one-to-one relationship to a Data 360 Individual, a Unified Individual, a Data 360 Account, or a Unified Account DMO. One source, one destination, one value. Because the value lands in an org field, the destination field has to exist, and the integration user needs field permissions for every destination field so the copy can write. The build also depends on object sharing: if the record cannot be read at its destination, the copied value is not usable.[^4]
+
+The distinction is the exam's favorite. Related list, one-to-many, live list of many records. Copy field, one-to-one, a single value parked in a field. When a scenario describes a system-to-system link that was never unified, such as telematics events tied to a vehicle, the related list answer is the direct-DMO variant, not the standard one, because the standard one reads the unified individual. When a scenario wants a number or a status that reports, sorts, or drives a formula, the copy field is the only one of the two that lives in a field the platform can use.
+
+### Change data events and data graphs drive automation
+
+Static display is only half the story. Data 360 can monitor changes in data model objects and calculated insight objects and send change data events outward. Those events can go to a Salesforce platform event, to Marketing Cloud, or to a webhook, which lets CRM automation and flows react when a computed value changes. This is the act path: instead of a user reading a value, the platform responds to it. The triggers are change data capture events on a DMO, streaming events, and streaming calculated insights, and the mechanism that carries them is a data action, which sends its result to a data action target that receives it in near real time. When a data action publishes to the Salesforce Platform, it uses the standard event `DataObjectDataChgEvent`.[^5]
+
+The second automation path is the data graph. A data graph combines and transforms DMO data into a materialized view, a precalculated structure optimized for reads. Because the heavy join has already been done, a consumer does not rebuild the query. Salesforce added the ability to access data from a data graph through an invocable action in a flow, which means a flow can read the precalculated view directly instead of assembling its own query at run time. When a flow must read a precalculated, materialized view of related Data 360 data, add the data graph to the flow through its invocable action. That is the correct mechanism, and it is the one the exam pairs with the word "materialized."[^6]
+
+### The APIs query unified data directly
+
+When another system needs to query the unified data rather than display it or react to it, Data 360 exposes several APIs, and they are not interchangeable. The Query API is the broad instrument. It runs Data 360 SQL, is available through the Data 360 Connect REST API and through Apex, and supports data streams, profile, engagement, and unified data model objects. If the question spans categories or needs ad hoc SQL, the Query API is the fit.
+
+The Profile API is the narrower instrument. It queries profile-category data model objects along with their metadata and computed insights, and it returns a bounded result set. It caps a request at 50 fields, defaults to a return limit of 4,999 rows, and supports only the AND logical operator and equality comparison. Most importantly, it does not support engagement-category objects. A Profile API call against an engagement DMO is not a slow call; it is the wrong call.[^7]
+
+The Connect REST API is the surface both ride on, and it reaches more than queries. Alongside SQL queries it exposes calculated insights, identity resolution rulesets, segments, and universal ID lookup, and it can also retrieve metadata about Data 360 resources. A consultant who needs to run Data 360 SQL across unified and engagement data model objects reaches for the Query API, which runs Data 360 SQL and supports data streams, profile, engagement, and unified objects. Reach for the Profile API only when the object is in the profile category and the query fits inside its field and row limits.
+
+### The path decides which key the target must hold
+
+Bring the paths back together under one rule: the reference path determines which key the target system must hold. A related list enrichment uses a lookup field that identifies the matching ID. A copy field needs a one-to-one unified link. A flow reads a data graph, or fires on a change event. An API call filters by a profile key such as the Unified Individual ID. Each of these is a promise about identity, and the promise fails silently when the key is absent.
+
+This is why the consultant names the key before choosing the path, not after. If the target record shares an identifier with the DMO, a direct-DMO related list is available without unification. If the target holds a customer ID that the unified individual carries, a standard related list works. If the target needs a single unified value in a field, the one-to-one copy field is the only option and the unified link must exist. If the target is an external system, the API path asks it to store and send the profile key the query filters on.
+
+### A five-step walkthrough: wiring a reference end to end
+
+1. Confirm the identity resolution output the reference path needs. A related list needs a Unified Individual or Unified Account DMO. A copy field needs a one-to-one relationship to a (Unified) Individual or Account DMO. If the output does not exist yet, the build is blocked upstream, not in Setup.
+
+2. For a related list, open the object management settings for the target object in Setup and select Data Cloud Related Lists, then click New, pick the data space, select the Data Cloud object, enter the lookup field, and add the related list to the page layouts.
+
+3. For a copy field, create the destination field in your org, grant the integration user field permissions, configure the copy field enrichment in Setup under Integrations and then Enrichments and then Copy Fields, and set the object sharing so the value can be read.
+
+4. For automation, add the data graph to a flow through its invocable action, or subscribe to the change data event that Data 360 sends to a platform event, Marketing Cloud, or a webhook.
+
+5. For an external query, call the appropriate API: the Query API for Data 360 SQL across data model objects, or the Profile API for profile-category objects and their computed insights.
+
+## Exam Traps
+
+The first trap is reaching for a related list enrichment on a direct system-to-system link that was never unified. A related list reads the unified individual, so a DMO that only has a direct relationship belongs in a direct-DMO related list instead. When a scenario describes vehicle telematics, device events, or any link keyed on a non-person identifier, the direct relationship is the tell.
+
+The second trap is assuming a copy field can copy any DMO value. Copy fields need a one-to-one relationship to a unified Individual or Account DMO, so a one-to-many source cannot be copied into a single field. If the scenario describes many records for one person, a copy field is structurally wrong no matter how the request is phrased, and the related list is the fit.
+
+The third trap is calling the Profile API for engagement objects. The Profile API serves profile-category objects and does not support engagement-category data model objects, so an engagement query must use the Query API. When an option claims the Profile API covers engagement data, treat that claim as the wrong answer it is.
+
+## The decision rules to carry out of this lesson
+
+Match the reference path to the target's identity key, and confirm that key before you build. Display maps to an enrichment, act maps to an invocable action or a change data event, and query maps to an API. Use a related list when the DMO is on the many side of a one-to-many relationship to the unified individual; use a direct-DMO related list when the link never needed unification; use a copy field only for a one-to-one unified value that must live in an org field. Read a precalculated view in a flow by adding the data graph to the flow through its invocable action. Query across unified and engagement data with the Query API, which runs Data 360 SQL and supports data streams, profile, engagement, and unified objects.
+
+## What's next
+
+Lesson 38 - Design and Governance for Cross-System Reference: Source of Truth, Sync versus Query, Permissions, and Duplication (en-2b) takes the reference you just wired and asks the harder design questions. Once data crosses a system boundary, who owns it, whether it is copied or read live, who is allowed to see it, and how you stop the copies from quietly diverging. That is the governance layer this lesson deliberately left open.
+
+[^1]: Salesforce Help, "Create a Related List Enrichment," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_related_list_enrichment.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Enrich Your Org with 360 Data and Insights," (https://help.salesforce.com/s/articleView?id=data.c360_a_enrich_your_org_with_data_and_insights.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Create a Direct-DMO Related List Enrichment," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_related_list_direct_dmo_enrichment.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Create a Copy Field Enrichment," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_copy_field_enrichment.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Data Actions in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_actions_cdp.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Data Cloud" release notes, Edit a Data Graph, (https://help.salesforce.com/s/articleView?id=release-notes.rn_c360_truth.htm&language=en_US&release=250&type=5)
+[^7]: Salesforce Developers, "Query Customer Profile Information with Profile API," (https://developer.salesforce.com/docs/data/data-cloud-query-guide/references/data-cloud-query-api-reference/c360a-api-profile-call-overview.html)
