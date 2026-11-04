@@ -1,0 +1,113 @@
+---
+title: "Lesson 33: Modeling Decisions That Decide Unification Quality"
+slug: day-33-hu-2d-modeling-decisions-that-decide-unification-quality
+series: sf-data360-consultant
+lesson: 33
+excerpt: "Most bad segments are really bad keys. This lesson covers the modeling decisions that decide unification quality: primary keys, Individual ID consistency, mapping time normalization, timestamps and record currency, multi currency and locale, and how a model error surfaces late as an off audience."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Unification, Data Modeling, Identity Resolution]
+---
+
+# Lesson 33: Modeling Decisions That Decide Unification Quality
+
+A retailer builds a flagship audience for a campaign and the count comes back about fifteen percent higher than the addressable customer list anyone expected. The segment definition is fine. The problem is upstream: three source systems feed the Individual DMO, and each one formats the same customer identifier a little differently. One strips leading zeros, one trims whitespace, one mixes casing. The same person arrives as several Individuals that never merge, and the audience is quietly polluted.
+
+This lesson is about the modeling decisions that produce that outcome, and how to prevent it. Requirement hu-2d sits in the Harmonization and Unification domain, worth 17% of the Salesforce Certified Data 360 Consultant exam, and its text covers the decisions that determine unification quality: primary keys, normalization, timestamps and record currency, multi currency and locale, and how a bad model surfaces as bad segments. The exam tests judgment here, because none of these failures throw an error at mapping time; they show up later, as a number that is wrong.
+
+## Deep Dive
+
+### Primary keys are the first decision that decides unification quality
+
+Every Data Model Object needs a stable, unique, non-null primary key, mapped from a source column that genuinely identifies one record. This is the first decision because everything else builds on it. Identity resolution and consolidation operate on those keys, so a key problem does not stay local to one object; it propagates into every profile and audience downstream.
+
+Consider what a weak primary key does. If the source column you choose repeats, two distinct records collide under one identity, and the model loses the ability to tell them apart. If it changes over time, a single real world record spawns new keys as the old ones are abandoned, and the model accumulates phantom rows. Either way, the corruption is inherited by everything that reads the key, which is why treating a source row id as a good primary key without checking its uniqueness is one of the classic traps of this objective.
+
+The discipline is boring and it is the whole game. Before you map a key, confirm the source column is unique per record, is never null, and does not mutate. If no single column satisfies all three, you either find one that does or you compose a key deliberately rather than hoping a convenient column holds still.
+
+A worked example makes the failure concrete. Suppose a marketing tool exports one row per email address and offers the address as the row id. Two customers who share a household mailbox now share a primary key, and the model has no way to separate them. Compose a key that is genuinely per record, such as a source system prefix plus the source id, and the two customers stay distinct while each still maps its Individual ID to the person it belongs to. A DMO in the Profile or Other category still requires its primary key to be mapped before the mapping will save, and the party area requirements still apply when you want identity resolution, segmentation, and activation to consume it.[^4]
+
+### The Individual ID must be populated and formatted consistently across every source
+
+The Individual ID is the key that ties the model together, so it has to be populated consistently and formatted consistently across every source that feeds it. Small differences defeat matching. Leading zeros stripped by one system, mixed casing, or trailing whitespace mean the same person arrives as two Individuals that never merge, and matching is doing exactly what it was told: it saw two different strings.
+
+This is where the retailer's inflated audience came from. The cause was inconsistent Individual ID formatting or keys across sources, so the same person never matched, and the segment counted one real customer several times. Nothing failed loudly. The ruleset ran, the profiles were built, and the duplication was baked in from the moment the keys were mapped.
+
+The preventive work is done before the key reaches identity resolution. Normalize the key before mapping, and confirm it is never empty. Trim whitespace, fix casing, and preserve or strip leading zeros according to one agreed rule applied to every source. If several source systems can share an identifier, key qualifier fields exist to keep the sources distinct when they are merged into one DMO, which prevents the same value arriving from two systems from being read as one record.[^6] Consistency at the source of each mapping prevents duplicates and failed joins before they ever reach the ruleset.
+
+Fully qualified keys show why the qualifier matters when several sources feed one DMO. If a CRM contact and a Marketing Cloud subscriber share an identifier value but are different records, mapping both into Individual without a qualifier can leave records that carry the same key value and cannot be told apart. Adding a key qualifier field to the DLO fields that hold key values, primary or foreign, lets Data 360 interpret data from different sources correctly when it joins them.[^6]
+
+### Normalization is a mapping time decision, not an afterthought
+
+Standardizing date formats, phone numbers, country codes, and text casing at or before mapping is what lets profile merges and segment filters behave consistently. The fix belongs at or before mapping, during stream field mapping and transformation, because that is the one place the correction is applied once and inherited by every consumer.
+
+Cleaning data later, inside each individual segment, is not reproducible. A fix applied in one audience is silently missing in the next, and the underlying mismatch remains in the model for every future consumer to hit again. You end up maintaining the same correction in many places, each one a chance to forget it. Data 360 does not standardize arbitrary source formats for you, so the responsibility sits with the mapping, and source systems can arrive in wildly different shapes. Not all source systems provide normalized export options or normalize data to the same degree, which is why the mapping step is where the transformation has to be made explicit.[^2]
+
+Two specifics are worth keeping. Text case and whitespace are usually the cheapest to normalize and the most common cause of failed matching, so they belong on the checklist for every identifier field. Date and datetime fields carry their own format, and Data 360 parses them using a format you must verify, which leads to the next decision.
+
+### Try it in a trial org: normalize one field before mapping
+
+Pick a single identifier field, such as a phone number, and read the raw values in the DLO before mapping. You will usually find several formats inside one column: spaces, country prefixes, stray punctuation. Add a transformation during mapping to standardize them, then compare a segment built on the raw field with one built on the normalized field. The counts differ, and that difference is the whole lesson. Doing this once, on one field, is the fastest way to internalize why the fix belongs in the mapping rather than in every downstream audience.
+
+### Timestamps and record currency determine which value wins
+
+Map the source created and last modified timestamps so Data 360 can tell which value is the freshest and order engagement events chronologically. Record currency is not only about money; it is about which value wins. Without timestamps, most recent value logic is unreliable. An old email may overwrite a newer one, or an engagement may sort out of sequence, and the error stays invisible until an audience behaves unexpectedly.
+
+The mechanism is worth stating plainly. Reconciliation rules decide which single value is saved to a unified field when sources disagree, and one of the available rules is last updated, which selects the most recently updated value based on the source timestamps you mapped.[^5] If those timestamps are missing or wrong, the last updated rule has nothing sound to sort by, and the fastest changing source quietly becomes the winner for reasons that have nothing to do with being correct. The pair of choices that protects most recent value logic and correct monetary aggregates is timestamps mapped for freshness, and a currency field stored with amounts.
+
+On engagement data the timestamp does a second job. Engagement records are time series, and their order is chronology. A missing or malformed event timestamp scrambles that order, which changes sequences, recency counts, and any metric built on the sequence of events.
+
+The practical takeaway is to map both timestamps explicitly rather than leaving them for the source to sort out. Created and last modified timestamps are the metadata that makes freshness a fact instead of a guess. When a reconciliation rule has them, a disagreement between two sources resolves on grounds you can explain to the client; when it does not, the winner is an accident of which source ran last.
+
+### Multi currency and locale are quietly destructive when ignored
+
+Store monetary amounts with a currency indicator rather than as bare numbers. Data 360 has a currency data type, it supports multiple currencies, and each record is associated with a single currency; in both DLOs and DMOs a system field captures the three character ISO currency code for the currency values in that record.[^1] That system field is the currency indicator, and when dollar amounts and euro amounts sit in the same field without it, any aggregate that sums them is wrong by construction.
+
+Salesforce's own model shows the pattern. The Individual DMO carries Yearly Income as a number and a separate Yearly Income Currency field as text, so the amount and its currency travel together. Follow that shape on custom objects: pair every monetary field with a currency field and populate it from the source, rather than assuming a single global currency that stops being true the moment the company expands.
+
+Locale contributes to the same class of error, most often through date and time. Date and datetime fields must be formatted consistently, and Data 360 relies on the format to parse the value into the DLO; if the suggested format does not match your data, a date like 03/07/2024 can be read as March 7 in one source and July 3 in another, and the record is stored wrong without any failure.[^3] Keep date and time fields in a consistent time zone for the same reason: an event recorded against a local clock and an event recorded against UTC will not sort together reliably, and the audience built on that ordering will quietly include or exclude the wrong people.
+
+Currency and locale are easy to dismiss as reporting concerns, and they are not. They decide which values compare to which, and comparison is the substance of segmentation and insights. A model that compares unlike values produces confident wrong answers, which are harder to spot than missing ones.
+
+### A bad model shows up late as a bad segment
+
+Duplicate profiles, individuals missing from an audience, and counts that look slightly off almost always trace back to a key, normalization, timestamp, or relationship decision made at mapping time, not to the segment definition itself. The symptom appears far downstream from the cause, which is what makes it expensive. By the time someone notices the audience is wrong, the model has been feeding it for weeks.
+
+The reliable fix is to correct the model and re run through identity resolution, not to patch the segment. A segment level workaround hides the mismatch rather than removing it, and it leaves the same error in the model for the next audience. When a count looks off, the diagnostic order is stable: check the primary keys, then the Individual ID formatting, then the timestamps, then the currency and locale. In practice the answer is usually in the first two.
+
+A short worked example shows how far downstream the symptom lands. Three sources feed Individual, and one trims leading zeros. The ruleset runs, two profiles per duplicated person appear, and a segment that should count one hundred people counts a hundred and twelve. The segment definition is correct, the ruleset is correct, and the model is wrong. The fix is a mapping change on the source that trims the zeros, followed by a ruleset re run, not a filter on the segment that tries to collapse the duplicates after the fact.
+
+## Config walkthrough: hardening the model before it reaches unification
+
+1. On the Data Model screen, open each Data Model Object and confirm it has a primary key field defined and mapped to a source column that is unique per record, non null, and stable.
+2. In the stream mapping step, map Individual ID and any parent keys from source columns that are consistently formatted across every source that feeds the model, and add key qualifier fields where several sources share an identifier.[^6]
+3. Add field transformations during mapping to normalize text case, trim whitespace, and standardize date and phone formats before the values reach the Data Model Object.
+4. Map the source created and last modified timestamps so Data 360 can keep the most recent attribute value and order engagement events correctly.
+5. For monetary fields, make sure the currency system field is populated so each amount carries its ISO code, and confirm that date and time fields resolve to a consistent time zone and a verified format.[^1][^3]
+6. After a refresh, spot check a Data Model Object for duplicate or null keys, then build a small segment to confirm the expected individuals are included before you publish any audience.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, treating a source row id as a good primary key without checking uniqueness. This lets duplicates or collisions into the model and corrupts identity resolution downstream. A key that is unique on the day you look is not the same as a key that is unique by contract, so confirm uniqueness rather than assuming it.
+
+Second, skipping normalization at mapping time and fixing data later in each segment. That is not reproducible and hides the real mismatch instead of correcting it in the model. When standardization happens at or before mapping, during stream field mapping and transformation, every consumer inherits the fix; when it happens per segment, each audience carries its own private correction.
+
+Third, ignoring timestamps and currency or locale. Without them, most recent values and monetary aggregates are silently wrong, and the failure only appears later as off counts in a segment. The protection is timestamps mapped for freshness, and a currency field stored with amounts, plus a verified date format and a consistent time zone.
+
+## The decision rules to carry out
+
+Decide the primary key first, and make it unique, non null, and stable. Populate and format Individual ID consistently across every source before it reaches identity resolution. Normalize formats at or before mapping, because that is the only place the fix is reproducible. Map timestamps for freshness, store currency alongside amounts, and verify date formats and time zones. Then, when an audience looks wrong, fix the model and re run unification rather than patching the segment.
+
+## What's next
+
+Lesson 34 - What Data Enhancement Means After Unification and the Insight Calculator Family (en-1a)
+
+[^1]: Salesforce Help, "Data Types in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_types.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Data Mapping Best Practices," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_mapping_best_practices.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Date and Datetime Formats," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_types_and_date_formats.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Data Mapping Requirements in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_required_data_mappings.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Identity Resolution Rulesets," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_ruleset.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Data Interpretation with Fully Qualified Keys," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_inter_fqk.htm&language=en_US&type=5)
