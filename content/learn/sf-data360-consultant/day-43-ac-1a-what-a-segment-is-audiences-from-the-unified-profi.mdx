@@ -1,0 +1,109 @@
+---
+title: "Lesson 43: What a Segment Is: Audiences from the Unified Profile and Batch vs Streaming Decisions"
+slug: day-43-ac-1a-what-a-segment-is-audiences-from-the-unified-profi
+series: sf-data360-consultant
+lesson: 43
+excerpt: "Data 360 segments are rule sets that run against mapped data model objects, not saved lists of source rows. This lesson covers what a segment evaluates, how it reads the unified profile, and when batch or streaming segmentation fits a use case."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Segmentation, Unified Profile, Activation]
+---
+
+# Lesson 43: What a Segment Is: Audiences from the Unified Profile and Batch vs Streaming Decisions
+
+A retail marketing team builds a win-back audience and previews 48,000 lapsed buyers. The send goes out two days later and lands in 61,000 inboxes, including a handful of customers who bought something last week. Nobody edited the segment in between, and the rules never changed. What the team misunderstood was the object of the segment. They pictured a frozen list of customer rows copied out of the source systems. A Data 360 segment is a rule set, and the platform re-evaluates that rule set against current data every time it publishes. The audience is a query result, not a mailing list.
+
+Getting that mental model right is most of this objective. Requirement ac-1a sits in the Data Activations and Utilization domain, worth 20 percent of the Salesforce Data 360 Consultant exam, and it asks you to define basic concepts of segmentation and use cases, starting with what a segment is, how it relates to the unified profile, and when batch or streaming style segmentation fits. The exam keeps returning to this idea, because nearly every later objective about activation, refresh, and counts depends on knowing exactly what a segment evaluates.
+
+This lesson defines what a segment is and where its members come from, explains why a segment reads the unified profile rather than raw source records, separates batch from streaming style segmentation, names the segment types you will be asked to choose between, and lays out the use case patterns a consultant is expected to recognize. It closes with the decision rules that make segment type selection routine.
+
+## Deep Dive
+
+### A segment is a defined audience built on a data model object
+
+A segment in Data 360 is a defined audience built by filtering a data model object, such as Unified Individual or Account, so the business can target, analyze, or act on a subset of customers. It is not a report and not a saved list of raw source rows. It is a rule set that the platform evaluates against harmonized data. Because the rules reference a data model object, everything the segment sees has already been ingested, mapped, and, where identity resolution applies, unified. That is the sentence to remember: a segment is a rule set evaluated against mapped data model objects. Put another way, a segment filters a data model object such as Unified Individual, so it counts one member per unified profile, not one per source row, and it reads attributes as well as calculated insights.[^1]
+
+The practical consequence is that a segment inherits the quality of everything upstream of it. If a source field was never mapped to a data model object, no segment can filter on it, because the attribute library shows only mapped fields. If a mapping is wrong, the segment filters on the wrong value. Because segments run on mapped data model objects, every segment inherits the quality of harmonization and unification upstream. A consultant asked to fix a broken audience usually has to fix the data model, not the segment definition. That is an uncomfortable answer to deliver, and it is the correct one.
+
+A segment is the bridge between analysis and action. On its own, a segment is only a definition. The activation that follows is what delivers its members to a destination, whether that destination is a Marketing Cloud Engagement journey, a cloud file storage bucket, or an external advertising platform. The exam is precise about this separation: the segment produces membership, and the activation moves it. Keep the two distinct and most activation questions resolve cleanly. Keep them tangled and you will try to fix a destination problem by editing criteria, which never works.
+
+### A segment reads the unified profile, not the raw source records
+
+A segment reads the unified profile, not the raw source records. Once identity resolution has linked source profiles into a unified profile, one customer appears once, so a segment counts one member per unified profile rather than one per source row. Picture the same person existing three times in the source data: once as a loyalty member with a stale email, once as a web registrant with a current email, and once as a store purchase record with no email at all. Before unification, a naive count sees three records and reports three people. After identity resolution, the segment sees one unified profile and reports one person. Multiply that difference across tens of thousands of customers and you can see why an ununified count runs high.
+
+This is why an unreliable identity resolution ruleset silently corrupts every segment count downstream. The segment is doing exactly what it was told. It counts unified profiles, and if the ruleset merged two different people or split one person in two, the count is wrong in a way no amount of segment editing can repair. When a business reports that a customer received a duplicate offer, or that a loyal customer was skipped, the investigation usually opens at identity resolution rather than at the segment. Confirm the ruleset before you touch the criteria.
+
+The segment also reads the attributes reconciled onto the unified profile, so the values it filters on are the values reconciliation chose to display. The platform reconciles conflicting field values from the contributing sources according to the reconciliation rules in the ruleset, and the segment only ever sees the winning value. If two source systems disagree on a birthday, the segment sees whichever reconciled value the ruleset selected. A filter for birthdays in a given month therefore produces a population that reflects a reconciliation decision, not a universal truth. Say that out loud to stakeholders and a mysterious count becomes an explainable one.
+
+### Standard segmentation is batch oriented, and streaming fits only immediate cases
+
+Standard segmentation is batch oriented. The platform evaluates the segment rules on a schedule and writes the resulting members into a Segment Membership data model object. A standard segment publishes on a schedule you choose, such as every 12 or 24 hours, or manually.[^6] You pick between standard publish and a faster rapid publish when you set the segment schedule, and rapid publish is optimized for recent engagement data.[^2] That timing fits audiences that do not have to be current to the second: a monthly loyalty tier update, a weekly newsletter audience, a quarterly win-back list. Membership changes when the segment publishes, and between publishes it holds steady.
+
+Streaming and real-time options exist when the use case needs immediacy, such as reacting to a customer behavior during an active session. A real-time segment is evaluated on demand in milliseconds against a real-time data graph, so it can drive a next-best-action decision on a page while the customer is still reading it. The difference between batch and real-time is not quality; it is freshness. A batch segment cannot answer a question that has to be answered in the moment, and a real-time segment cannot do the heavy refinement work a batch segment does, because it does not support exclusion criteria or nested batch segments. The choice is driven by how fresh the audience must be and what the destination can accept, not by preference.
+
+If the destination is an email platform that ingests a nightly file, a real-time segment is the wrong tool even though the data is instant. If the destination is a personalization service that must decide what to show in the next 200 milliseconds, a batch segment is too slow no matter how accurate it is. The exam tip for this objective is to ask two questions before choosing a segment type: must the audience be current to the second, and can the destination accept scheduled batches? Those two answers decide standard, real-time, or API only. Ask them before you open the builder, not after the campaign ships.
+
+### Data 360 segment types and what each one can do
+
+Data 360 offers several segment types, and naming the right one is a common exam target. A segment type is not a label on a definition; it decides how the segment runs, how often it publishes, and what it can publish to. Get the type wrong and the segment either cannot reach its destination or reaches it too slowly.
+
+A standard segment is built on a single data model object and stamps membership into Segment Membership records, so it can be scheduled and published to activation targets. Persisted membership plus a schedule plus activation target support is what makes the standard segment the workhorse of the platform, and it is why a standard segment is the correct answer whenever an audience has to be delivered to a marketing destination on a recurring basis.
+
+A dynamic segment runs its query at request time with placeholders for dynamic values and does not persist membership. Because it persists nothing, it has no schedule and no activation target. The documentation is blunt about this: you cannot schedule or publish a dynamic segment through the Data 360 user interface or through the Connect API.[^4] It runs only by an API call, typically from a broadcast flow that supplies the parameter values at runtime. That makes a dynamic segment a fit for parameterized lookups such as region or product category passed in at call time, and a poor fit for a campaign delivery that has to reach a destination on its own. A dynamic segment runs by API call only and cannot be scheduled or published to an activation target.
+
+A waterfall segment layers existing segments in priority order so a person lands in only the highest priority segment they match. You hand it a list of existing segments, up to 20, all built on the same Segment On object, and it evaluates each person from top to bottom and stops at the first match. The output is a set of mutually exclusive audiences, which is exactly what you want when several offers must not overlap. If a customer qualifies for three offers, the waterfall places her in the highest priority one and stops.
+
+A real-time segment completes on demand in milliseconds. It is built on a real-time data graph rather than a batch data model object, and it carries real constraints: no exclusion criteria, no nested batch segments, no segment counts, and no manual publish. Use it when the decision must happen in the moment and the audience does not need to be counted or scheduled. Einstein Segment Creation sits alongside these as a creation method rather than a runtime type. You describe the segment in natural language and it suggests a segment and its attributes, which you refine and then publish like any standard segment.[^6]
+
+### Segmentation use cases cluster into a few patterns
+
+Use cases for segmentation cluster into a handful of patterns, and recognizing the pattern is how you translate a business ask into criteria. The first pattern is targeting: build an audience to receive a campaign, such as high value lapsed buyers who should get a win-back offer. The second is suppression: build an audience to keep people out, such as customers who purchased in the last seven days and should not be re-targeted with the same product. Targeting a high value lapsed buyer with an offer and suppressing customers who just purchased so they are not re-targeted are two sides of the same coin, and both consume segments.
+
+The third pattern is personalization: segments feed an experience, such as a hero banner that changes for customers in a specific loyalty tier. Personalizing a web experience is a segmentation use case even though no email is sent, because the segment supplies the membership the experience reads. The fourth pattern is analysis: you build a segment because you want to compare the size and revenue of two cohorts, or measure how a defined population behaves over time. Analysis use cases such as comparing the size and revenue of two cohorts also rely on segment membership, which is one reason membership is worth querying directly rather than viewing only as a count on a screen.
+
+What the patterns share is the consultant's job. The consultant's job is to translate a business goal into criteria on the right data model object and then choose the destination the goal actually needs. A goal that names no destination is not ready to become a segment. A goal that names a destination tells you the grain, the freshness, and the delivery format, and those three things decide the segment type almost on their own. This separation of audience, criteria, and destination is the bridge from a business sentence to a working segment.
+
+### Segment membership is stored in a Segment Membership object, and counts are snapshots
+
+Segment membership is stored in a Segment Membership data model object, created or updated each time the segment publishes. To identify who is in a segment you query the Segment Membership object, which links the member to the segment; the object type is Segment_Membership, and each object you segment on has a set of these membership objects across all the segments that use it.[^3] The latest membership object holds the profile IDs from the most recent publish, and a history membership object holds the profile IDs from the previous publish within the last 30 days. When a publish runs and a member no longer satisfies the criteria, that member is removed from the membership table. The membership is not appended to; it is reconciled to the current rule result.
+
+That removal behavior is the reason a segment count is a snapshot rather than a running total. Counts can differ from what a business expects for several reasons. The lookback window limits the data range the segment considers, and container criteria can narrow that window further, so records at the edge of the range are simply never evaluated. Membership only reflects the last completed publish, so a publish that is still running is invisible to the count. A count is a snapshot, not a running total, so it changes as data and rules change. The exam states the same idea as a trap: believing a segment count is a stable, real-time number is wrong, because the count reflects the last completed publish and is bounded by the lookback window.
+
+The lookback window earns its own paragraph because it is the most common cause of a count that comes in low. The default is 90 days, you can extend it up to two years or to your organization's maximum, and it applies to engagement category objects through their event time field. If a segment references an engagement object but does not filter on event time, the platform automatically excludes records whose event time falls outside the window.[^5] That is why a segment can return a count of zero while the records appear, on inspection, to meet the criteria. The lookback window limits the data range, and container criteria can narrow it further, and a container window narrower than the segment level window takes precedence.
+
+### Walking the setup: from the Segments tab to publish
+
+Creating a segment follows a stable path, and walking it once in words makes the mental model concrete. The menu paths below match the current Data 360 interface.
+
+1. In the Data 360 app, open the Segments tab to see the list of existing segments and their types and status.
+2. Click New, choose Use a Visual Builder, then select the segment type (for example Standard Segment) and click Next.
+3. Select the data space, then for Segment On pick the data model object the segment is built on, such as Unified Individual.
+4. Set the Lookback Window for the initial data range, then continue into the segment canvas to add criteria.
+5. Save the segment, then publish it on a schedule or manually to send members to an activation target.
+6. Open a saved segment to inspect its criteria, last publish time, and membership count.
+
+Two details in that list carry outsized weight. The Segment On step fixes the grain of the audience, so choosing Unified Individual produces people while choosing a transactional object produces transactions. The Lookback Window step fixes the outer boundary of the data the rules can see, so a window that is too short quietly removes members before the rules ever run. Neither choice throws an error. Both surface later as a count that does not match the business expectation, usually on the day of the first send.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is treating a segment as a list of raw source records. A segment is a rule set evaluated against mapped data model objects, so it counts one member per unified profile, not one per source row. A consultant who thinks in source rows will misread every count and will hunt for the bug in the wrong place, editing criteria when the real problem is upstream.
+
+The second is assuming any segment type can be scheduled and activated. A dynamic segment runs by API call only and cannot be scheduled or published to an activation target, so it does not fit a campaign delivery use case. The tempting wrong answers are a dynamic segment, because it sounds flexible, and a real-time segment, because it sounds fast. Only a standard segment persists membership and can be scheduled and published, which is what a marketing destination needs.
+
+The third is believing a segment count is a stable, real-time number. The count reflects the last completed publish and is bounded by the lookback window, so it is a snapshot that moves as data and rules change. The lookback window limits the data range, and container criteria can narrow it further. Explain that to stakeholders before the first campaign, and a moving number becomes expected behavior rather than a defect report.
+
+## The Decision Rules
+
+Carry four rules out of this lesson. A segment is a rule set evaluated against mapped data model objects, not a saved list, so it counts one member per unified profile. A segment reads the unified profile and the reconciled attribute values, so the quality of identity resolution sets the ceiling on how accurate any segment can be. Standard segmentation is batch oriented and publishes membership on a schedule, while streaming and real-time segmentation fit only decisions that must happen in the moment, and the destination decides which one you can use. Every count is a snapshot bounded by the lookback window and the last completed publish, so treat a moving number as designed behavior.
+
+## What's next
+
+Lesson 44 - Designing a Segment for a Business Goal: Audience, Criteria, and Testing Before Publish (ac-1b) picks up where this lesson leaves off. It turns the definition into a method: stating the business goal as an audience, a condition, and an action, mapping each part to a data model object, criteria, and a destination, and previewing the audience before it ever ships.
+
+[^1]: Salesforce Help, "Create Segments in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_segments.htm)
+[^2]: Salesforce Help, "Create a Standard Segment in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_segment.htm)
+[^3]: Salesforce Help, "Segment Membership Data Model Object," (https://help.salesforce.com/s/articleView?id=data.c360_a_segment_membership_data.htm)
+[^4]: Salesforce Help, "Create a Dynamic Segment," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_dynamic_segment.htm)
+[^5]: Salesforce Help, "Data 360: Lookback Window on Engagement Data in Segments," (https://help.salesforce.com/s/articleView?id=000395460)
+[^6]: Trailhead, "Segment Types and Their Applications in Business Scenarios," (https://trailhead.salesforce.com/content/learn/modules/advanced-segmentation-in-data-360/match-segment-types-to-your-use-case)

@@ -1,0 +1,110 @@
+---
+title: "Lesson 30: The Standard Customer 360 Data Model and Its Object Families"
+slug: day-30-hu-2a-the-standard-customer-360-data-model-and-its-objec
+series: sf-data360-consultant
+lesson: 30
+excerpt: "Requirement hu-2a in the Harmonization and Unification domain (17% of the Salesforce Certified Data 360 Consultant exam) covers how to model data in Data 360 using the standard Customer 360 data model. This lesson maps its profile, contact point, engagement, and vertical object families so every source lands in the right home."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Data 360, Customer 360 Data Model, Data Modeling, Engagement]
+---
+
+# Lesson 30: The Standard Customer 360 Data Model and Its Object Families
+
+A team deploys a CRM bundle and notices that customer email addresses are flowing into fields on the Individual object. It works, in the sense that the values land somewhere. Then segmentation returns strange counts, identity resolution matches almost nothing, and an email activation sends to a handful of addresses that were never deduplicated. The data went into the wrong object family, and the model let the team do it.
+
+That is the failure requirement hu-2a exists to prevent. Part of the Harmonization and Unification domain worth 17% of the Salesforce Certified Data 360 Consultant exam, hu-2a asks you to model data in Data 360, focused on the standard Customer 360 data model and how its object families organize profile, contact point, engagement, and related data. The model is not decoration. It is the set of agreed shapes that lets matching, segmentation, and activation operate on your data at all.
+
+This lesson walks the families in the order a consultant explains them to a client. Individual is the central who. Contact point objects hold the addressable channels. Engagement objects record what happened. Vertical subject areas extend the model with business objects, and consent objects record what a person agreed to. Once you can place any data element in the right family, the mapping decisions downstream get much easier.
+
+## Deep Dive
+
+### Individual is the central who of the model
+
+Individual is the hub the rest of the person-centric model points at. It represents the person you are, or will be, dealing with using the system, and it carries descriptive attributes such as FirstName, LastName, BirthDate, and BirthPlace.[^1] It is deliberately lightweight. Individual is the place for who the person is, not a place to pile on engagement history or transaction detail, and keeping it lean is what lets the other families attach to it cleanly.
+
+The field that carries the most weight is the identifier. Imported data customer identifiers must be mapped to the Individual ID field to drive identity resolution behavior and to receive accurate data when creating data segments.[^1] This is the single mapping decision that most affects whether the rest of the model works. The Individual ID is what links the Individual data model object to other objects, and when you bring in any customer information it is mapped to this object and stays consistent throughout the product.[^1]
+
+The required mappings are concrete. During data modeling you map Individual Id as the primary key, plus First Name and Last Name, and you wire the required relationships so contact point objects can reach the person.[^2] If the identifier is not mapped to Individual ID, identity resolution has nothing trustworthy to match on and segmentation reads a person the model cannot connect to the rest of the data.
+
+So the answer to the exam's framing question is direct. The central who of the Customer 360 data model is Individual via the Individual ID field, and that is what person-related objects must map to for identity resolution to work. Everything else in this lesson is a family that hangs off that hub.
+
+A useful sanity check while you map a stream is to ask whether the Individual rows you are creating are genuinely one per person. If a source produces one Individual row per email address, or one per account, then the source is really holding contact points or relationships, and the identifier you are casting as Individual ID is not a person identity at all. Fixing that misreading at modeling time is far cheaper than discovering it after identity resolution has produced a unified profile that quietly splits one customer into four.
+
+### Contact point objects hold the addressable channels
+
+A contact point object holds one channel identifier for a person, and the model gives you one object per channel. The standard set includes Contact Point Email, Contact Point Phone, Contact Point Address, Contact Point App, Contact Point Social, Contact Point Digital Id, and Contact Point OTT Service.[^1] Contact Point Email holds an email address, Contact Point Phone holds a phone number, Contact Point Address holds a mailing address, and Contact Point Social holds a social handle such as a Twitter handle.[^1]
+
+Each of these links back to the person through a Party relationship onto Individual ID. The required relationships are always many to one, because many contact points can belong to one individual, while the Individual side is one to many because one individual can have multiple contact points.[^2] Concretely, the model wires Individual.ID to ContactPointEmail.Party, to ContactPointPhone.Party, to ContactPointAddress.Party, and to the other contact point objects' Party fields.[^2] A person with three email addresses is one Individual with three Contact Point Email rows, not three Individuals. That is the whole point of the family: it lets a person accumulate channels without turning into duplicate people.
+
+Party Identification sits alongside the contact points and holds other ways to identify a person, such as a driver's license number or an external customer id.[^1] It is not a channel you contact the person on. It is a handle, an identifier the business uses to recognize the person, and it links to Individual by the same Party relationship pattern.[^2]
+
+This is the family the exam points at when it asks where a channel identifier belongs. A marketing team that wants each customer's email and phone stored as separate addressable channels is described by Contact point objects such as Contact Point Email and Contact Point Phone, linked to Individual through Party. Loading that email into a field on Individual's own record is the mapping error that started this lesson.
+
+Cardinality is the design detail worth saying out loud in a review. Because the relationship from a contact point to Individual is many to one, the model expects a person to accumulate channels over time and never forces you to choose one. A loyalty member who changes an email address does not overwrite the old row. You get a second Contact Point Email row, and identity resolution and reconciliation handle which one matters downstream. That accumulation is a feature rather than clutter, and it is why a contact point object is the right home for anything addressable, whether the channel is an email, a phone number, a social handle, an app, or a digital advertising identifier.
+
+### Engagement objects capture what happened
+
+Engagement objects describe interactions with a party. The standard engagement family includes Email Engagement, Marketing Engagement, Product Browse Engagement, Product Order Engagement, Shopping Cart Engagement, Website Engagement, Web Search Engagement, and Device Application Engagement, among others.[^3] An engagement is an event: a person opened a message on a date, browsed a product, placed an order, added an item to a cart, or clicked on a page.
+
+Every engagement ties back to the person through an Individual ID reference. The Email Engagement object, for example, carries an Individual Id attribute that links it to the Individual data model object, so the event connects to the person it belongs to.[^3] That reference is how the model answers who an interaction was for, alongside why it occurred and how it took place.
+
+Two properties of this family drive design decisions. First, engagement rows are event-like and high volume. They grow with every click and every send, so they are typically the largest tables in the model, and you should expect them to scale differently from profile data. Second, because they describe what happened rather than who the person is, they belong in their own family rather than on the Individual object. The exam tests this with a concrete case: a Product Order Engagement record is an interaction, and it references Individual, through the Individual ID reference, to tie the order interaction back to a person. The source order table is not the model link, and a contact point object holds a handle rather than an interaction.
+
+### Vertical subject areas and consent objects extend the model
+
+Beyond the core person and engagement families, the Customer 360 data model organizes data into subject areas that represent major business activities.[^4] A subject area is a grouping of data model objects that belong to the same part of the business. The model publishes subject areas for Party, Engagement, Case, Loyalty, Privacy, Product, and Sales Order, plus additional standard objects, and each area defines the objects and relationships that belong to it.[^4]
+
+The vertical subject areas are where business objects live. Sales and Service bring objects such as Account, Account Contact, Lead, Case, and Device. Commerce brings Sales Order and Sales Order Product along with product objects such as Goods Product, Bundle Product, and Master Product, plus commerce engagements like Shopping Cart Engagement. Loyalty brings Loyalty Program Member, Loyalty Benefit, and Loyalty Tier. A customer's purchase history belongs in the commerce and sales order objects, not on the person, because it is a business event with its own structure and its own scale.
+
+Consent objects sit in the privacy family and record what a person agreed to. Party Consent, Contact Point Consent, and Communication Subscription Consent are the ones a consultant meets most often. Party Consent tracks a broad consent decision for an individual, Contact Point Consent tracks consent for a specific contact point such as a work email, and Communication Subscription Consent tracks consent to a specific communication on a specific contact point. They exist because honoring the customer's stated preferences is a business obligation, and the model gives each level of consent a home rather than leaving it in a custom field.
+
+### After identity resolution, unified objects appear
+
+The source objects described so far are the inputs. Identity resolution produces unified objects as outputs, and those are the objects downstream segmentation and activation read from. Unified Individual is the reconciled profile that represents one person across sources. Unified Link Individual is the bridge object that ties each source record to the unified identity, and its API name is IndividualIdentityLink__dlm.[^5] Where your data sources carry key qualifier fields, those fields also appear on the unified link objects, so you can tell which source a link came from.[^5]
+
+The relationship between the source and the unified side is exact. The source Individual's ID links to the link object in a one to one relationship, which is what preserves the unique nature of the unified record.[^2] The link object is not the customer; it is the connective tissue that maps many source records to one unified profile and back again.
+
+The practical consequence is the one to remember for segmentation. A source object that never resolves leaves no unified counterpart and no audience, because segments built on the unified layer have nothing to match. This is why the mapping work you do at modeling time is not paperwork. If the email or phone never landed in a contact point object, or the identifier never reached Individual ID, identity resolution cannot see it, and the unified profile that results is thinner than the data you actually own.
+
+### The practical rule for where data belongs
+
+When a data element's home is unclear, ask which family it serves. Properties of the person go to Individual. A channel identifier goes to a contact point object. An interaction goes to an engagement object. A purchase or other business event goes to the relevant subject-area object. A statement of consent goes to a consent object. Run every field through that question and the mapping decision resolves itself.
+
+Here is the walkthrough for finding and confirming an object's place in the model.
+
+1. In Data 360, open the Data Model screen, also reachable from Data Cloud Setup, to browse the standard Customer 360 data model objects grouped by subject area.
+2. Use Object Manager for Data 360 to inspect a single object: its fields, its primary key, its relationships, and the cardinality of each relationship to a related object.
+3. Filter the Data Model list by subject area, such as Individual and Contact Points, Engagement, or a vertical like Sales, Service, Commerce, or Loyalty, to locate where a given data element belongs.
+4. Open the target object and read its relationship to Individual ID to confirm the join path before you choose that object as a mapping destination for a stream.
+
+The rule cuts both ways, and getting it wrong is quiet rather than loud. Loading an email address into an Individual field, or an order into the person object, fights the model. The record still saves, so nothing screams for attention, but matching has less to work with and segmentation reads a thinner profile than your data supports. The model degrades slowly, which is exactly why the family question has to be asked at design time rather than discovered at activation time.
+
+### Try it
+
+Take one of your data streams and walk its mapped fields one at a time, asking the family question. Any field that lands outside its family, an email on Individual, a transaction detail on the person object, is a mapping decision to revisit before the next identity resolution run. Then open the unified link object for that stream and confirm the source record count matches what you expect, because a mismatch there tells you the source never fully resolved.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+The first is assuming every object in Data 360 is a standard Customer 360 object. Only the published Customer 360 data model objects are standard, and anything else is a custom object you create and wire up yourself. The word standard is a real boundary. Treating a custom object as though the platform ships and governs it as part of the model leads to mapping assumptions that do not hold.
+
+The second is loading channel identifiers or transactions into the Individual object. Individual is the lightweight who, while a channel identifier belongs in a contact point object and an interaction belongs in an engagement object. The wrong answer here is the intuitive one, because storing an email address next to a name feels natural. It breaks the model's ability to hold many channels per person and to deduplicate them.
+
+The third is treating a contact point object as a duplicate of Individual. A contact point object holds one channel identifier and links to Individual through Party onto Individual ID, so mapping an email into Individual's own fields puts it in the wrong home. The two objects are complementary, not redundant. Individual answers who the person is, and the contact point object answers how to reach them on one channel.
+
+## The decision rules
+
+Carry four rules into the modeling session. First, treat Individual as the hub and map every imported customer identifier to the Individual ID field, because that key is what drives identity resolution and what makes segment counts accurate. Second, hold each channel identifier in its own contact point object and link it to Individual through Party, so a person with three emails stays one person with three channels. Third, route interactions to the engagement family with an Individual ID reference, and route purchases and other business events to the relevant subject-area object. Fourth, remember that unified objects such as Unified Individual and the unified link object are outputs of identity resolution, not inputs, so a source that never resolves produces no unified counterpart and no audience.
+
+## What's next
+
+Lesson 31 - Data Lake Objects vs Data Model Objects and Mapping Streams to the Model (hu-2b). That lesson goes one level below the model you just learned, separating the data lake objects that land from ingestion from the data model objects that the Customer 360 data model defines, and walking how a stream is mapped from one to the other before identity resolution or segmentation can use it.
+
+[^1]: Salesforce Help, "Customer 360 Data Model: Individual and Contact Points," (https://help.salesforce.com/s/articleView?id=data.c360_a_cloud_information_model_individual_and_contact_points.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Individual Object Data Modeling Requirements," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_data_modeling_individual.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Engagement Data Model," (https://help.salesforce.com/s/articleView?id=data.c360_a_engagement_data_model.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Customer 360 Data Model," (https://help.salesforce.com/s/articleView?id=data.c360_a_c360datamodel.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Unified Link Objects and Relationships to Unified Objects," (https://help.salesforce.com/s/articleView?id=sf.c360_a_identity_resolution_data_modeling_unified_and_link_objects.htm&language=en_US&type=5)

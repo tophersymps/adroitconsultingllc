@@ -1,0 +1,111 @@
+---
+title: "Lesson 23: Data Collaboration in Data 360: What Zero Copy Means and Which Sources Support It"
+slug: day-23-ing-3a-data-collaboration-in-data-360-what-zero-copy-mean
+series: sf-data360-consultant
+lesson: 23
+excerpt: "Requirement ing-3a in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe Data 360 collaboration and Zero Copy, including which sources and connector types support it. Lesson 23 covers the two halves of Zero Copy, the external systems it targets, the virtual data lake object, and when to ingest instead."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Zero Copy, Data Federation]
+---
+
+# Lesson 23: Data Collaboration in Data 360: What Zero Copy Means and Which Sources Support It
+
+A retailer runs its transaction history in a Snowflake warehouse. Two petabytes of it, governed by a data team that will not let the rows leave. Marketing wants those transactions inside Data 360 segments to score loyalty and trigger journeys. The instinct is to schedule an export, land the table in Data 360, and move on, but that instinct costs storage, doubles the copies of the most sensitive data in the company, and ages the moment it lands. The requirement says the rows stay in the warehouse and the segments still see them. The answer is not a bigger ETL job. It is collaboration.
+
+That is the problem requirement ing-3a exists to test. It sits in the Data Source Connection and Ingestion domain, worth 18 percent of the Salesforce Certified Data 360 Consultant exam, and it asks you to describe Data 360's data collaboration capabilities, including Zero Copy, covering what collaboration means across systems and which sources and connector types support it. The exam treats collaboration as a live, runtime connection between two systems, not a synchronization between them.
+
+This lesson defines collaboration and Zero Copy, walks the two halves the exam treats as one capability, names the external systems the shipped connectors target, explains the virtual data lake object that a zero copy connection still produces, and ends with the cases where copying is the right move after all.
+
+## Deep Dive
+
+### Data collaboration means two systems query each other at runtime
+
+Data collaboration in Data 360 means two systems query each other's data at runtime instead of one of them copying the other's rows. That runtime framing is the whole idea, and the exam leans on it.
+
+For the retailer in the opening scenario, the fit is zero copy data federation through a query federation connector, which lets Data 360 query the warehouse without copying it and returns the transaction rows to the segment at query time. A scheduled batch ingest would create the copy the requirement forbids, and a data share runs the other direction.
+
+Inbound, Data 360 reads live from an external warehouse or lake. Outbound, the external system reads Data 360 objects such as data lake objects, harmonized data model objects, and calculated insight objects. Nothing is duplicated across the boundary, so each system keeps its own storage, its own compute, and its own refresh schedule. Salesforce describes this precisely: zero copy data federation is the process of querying data from multiple, physically distinct data sources, which lets users treat disparate systems as a single logical system, called a federation, while maintaining the autonomy of each system, and it avoids duplicating data across system boundaries.[^1] When the exam frames Zero Copy as a single logical federation over physically distinct sources, that is the definition to reach for.
+
+The collaboration direction matters as much as the mechanism. Sharing runs outward: Data Shares provide access for external systems to use data in Data 360, and with access to data lake objects, data model objects, and calculated insight objects, an external team can build analytics and models without the data ever being loaded into their system.[^2] Federation runs inward: Data 360 reaches out and reads. A single design often uses both directions at once, which is why the two are taught together.
+
+### Zero Copy is the name for the no-copy pattern, and it has two halves
+
+Zero Copy is the name for that no-copy pattern as delivered in Data 360, and the exam treats it as one capability with two halves: zero copy data federation, which is data in, and zero copy data sharing, which is data out. The two capabilities together make up Zero Copy, and any answer that names only one of them has answered half a question.
+
+Federation is Data 360 querying an external system. Sharing is Data 360 publishing selected objects so an external system can query them. Because both directions are live, a central copy is never the integration. That is the sentence to hold against every tempting wrong answer. Do not describe Zero Copy as a sync, a replication job, or an ETL pipeline on a short interval, because there is no persistent copy being refreshed between the two systems. A distractor that offers a fifteen minute sync, or a nightly refresh of the external table, is describing ingestion wearing a collaboration label.
+
+The business argument for the two halves is the same on each side. Data 360's zero copy is bidirectional: external data from data lakes and warehouses is available inside Data 360 as if it were natively stored there, and the enriched, unified data from Data 360 can be shared back into an external lake without copies and without an outbound ETL process. Each half removes a class of duplication, and the pair removes the pipeline that would otherwise sit between the two systems.
+
+### Which external systems Zero Copy targets
+
+The external systems Zero Copy targets are the warehouses and data lakes with shipped zero copy connectors, and the list the exam works from includes Snowflake, Databricks, Google BigQuery, Amazon Redshift, and IBM watsonx.data, plus open table formats such as Apache Iceberg. The IBM watsonx.data connector federates data into Data 360 as a structured, data in connector whose only supported connection method is Zero Copy (File Federation).[^4] The Apache Iceberg connector does the same for Iceberg tables, also as Zero Copy (File Federation).[^4]
+
+Every one of those systems supports query federation, in which Data 360 sends SQL to the external system's compute engine and receives the relevant records back. Query federation is the universal connector type. Trailhead states the split cleanly: in query federation, Data 360 sends a query to the external system's query engine, which retrieves records from its storage layer and returns them to Data 360, and all external systems support this; in file federation, Data 360 directly queries the external system's storage layer using its own compute engines, which is optimized for large datasets but carries an additional requirement.[^3] That additional requirement is the format. File federation works only when the data is organized in a supported open table format, which for the Data 360 stack means Parquet files tracked by an Iceberg style table format.[^5]
+
+The exam question that matters here is the one that asks which connector type works with any supported external system. The answer is query federation, because it asks only that the external system run SQL on Data 360's behalf. File federation is the narrower option, and an answer that claims file federation works against every source has skipped the open table format requirement. Lesson 24 turns to the mechanics that separate the two in detail.
+
+### In a federated design the rows never leave their system of record
+
+In a federated design the rows never leave their system of record in persisted form. With a live query, Data 360 sends the query, receives the result set, uses it for the workflow, and retains nothing once the workflow completes. That is the operating contract, and everything else follows from it.[^1]
+
+The objects still have to exist in the Data 360 model for you to use them, and that is where the virtual data lake object comes in. Regardless of whether data is ingested or federated, Data 360 creates a data lake object, but when a zero copy connector is used the DLO does not contain any actual data and acts as a pointer to the external physical table, which is why these are called external or virtual DLOs.[^1] You then map that virtual DLO to a data model object exactly as you would an ingested one. The consequence the exam probes hardest is the one behind the quiz: when Data 360 federates a table over a zero copy connector, the resulting data lake object holds no rows, because it points at the external physical table. Any answer that describes stored rows, a cached snapshot, or key columns only is describing ingestion or acceleration, not federation.
+
+The mapping step is not optional. A federated object that is never mapped to a data model object is invisible to segmentation and activation, the same way an unmapped ingested DLO is. The virtual DLO and the DMO are the two halves of making an external table usable inside Data 360.
+
+### Federated data is queryable, which is the business point
+
+Because federated data is queryable, it can participate in identity resolution, calculated insights, segments, data graphs, and agent actions, and that participation is the business point of collaboration. The retailer in the opening scenario does not want a copy of the transaction table; it wants the transactions to influence a segment. Federation delivers exactly that.
+
+What federated data cannot do is behave like landed data. Joins that read a federated table on every run, full scans of high-volume detail, and repeated aggregations all pay external compute each time they execute, because the work runs on the external system or, in file federation, inside Data 360's engine against external storage, every single time. There is no persisted copy to make the second query cheaper than the first. Design federation so the external system holds the authoritative high-volume detail and Data 360 holds the ingested customer spine, and accept that the profile is assembled at query time rather than stored as one combined record.
+
+That design rule is also a cost rule. Federated queries consume Data 360 credits and external compute even though nothing is copied, so the cost moves to query time rather than disappearing. A team that federates a table and then runs a segment against it twenty times a day is paying twenty times for the same rows. When the access pattern is frequent and the data changes slowly, the answer is usually acceleration, which lesson 24 covers as the middle path between live federation and full ingestion.
+
+### When Zero Copy is the wrong choice
+
+Zero Copy is the wrong choice when the workload needs a stable copy. The exam rewards the consultant who knows where federation stops.
+
+If the data must be available while the source is down, federate nothing, because a live query that cannot reach its source returns nothing. If security review will not permit runtime connectivity into the external system, federation is out on policy grounds before it is out on technical ones. If the transformation work is heavy and repeats inside Data 360, a virtual object that re-scans every run will cost more than a landed table that transforms once. If the external system is not on the supported connector list, there is no zero copy path to take. Data residency requirements that demand the data be physically resident in a region also defeat federation, because the rows are never resident in Data 360 at all.
+
+Notice what all of those cases share. Each one is a statement about persistence, isolation, compute, or geography, and each one is answered by ingestion rather than federation. The decision is really about where you choose to pay and where you choose to hold the risk: at query time and at the boundary, or at load time inside Data 360. A consultant who can name which side of that line a requirement falls on has the objective.
+
+## Config Walkthrough
+
+Stand up a zero copy collaboration in six steps.
+
+1. In Data 360 Setup, open Connections and confirm the external system you plan to federate is covered by a zero copy connector and which connector type it supports. Snowflake, Databricks, BigQuery, Redshift, IBM watsonx.data, and Apache Iceberg are the platforms to check against.
+
+2. Collect the external system details, including the database name, connection URL, and credentials, then create the connection and choose query federation or file federation based on what the source supports and where you want the query compute to run.
+
+3. Create a data stream from that connection. Leave the default mode, which federates the data when it is requested at runtime and is called live query, so that zero rows are persisted.
+
+4. Open the resulting object and confirm it is an external, or virtual, data lake object that contains no rows and points at the external physical table, then map it to the data model object your segment or insight needs.
+
+5. Test the collaboration end to end by querying the federated object from a calculated insight or a segment and confirming rows come from the external system while nothing is stored in the DLO.
+
+6. Review federation usage and credit consumption in Data 360 so the team understands that federated queries are billed even though no data is copied, and that the cost lands at query time.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, calling Zero Copy a replication or sync feature with a refresh interval. Live federation persists no rows, so an answer offering a fifteen minute sync or a nightly refresh is describing ingestion, not Zero Copy. If a distractor has a schedule on it, suspect it.
+
+Second, assuming file federation works against every source. Query federation is the universal connector type; file federation adds a requirement that the external data already be in a supported open table format. An answer that claims file federation against a proprietary warehouse format has ignored that requirement.
+
+Third, believing Zero Copy is free because it copies nothing. Federated queries consume Data 360 credits and external compute, so the cost moves to query time rather than disappearing. An answer that promises zero cost because zero bytes are stored is only half right, and the exam wants the half that names the query bill.
+
+## Decision rules to take away
+
+Reach for collaboration when two systems must share data without either one surrendering its copy. Remember that Zero Copy is two halves, data federation and data sharing, and that both run live rather than on a schedule. Pick query federation when you need it to work against any supported external system, and choose file federation only when the data is already in a supported open table format. Expect a virtual data lake object that holds no rows and points at the physical table, and map it to a data model object like any other. Treat federated data as queryable but not as landed: it can feed identity resolution, calculated insights, segments, data graphs, and agent actions, but it pays external compute on every run. And ingest instead when the requirement demands a stable copy, isolation from the source, heavy in-platform transforms, an unsupported source, or physical residency.
+
+## What's next
+
+Next is Lesson 24 - Zero Copy Mechanics and Limits: Query vs File Federation, Caching, and Refresh (ing-3b). It takes the two federation types apart at the mechanism level, covering what must exist on both sides of the connection, what is cached versus queried, and what that means for latency and refresh.
+
+[^1]: Salesforce Help, "Zero Copy Data Federation," (https://help.salesforce.com/s/articleView?id=sf.c360_a_byol_data_federation.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Data Shares," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_shares.htm&language=en_US&type=5)
+[^3]: Trailhead, "Connect and Transform Data for Enhanced Insights," (https://trailhead.salesforce.com/content/learn/modules/data-cloud-connect-and-unify/connect-and-transform-data)
+[^4]: Salesforce Developers, "IBM watsonx.data Connector," (https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-watsonx-connector.html)
+[^5]: Salesforce Architects, "Data 360 Architecture," (https://architect.salesforce.com/docs/architect/fundamentals/guide/data-360-architecture.html)

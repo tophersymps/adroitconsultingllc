@@ -1,0 +1,107 @@
+---
+title: "Lesson 21: Data Stream Categories, Refresh Modes, and Mapping at Ingestion"
+slug: day-21-ing-2b-data-stream-categories-refresh-modes-and-mapping-a
+series: sf-data360-consultant
+lesson: 21
+excerpt: "Category, refresh mode, and mapping are decided at ingestion time, and two of them lock the moment you save. This lesson covers Profile, Engagement, and Other, the three refresh modes and how each handles deletes, and how mapping turns a data lake object into something usable."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Streams, Refresh Modes, Data Mapping]
+---
+
+# Lesson 21: Data Stream Categories, Refresh Modes, and Mapping at Ingestion
+
+A team builds a claims data stream, picks Updated Date as the event time field because it looks like a sensible timestamp, and moves on. Weeks later the claim count is inflated. Records that share a primary key keep re entering the data lake object every time a claim is touched, because the date they chose moves as the claim speeds through review. The field that looked reasonable was the one field guaranteed to change, and it was not editable after setup.
+
+That failure is the reason this lesson exists. Requirement ing-2b sits in the Data Source Connection and Ingestion domain, worth 18% of the Salesforce Data 360 Consultant exam. It asks you to describe processes and considerations for data ingestion from varied sources into Data 360, focused on choosing the data stream category, setting the refresh mode and schedule, and mapping ingested data to the data model. Two of those choices are locked at creation, so the exam cares about whether you know which ones and why.
+
+This lesson covers the three data stream categories and what each is for, the event time field and the duplication it causes when chosen badly, the three refresh modes and how each one handles deletes, how refresh frequency and manual runs work, and how mapping turns a data lake object into data the rest of Data 360 can use. It ends with the traps and the decision rules.
+
+## Deep Dive
+
+### Every data stream has a category, and there are three: Profile, Engagement, and Other
+
+When you create a data stream, you select a category, which describes the type of data found in that stream. The three data categories are Profile, Engagement, and Other.[^1] The category is not cosmetic. It tells Data 360 what the records represent, and it governs which data model objects the stream can later map to.
+
+Profile is for a population you intend to segment on or unify. Select Profile if your dataset is a list of individuals with identifiers such as consumer IDs, email addresses, or phone numbers, a list of businesses or accounts with account IDs, or a list of employees or any other population you want to segment on or use as a segment's starting population.[^1] Use Profile streams for data about an entity you want to segment, unify, or enrich.[^1] The entities can be people or non human things such as vehicles, devices, and loyalty cards, as long as they are the primary object of interest.
+
+Engagement is for time series data. You select the Engagement category if your dataset is time series oriented.[^1] A click, a transaction, a sensor reading, a support case event: these are records of things that happened at a point in time, and they pile up over time rather than describing a current state. Engagement streams carry the thing that happened and when.
+
+Other is for supporting data that is not the primary entity. You select the Other category if your dataset is related to Profile and Engagement but is not intended to be the primary entity for segmentation or unification, which is typically reference data that provides descriptive attributes for Profile or Engagement records.[^1] A product catalog, a store location list, or a static vehicle model reference belongs in Other. It describes or decorates the entities and the events rather than being them itself. If you have a time series dataset but no immutable date field, the documented guidance is to choose the Other category instead.[^1]
+
+The category locks, and this is the first thing to memorize. You cannot change the category after saving the data stream, so review the types carefully before you make a selection.[^1] A stream created in the wrong category cannot be fixed in place. It has to be recreated, which means re running ingestion and re doing anything built on it.
+
+### Choosing Engagement forces an event time field, and a mutable date duplicates records
+
+Category and event time are joined at the hip. When you set the data stream category to Engagement, you define the event time using a Date or DateTime typed field from your source schema, and the Event Time Field dropdown appears in the UI only when you select Engagement.[^1] Profile and Other streams do not carry this field, because there is no single "when did this happen" moment for a description of current state.
+
+The event time field is not editable after initial setup, so you must choose a Date or DateTime typed field that will not change after it is defined for a data record.[^1] This is where the opening failure comes from. Using a mutable date field causes duplication of records where multiple records with the same primary key get added to the data lake object.[^1] The field moves, the record looks new, and the stream appends it again. A field such as Updated Date that changes frequently is likely to cause the creation of duplicate records.[^1] A file extract date is just as bad for a different reason: all records in the same file share that value, so it cannot distinguish one record's event moment from another's.
+
+The documented example is exactly the claims scenario. You are ingesting insurance claim data with two dates, the date the claim was created and the date the claim's status changed. For the Event Time Field, use the claim created date, not the date the claim was modified.[^1] The claim created date does not change after a claim is created, while the modified date changes as the claim steps through the review process. The rule generalizes: pick a date that is set once and never moves. The claim created date is immutable; the status change date is not.
+
+### Refresh Mode controls how data lands in the data lake object
+
+The Refresh Mode settings determine how data is ingested into a data lake object, and you set them in the data stream settings.[^2] There are three modes, and each handles adds, changes, and deletes differently.
+
+Incremental is available for most non file based data streams that have a Datetime field. You select the field that indicates when the incoming record was last modified, and for each refresh the data stream is updated with data added or changed since the last refresh.[^2] To make sure there is no data loss, the last few records from the previous run are reprocessed during each job run.[^2] That reprocessing window is the safety net for records that were in flight when the prior run ended. Deletes are handled in band: to remove records from an incrementally updated DLO, you mark deleted records in your source system with a Delete Record Flag, and the DLO removes them during the next update.[^2]
+
+Upsert is the mode for data streams created from file based connectors. For each refresh, the stream is updated with data added or changed since the last refresh.[^2] It does not reprocess a trailing window the way incremental does, because file based delivery is already batched. When the refresh mode is set to upsert, you delete records from a DLO by using a delete file rather than a flag.[^2] A delete file is the documented deletion path for records ingested by file based and API connectors, and it is created in CSV or Parquet format. Use a delete file in CSV or Parquet format to remove records from a DLO fed by a file based stream. The primary key values in the delete file must match the primary key data type of the DLO, and for SFTP the file has to sit in a delete subfolder beside the source files.[^6]
+
+Full Refresh is the sledgehammer. During each refresh cycle, all existing data is deleted and replaced with the newly imported dataset.[^2] If no other refresh setting is available, full refresh is the default refresh mode.[^2] It is the right choice for small reference tables that change wholesale, like a product catalog. It is the wrong choice for a large time series table, both because of the cost of reloading everything and because any point in time history not present in the latest extract is gone.
+
+When the stream is an Ingestion API data stream, the build flow sets several of these choices in one dialog: you select the schema objects, then in the New Data Stream dialog set the primary key, the object's category, and the record modified field, and for Profile and Other streams the refresh mode, before you deploy.[^5] The record modified field tells Data 360 which incoming record is the newer one when data arrives out of order.
+
+The mode tells you which delete path you get. Incremental takes a Delete Record Flag in the source system. Upsert takes a delete file in CSV or Parquet format. Full Refresh does not need either, because it wipes and reloads. Match the deletion method to the mode, because the two do not cross over.
+
+### Ingestion frequency depends on the connector, and you can drive a run by hand
+
+Data streams run on schedules, and the supported frequency depends on the connector. Setting options include hourly, daily at a specified hour, weekly on a specified day and time, and monthly on a specified day and time, all in UTC.[^2] Some cloud storage connectors are tighter: Amazon S3, Azure Blob Storage, and Google Cloud Storage data streams support 5, 15, or 30 minute intervals.[^2] The Salesforce CRM connector runs on its own cadence, with incremental refreshes fetching changes since the last full refresh.
+
+You are not stuck waiting for the schedule. You can force a run with Refresh Now on the data stream record page, and you review past runs under Refresh History.[^2] Refresh Now is how you confirm a stream is landing data without waiting a full cycle. Refresh History is how you see whether a run processed records, processed none, or failed. A schedule that is technically correct but never delivers is a silent failure, and refresh history is where you catch it.
+
+### Ingestion writes to data lake objects, and only mapping makes the data usable
+
+Data ingested by all data streams is written to data lake objects (DLOs). After creating your data streams, you associate your DLOs to data model objects (DMOs), and only mapped fields and objects with relationships can be used for Segmentation and Activation.[^3] The DLO is the landing zone; the DMO is the semantic object the rest of the platform reads. Mapping is the bridge between them.
+
+Mapping happens on a canvas. On the Data Stream detail page you click Start Data Mapping, and on the field mapping canvas you see your DLOs on one side and the target DMOs on the other, and you connect a DLO to the desired DMO.[^3] When mapping a DLO to a DMO, the data types of the DLO and DMO fields must be compatible, so a string field in the DLO will not map cleanly to a numeric DMO field. Automapping can calculate and apply field mappings when you choose a specific DMO, and you then adjust and save.
+
+Two mapping rules matter for the exam. First, the automatic convenience does not apply everywhere: mappings and relationships are set up automatically only for data streams deployed through standard data bundles, and you must ensure the required mappings and relationships are set up properly for custom data streams.[^4] Second, the required fields differ by category. When you are mapping a DMO in the Profile or Other category, you must map the primary key field, and you can save the mapping only after mapping the primary key. When you are mapping a DMO in the Engagement category, you must map the primary key field and the Event dateTime field, and you can save only after mapping both.[^4] The event time shows up again here: an Engagement mapping will not save without it.
+
+Mapping is not optional polish. An unmapped DLO is data at rest with no downstream reach. Only mapped fields and objects with relationships feed identity resolution, segmentation, and activation, so a stream that ingests perfectly but is never mapped has delivered nothing the business can use.
+
+### Config walkthrough: category, refresh mode, and mapping
+
+The end to end sequence:
+
+1. Open the Data Streams tab, create the data stream, and when prompted select the category: Profile, Engagement, or Other.
+2. If you selected Engagement, choose a Date or DateTime field as the Event Time Field that will not change for a record, then continue.
+3. On the data stream record page, open the data stream settings and set the Refresh Mode: Incremental for non file streams with a datetime field, Upsert for file based connectors, or Full Refresh.
+4. If you used Incremental, select the field that indicates when the incoming record was last modified; for file based deletes, plan a delete file in CSV or Parquet format.
+5. Review Refresh History or click Refresh Now to run the data stream and confirm the data lands in the data lake object.
+6. On the data stream detail page, click Start Data Mapping and connect DLO fields to the target DMO on the field mapping canvas, then save the mappings.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, planning to change the category later. The category cannot be changed after saving the data stream, so a wrong category stream must be recreated. The tempting answer, that you can switch it once you see the real data, is wrong. Decide Profile, Engagement, or Other before you save, and be ready to rebuild if you get it wrong.
+
+Second, picking a mutable date as the event time field. An Updated Date or a file extract date causes duplicate records, because records sharing a primary key get added more than once as the date moves or as the whole file shares one value. The right choice is a date that is set once, like the claim created date, and the field is not editable after setup, so the correction is a rebuild.
+
+Third, assuming mapping is optional. Only mapped fields and objects with relationships can be used for segmentation and activation, so an unmapped DLO is not usable downstream. A stream that ingests flawlessly and is never mapped has no reach. Do the mapping, map the primary key at minimum, and remember that an Engagement DMO also requires the Event dateTime field.
+
+## The decision rules to carry out
+
+Choose the category before you save, because it locks: Profile for populations you segment or unify, Engagement for time series, Other for reference data that describes them. For Engagement, pick an immutable Date or DateTime field as the event time, and never use a moving date or a file extract date. Pick the refresh mode to fit the connector and the delete path: Incremental with a Delete Record Flag for non file streams with a datetime field, Upsert with a delete file in CSV or Parquet format for file based streams, and Full Refresh only for data that reloads wholesale. Drive a run with Refresh Now and read Refresh History to confirm delivery. Then map the DLO to the DMO, mapping the primary key and, for Engagement, the event dateTime field, because only mapped fields and relationships reach segmentation and activation.
+
+## What's next
+
+Lesson 22 - Ingestion Considerations: Source Choice, Volume, Schema Drift, and Failure Handling (ing-2c).
+
+[^1]: Salesforce Help, "Category," (https://help.salesforce.com/s/articleView?id=data.c360_a_category.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Data Stream Settings and Refresh Modes," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_stream_edit_settings.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Data Mapping," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_mapping.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Data Mapping Requirements in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_required_data_mappings.htm&language=en_US&type=5)
+[^5]: Salesforce Developers, "Create an Ingestion API Data Stream," (https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-create-ingestion-data-stream.html)
+[^6]: Salesforce Help, "Delete Records by Using a Delete File," (https://help.salesforce.com/s/articleView?id=data.c360_a_delete_data_stream_records_deletion_file.htm&language=en_US&type=5)

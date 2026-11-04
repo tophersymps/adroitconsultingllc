@@ -1,0 +1,117 @@
+---
+title: "Lesson 34: What Data Enhancement Means After Unification and the Insight Calculator Family"
+slug: day-34-en-1a-what-data-enhancement-means-after-unification-and
+series: sf-data360-consultant
+lesson: 34
+excerpt: "Enhancement is the layer above harmonization and unification: turning stored, unified data into computed metrics and materialized views. Lesson 34 of the Salesforce Data 360 Consultant course covers what enhancement means after unification and the family of calculators that build it, including calculated, streaming, and real-time insights and data transforms."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Calculated Insights, Streaming Insights, Real-Time Insights]
+---
+
+# Lesson 34: What Data Enhancement Means After Unification and the Insight Calculator Family
+
+A consultant finishes identity resolution, watches the unified profile populate, and calls the data work done. Two weeks later a marketing lead asks a simple question: which of our gold tier customers spent more than two thousand dollars in the last year, put that group in a segment, and show the same number on the account record page. The unified profile has none of those numbers. It has attributes, a name, an email, a tier, and the matched keys that tie one person to another across systems. The number the lead wants does not exist until someone computes it.
+
+That gap is what data enhancement closes. Harmonization and unification produce identity and structure. They decide which records describe the same person, and they make those records joinable. Enhancement reads that structure and derives new values on top of it. It turns stored data into computed values that describe a customer or a population, and it does not rewrite the records it reads.
+
+Requirement en-1a sits in the Data Enhancements, Sharing, and Analysis domain, worth 18% of the Salesforce Data 360 Consultant exam. It asks you to demonstrate how to enhance data and build insights on unified data, with a focus on what enhancement means after harmonization and unification and on the family of calculators that build metrics. Those calculators are calculated insights, streaming insights, real-time insights, and data transforms. This lesson draws the boundary between producing unified data and computing on it, then covers each calculator and the reusable objects it publishes.
+
+## Deep Dive
+
+### Enhancement is the layer above harmonization and unification
+
+When your source records land in Data 360, they first sit in a data lake object (DLO), which is the storage container for ingested data, held in the shape the source system gave it. Harmonization maps those DLO fields to a data model object (DMO), which is the structured representation of an entity such as an Individual or an Account. Unification runs identity resolution and links source profiles into a unified profile, the Unified Individual or the Unified Account. By the time those two steps finish, Data 360 holds three kinds of state at once: raw source records, mapped data model objects, and the unified profiles that tie them together.
+
+Enhancement is the next layer. It reads that stored digital state and turns it into computed values. You do not change the underlying records. You derive metrics, attributes, and materialized views on top of them. A lifetime value number, a count of recent engagements, and a data graph record that stitches several DMOs into one view are all enhancements, and all of them are computed rather than copied from a source.
+
+This boundary is what most scenarios test. Enhancement reads unified data, while harmonization and unification produce the keys that make that data joinable. If you point a metric at a data lake object field that was never mapped to the data model, the metric will not reflect the unified customer, because the calculators live on the mapped and unified layer, not on the raw DLO. The relationship between source records and the unified customer is exactly what the insight relies on.
+
+The order of these layers is not a formality. Harmonization is where a field gets a name the rest of the platform understands, and unification is where two rows get tied to one person. An insight cannot repair a missing join or a broken match rule, because by the time the insight runs, the mapping and the identity resolution have already done their work. Consultants who expect an insight to reconcile duplicate customers discover the hard way that the calculators read what unification produced. They do not fix it.
+
+A useful way to hold the boundary is to ask what would change if the insight were deleted. Delete a calculated insight and the unified profile still exists, the mapped objects still exist, and the source records still exist. What disappears is the computed value, because the value was always a derivation, never a source of truth. That is the working test for enhancement: if removing the calculation leaves the underlying records intact, you were enhancing, not loading.
+
+### Calculated Insights are the batch calculator
+
+A calculated insight defines and calculates multidimensional metrics from your entire digital state. It processes high volume sets of stored records together, so it suits complex calculations that need large amounts of historical data, such as ranking customers by spend, computing a satisfaction score, or adding up lifetime purchases. When the base data changes, the insight automatically adds the incremental changes on the next run.[^1]
+
+You author one in the Calculated Insights tab by selecting a base object and then adding measures and dimensions. A measure is the metric being computed, a value such as a sum, a count, an average, or a maximum applied to a field. A dimension is what you group the measure by, an attribute such as a loyalty tier or a state. Add a dimension and a single overall number becomes one number per group, which is what makes the metric multidimensional.
+
+The output matters as much as the math. A calculated insight produces an insight object, and that object is read by other features downstream. Segment criteria can filter on its measures, personalization attributes can surface them on a page, and copy field enrichments can copy them into a Salesforce field. The calculated insight is therefore the batch calculator that most other Data 360 features depend on.
+
+A worked example makes the role concrete. Suppose a support team wants a count of cases per customer. The base object is the Case DMO, the measure is a count of case identifiers, and the dimension is the individual, so each row of the result is one person with a case count. That one object can then feed a segment of high contact customers and a copy field on the contact record. The same measure with the dimension left off would produce a single number for the whole organization, which is almost never the question the business asked.
+
+### Streaming Insights aggregate engagement events over a rolling window
+
+A streaming insight is an aggregation query built on real time engagement data over a rolling time window, and those windows can be as short as one minute. It processes events from streaming sources such as the Web SDK, the Mobile SDK, and the ingestion API. Only engagement style streaming objects are available to it. Streaming profile data is not, which is a distinction the exam likes to lean on.
+
+To build one you need a window function aggregate and at least one measure. The result is a time series aggregation, in near real time, that can drive orchestration or a data action. A typical use is a service scenario: a customer browsed a troubleshooting page, so the support agent can skip the steps the customer already tried. Another is lead scoring on near real time actions, or intercepting an inactive account and driving a re-engagement action.
+
+Because a streaming insight works on a rolling window rather than a finished dataset, it does not complete the way a batch job does. It keeps running as events arrive, and the window slides forward, so the aggregate always describes recent activity rather than all history. Segment and activation do not support streaming insights, which is why they pair with data actions instead.
+
+Two practical details separate a streaming insight from the batch calculator in a design review. First, its window is short by design, measured in minutes rather than months, so the aggregate answers what is happening now, not what happened last quarter. Second, it is bound to engagement style objects, so a profile attribute that never arrived as an event cannot feed it. When a requirement asks for a profile attribute, reach for a calculated insight. When it asks about recent behavior on a stream, reach for streaming.
+
+### Real-Time Insights compute per event inside a real-time data graph
+
+A real-time insight is built with a real-time data graph and its related data model objects. The related DMO is one that is not defined in the real-time data graph itself but can still be used as a real-time dimension.[^2] Data 360 calculates and stores the result inside the data graph, and the results come back in milliseconds. Real-Time Insights compute results in milliseconds from each event that updates a real-time data graph, and that per event timing is the whole point.
+
+The contrast with streaming is the unit of computation. A streaming insight summarizes a window of many events. A real-time insight computes from each individual event as it updates the graph, so it fits cumulative activity logic such as a personalization threshold on a website. You can track how many times a customer viewed a product category, or the value of the items in a cart, and decide on the spot whether the customer qualifies for an offer.
+
+Real-time insights are used with segmentation and activation as part of a real-time data graph, so the insight is only meaningful when the graph is the delivery path. The real-time data graph is required for the other real-time capabilities, and it refreshes continuously so it stays current with the DMO changes that the events produce.[^3] Without that graph, there is no per event engine for the insight to read from.
+
+A real-time insight also comes with a build constraint worth remembering. The metric functions are limited, so this is not the place for exotic math. The value comes from the per event timing, not from a clever formula. You select a real-time data graph as the input, add at least one measure, and enable it, and the graph does the work of keeping the data current while the insight reads it event by event.
+
+### Data Transforms shape data before the calculators
+
+Sometimes the shape of the incoming data does not fit what you want to compute. A data transform takes a data lake object and produces a transformed data lake object or a data model object through a sequence of transformation nodes,[^4] so columns can be renamed, joined, filtered, and aggregated before anything downstream consumes them. A transform can also start from data that has already been mapped to a DMO.
+
+The nodes are the steps. An Input node holds source data in a DLO or DMO. A Filter node removes rows you do not need. A Join node pools two inputs on a key field. An Aggregate node rolls data up with functions such as Sum, Count, Average, Minimum, and Maximum. A Transform node manipulates values, formats dates, buckets numbers, or drops columns. An Output node lands the result in a DLO or DMO, and an Update node swaps column values when key pairs match.
+
+Use a transform when you need a repeatable batch pipeline rather than a hand edited mapping. Standing values up into a single uniform value, joining usage logs to customer records, and computing intermediate aggregates are all transform work. A transform output can then be mapped or fed into the insight calculators. Treat a data transform as the shaping step between ingestion and the calculators, not as a replacement for unification. It prepares data; it does not decide who the customer is.
+
+### Every insight publishes a reusable object that other features consume
+
+The calculators do not just display numbers. Each one publishes an object with dimensions and measures, and that object is what other features read. A calculated insight result can filter segment criteria, populate personalization attributes, and feed copy field enrichments. A streaming insight result drives orchestration and data actions. A real-time insight result drives website personalization inside a real-time data graph.
+
+Data graphs take the feed one step further. A data graph combines and transforms normalized data from data model objects into new, materialized views of your data.[^5] Because the data in a graph is precalculated and stored, you can access and update it in milliseconds and answer queries with fewer downstream calls. The consistent pattern across all of these is the same: the calculators publish reusable objects, and segments, activations, actions, and other systems consume them.
+
+Keeping the four tools distinct matters because they are not interchangeable. A calculated insight cannot react to the last minute, a streaming insight cannot read a profile field, a real-time insight cannot run a month long aggregate, and a data transform does not compute a customer metric at all, it reshapes data for the tools that do. The exam often offers one of these as a distractor for a scenario that belongs to another, so name what the scenario actually needs before you look at the options.
+
+## Config Walkthrough
+
+Building an insight follows a fixed order. Confirm the unified data first, because the calculator reads unified attributes, then define the insight and validate the result.
+
+1. In Data 360, confirm identity resolution has produced the unified profile, the Unified Individual or the Unified Account, that your insight will read. Without a unified profile the metrics have nothing to attach to.
+2. Open the Data Model screen and confirm the source fields your insight needs are mapped. An insight can only use attributes that exist on a mapped object, so an unmapped field silently contributes nothing.
+3. Open the Calculated Insights tab and click New. Choose the insight type, Calculated Insight, Streaming Insight, or Real-Time Insight, and choose the data space.
+4. Add the base object, then add at least one measure and, for grouping, one or more dimensions. A streaming insight additionally needs a window function aggregate, and a real-time insight reads a real-time data graph as its input.
+5. Click Save and Run, then validate the result in Data Explorer and confirm the insight object exposes the dimensions and measures you defined. Data Explorer can show data lake objects, data model objects, calculated insight objects, and data graphs.
+
+## Try it
+
+Pick one number your business already reports by hand, such as top customers by spend, and trace it back to its source. Write down the base object the number would come from, the field the metric would sum or count, and the attribute you would group by. Then ask which calculator fits: does the number need a year of history (calculated), a window of the last few minutes (streaming), or a decision inside the current click (real-time)? Naming the calculator before you open Data 360 is the habit the exam rewards, and it separates a consultant who reads the requirement from one who reaches for a favorite tool.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, treating enhancement as a change to source or unified records. Insights and data graphs derive computed values on top of the data rather than overwriting it. An answer that says an insight edits the unified profile is wrong, because the calculators read the profile, they do not rewrite it.
+
+Second, assuming all three calculators run the same way. Calculated insights process high volume batches of stored records together. Streaming insights summarize a rolling window of engagement events, with windows as short as one minute. Real-time insights compute per event inside a real-time data graph and return results in milliseconds. Pin each behavior to its calculator and the choice becomes mechanical.
+
+Third, building an insight on an unmapped data lake object field. Only mapped data model object attributes are visible to the calculators, so an unmapped field silently contributes nothing to the metric. If a measure returns empty or misses the unified customer, the first thing to check is whether the field was mapped and whether identity resolution ran.
+
+## Decision rules to carry forward
+
+When a scenario names stored records and complex historical math, choose a calculated insight. When it names near real time, Web or Mobile SDK events, and a time window, choose a streaming insight. When it names milliseconds, a real-time data graph, and website personalization, choose a real-time insight. When it names a repeatable reshaping step before the math, choose a data transform. And in every case, remember that the calculator reads unified data, so confirm the profile and the mapping before you build it.
+
+## What's next
+
+The next lesson is Lesson 35 - Calculated Insights in Practice: Dimensions, Measures, and Where Results Are Used (en-1b). It takes the batch calculator from this lesson and walks the build in detail: choosing the base object, picking a metric level, and naming the exact places a calculated insight result can be used.
+
+[^1]: Salesforce Help, "Enhance Data with Insights," (https://help.salesforce.com/s/articleView?id=data.c360_a_insights.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Create a Real-Time Insight Using Builder," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_real_time_insight.htm&language=en_US&type=5)
+[^3]: Trailhead, "Explore Real-Time Features in Data 360," (https://trailhead.salesforce.com/content/learn/modules/real-time-use-cases-in-data-cloud/explore-real-time-features-in-data-cloud)
+[^4]: Trailhead, "Get Started With Batch Data Transforms in Data 360," (https://trailhead.salesforce.com/content/learn/modules/batch-data-transforms-in-data-cloud-quick-look/get-started-with-batch-data-transforms-in-data-360)
+[^5]: Salesforce Help, "Data Graphs," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_graphs.htm&language=en_US&type=5)

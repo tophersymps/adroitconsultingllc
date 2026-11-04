@@ -1,0 +1,106 @@
+---
+title: "Lesson 19: Streaming Data Transforms and Real-Time Preparation"
+slug: day-19-ing-1c-streaming-data-transforms-and-real-time-preparatio
+series: sf-data360-consultant
+lesson: 19
+excerpt: "A streaming data transform cleans and reshapes each record as it arrives, then writes it to a different target object. This lesson covers source and target selection, the SQL expression that is the whole logic, the settings that lock the moment you save, and the traps the exam sets."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Streaming Transforms, Data Ingestion]
+---
+
+# Lesson 19: Streaming Data Transforms and Real-Time Preparation
+
+A developer stands up a streaming data transform, watches rows land in the target object, and then notices a column name typed wrong in the SQL. She opens the transform to correct it and finds no edit control at all. The transform is already live, and a live streaming transform is not editable. The only path is: delete the transform and create a new one, because streaming transforms cannot be modified after saving.
+
+That is the failure this lesson exists to prevent. Requirement ing-1c sits in the Data Source Connection and Ingestion domain, which carries 18% of the Salesforce Data 360 Consultant exam. The requirement asks you to explain data transformation capabilities within Data 360, focused on setting up a streaming data transform and preparing records in real time for downstream consumption. On the job that means shaping raw records into the clean form the data model expects before anyone tries to unify, segment, or activate them.
+
+This lesson walks the whole path. It defines what a streaming transform is and how it differs from a batch transform, then works through source selection, the data space restriction, the currency setting, target selection including creating a new object inline, and the SQL expression that becomes the entire logic of the transform. It ends with the three traps the exam sets and the decision rules a consultant should carry into a real project.
+
+## Deep Dive
+
+### A streaming data transform reads the source and reshapes it into a different target object
+
+A streaming data transform reads one record in a source object, reshapes the record data, and writes one or more records to a target object.[^1] It runs continuously as a streaming process, picking up new or changed data as it arrives, rather than running once on a chosen schedule. The point of the transform is to clean and normalize ingested data, and then let you map the improved data to the data model. The source and target objects must be different objects.[^1] They must be different objects because the transform reads from one place and writes to another, and the write cannot land on the object it is reading.
+
+The runtime behavior is what separates it from batch. New records are ingested and are immediately transformed and appended to the output object.[^2] There is no waiting for a window to close and no scheduled slot to hit. The transform reacts to the stream. A batch transform is the opposite shape: it runs over selected data on a time interval, so you use it when you need to modify select amounts of data on a scheduled interval.[^2] Streaming is per record as it enters; batch is windowed and scheduled. Both produce data that you then map to the data model, but they are chosen for different problems.
+
+The classic streaming use case is detection while the event is still fresh. A streaming data transform is ideal for detecting credit card fraud, where you aggregate data coming from many processing systems as it is ingested, normalize it into a standard format, and spot irregularities in near real time.[^2] The value is the latency: a fraud signal that arrives an hour later is worth far less than one that arrives as the charge posts. When you read an exam scenario about reacting to data the moment it enters the system, think streaming. When you read about rearranging a large settled dataset on a nightly job, think batch.
+
+### You choose a data lake object or a data model object as the source, and a data model object source pins the transform to one data space
+
+Setup starts on the Data Transforms tab. In Data 360, on the Data Transforms tab, you click New.[^1] If the Data Transforms tab is not visible, you click More and select Data Transforms. If the New button is missing entirely, two causes explain it: either the tab is hidden under More, or your org has already used the maximum number of transforms allowed, in which case the New button does not appear.[^1] That second cause is a real ceiling, not a display quirk, and a consultant who cannot find New should check the org's transform count before assuming a permissions problem.
+
+After clicking New, you select Streaming Data Transform and click Next, then select Data Model Object or Data Lake Object as the source type and click Next again.[^1] The choice matters more than it looks. If you select Data Model Object, you choose a data space from the dropdown menu, because a data transform that runs on data model objects is restricted to read and write to the selected data space.[^1] The transform is confined to that space. It reads within it and it writes within it, and it does not reach across into another space.
+
+That confinement is a governance boundary, and it is the thing people get wrong. A transform that runs on data model objects is not org wide. If a scenario describes a team that expects one transform to reach data in several spaces, the correct reading is that it cannot, and the design has to change, either by picking the right space or by moving the logic to a different layer. A streaming transform on data lake objects does not carry the same data space pin, which is one reason a team that needs to clean raw ingested data often targets a DLO first.
+
+### Naming the transform and the currency setting
+
+Next you enter a name for the data transform, and optionally you select a currency.[^1] The currency setting converts data with multiple currencies to a single value. If you have multiple data transforms that write to the same target, make sure they all have the same currency.[^1] This is easy to skip and expensive to get wrong. Picture two transforms feeding one target object: one set to normalize to US dollars and one left with a different currency. The target now holds values in two currencies with no marker to tell them apart, and every downstream total is quietly wrong. The rule is simple. When several transforms share a target, give them the same currency.
+
+The currency setting is a normalization step, not a filter. It does not drop rows and it does not pick a winning currency per row. It converts multi-currency data down to a single value so that the output column is comparable. That is useful when a source system records transactions in many currencies and the downstream consumer wants a single comparable amount.
+
+### The target object can be an existing DLO or DMO, or one you create inline
+
+For the Target Object field, you choose a DLO or DMO from the list, or you select Create New.[^1] There is a specific behavior here that the exam likes to test: only DLOs and DMOs created using Create New are displayed in this list.[^1] In other words, the list is not a full inventory of every object in the org. It holds the objects you can target directly here, and when you need a fresh object you define it during setup with Create New rather than leaving the flow to build it somewhere else.
+
+This is why the claim that a target object cannot be created during setup is false. You can select Create New and define the object inline. When you create a new target this way, the SQL syntax you write next determines the columns and data types for the new DLO or DMO.[^1] The statement is not just a transform; it is also the schema declaration for the object it feeds.
+
+### The SQL expression is the whole logic of the transform, and Check Syntax gates the save
+
+In the Expression field you enter a SQL statement that tells the streaming data transform which records to process and how to map the transformed output to the target object.[^1] Everything the transform does lives in that statement. There is no separate mapping screen for the streaming case the way there is for a data stream; the SQL carries both the selection of records and the mapping of output columns.
+
+Verify your SQL statement's syntax by clicking Check Syntax.[^1] If a streaming data transform contains syntax errors or validation errors, such as incorrect API names for the source and target, you cannot save it, and these errors appear on the left side.[^1] Fix them before saving. The validation is doing real work: it catches a misspelled API name that would otherwise silently write nothing or write to the wrong column. The practical habit is to write the statement, click Check Syntax, read the left panel, and only then think about saving.
+
+Because a streaming transform runs continuously on incoming records, write the statement to handle the stream as it arrives rather than a one time load. A statement that assumes it sees a whole settled dataset will behave strangely when it is instead handed records one at a time. If the transform needs to read only certain rows, use a WHERE clause to limit which source object records it reads and processes.[^1] Keep the logic tight, because the transform runs it on every record that flows past.
+
+### Keep the streaming logic simple and stable, and send heavy logic to a batch transform instead
+
+A streaming transform executes against every incoming record as the stream arrives, so the cost and the risk of a bad statement are paid continuously. Anything that needs joins across many objects, aggregation, or window functions belongs in a batch transform that runs downstream instead.[^1] Aggregation means collapsing many records into a summary, and a streaming transform is not the place to do it. Window functions need an ordered, bounded set of rows to look across, and a stream does not hand you that. Joins across many objects turn each incoming record into a multi table look up, and the latency and the failure surface both grow.
+
+Simple joins are a different story. In a streaming transform you can use INNER JOIN and LEFT JOIN clauses in the SQL statement to combine data from two streams.[^3] When you build a join, one object identifies the object that triggers the transform on update, and the other specifies the object used to evaluate the join.[^3] So a narrow, single predicate join between two streams is fair game in streaming. What you avoid is the heavy shape: many tables, aggregation, and window logic. Those belong in the batch layer, where the data has settled and the run is scheduled.
+
+The design principle is to keep streaming logic simple and stable. A streaming transform is a long lived component that runs on its own, so a fragile statement is a fragile pipeline. When a requirement grows complicated, split it: do the light, per record cleanup in streaming, and do the heavy reshaping in a batch transform downstream.
+
+### Creating a new target inline means naming the object and choosing its key
+
+When you create a new DLO or DMO during setup, you click Next and you are prompted to enter a name for the DLO or DMO and the category.[^1] You can optionally select a value from the Enable Value Suggestion field, which streamlines the process by providing a list of valid values for fields.[^1] Value suggestions help you enter consistent field values rather than free typed ones that drift.
+
+Then you choose a key qualifier to create fully qualified keys (FQK) and select a primary key field.[^1] The key qualifier, paired with a primary key field, is what creates fully qualified keys on the newly created target object. A fully qualified key is a key that is unique across every source that contributes to the object, not just within one source, which matters when the same natural identifier can appear in more than one system. Once you click Save, the DLO or DMO is created, and a streaming data transform is created that uses it as the target data source. That transform then executes to populate the object with data.[^1]
+
+The full sequence for creating a target inline is worth memorizing as one motion: enter the name and category, optionally set value suggestion, choose the key qualifier for fully qualified keys, select the primary key field, and save. Get the key wrong and the object ingests records that cannot be reliably matched later.
+
+### Config walkthrough: setting up a streaming data transform
+
+The whole flow, in order:
+
+1. In Data 360, open the Data Transforms tab (or click More and select Data Transforms) and click New.
+2. Select Streaming Data Transform and click Next, then choose Data Model Object or Data Lake Object as the source type and click Next.
+3. Select the data space if you chose a data model object, enter a transform name, and optionally set the currency.
+4. Set the Target Object to an existing DLO or DMO, or click Create New to define one inline, then click Next.
+5. Enter the SQL statement in the Expression field and click Check Syntax, fixing any errors shown on the left side.
+6. Save. If you created a new target, name the DLO or DMO, set the value suggestion and the key qualifier for fully qualified keys plus the primary key field, then Save.
+
+## Exam Traps
+
+Three traps dominate this objective, and each one turns on a rule that is easy to skim past.
+
+First, thinking a streaming transform can be tweaked later. A tempting wrong answer is to edit the transform and save again, or to pause it, edit it, and resume. Both are wrong. A streaming transform activates immediately when saved, and you cannot change it after saving it. The correct path to change it is delete the transform and create a new one. If you find yourself reaching for an edit control that is not there, the mental model is wrong: treat what you type as permanent, and check the syntax before you commit.
+
+Second, selecting the same object for source and target. A transform requires the source and the target to be different objects.[^1] The scenario that offers to transform an object onto itself, or to clean a target in place, is describing something the tool will not let you build. If a requirement seems to need it, the real design is to write to a second object and let mapping connect the cleaned copy to the data model.
+
+Third, assuming data model object transforms are org wide. A transform that runs on data model objects is confined to the data space you select, and it can only read and write within that space. The scenario that has one transform reaching into other data spaces is testing whether you know the transform is pinned. Read the source type before you reason about reach.
+
+## The decision rules to carry out
+
+Use a streaming data transform when records must be cleaned and normalized as they arrive, not on a schedule. Remember that the source and the target must be different objects. Decide the source type early, because a data model object source pins the transform to one data space for both reads and writes. Set the currency consistently when several transforms share a target. Put the whole logic in the SQL expression, run Check Syntax, and fix the left panel before saving. Keep the statement simple: light per record work in streaming, and joins across many objects, aggregation, and window functions in a batch transform downstream. And never plan to edit a streaming transform later. Once you save, the shape is fixed, so the only change path is delete and recreate.
+
+## What's next
+
+Lesson 20 - Connectors and Data Streams: CRM, MuleSoft, Ingestion API, File and Federated Sources (ing-2a).
+
+[^1]: Salesforce Help, "Set Up a Streaming Data Transform," (https://help.salesforce.com/s/articleView?id=data.c360_a_streaming_transform_setup.htm&language=en_US&type=5)
+[^2]: Trailhead, "Get Started with Streaming Data Transforms in Data 360," (https://trailhead.salesforce.com/content/learn/modules/streaming-data-transforms-quick-look/get-started-with-streaming-data-transforms-in-data-cloud)
+[^3]: Salesforce Help, "Join Data in a Streaming Transform," (https://help.salesforce.com/s/articleView?id=data.c360_a_join_data_streaming_transform.htm&language=en_US&type=5)

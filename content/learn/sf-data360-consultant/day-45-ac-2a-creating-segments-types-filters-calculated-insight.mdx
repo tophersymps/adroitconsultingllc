@@ -1,0 +1,107 @@
+---
+title: "Lesson 45: Creating Segments: Types, Filters, Calculated Insights, and Engagement Data as Criteria"
+slug: day-45-ac-2a-creating-segments-types-filters-calculated-insight
+series: sf-data360-consultant
+lesson: 45
+excerpt: "Creating a segment means choosing a type, bounding the data with a lookback window, and building criteria from direct attributes, related attributes, calculated insights, and engagement data. This lesson covers each choice and the mistakes that recur."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Segmentation, Calculated Insights, Engagement Data]
+---
+
+# Lesson 45: Creating Segments: Types, Filters, Calculated Insights, and Engagement Data as Criteria
+
+A consultant is asked for an audience of top-decile customers by predicted value. She opens the segment canvas and looks for the field. It is not there, and it will never be there, because lifetime value is not an attribute sitting on Unified Individual. It is a metric computed across several sources, and in Data 360 that means a calculated insight. The request was reasonable and the object she reached for was the wrong one. Knowing which object a criterion lives on is the skill this lesson builds.
+
+Requirement ac-2a, in the Data Activations and Utilization domain worth 20 percent of the Salesforce Data 360 Consultant exam, asks you to manage segments within Data 360, covering segment types, filters and criteria, and using calculated insights and engagement data as criteria. This lesson takes the segment type names from lesson 43, adds the creation mechanics, and shows how filters, calculated insights, and engagement data each become a criterion on the canvas.
+
+## Deep Dive
+
+### The segment types you create, and what separates them
+
+Creation starts with the segment type, and the type decides how the segment runs. A standard segment is built on a single data model object and persists its members into a Segment Membership object, so it can be scheduled and published. The persisted membership is what makes scheduling and activation possible, and it is why the standard segment covers the large majority of campaign work.
+
+The other types exist because some use cases cannot be served by a scheduled batch. A dynamic segment runs its query at request time with placeholders for dynamic values and does not persist membership, so it cannot be scheduled or published and can only be run by an API call.[^5] A real-time segment completes on demand in milliseconds and is built on a real-time data graph rather than a batch data model object. A waterfall segment processes existing segments in priority order so each person lands in only the highest priority segment they match. Einstein Segment Creation suggests a segment and its attributes from a natural language description, which you then refine and publish as a standard-style audience.[^6]
+
+The distinctions that the exam rewards are about capability, not vocabulary. Only a standard segment persists membership and can be scheduled and published, so a campaign delivery needs a standard segment. A dynamic segment is API only and has no destination, so it fits a parameterized lookup, not a send. A real-time segment answers a question in the moment but does not support a manual publish or segment counts, so it fits an in-session decision. A waterfall segment produces mutually exclusive audiences from existing segments, so it fits the one-offer-per-person problem. Match the capability to the use case and the type chooses itself.
+
+### The lookback window bounds every standard segment
+
+When you create a standard segment you choose a data space and a Segment On object, then set a lookback window that bounds the data range. The lookback defaults to 90 days and can extend as far as your organization maximum, up to two years.[^1] The window is not a filter you add later; it is a boundary the whole segment lives inside, and it applies to engagement category objects through their event time field. Only records whose event time falls inside the window are considered, and a record with a null event time is treated as outside the window entirely.
+
+Container criteria can be narrower than the segment level window and take precedence when they disagree. Container criteria can specify a narrower window that takes precedence over the segment level setting, which means the effective range for that criterion is the smaller of the two. Set the segment level window to 90 days and a sales order container to 60 days, and the order criterion only counts orders from the last 60 days while the rest of the segment still sees the full 90. This is a feature, not a bug, and it is also the single most common explanation for a count that comes in lower than the business expected.
+
+A lookback window that is too short drops members silently, because there is no error for data you chose not to look at. The documentation lists this as a common cause of a segment returning zero even when records appear to qualify, and the remedy is to review whether profile records were excluded by the window before you change any criteria. When you create the segment, deliberately choose the window that matches the business cadence, and when you nest a container, check whether its window narrows the range further.
+
+On publish, the platform creates or updates the Segment Membership data model object of type Segment_Membership, and that object is how you identify who is in the segment. Each object you segment on carries a set of these membership objects across all the segments that use it, and querying membership is the reliable way to answer who, rather than reading a count off a screen and hoping it matches the destination.[^2]
+
+### Filters come from the attribute library, and containers carry the logic
+
+Filters come from the attribute library, which lists direct attributes on the segment object and related attributes reachable through relationships. The library only shows fields that are mapped and associated with the selected segment target, so a field that was ingested but never mapped is invisible to segmentation. That is not a limitation to work around; it is the reason data mapping comes before segment building in every implementation.
+
+You arrange filters in containers. Direct attributes sit on the canvas as standalone rules, while related attributes land inside a container because one profile can hold many of them. Containers support inclusion and exclusion, so you can express who is out as well as who is in, and each container can hold up to 20 filters with AND or OR logic between them. Attributes in one container are evaluated together and attributes in separate containers are independent, which is the difference between a single purchase that matched both conditions and two separate purchases that matched one each.
+
+Operators range from equality and range comparisons to date windows and set membership, and the operators available depend on the attribute's data type. Date operators use the org time zone and include relative windows such as last number of days, which makes them a natural fit for behavioral criteria. Text operators support set membership through Is In, which accepts up to 100 values in the standard path and up to 10,000 through bulk import, and a segment can include only one Is In operator at that bulk size.[^3]
+
+One structural caution belongs here. Because the segment canvas relies on predefined single field relationships, a data model object with a composite key can produce inaccurate counts or arbitrary joins. The canvas cannot join on all fields of a composite key at once, so it may select a single field and produce a result that is technically wrong without being obviously wrong. To avoid the problem, use data model objects with a single, unique primary key for segmentation, and keep composite keys for manual queries where every join field is written out explicitly.
+
+### A calculated insight is a metric, and it extends a segment
+
+A calculated insight is a metric or aggregate, such as lifetime value or an engagement score, computed across data and refreshed automatically. It is not an attribute you map from a source; it is a value the platform computes, which is why it does not appear on the Unified Individual object the way a postal code does. You can extend a segment with calculated insights, which lets criteria reference a computed metric rather than a raw attribute. This is how you build audiences such as top decile by predicted value or customers whose engagement score crossed a threshold, neither of which exists as a stored field.
+
+A calculated insight added as a segment criterion is the mechanism behind every metric-based audience. You drag the insight's metric onto the canvas, choose an operator, enter a value, and optionally add a dimension to refine the metric further. For a criterion to work, the insight has to connect to the object you are segmenting on, usually through a join to the segmented table with the segmented table's primary key as one of the insight's dimensions. An insight that is aggregated at a level that does not match the segment is simply not offered, which is the platform protecting you from a criterion that would return an arbitrary number.
+
+The dependency that surprises people is refresh timing. Because insights refresh on their own cadence, a segment built on an insight changes when the insight changes, so document that dependency when the audience size surprises anyone. A membership count that moves on a day when nobody edited the segment is often the calculated insight updating underneath it. Say so in the design record and you have converted a mystery into a scheduled event.
+
+### Engagement data objects drive behavioral criteria
+
+Engagement data model objects record interactions such as email opens, clicks, and web activity. Because these are engagement type objects, they can drive behavioral criteria directly on the canvas: include people who opened in the last 30 days, exclude people who unsubscribed, or weight a segment by recent web visits. A related attribute from an engagement object lands in a container, so the behavioral rule stays scoped to that object instead of leaking into the rest of the criteria.
+
+Behavioral criteria are usually the most predictive, because they reflect what a person actually did rather than what a profile says about them. They also depend on the freshness of the engagement stream, which is the trade-off. If the stream lags, the segment lags, and a campaign can reach the wrong people or miss them entirely. Align the publish schedule with how current the engagement data actually is. A rapid publish cadence is optimized for recent engagement data, but it only sees the last seven days of it, so a behavioral criterion that reaches further back than the cadence allows will not behave the way the builder assumed.
+
+The lookback window and engagement data interact in a way worth naming. If a segment references an engagement object but does not filter on event time, the platform automatically excludes records whose event time falls outside the segment's lookback window. That automatic exclusion is a frequent cause of a segment count that is lower than expected, and it is invisible on the canvas unless you know to look for it.[^4] When a behavioral criterion seems to ignore qualifying records, check the lookback window before you rewrite the criterion.
+
+### Three creation mistakes that recur
+
+Three creation mistakes recur often enough to check for on every build. The first is building on a data lake object instead of a mapped data model object. Segmentation reads mapped data model objects and their established relationships, so an unmapped data lake object field is invisible to criteria, and a segment that appears to target a data lake object is really targeting nothing the canvas can see. Confirm the mappings exist before you build, because segmentation and activation use only mapped fields and objects with established relationships.
+
+The second is ignoring the lookback window. Members outside the window drop out of the audience, and a container window narrower than the segment level window takes precedence and shrinks the data range further. This mistake never throws an error, which is what makes it dangerous. It produces a smaller audience than intended and leaves the builder convinced the data is wrong.
+
+The third is overusing one giant container. A container holding every related criterion is hard to read and hard to maintain, and it hides the intent of the logic. Split criteria into logically named containers so intent is visible, and let each container hold one coherent behavioral idea. A reader should be able to scan the canvas and say what the audience is, which is impossible when everything sits in one block.
+
+### Walking the build
+
+The build below follows the current Data 360 interface and the criteria mechanics this lesson covers.
+
+1. In the Data 360 app, click Segments, then New, and select Use a Visual Builder.
+2. Choose the segment type, for example Standard Segment, then click Next and select the target data space.
+3. For Segment On, select the data model object the segment is built on, then set the Lookback Window.
+4. In the segment canvas, add containers and drag direct or related attributes from the attribute library, and set include or exclude with the operators you need.
+5. To use a metric, extend the segment with a calculated insight and add its attribute as a criterion.
+6. Save the segment, verify it with Preview, and connect it to an activation target when it is ready to publish.
+
+The two steps people skip are the lookback window and the preview. The window quietly bounds everything the canvas can see, and the preview is the only cheap way to catch a boundary you set wrong. Everything else in the build is a choice you can revisit; those two decide whether the count you get is the count you meant.
+
+## Exam Traps
+
+The first trap is building on a data lake object. Segmentation reads mapped data model objects and their established relationships, so an unmapped data lake object field is invisible to criteria, and the build will not behave the way it looks like it should. Confirm the mappings before you build.
+
+The second trap is ignoring the lookback window. Members outside the window drop out of the audience, and a container window narrower than the segment level window takes precedence and shrinks the data range further. A count that comes in low is far more often a window problem than a criteria problem, so check the window first.
+
+The third trap is assuming a dynamic segment can be scheduled and activated like a standard segment. Dynamic segments run only by API call, do not persist membership, and cannot be scheduled or published to activation targets. If a use case needs a scheduled send to a destination, the correct answer is a standard segment.
+
+## The Decision Rules
+
+Carry five rules out of this lesson. Choose the segment type by capability: standard persists and publishes, dynamic is API only, real-time answers in the moment, and waterfall produces mutually exclusive audiences. Set the lookback window deliberately, remembering that container criteria can specify a narrower window that takes precedence over the segment level setting. Build criteria from mapped direct and related attributes, and reach transaction or interaction data through relationships rather than unmapped objects. When a criterion depends on a computed number, use a calculated insight added as a segment criterion, and count on that insight to change on its own cadence. And when a segment will be reused or joined, use data model objects with a single, unique primary key for segmentation so the canvas can join correctly.
+
+## What's next
+
+Lesson 46 - Operating Segments: Refresh, Membership Counts, Editing and Versioning, and Sharing (ac-2b) moves from creating a segment to running one. It covers how refresh and publish schedules behave, how membership counts move and why, how editing a live segment is versioned, and how segments are shared across a Data 360 org.
+
+[^1]: Salesforce Help, "Create a Standard Segment in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_segment.htm)
+[^2]: Salesforce Help, "Segment Membership Data Model Object," (https://help.salesforce.com/s/articleView?id=data.c360_a_segment_membership_data.htm)
+[^3]: Salesforce Help, "Segmentation Operators in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_datatype_expression_operators.htm)
+[^4]: Salesforce Help, "Data 360: Lookback Window on Engagement Data in Segments," (https://help.salesforce.com/s/articleView?id=000395460)
+[^5]: Salesforce Help, "Create a Dynamic Segment," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_dynamic_segment.htm)
+[^6]: Salesforce Help, "Create an Einstein Segment in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_segment_einstein_create.htm)

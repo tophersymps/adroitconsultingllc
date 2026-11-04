@@ -1,0 +1,107 @@
+---
+title: "Lesson 11: Data Governance Basics: Tags, Classifications, and Metadata"
+slug: day-11-sa-2a-data-governance-basics-tags-classifications-and-me
+series: sf-data360-consultant
+lesson: 11
+excerpt: "Objective sa-2a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to apply data governance requirements to platform configuration. Lesson 11 covers tagging and classifying data objects and fields so policy-based governance applies at scale."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Governance, Tags, Classifications]
+---
+
+# Lesson 11: Data Governance Basics: Tags, Classifications, and Metadata
+
+A consultant inherits an org with several hundred data lake objects and data model objects and is asked to protect every field that holds a Social Security Number. The instinct is to open permissions and tick boxes field by field. Two sprints later the work is still half done, a new set of fields has arrived from a fresh data stream, and the protection map is already stale. Manual permission editing does not scale, and everyone who has tried it in a live Data 360 org knows the feeling.
+
+The fix is to describe the data once and let policy act on the description. This lesson covers objective sa-2a, part of the Data 360 Setup and Administration domain, worth 13% of the Salesforce Certified Data 360 Consultant exam. The objective asks you to apply data governance requirements to platform configuration, focused on tagging and classifying data objects and fields so policy-based governance applies at scale. We cover what tags and classifications are, how the tag hierarchy works, how automatic tagging and propagation handle volume, why a tag tied to a policy cannot be deleted, and how tagging powers attribute-based access control.
+
+## Deep Dive
+
+### Data governance in Data 360 combines tags, classifications, user attributes, and policies
+
+Data governance in Data 360 combines tags, classifications, user attributes, and policies. Tags are metadata labels that describe an object, field, or record. Classifications group related tags into categories such as public, internal, confidential, or restricted.[^1] Together they let you enforce access with policy rules instead of hand-editing permissions object by object, which does not scale once you have hundreds of DLOs, DMOs, and fields. The governance model is metadata first: you describe the data, and the policies read the description to decide what to allow and deny.
+
+The distinction between a tag and a classification matters because they play different roles. A tag is the specific label, the thing that says this field holds an account number or that this object holds customer data. A classification is the bucket that groups related tags by value, sensitivity, or regulatory requirement, the thing that says these fields are confidential and those are public.[^2] You tag at the granularity of the thing, and you classify at the granularity of the rule. The pair is what lets a governance team describe a policy in business terms and have it apply to whatever the data is called. A classification such as `Restricted` can sit above a cluster of tags, so a single policy written against the classification covers everything the cluster contains, and a curator who adds a tag to the cluster extends the protection without touching the policy.
+
+There is a practical reason the layer exists at all. Permissions live on objects and fields, and objects and fields multiply. Every new data stream, every identity resolution run, and every segment can produce fresh objects, and each one would need its own permission work under a purely manual model. Tags and classifications invert that: you describe the categories once, and each new asset earns protection by carrying the right label. The exam rewards the consultant who reaches for metadata rather than for another round of permission editing, because the metadata approach is the one that survives the next data stream.
+
+### Tags apply at object level and field level
+
+Tags apply at object level and field level, and the two levels do different work. Object-level tags label whole data objects such as data lake objects, data model objects, and calculated insight objects. A `Confidential` or `Customer Data` tag on an entire sales dataset describes the overall nature or sensitivity of the thing. Field-level tags identify the sensitive parts inside an object, such as Email, Social Security Number, or Date of Birth, where masking or restricted access is needed.[^3] The email field inside a customer object is a different protection problem from the object itself.
+
+Applying both lets you grant broad access to an object while still protecting its sensitive fields. That is the whole trick of scalable governance: the object-level tag can drive a broad allow so the right team can use the dataset, and the field-level tags drive masking or denial so the account numbers and identifiers inside it stay hidden from anyone who does not need them. A governance design that only tags objects is too coarse, and a design that only tags fields has no way to reason about reach. Use both, at the level each decision belongs to.
+
+A worked example shows why the split matters. An insurer tags its entire claims dataset at the object level as `Customer Data` so that the claims team gets a broad allow to the object. Inside that object, the fields for claimant national identifier and bank account number carry field-level tags. The object-level tag answers can this team work with claims, and the field-level tags answer can they see the identifiers inside a claim. A single field-level policy keyed on the identifier tag masks those fields for everyone outside the settlement team while leaving the rest of the object fully usable. The insurer never has to deny the whole dataset to protect three fields, and it never has to enumerate those three fields individually when a fourth is added later.
+
+### A tag can have one parent and multiple child tags, but the hierarchy is limited to a single level
+
+A tag can have one parent and multiple child tags, but the hierarchy is limited to a single level. A tag can have one parent and multiple children, limited to one level. That sentence is the one to memorize, because the tempting wrong answer is that tags nest as deeply as you like. They do not. You can build `Personal Data` as a parent with `Email`, `Social Security Number`, and `Phone` as children, but you cannot then make `Email` the parent of `Work Email` and `Home Email` in a third level. A tag has a single parent at most, never multiple parents, and the tree stops one level down.[^2]
+
+Tags are created from the Data Governance tab. You give the tag a unique name and an optional description, and except for periods most characters and spaces are allowed in the name. The tag API name is auto-filled from the name and can be edited. You also choose the tag's source taxonomy, which defaults to the custom tag taxonomy, and you can optionally attach an existing parent. One trap hides here: if you select a tag parent, you can no longer change the tag's source taxonomy, so decide the taxonomy before you attach the parent.[^2] Classifications follow a similar pattern from the Data Governance tab, where you pick a source taxonomy, optionally choose a parent classification, name it, and optionally attach tags. Tags are hierarchical, so attaching a parent tag to a classification pulls in all of its child tags.[^4]
+
+The single-level limit shapes how you design a taxonomy, and getting it wrong early is expensive because renaming a large tag set later is manual work. Put breadth into the number of children under a parent rather than depth into grandchildren, and put additional structure into classifications, which group tags by value or sensitivity and are the thing policies reason over. A consultant who tries to model a four-tier data dictionary directly in tags will hit the wall at level two. A consultant who models category as classification, subject as parent tag, and specific field as child tag stays inside the limit and still gets a vocabulary rich enough for real policies.
+
+### Automatic content tagging and tag suggestions help tag data at volume
+
+Automatic content tagging and tag suggestions help tag data at volume. Auto-tagging can govern both structured and unstructured data by attaching metadata tags based on detected content, and tag propagation moves a tag to related assets. The Suggest Tags feature uses a large language model to look at information such as object and field names and suggest tags based on defined taxonomies. To protect privacy, it does not access or analyze customer data at all; it analyzes metadata to suggest relevant tags at the object and field levels, and those suggestions are not applied automatically. A data steward or admin reviews and approves them, which keeps final control with someone who understands the business context.[^5]
+
+That human-in-the-loop step is a feature, not a limitation. The suggestion engine is good at reading a field name like `SSN__c` or `DateOfBirth__c` and proposing the obvious tag, and it is blind to the business nuance that decides whether a field is genuinely sensitive in this org. A steward who reviews the queue catches both directions of error: a tempting field that is not actually sensitive, and a blandly named field that holds regulated data. The suggestions cut the volume of manual work; the review keeps the accuracy that a purely automatic pass would lose.
+
+Tag propagation comes in two shapes. Manual propagation pushes tags from a primary object, such as a data model object, down to its downstream objects. Automatic propagation handles the objects that processes generate: when identity resolution runs and produces a unified individual DMO, or when a segment or calculated insight generates a new object, Data 360 applies the source object's tags to the generated object automatically.[^6] This matters because governance is meant to be repeatable. When new data arrives you attach the correct tag once, and the existing policies enforce themselves without additional setup. You are not rebuilding the fence every time the field moves. Think of propagation as the reason a tag applied to a source object keeps its meaning one or two hops downstream, so a policy written against the source tag still finds the same condition on the derived object.
+
+### Tags cannot be deleted while they are used in a policy
+
+Tags cannot be deleted while they are used in a policy, and the default tags provided by Data 360 carry the same protection. When an admin tries to delete a tag and the platform blocks it, the most likely reason is that the tag is used in a policy. The tag is used in a policy. Having many child tags is not the reason, because tag hierarchy depth does not block deletion. An auto-filled API name is not the reason either. The block is about the policy dependency, not the shape of the tag.[^7]
+
+The remedy is order of operations. Before retiring a tag, remove it from every policy that references it, then delete it. Skipping the first step leaves a policy pointing at a missing condition, which is why the platform refuses in the first place. A deliberate taxonomy pays for itself here. A small set of well named tags and classifications keeps policies few and legible, whereas ad hoc tags create sprawl that is hard to audit and easy to break during a migration. If every team invents its own labels, the policy list grows with them, and the next person to tidy up cannot tell which tags are load-bearing. Name tags for what they describe, not for who asked for them, and the delete path stays open because you can see exactly which policies to touch first.
+
+The default tags deserve a specific warning. Because Data 360 ships a standard tag set, a policy author can key a policy on a default tag without realizing it, and that default tag then becomes undeletable along with every other tag in use. That is not a problem if the tag is genuinely shared, but it is a surprise if a consultant assumed the defaults were always disposable. Audit which tags your policies reference before you plan any cleanup, so you do not discover an undeletable tag in the middle of a migration window.
+
+### The point of tagging and classification is to power attribute-based access control
+
+The point of tagging and classification is to power attribute-based access control. Policies read the tags and classifications on a resource as conditions, so a rule like deny anyone without the Finance Team User permission access to objects tagged `Financial Data.Account Info` applies automatically to every field later tagged the same way, with no additional configuration. That is the scalability dividend of governing by metadata rather than by permissions. The tag is the condition; the policy is the enforcement.
+
+This is why the exam rarely rewards tagging without a policy that consumes it. Tags do not grant or deny access by themselves. They are not permissions, and applying a tag to a field does not hide it from anyone. A tag is an attribute that a policy reads at runtime, and until a policy exists that references the tag, the tag is documentation rather than control. The same is true of classifications: they group tags into decision-ready categories so a policy can say allow the Compliance team where the data is classified as Confidential, or deny access to anything tagged PII for users outside the Support team. When the requirement is to protect every field that holds a Social Security Number, including fields added next year, without editing permissions each time, the answer is to tag the SSN fields and write a policy keyed on that tag. New fields tagged the same way inherit the protection automatically; hand-editing permissions every quarter does not, and hiding the entire object is far broader than the requirement and blocks legitimate access to the non-sensitive fields beside the SSN.
+
+Try it in a Developer Edition org. Create one parent tag named for a category and two child tags under it, then attach one child tag to a field on an object. Try to create a third level under a child tag and watch the interface refuse it. Then write one trivial deny policy that references the field-level tag, and try to delete the tag. The block you get is the mechanism, felt rather than memorized.
+
+### Configuration walkthrough
+
+Five steps build a working tag and classification layer.
+
+1. In Data 360, open the Data Governance tab. Tags, Classifications, Taxonomies, and Policies all live here, so this is your home base for governance work.
+
+2. To create a tag, click New, enter a unique tag name and an optional description, choose a source taxonomy, optionally choose a parent tag, then click Next. The API name fills in from the name and can be edited.
+
+3. Optionally assign the tag one or more classifications, then click Save. Keep the classification set small and meaningful so policies stay legible.
+
+4. To apply a tag to an object or field, open the resource and attach the tag manually, or use automatic tag suggestions and tag propagation. Let propagation carry the tag to the objects that downstream processes generate.
+
+5. To classify, create or reuse a classification that groups related tags by value, sensitivity, or regulatory requirement. Classifications are the buckets your policies reason over, so name them for the rule they support.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, treating tags as a deep taxonomy. The hierarchy is limited to a single level, so a three-level structure cannot be built. If you design on the assumption that tags nest as deep as you like, you will discover the wall in the middle of a migration. Design the taxonomy to fit one level of parent and child, and put depth into classifications or naming instead. The unlimited-nesting distractor is the strongest wrong answer precisely because it matches how data dictionaries usually work elsewhere.
+
+Second, deleting a tag that a policy uses. The platform blocks the deletion, and the block is not a bug. Remove the tag from every policy that references it, then delete it. The strongest distractor points at child tags as the cause; hierarchy depth does not block deletion, the policy dependency does. A tag with a dozen children deletes cleanly once no policy references it, and a tag with no children refuses while one policy still uses it.
+
+Third, confusing tags with permissions. Tags do not grant or deny access by themselves. They are the conditions that policies read, nothing more. Applying a tag and declaring the data protected is the classic governance failure: the metadata is in place and the enforcement is not. The exam rarely rewards a tagging answer that does not name the policy that consumes the tag.
+
+## What a consultant should walk away with
+
+Describe before you enforce. Tag at object level for reach and at field level for protection, and let classifications group tags into the categories a policy can reason about. Keep the taxonomy shallow, one parent and one level of children. Let automatic suggestions and propagation carry the load when data arrives at volume, and treat approved tags as the reusable condition, not a one-off label. Before you retire a tag, pull it out of every policy that references it. And never leave a tag standing alone: think of tags as the conditions and policies as the enforcement, and wire up the policy that consumes the tag. A tag with no policy is a note to yourself, not a control.
+
+## What's next
+
+Lesson 12 - Data Access Policies: OLS, FLS, RLS, and Dynamic Data Masking (sa-2b). Tags and classifications are only half of governance. Lesson 12 turns those conditions into enforcement, covering object, field, and record level access policies, dynamic data masking, and the precedence rule that decides what happens when an allow and a deny collide.
+
+[^1]: Salesforce Help, "Data Governance in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_gov_capabilities.htm&type=5)
+[^2]: Salesforce Help, "Create a Tag in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_tag.htm&type=5)
+[^3]: Salesforce Help, "Object-Level and Field-Level Tags in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_object_level_field_level_tags.htm&type=5)
+[^4]: Salesforce Help, "Create a Classification in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_classification.htm&type=5)
+[^5]: Salesforce Help, "Manual and Automatic Tagging in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_manual_automatic_tagging.htm&type=5)
+[^6]: Salesforce Help, "Tag Propagation in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_tag_propagation.htm&type=5)
+[^7]: Salesforce Help, "Edit or Delete a Tag in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_edit_tag.htm&type=5)

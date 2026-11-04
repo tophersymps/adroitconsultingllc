@@ -1,0 +1,136 @@
+---
+title: "Lesson 52: Flow-Driven Data 360 Scenarios End to End: Read, Decide, Write Back"
+slug: day-52-ac-5b-flow-driven-data-360-scenarios-end-to-end-read-dec
+series: sf-data360-consultant
+lesson: 52
+excerpt: "The capstone of the Salesforce Data 360 Consultant course: an end to end flow that reads unified data from Data 360, decides on a threshold, and writes the decision back to the CRM record, with the testing, error handling and governance that make it safe to run in production."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "15 min read"
+tags: [Data 360, Flow, Activation, Governance]
+---
+
+# Lesson 52: Flow-Driven Data 360 Scenarios End to End: Read, Decide, Write Back
+
+A sales rep opens a new Lead first thing in the morning and finds it almost empty. The engagement score cleared the threshold, the flow fired, the Lead exists, and every field the rep actually needed is blank. The Data 360 half of the automation worked exactly as designed. The read on the CRM half did not, and nobody had told the flow what to do when the harmonized profile it was counting on was not there. The signal arrived, the decision did not.
+
+That failure is the reason this objective exists. Requirement ac-5b, in the Data Activations and Utilization domain worth 20% of the Salesforce Data 360 Consultant exam, asks you to use Data 360 in Salesforce flows, specifically an end to end, flow-driven scenario that reads unified data and writes a decision back, including testing, error handling, and governance.[^9] It is the heaviest domain in the exam, and it is the last lesson of this course.
+
+It is also the objective that puts every other lesson together. The previous lessons taught you how a data stream refreshes, how a calculated insight produces a score, how unified profiles are harmonized, and how a flow reads Data 360 objects. This lesson assembles them into the one pattern a Data 360 consultant is actually paid to build: read unified data, decide, and write the decision to the system of engagement. Get the shape right and the rest is configuration. Get the shape wrong and you ship the empty Lead in the opening.
+
+## Deep Dive
+
+### A calculated insight scores each unified profile, and a threshold turns the score into an action
+
+The scenario is deliberately common. A calculated insight scores each unified individual's engagement, and when the score crosses a threshold the business wants a sales rep to get a new Lead and a task. The Data 360 object holds the signal. CRM holds the person. Those two facts drive every design decision that follows.
+
+Start with the signal. A calculated insight defines and calculates multidimensional metrics over the entire digital state you have stored in Data 360, at the profile, segment, and population levels, and it can rank customers by spend or by engagement.[^6] When the base data changes, a calculated insight recomputes automatically, adding the incremental changes rather than rebuilding from nothing.[^6] You create one on the Calculated Insights tab, either through the visual builder or with SQL, save and run it, then set a schedule and enable it, and creating one requires the Data Cloud Architect permission set.[^10] The result is a calculated insight object, a CIO, which you can inspect in Data Explorer by selecting Calculated Insights as the object.[^6]
+
+Step one of any real build is to confirm the signal exists and is fresh. Open the calculated insight, confirm it is enabled and scheduled, and confirm the data stream that feeds it is refreshing. A CIO whose underlying data stream has stalled will keep serving the last score it calculated, so a flow can fire on a stale number and no one will notice until the business asks why a dormant account suddenly looks hot.
+
+Step two is to create the flow that watches the signal. This is a Data Cloud-triggered flow, and it starts when conditions are met on a Data Cloud object.[^1] You create it from the Flows list, choosing Data Cloud-Triggered Flow as the type, and in the Start element you select the Data Cloud object and set the conditions.[^1] The object can be a data model object or the calculated insight object that carries the score. A detail worth memorizing: if you select a DMO, the flow triggers only if that DMO is mapped as part of a data stream.[^1] A CIO trigger sidesteps some of that, but the downstream read still depends on refreshed data, so the freshness check from step one is not optional.
+
+Step three is to read the harmonized attributes the rep needs. The Start element hands you the trigger context, but the fields a rep needs on the Lead, name, contact point, score, last activity, do not all live on the object that fired the trigger. You pull them with a Get Records element, and you pull them from the unified model so the rep sees the whole customer rather than a single source's slice.
+
+### The write goes to CRM, because a flow reads Data 360 and cannot write it
+
+Step four is the one people get wrong, so learn it as a rule rather than a step. A flow reads Data 360 and cannot write it. You can read data from Data Cloud data model objects with a Get Records element or in Apex, but you cannot create, update, or delete Data Cloud data from the flow.[^2] The capability was shipped deliberately one way: the release that introduced it says plainly that you can read from Data Cloud DMOs but not create, update, or delete Data Cloud data, and its own example reads a form DMO and creates a Lead in the CRM.[^2]
+
+That constraint is not a limitation to work around. It is the design. The flow creates or updates the CRM record, a Lead in this scenario, and sets its fields from the Data 360 attributes it read. Data 360 stays the source of the signal, and CRM stays the system of engagement where the rep works. Keep the read on the asynchronous or scheduled path and keep the CRM write on the normal path, so a slow Data 360 read never blocks a user-facing transaction. The split that keeps a Data 360 plus flow design trustworthy is to read unified data in the flow, decide, then write the decision to the CRM record.
+
+Say that sentence back to yourself, because it is the load bearing idea of this whole objective. Read unified data, decide, write the decision to the system of engagement. Every trustworthy Data 360 plus flow design has that shape, and every design that ignores it has a hole where the write back should be.
+
+### Error handling is explicit: a no-records outcome, a decision, and a fault connector
+
+A Get Records element with no match does not fail. It quietly returns nothing. When the element is set to choose fields and assign variables, and no records match the conditions, the flow retrieves no records and the variables you intended to fill are empty or null, which means any logic that depends on them has to handle the empty case, and the documented fix is to use a decision element to check whether the variables are empty before you proceed.[^3] That quiet empty return is the mechanism behind the blank Lead in the opening. Nothing threw. Nothing logged. The fields were simply null when the Create Records element ran.
+
+So give the read an explicit outcome for the no match case. Add a decision element immediately after the read, and branch on profile found versus profile missing. Route the missing case to a fallback the business signed off on, such as logging a record for later investigation, notifying an owner, or creating a minimal record that flags itself as incomplete. The point is that a missing profile should be a visible, intentional path, not a silent one.
+
+Then wire the fault connector. A Get Records element can throw a fault, not just return empty, when the query itself fails, and without a fault path the flow follows the default behavior for its type.[^4] Adding a fault path to the read gives you a second explicit route: one path for a successful query that found nothing, one path for a query that failed outright. The two are different problems and they deserve different handling.
+
+Finally, handle the late arrival. Because the output depends on the data stream refresh, a value can arrive after the flow already ran for that profile, and the trigger set you saw may simply not have been complete yet. A design that assumes the trigger set is complete will under-create Leads during a refresh window and over-create them during a catch up, so build the decision to tolerate a missing value and let the next refresh or the next trigger pick it up rather than forcing an action on partial data.
+
+### Test with real, small data before you activate
+
+Build the flow, then debug it in Flow Builder with a representative record from the Data 360 object, or run it against a small, controlled population. You are confirming three things and nothing more: that the trigger fires only under the intended condition, that the Get Records element returns the expected row from the right data space, and that the CRM write lands where you expect it to land.
+
+The most common testing confusion in this objective is a test where nothing happened. The logic looks right, the record exists, and the flow produces no output. The instinct is to rewrite the condition. The correct first move is to check the data stream refresh history, because flow output depends on the refresh and on the timing, and a delay is expected rather than a bug. So when a Data 360 flow test does nothing, check the data stream refresh history before you touch the logic. What should you check first? The data stream refresh history, since flow output depends on refresh and on timing. You can see it on the data stream's record page under Refresh History, and you can pull a manual refresh with Refresh Now when you need the data to move on your schedule rather than the connector's.[^5] The refresh cadence itself varies by connector, so know the one you are testing on: Marketing Cloud Engagement streams pull daily or hourly depending on the data type, and the Salesforce CRM connector runs incremental refreshes on a short cycle while the initial state comes from a full refresh.[^5]
+
+Test on a population small enough that you can confirm each row by hand, and only then widen it. Debugging a firehose against a threshold bug is how you end up with a thousand Leads nobody asked for.
+
+### Governance wraps the pattern
+
+A flow that reads harmonized customer data and writes to CRM is a system of record change dressed up as an automation, so govern it like one. Write down who owns the calculated insight, who owns the trigger condition, and who owns the CRM write. Three owners, three change paths, and if any one of them changes without the other two knowing, the flow's behavior changes silently. A change to the insight's scoring logic, after all, can quiet the trigger or flood it, and the person who edited the SQL may never have heard of your flow.
+
+Permission is the second rail. To view, save, and activate a Data Cloud-triggered flow, a user needs Manage Flow together with View Setup, View All Data, Data Cloud User, and Read access on data model objects, data model fields, and calculated insight objects.[^1] That is a powerful bundle: it can read harmonized customer data and it can write to CRM through the flows it controls. Grant it to the smallest group that genuinely builds the automation, and keep it out of the hands of anyone who only needs to see the result. Reading a DMO in a Get Records element on its own requires Read on the data model object plus Manage Flows,[^2] which is narrower, and that distinction is worth using when you scope who gets what.
+
+The third rail is consent and data use. Confirm the rights attached to the data feeding the signal, because a flow that acts on a customer is an act on that customer's data. If the engagement data arrived from a source whose consent terms do not permit an outbound sales action, the automation is a governance failure no amount of clean code will fix. And document the latency budget the business accepted. A threshold flow is not instant; it inherits the data stream's refresh schedule and the calculated insight's recompute, so agree how fresh the business needs the score to be and write that number down before someone assumes real time.
+
+### Operationalize with monitoring
+
+Once the flow is live, watch it the way you would watch any integration. Data 360 automations can monitor flow runs and check their progress, and you can chain Data 360 processes so that, for example, a calculated insight refreshes or segmentation runs when ingestion completes.[^7] Use that event traffic to alert on failed runs and on volumes that deviate from the norm, because the first symptom of a broken read is usually a spike or a drop in how often the flow fires, not an error someone reported.
+
+A related mechanism is the data action. A Data Cloud-triggered flow uses data action functionality when it publishes an event to the Salesforce Platform Event, and the data action record shows the published flow under a Flow Integration label in its Managed By column.[^8] Data actions monitor changes on data model objects and calculated insight objects and send the change events to targets,[^8] which is useful context when a business asks you to fan one signal out to several consumers at once.
+
+Version the flow, test changes in a sandbox that actually has the Data 360 connection, and deploy through your normal lifecycle rather than editing live. Keep the trigger condition thin and the logic inside the flow, so the DMO or CIO stays a signal and the flow stays the one place a reviewer can read the decision from top to bottom. And retire triggers that no longer map to a business action. An automation that nobody remembers building is worse than no automation, because it still writes.
+
+## Config Walkthrough
+
+The scenario above configures in six steps, in this order.
+
+1. Confirm the calculated insight object, or the DMO, that carries the signal exists and that its data stream is refreshing. Open the data stream and check its refresh history on the record page before you build anything on top of it.[^5]
+
+2. Create a Data Cloud-Triggered Flow from the Flows list. Select Data Cloud-Triggered Flow as the type, then in the Start element select the Data Cloud object and set the threshold condition.[^1] Keep the condition as thin as the business requirement allows.
+
+3. Add a Get Records element on the asynchronous or scheduled path. Set Data Source to Data Cloud Object, choose the Data Space and the DMO or CIO, and store only the harmonized attributes the CRM record needs.[^2]
+
+4. Add a Decision element after the read to branch on profile found versus profile missing, and wire the fault connector and the no-records outcome to a fallback.[^3] A missing row must be an explicit path, not a silent null.
+
+5. On the found path, create or update the CRM record and set its fields from the Data 360 values you read. The write goes to CRM, because a flow reads Data 360 and cannot write it.[^2]
+
+6. Debug with a representative Data 360 record, then activate the flow. Monitor failed runs, and check the refresh history before you rework logic when a test produces no output.[^5]
+
+## Try it
+
+Take a threshold scenario and reverse the build. Name the calculated insight that will carry the signal, then name the data streams behind it and their refresh schedule. Only after those two are settled would you create the Data Cloud-triggered flow and set its Start condition. Then build the read, the decision, and the CRM write, and debug against a single record before you widen the population. If your debug run produces nothing, open the data stream refresh history before you change a single condition, and confirm the Get Records element is pointed at the right data space before you blame the trigger.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, debugging the logic when the real cause is refresh latency. Flow output depends on the data stream refresh and on activation timing, so a flow that produced nothing in a test is more often waiting than wrong. Check the data stream refresh history before you rewrite conditions that already look correct.
+
+Second, building the trigger condition so broadly that the flow fires on unrelated changes. The Start element watches a DMO or a CIO, and a thin, specific condition keeps the flow from acting on records the business did not intend. A condition that is too wide does not fail a test; it just quietly writes records nobody wanted.
+
+Third, assuming a missing Data 360 row fails loudly. A Get Records element with no match returns empty variables, not an error, so without an explicit no-records outcome and a fault connector the flow proceeds and writes a half populated CRM record.[^3] Blank fields on the created record are the signature of this trap, and the first thing to check is whether the Get Records element found the harmonized profile row (correct data space and conditions) and handled the no-records outcome.
+
+## Decision rules to carry forward
+
+This is the last lesson, so the rules are the whole course. Across the six official domains of the exam, here is what a Data 360 consultant should be able to decide.
+
+On solution positioning (14%), you decide when Data 360 is the right answer and when it is not: what the platform's terminology means, where it fits beside CRM and Marketing Cloud, and how it grounds predictive and generative AI rather than chasing a demo.
+
+On Data 360 setup and administration (13%), you decide permissions, permission sets and org wide settings before data moves, apply governance to the configuration itself, and know which tooling to reach for when something breaks, including how to read a refresh error rather than guess at it.
+
+On data source connection and ingestion (18%), you decide how data arrives and how it is transformed, batch or streaming, connector or API, and you decide when a collaboration such as Zero-Copy is better than a copy.
+
+On harmonization and unification (17%), you decide how sources map to the model and how match and reconciliation rules collapse many records into one unified profile, because everything downstream depends on that profile being right.
+
+On data enhancements, sharing, and analysis (18%), you decide how to enrich unified data and build insights on it, how to reference Data 360 data from other systems, how to report on it, and where predictive and generative tooling adds value.
+
+On data activations and utilization (20%), you decide who is in an audience, where that audience goes, and, in this final lesson, how a flow reads the unified signal and writes the decision back to CRM. The pattern to walk away with is one sentence: read unified data in the flow, decide, then write the decision to the CRM record, and wrap it in explicit error handling, honest testing, and governance you can point to.
+
+## What's next
+
+The course is complete: all 52 lessons of the Salesforce Data 360 Consultant certification prep course are now published, covering the six official exam domains, Solution Positioning at 14%, Data 360 Setup and Administration at 13%, Data Source Connection and Ingestion at 18%, Harmonization and Unification at 17%, Data Enhancements, Sharing, and Analysis at 18%, and Data Activations and Utilization at 20%.[^9] There is no lesson 53. From here, take the 60 question practice exam built into this course and use the results to target your weak domains, then book the real Salesforce Certified Data 360 Consultant exam, which is 60 scored multiple choice questions in 105 minutes with a 70% passing score.[^9] Revisit the lessons behind any domain where the practice exam catches you, and go pass it.
+
+[^1]: Salesforce Help, "Trigger Flows with Data 360 Data," (https://help.salesforce.com/s/articleView?id=sf.flow_concepts_trigger_data_cloud.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Get Records from Data Cloud Objects in Flow Builder," (https://help.salesforce.com/s/articleView?id=release-notes.rn_automate_flow_builder_access_data_cloud_objects_from_get_records_element.htm&language=en_US&release=244&type=5)
+[^3]: Salesforce Help, "Get Records Element," (https://help.salesforce.com/s/articleView?id=platform.flow_ref_elements_data_get.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Default Flow Error Handling," (https://help.salesforce.com/s/articleView?id=platform.flow_build_logic_fault_default.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Data Stream Schedule in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_stream_schedule.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Enhance Data with Insights," (https://help.salesforce.com/s/articleView?id=data.c360_a_insights.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Automate Flows in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_orchestrate_a_workflow_in_customer_data_platform.htm&language=en_US&type=5)
+[^8]: Salesforce Help, "Act on Data in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_act_on_data.htm&language=en_US&type=5)
+[^9]: Salesforce Help, "Salesforce Certified Data 360 Consultant Exam Guide," (https://help.salesforce.com/s/articleView?id=005298940&language=en_US&type=1)
+[^10]: Salesforce Help, "Create a Calculated Insight Using Builder," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_calculated_insight_using_builder.htm&language=en_US&type=5)

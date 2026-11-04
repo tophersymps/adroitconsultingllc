@@ -1,0 +1,108 @@
+---
+title: "Lesson 32: Extending the Model with Custom Data Model Objects and Relationships"
+slug: day-32-hu-2c-extending-the-model-with-custom-data-model-objects
+series: sf-data360-consultant
+lesson: 32
+excerpt: "The standard Customer 360 model covers common subjects, and organization-specific data needs its own object. This lesson shows how to create a custom data model object, wire it into the model with a relationship to Individual, and make it count in identity resolution and segments."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Custom Data Model Objects, Data Model, Identity Resolution]
+---
+
+# Lesson 32: Extending the Model with Custom Data Model Objects and Relationships
+
+An insurer wants to track warranty registrations, each tied to a serial number and a purchase date. The standard Customer 360 model has an Individual, an Account, and contact points, but nothing that fits a warranty registration as its own thing. The team takes the shortcut and bolts forty fields onto the Individual DMO. It works for a release. Two releases later that object is unrecognizable, every new mapping has to work around the added fields, and the standard model no longer means what it used to.
+
+There was a cleaner path, and it is the subject of this lesson. Requirement hu-2c sits in the Harmonization and Unification domain, worth 17% of the Salesforce Certified Data 360 Consultant exam. Its text asks you to model data in Data 360, focused on extending the customer 360 model with custom data model objects, defining their relationships, and how custom objects participate in unification. The exam wants you to know that a custom object extends the model, that its relationships are what connect it, and that participation in unification is opt in rather than automatic.
+
+## Deep Dive
+
+### The standard model covers common subjects, and organization-specific data needs its own object
+
+The Customer 360 Data Model is the standard data model Data 360 uses to aid in data modeling and extensibility across platforms, and it serves as the framework for unifying raw data into a single actionable view. It covers the subjects almost every business shares: the person, the account, the order, the engagement. What it cannot cover is the data that is yours alone. When organization-specific data does not fit one of the standard subject areas, you create a custom Data Model Object.
+
+A custom DMO is not a separate universe. It sits alongside the standard ones, carries the fields you define, and can be mapped to from a data stream exactly like a standard object. That last point is the reason custom DMOs extend the model rather than living beside it. You create one from the Data Model tab by clicking New, and you can build it from scratch, by copying an existing standard or custom DMO, or by uploading a CSV file that lists the fields.[^1] All three paths produce an object that the mapping step treats as a first class target.
+
+So the first decision is scoping. Use a custom Data Model Object when the data is organization-specific and does not fit a standard subject area, and you also define its relationships into the model. A warranty registration, an internal service tier, a loyalty enrollment that carries its own lifecycle: these are candidates. A standard object can be extended with custom fields, so a custom DMO is not the answer to every new field, and it is never merely the answer to needing somewhere to put a value.
+
+A worked example makes the boundary clear. For a warranty registration, the fields you need are a serial number, a purchase date, a registration date, a coverage term, and a link to the person who registered it. None of those attributes except the link belongs on Individual, because Individual means a person, and a person can hold several warranties. They do not fit Account either, because a warranty is not an account. The registration is its own subject, and a subject of your own is the signal that a custom Data Model Object is the right tool.
+
+### The relationship to the standard model is what makes a custom object useful
+
+Defining fields alone produces an island. The step that makes a custom Data Model Object useful is its relationship to the object it belongs to, and most often that is a many to one relationship to the Individual object on Individual ID. A DMO can have a standard or a custom relationship with other DMOs, the relationship can be structured as one to one or many to one, and you can view relationships and their statuses on a DMO record's Relationships tab.[^2]
+
+The reason to reach for Individual is that Individual is the anchor of the party area of the model. A custom object with a populated Individual ID and a working relationship can join profiles and segments, because its records hang off a person the rest of the platform already understands. A custom object without that relationship is effectively invisible to both. The data is present, the rows are correct, and no audience about people will ever include them.
+
+The cardinality choice is not cosmetic and it is not reversible. Cardinality between two DMOs has implications for segmentation and activation, and you cannot change the cardinality after the relationship is created.[^2] The standard example is instructive: Contact Point Email connects to Individual as many to one, because one individual can have several email addresses, and Sales Order connects to Individual the same way, because one person can place several orders. A warranty registration that belongs to one person and can be repeated follows that same many to one shape: many registrations, one individual.
+
+### Keys are central to a custom object too
+
+Two keys do the work on a custom object. The primary key uniquely identifies each record in the object itself, and the foreign key, typically the Individual ID, attaches each record to the correct person or parent. When you create a custom DMO from scratch you enter the field details and select a primary key field, and the object API name must be unique across standard and custom DMOs, excluding the ssot__ prefix.[^1] When you map a data stream to it, you map both keys to the correct source columns.
+
+The consequences of getting a key wrong are the same as anywhere in the model, only more local at first. Give the object a primary key that repeats, and its own records collide. Leave the Individual ID foreign key unmapped or filled from an empty source column, and the object's rows never connect to the wider model, so its data cannot influence an audience. Either gap produces an object that looks fine in isolation and does nothing in practice.
+
+The mapping requirements reinforce this. A custom DMO is still a DMO, so if it is in the Profile or Other category you must map its primary key before the mapping will save, and the party area requirements still apply when you want identity resolution, segmentation, and activation to consume it.[^4] The keys are not optional decoration; they are the conditions the platform checks.
+
+Choose the primary key from the perspective of the object, not the source row. A warranty registration numbers itself, so a registration id, or a serial number plus a sequence, is a natural primary key candidate as long as it is unique and never recycled. The Individual ID is then the foreign key rather than the primary key, and it repeats by design, because one person registers several warranties. That repeat is exactly the many in many to one, and it is what lets Individual ID anchor thousands of registrations without any of them colliding.
+
+### Custom objects take part in unification only when the ruleset references them
+
+A custom Data Model Object can contribute to unification, but it does not do so automatically. Identity resolution rulesets contain match and reconciliation rules that tell the customer data platform how to link multiple sources of data into a unified profile, and the primary data model object for a ruleset determines which records are unified.[^3] Matching considers the objects the ruleset is configured for, not every object in the model.
+
+That framing sets the rule. A custom DMO whose Individual ID is consistently populated can contribute matching identifiers and attributes, provided the ruleset references it. Until the object is named in the ruleset and its key fields are populated, it contributes nothing to matching, no matter how clean its data is. The object is eligible; eligibility is not the same as participation.
+
+So there are two conditions, and both must hold. The object must be referenced by the identity resolution ruleset, with its relevant key fields populated. Miss the first and the ruleset never looks at the object; miss the second and there is nothing for it to match on.
+
+A worked example fixes the idea. Picture a support tier stored on a custom object, where each row carries a tier value and points at an Individual through its Individual ID. If the ruleset is configured for Individual and the tier object is named among the objects it considers, those tier values become available to matching and can appear on the unified profile. If the ruleset never mentions the object, the same rows sit outside matching entirely. Same data, same keys, different ruleset configuration, and a different outcome.
+
+### Overloading a standard object is a design decision, not a default
+
+Piling organization-specific fields onto a standard object blurs the standard model. The fields accumulate, the object's meaning drifts from the shared subject it was meant to represent, and every downstream mapping has to navigate the added clutter. The standard model is valuable precisely because its objects mean the same thing across releases and across teams; every field you add for a local reason dilutes that shared meaning a little.
+
+The better pattern is to use a custom Data Model Object for genuinely distinct data and keep the standard objects clean so their meaning stays stable. A warranty registration or an internal service tier is a real subject with its own lifecycle, and it earns its own object. This is not a hard rule that forbids standard object extension, but it is a strong default, because the cost of a cluttered standard object compounds over time while the cost of a well named custom object is paid once.
+
+### Naming and data space should be planned before you save
+
+Custom objects get API names that other features reference, so the name you choose becomes a contract. In an org with multiple data spaces the data space prefix becomes part of the API name, which makes the choice even heavier. When you create a data space you enter a unique prefix of up to three alphanumeric characters, and you cannot change it after you save, because it becomes part of the API name used to differentiate objects that exist in multiple data spaces; the Individual DMO mapped into two spaces ends up as DS1_Individual_dlm and DS2_Individual_dlm.[^5]
+
+The practical instruction is to plan the object's name and its data space before you save. The object API name must be unique across standard and custom DMOs, excluding the ssot__ prefix.[^1] Pick a name that still reads correctly once the prefix is in front of it, choose the data space with the same care you would choose a schema name, and confirm both before the object exists. Mappings, rulesets, and downstream references bind to that name, so renaming later means rebuilding.
+
+A small naming habit pays for itself. Prefix custom objects with the subject, not the source system, so a reader can tell what an object represents without opening it. Registration, Service Tier, and Loyalty Enrollment age well; Object C from the finance project does not. Because the data space prefix sits in front of the name in a multi space org, keep the rest of the name short enough that the whole API name stays readable.
+
+### Try it in a trial org
+
+Create one custom Data Model Object end to end and the mechanics stick. Build a Warranty Registration object from scratch, add a registration id and mark it as the primary key, add a serial number and a coverage term, then create a many to one relationship to Individual on Individual ID. Map a small stream, or an existing Data Lake Object, to the object and map both keys. Finally, open the object's Relationships tab and confirm the link is active, then open an identity resolution ruleset and check whether the new object appears among the objects it considers. That last check is the step people skip, and it decides whether the object contributes to matching or merely holds rows.
+
+### Config walkthrough: creating and connecting a custom object
+
+1. In Data 360, open the Data Model tab and click New to create a custom Data Model Object for the data that does not fit a standard subject area. You can build it from scratch, copy an existing DMO, or upload a CSV file of fields.[^1]
+2. Enter the Object Label, Category, and Description, then add the fields the object needs and set a primary key field that uniquely identifies each record. Confirm the object API name before you save, because the name travels.
+3. Open the object's Relationships tab and create the relationship to the standard object it belongs to, for example a many to one relationship to Individual on Individual ID. Set the cardinality deliberately, because you cannot change it later.[^2]
+4. Map a data stream, or an existing Data Lake Object, to the custom object, mapping both its primary key and its Individual ID foreign key to the correct source columns.
+5. If the object should affect matching, add or confirm it in the identity resolution ruleset, refresh the ruleset, and verify that its rows are considered.[^3]
+6. Open the custom object from the Data Model tab and review its fields, key, and relationships after saving, then adjust them before you build segments on the object.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, creating a custom Data Model Object, mapping its fields, and never creating a relationship to Individual. Without the relationship and a populated Individual ID, the object cannot join profiles, identity resolution, or segments. In that situation the most likely gap is its relationship to Individual, and the mapped Individual ID key, is missing, so records are not tied to a person, which is why the object's rows exist yet never appear in a person based audience.
+
+Second, overloading a standard object with organization-specific custom fields instead of creating a custom Data Model Object. This blurs the standard model and complicates every later mapping, and it costs more over time than the custom object would have. Reach for a custom object when the data is organization-specific and does not fit a standard subject area, and you also define its relationships into the model.
+
+Third, assuming a custom Data Model Object is automatically included in identity resolution. It contributes only when the ruleset references it and its key fields are populated. The tempting answer treats the object as participating by virtue of existing. It does not; for it to contribute, it must be referenced by the identity resolution ruleset, with its relevant key fields populated.
+
+## The decision rules to carry out
+
+Define a custom Data Model Object for data that is organization-specific and does not fit a standard subject area, and wire it into the model with a relationship to Individual on Individual ID. Give it a unique primary key and a populated foreign key, and remember that it counts in unification only when the ruleset references it and its keys are populated. Plan the object name and its data space before you save, keep standard objects clean, and choose cardinality deliberately because it is fixed once created.
+
+## What's next
+
+Lesson 33 - Modeling Decisions That Decide Unification Quality (hu-2d)
+
+[^1]: Salesforce Help, "Create a Custom Data Model Object," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_custom_data_model_object.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Data Model Object Relationships," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_model_object_relationships.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Identity Resolution Rulesets," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_ruleset.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Data Mapping Requirements in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_required_data_mappings.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Create a Data Space," (https://help.salesforce.com/s/articleView?id=sf.c360_a_data_spaces_create.htm&language=en_US&type=5)

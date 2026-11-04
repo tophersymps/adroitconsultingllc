@@ -1,0 +1,109 @@
+---
+title: "Lesson 12: Data Access Policies: OLS, FLS, RLS, and Dynamic Data Masking"
+slug: day-12-sa-2b-data-access-policies-ols-fls-rls-and-dynamic-data
+series: sf-data360-consultant
+lesson: 12
+excerpt: "Objective sa-2b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to build object, field, and record level access policies and dynamic data masking with correct policy precedence. Lesson 12 covers OLS, FLS, RLS, masking methods, and the deny-beats-allow rule."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Governance, Access Policies, Data Masking]
+---
+
+# Lesson 12: Data Access Policies: OLS, FLS, RLS, and Dynamic Data Masking
+
+A team writes a clean allow policy that grants its regional managers access to opportunity records, then adds a deny policy for records marked confidential. A manager in a region that both conditions touch opens a confidential opportunity and sees nothing. The analyst who built the policies files a defect and waits for a fix. There is no defect. The platform did exactly what the governance model says it does, and the engineer had simply never learned the precedence rule.
+
+This lesson covers objective sa-2b, part of the Data 360 Setup and Administration domain, worth 13% of the Salesforce Certified Data 360 Consultant exam. The objective asks you to apply data governance requirements to platform configuration, focused on building object, field, and record level access policies and dynamic data masking with correct policy precedence. We cover the three security levels, the model underneath them, the precedence rule that settles conflicts, record-level security with joins and hierarchies, the masking methods, and the sharp edges that turn a careless mask into an outage.
+
+## Deep Dive
+
+### Data 360 governance policies control access at object, field, and record level
+
+Data 360 governance policies control access at object, field, and record level, and the exam expects you to route a requirement to the right level. Object-level security decides whether a user can reach an object at all. Field-level security hides specific fields, such as a credit card number, from users outside a team. Record-level security shows only rows that match a condition, such as customers in one region or records the user owns.[^1] The three levels answer three different questions: can you see this object, can you see this field, and can you see this row.
+
+A worked example separates them cleanly. A bank wants a call center agent to work cases on customer objects but not see account balances or records outside her region. Object-level security grants the agent reach to the customer object so the case screens work at all. Field-level security hides the balance field from anyone outside the finance team, so the agent can read the rest of the record. Record-level security filters the record list to the agent's region, so the rows she sees are the ones she is responsible for. Miss any one layer and the requirement is only partly met: no object access and the screens break, no field policy and the balances leak, no record policy and the agent reads the whole customer base.
+
+The model behind these policies is attribute-based access control. Instead of granting access purely by role, an ABAC policy grants or denies based on user attributes and data attributes together. The user attributes are things like department, division, or a custom permission; the data attributes are the tags and classifications you applied in the previous lesson. That combination is what lets a policy read as a business rule, grant access to users in the Wealth Management department where the object is tagged Wealth Management Data, and stay correct as the data model grows.[^3] It is a deliberate shift away from rigid role-based controls toward declarative intent. Role-based access control still exists in Data 360 and manages object permissions through permission sets, but ABAC is the flexible layer that handles the fine-grained, condition-driven rules the exam cares about.
+
+### Precedence: a deny policy always overrides an allow policy
+
+Precedence is the rule to memorize: a deny policy always overrides an allow policy. If one policy denies a user access to a resource and another allows it, the deny wins and access is blocked. Deny wins and access is blocked. That is the sentence to carry into the exam, because the tempting wrong answer is that the more specific or more recent policy takes effect. Neither does. Creation order does not matter; deny is always authoritative.[^2]
+
+Deny clauses are the safe way to build a hard boundary, and the reason is asymmetry. An allow policy can never reopen access that a deny closes, so you can keep adding allows around a deny without worrying that one of them accidentally re-grants the thing you meant to protect. Policies that do not conflict simply both take effect, and overlapping allows are harmless: two allow policies that cover the same field both permit it, and neither erodes the other. This asymmetry is why governance teams reach for deny when the requirement is absolute, a regulatory carve-out, a confidential tier, or a contractor exclusion, and reach for allow when the requirement is a grant that a later change might widen.
+
+The enforcement order reinforces the point. Data 360 evaluates policies in layers: deny policies are applied first, masking policies next, and allow policies last. A masking policy cannot override a deny, and an allow policy cannot override a deny or a masking policy.[^4] So when two policies apply to the same field, one allows a group to read it and another denies the same group, the result is that the deny wins and the group is blocked. The allow was never in the running. A useful mental model is that the layers narrow downward: deny removes access, masking obscures what survives, and allow grants what is left. If you remember only one ordering fact for the exam, remember that deny is evaluated first and nothing downstream can undo it.
+
+### Record-level security can be extended with joins
+
+Record-level security can be extended with joins, letting an access rule reference external mapping or lookup tables for more dynamic, context-aware conditions. A permit policy can allow users to access opportunity records if those records are owned by them or by someone in their reporting chain, based on the manager hierarchy.[^1] Instead of hard-coding a list of users or a region string, the rule consults a mapping and decides at query time. A join block can reference an entitlement table that lives in your data, so record access can be driven by a mapping that your business already maintains rather than a value someone has to keep editing inside the policy. A policy can carry several conditions and a small number of joins, and the joins are how you reach related tables without flattening everything into one wide object first.
+
+Hierarchy support goes further. Record-level security supports manager, role, and territory hierarchies, which are flattened and ingested into Data 360 before use, so a rule can express things like show opportunities owned by me or by anyone in my reporting chain without naming a single person.[^8] The catch is that hierarchy is a build step, not a toggle. You ingest the hierarchy first, from a Salesforce CRM connection, and only then does the hierarchy operator appear as an option in Policy Builder. It can take up to fifteen minutes for source changes to reflect, and after you configure a hierarchy you cannot edit or delete it, so get the shape right before you save. A rule that references a hierarchy you never ingested simply cannot be written, because the operator is not offered until the setup is complete.
+
+Record-level security is also applied to queries, not to storage, and it runs after the broader checks. A query passes the security checks for the objects and fields it touches first, and only then does the row-level policy decide which records come back. That ordering is why a broken field policy can take a row policy down with it, which is the bridge to the next section. It is also why row filtering belongs in policies rather than in data spaces: a data space decides which objects a user can work with, but it does not filter rows within an object, and only an access policy does that job.
+
+### Dynamic data masking hides sensitive values at query time
+
+Dynamic data masking hides sensitive values at query time for unauthorized users without changing the underlying data. The data stays intact in storage; the mask is applied when the query runs, per query and per user. The supported methods are redaction, which replaces characters with X; nullification, which replaces the value with NULL; datetime rounding, which shows only the year, or the year and month; and numeric rounding, which rounds to a whole number or a set number of decimals.[^5] A credit card number can be redacted to its last four digits, a date of birth can be rounded to its year, and an account balance can be rounded to the nearest whole number.
+
+Because masking is evaluated per user, the same field can be fully visible to finance and masked for a call center agent, which is the whole point. It is the feature that fits a requirement like service agents see only the last four digits of a Social Security Number while finance sees the full value. Dynamic data masking is the answer there, because it obscures the value for one audience and not the other without touching the stored record. Object-level security is the strongest distractor and is the wrong tool: it controls reach to the whole object, not partial visibility of one field, so it cannot show a field to one team and hide it from another. A data space prefix and tag propagation have nothing to do with partial field visibility either.[^9]
+
+The mechanics of choosing a method come down to what the audience still needs to do. Redaction keeps the field usable as a token, so a support agent can match a customer across systems without seeing the full identifier. Nullification removes the value entirely, which is right when even the shape of the value is sensitive. Rounding trades precision for usability, which is the right call when a trend matters more than the exact figure: a finance analyst can still chart revenue by year even if the exact date is rounded away. The wrong answer in a design review is to pick the strictest method for every case, because over-masking makes the data useless and pushes users toward shadow copies that governance cannot see.
+
+### Masking carries sharp edges
+
+Masking carries sharp edges, and the exam tests them because they cause real incidents. A field governed by a masking policy cannot be used in a data graph, and attempting it makes the graph inaccessible to the governed user. A masked Boolean always reads as False regardless of its real value.[^4] These two are easy to trip over because neither announces itself; the graph simply fails, and the flag simply reads wrong.
+
+The sharpest edge is the join key. Masking a field used as a join key or a query filter produces incorrect or incomplete results, and record-level security with joins on masked key values returns nothing. If a RLS with Join policy uses a masked field as the join key, the join operates on the masked value, so the values no longer match and the join finds no rows. The join query returns no results because the key values are masked. The tempting assumption that joins ignore masking is wrong: joins evaluate the masked value like anything else. The practical rule is to unmask primary key and foreign key fields so object relationships and joins stay accurate, and to keep mask targets off anything your reporting joins on.[^6]
+
+Why does a masked join key fail so completely rather than partly? A join works by matching equal values across two tables. If the left table's key is redacted and the right table's key is not, almost nothing matches, so the result set collapses to nearly empty and the report looks broken rather than wrong. That is the failure mode to remember: it does not throw an error, it returns silence. A consultant who tests a masking policy on a detail field will see a clean result, and a consultant who tests it on an identifier that another team joins on will see empty tables and blame the data. Keep mask targets on descriptive fields and leave the keys alone.
+
+### Policies are built from the Data Governance tab under Policies
+
+Policies are built from the Data Governance tab under Policies, and the flow is the same shape whichever type you choose. For a masking policy you name it, choose Dynamic Data Masking, pick the resource, for example Field in Structured Data, set the action to Mask, choose the masking method, then define the conditions that trigger it, such as the presence of a `Financial Data.Account Info` tag.[^4] For a data access policy you do the same, choosing the resource as Object, Field, or Record, and choosing Allow access or Deny access as the action. Field-level security supports only Deny access, because an FLS policy exists to hide a field, not to grant it.[^7]
+
+Two scope details matter. Conditions can be grouped, and you can add conditions up to the policy's limit and combine them with AND or OR logic for finer control. And by default a rule applies across all data spaces; as new data spaces are added, the rule applies to their resources too. To limit a policy to specific spaces you click Customize Scope, deselect the apply-to-all option, and choose the spaces you want.[^6] Finally, allow a couple of minutes after you create or modify a policy before you test it, because its access controls are not active during the propagation window.
+
+Try it in a Developer Edition org. Create one masking policy on a descriptive field, not a key, and confirm that the value changes for a test user while the stored value is untouched. Then try the same policy on a join key in a small record-level rule and watch the join return nothing. The two results together teach the masking boundary better than any description of it.
+
+### Configuration walkthrough
+
+Five steps build a masking policy from scratch.
+
+1. In Data 360, open the Data Governance tab and select Policies in the left pane. Policies is where every type lives, so start here.
+
+2. Click New and choose the policy type, for example Object or Field-Level Access, Record-Level, or Dynamic Data Masking, then click Next. The type determines which resources and actions you will be offered.
+
+3. In Policy Builder, enter a policy name, then define the resource: an object, a field in structured data, or a record set. The resource is the thing the rule protects.
+
+4. Optionally click Customize Scope to limit the policy to specific data spaces instead of all data spaces in Data Cloud. Leave it default only when the rule genuinely belongs everywhere.
+
+5. For a masking policy, set the action to Mask, choose the method (redaction, nullification, datetime rounding, or numeric rounding), define the conditions, then click Save and Activate. Wait for the propagation window before you test the result.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, assuming an allow policy can override a deny. Deny always wins, so a conflicting allow changes nothing. A candidate who picks the most specific or most recent policy is answering a different question from the one Data 360 asks. Creation order is irrelevant; deny is always authoritative. The recency distractor is strong because versioning intuition suggests the newest rule should win, but governance precedence is a fixed rule rather than a last-write-wins model.
+
+Second, masking a join key or filter field. That breaks queries and related lists, and record-level security with joins on masked key values returns no rows. The instinct to mask everything sensitive at once is what causes this, so choose mask targets carefully and keep them off the keys that hold your relationships together. The assumption that joins ignore masked values is the strongest wrong answer in this area, and it fails because joins evaluate the masked value like any other value.
+
+Third, thinking masking alters stored data or that a masked field still works in a data graph. Masking applies at query time only, so the stored value is untouched. And a masked field used in a data graph makes the graph inaccessible, because the graph cannot resolve a value it is not allowed to read directly.
+
+## What a consultant should walk away with
+
+Route the requirement to the right level: object for reach, field for partial visibility, record for rows. Read the level through the attribute model, where user attributes and data attributes decide together. Memorize one rule before the exam: deny beats allow, and never mask a join key. Use deny for hard boundaries because an allow can never reopen what a deny closes. Ingest the hierarchy before you write a hierarchy rule, and remember that record-level policies filter rows at query time after the object and field checks pass. Choose the masking method by what the audience still needs to do with the value, and when two audiences should see different halves of one field, reach for dynamic data masking, not object-level security.
+
+## What's next
+
+Lesson 13 - Data Kits: Packaging Data 360 Metadata for Deployment (sa-3a). You now have the setup, the tags, and the policies that make an org secure. The next problem is getting all of that configuration out of a sandbox and into production without rebuilding it by hand. Lesson 13 covers data kits and the packaging workflow that carries Data 360 metadata between orgs and data spaces.
+
+[^1]: Salesforce Help, "Object, Field, and Record Level Security," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_access_policies.htm&type=5)
+[^2]: Salesforce Help, "Policy-Based Governance in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_policy_based_governance_dg.htm&type=5)
+[^3]: Salesforce Help, "Policy Types in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_policy_types_in_dg.htm&type=5)
+[^4]: Salesforce Help, "Create a Dynamic Data Masking Policy for Structured Data in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_dynamic_data_masking_policy.htm&type=5)
+[^5]: Salesforce Help, "Dynamic Masking Types in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_types_of_dynamic_data_masking.htm&type=5)
+[^6]: Salesforce Help, "Create a Record-Level Policy in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_rls_policy.htm&type=5)
+[^7]: Salesforce Help, "Create an Object or Field-Level Access Policy in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_ols_fls_policy.htm&type=5)
+[^8]: Salesforce Help, "Ingest Hierarchical Data," (https://help.salesforce.com/s/articleView?id=data.c360_a_ingest_hierarchy_data.htm&type=5)
+[^9]: Trailhead, "Establish Effective Policy Frameworks for Data Governance," (https://trailhead.salesforce.com/content/learn/modules/data-cloud-data-governance-strategies/set-up-your-policy-frameworks)

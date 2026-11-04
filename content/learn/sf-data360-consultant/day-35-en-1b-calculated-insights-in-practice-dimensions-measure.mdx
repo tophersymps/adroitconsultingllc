@@ -1,0 +1,121 @@
+---
+title: "Lesson 35: Calculated Insights in Practice: Dimensions, Measures, and Where Results Are Used"
+slug: day-35-en-1b-calculated-insights-in-practice-dimensions-measure
+series: sf-data360-consultant
+lesson: 35
+excerpt: "A calculated insight describes one set of numbers over one base object, computed from measures grouped by dimensions. Lesson 35 of the Salesforce Data 360 Consultant course walks the build in practice: choosing the base object, defining measures and dimensions, picking the metric level, and the places a calculated insight result can be used."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Calculated Insights, Dimensions, Personalization Attributes]
+---
+
+# Lesson 35: Calculated Insights in Practice: Dimensions, Measures, and Where Results Are Used
+
+A retail analyst builds a calculated insight that sums order amount, groups it by product category, and runs it. The numbers look great, and every category has a total. Then the marketing team asks to drop the top spenders into a personalization attribute and copy each customer's lifetime value onto the contact record. The analyst tries, and it fails. The insight describes categories, not people. Nobody grouped by the customer, so there is no per person value to place on a profile. The math was right and the question was wrong.
+
+That failure is a grouping mistake, and it is the heart of requirement en-1b in the Data Enhancements, Sharing, and Analysis domain, worth 18% of the Salesforce Data 360 Consultant exam. The requirement asks you to demonstrate how to enhance data and build insights on unified data, focused on building a calculated insight in practice: choosing its base object, defining measures and dimensions, picking the metric level, and the places a calculated insight result can be used. This lesson follows the build end to end and names exactly where the result goes next.
+
+## Deep Dive
+
+### A calculated insight describes one set of numbers over one base object
+
+A calculated insight describes one set of numbers over one base object. You pick the source data model object, then add measures and dimensions. The base object matters because a measure can only reference fields that the object or its joins expose, so the object you choose sets the limit on what you can compute. If the field you want is not on the base object and not reachable through a join, the measure cannot see it.
+
+Picture the retail case in the opening. The base object is a Product Order Engagement DMO, which holds the order rows for each customer and product. Each row carries an order amount, a product category, and the link back to the individual who placed the order. That single object, once it is joined to the unified profile, exposes everything the analyst needs: the money, the grouping attribute, and the person. Choose the wrong base object and you either cannot reach the person or cannot reach the money.
+
+A join is what lets a measure reach beyond the base object, and it is where most build mistakes start. If a measure needs a field that lives on a related object, the insight needs the join that reaches it, and the join must run on a key the unified data actually carries. When the analyst wanted lifetime value, the Product Order Engagement object alone was not enough. The join to the unified individual is what put a person on each order row and made the per person metric possible. Without that join, the insight can compute a grand total, but it cannot compute a total per customer.
+
+### A measure is the metric function applied to a field; dimension is the attribute you group the measure by
+
+The two building blocks carry exact definitions, and the exam tests them directly. Measure is the metric function applied to a field; dimension is the attribute you group the measure by. A measure is a value such as a sum, a count, an average, or a maximum applied to a field. A dimension is the grouping attribute, a loyalty tier, a state, or a product category.
+
+Adding a dimension turns a single overall number into one number per group, which is what makes the insight multidimensional. Sum an order amount with no dimension and you get one grand total for the whole company. Add product category as a dimension and you get a total per category. Add the individual as a dimension and you get a total per person. The same measure, three different meanings, decided entirely by the dimension you choose.
+
+The builder makes the roles explicit. Under Measures you click plus, select a metric function and the field to calculate, and name the metric. Under Dimensions you click plus, select the field to group by, and name the dimension. If the definitions get swapped in your head, the exam answer that calls the metric function a dimension and the grouping attribute a measure is the one to avoid.
+
+### The metric level determines where the result can be used
+
+Data 360 lets you create these metrics at the profile, segment, and population levels.[^1] The level you choose determines where the result can be used, which is why the level decision comes before the build, not after it.
+
+A profile level metric is computed per person, and it is the form segments and copy field enrichments consume. When a customer profile carries a value, copy field enrichments can copy that value onto the matching Salesforce record, and segment criteria can filter on it. A segment level or population level metric describes a group, and it is useful for reporting and for comparing one person against a cohort. A scenario that asks for a personalization attribute is really asking for a profile level insight, not an aggregate over an entire segment.
+
+This is where the opening mistake gets its name. To produce one lifetime value per customer for a personalization attribute, the insight must group by the Individual dimension so each row is a person. That grouping is what lifts a raw sum into a per person metric that a profile can carry. If instead the analyst groups only by product category and omits the Individual dimension, the result describes categories rather than people and cannot be used as a personalization attribute. The dimension is the whole ballgame.
+
+The three levels also imply different validation. A profile level metric should have roughly one row per unified profile, so you can spot a missing dimension by an unusually small row count. A segment level or population level metric collapses many people into one row per group, so a count that looks tiny may be exactly right. Before you wire an insight anywhere, open it in Data Explorer and check that the row count matches the level you intended, because the row count is the cheapest proof that the grouping did what you meant.
+
+### You can author with the visual builder or with SQL
+
+You can author a calculated insight with the visual builder or with a SQL expression. The builder adds aggregate nodes where you select a metric function and the field to calculate, and dimensions where you pick the field to group by and name the dimension.[^2] In SQL you write the aggregate and the GROUP BY elements directly. Either path produces the same insight object, so the choice is a matter of author comfort, not capability.
+
+The builder path runs through the Calculated Insights tab: click New, choose Calculated Insight, choose the data space, select the base object, then add the aggregate node with its measures and dimensions. The SQL path runs through the same tab: click New, choose Create with SQL, and enter the query expression, then check the syntax before activating.[^3] A data engineer who prefers the SQL authoring experience and a marketer who prefers the builder can produce identical insights.
+
+Currency measures need one extra decision. When an insight includes currency measures you set the insight currency in the builder, or you use the currency conversion function in SQL so totals are comparable across currencies.[^5] The builder manages the conversion logic for you once you pick the insight currency, while the SQL path requires the conversion function and the currency type field to be handled explicitly. Get this wrong and mixed currency totals add dollars to euros, which is worse than no number at all.
+
+### A calculated insight produces a reusable insight object that other features read
+
+The result is not a picture. It publishes a reusable insight object that segment criteria, personalization attributes, copy field enrichments, and data graphs can read. Segment criteria can filter on its measures. Personalization attributes can surface them on a page. Copy field enrichments can copy them into a Salesforce field. Data graphs can incorporate them.
+
+Because the result is a reusable object, editing the insight definition and re running it updates every consumer. That is why the definition, and not a copied value, stays the source of truth. If a downstream report shows a stale number, the fix is to re run the insight, not to patch the report. One definition, many readers, and the readers always see the last successful run.
+
+Reading the same object from several places also keeps the values consistent. If a segment filters on a lifetime value and a record page displays the same lifetime value, both read the same insight object, so they cannot disagree. The alternative, where each consumer keeps its own copy, drifts the moment one copy is refreshed and the other is not. A reusable object removes that entire class of mismatch.
+
+That last point carries a design consequence. A failed or stalled run leaves consumers reading the previous result, so the run status and the last run time are part of the design. Before you wire an insight into a segment, check that the most recent run succeeded. A segment built on an insight that has not refreshed in days is quietly deciding on old numbers.
+
+### A worked retail example
+
+Take the retail scenario and build it properly. The base object is Product Order Engagement, joined to the unified individual so each order row carries the person behind it. The measure is the sum of an order amount field. The dimension is the Individual ID, so each row of the result is one person carrying their total spend.[^4]
+
+The result is a profile level metric: one lifetime order value per person. Because each row is a person, the result can filter a high value segment, or it can be copied onto the Contact record through a copy field enrichment. The same base object could instead produce a category report by grouping on product category, but that result describes products, not people, and it cannot be placed on a profile.
+
+The contrast between the two groupings is worth holding side by side. Group by Individual ID and each row is a person, so the value can be copied onto a contact and filtered into a segment. Group by product category and each row is a category, so the value can be charted but not attached to a person. Both are valid insights. Only one answers the question the marketing team actually asked, which is why the dimension is a business decision as much as a technical one.
+
+The order of decisions is what makes it work. Choose the base object, because it decides which fields are reachable. Choose the measure, because it decides what number you compute. Choose the dimension, because it decides whether the number belongs to a person or to a group. Only then does the level fall out, and only then can you say where the result will be used.
+
+### Batch timing and validation
+
+Calculated insights run on a schedule and can be re run on demand from the Calculated Insights tab. Because they are batch, the value can lag the newest source records until the next run. A scenario that expects real time totals should not rely on a calculated insight, because the freshest records are not reflected until the insight runs again.
+
+That delay is a design constraint, not a defect. Schedule a calculated insight to match the cadence the business actually needs, because a metric that refreshes hourly for a use case that changes once a day spends credits to keep a number nobody is watching. The schedule, the level, and the consumers are decided together, and the exam treats a batch calculator used for a real time need as a mistake no matter how well the math is written.
+
+Validate a built insight in Data Explorer before you wire it into a segment. Data Explorer can show data from data lake objects, data model objects, calculated insight objects, and data graphs, so you can open the calculated insight object, confirm the measures and dimensions look right, and check the row counts. A row count of one for a metric you expected per person is the fastest way to catch a missing dimension.
+
+Treat run status and last run time as part of the design surface. Downstream features read the last successful result, so the schedule and the re run discipline are as much a part of the insight as the measures are. A correct definition on a stale schedule still feeds stale numbers into a live segment.
+
+## Config Walkthrough
+
+Building a calculated insight follows the same order every time.
+
+1. In Data 360, open the Calculated Insights tab and click New, then choose Calculated Insight and a data space. Only the objects included in that data space are available, so pick the space that holds your data.
+2. Select the base data model object the insight measures, and choose the metric level, profile, segment, or population, that matches where the result will be used.
+3. Add at least one measure by choosing the metric function and the field to calculate, then name the measure. A calculated insight requires at least one measure.
+4. Add one or more dimensions by selecting the field to group by. Include the Individual dimension when the result must be a per person attribute.
+5. Set the insight currency for currency measures, then click Save and Run and validate the result in Data Explorer. Confirm the measures, dimensions, and row counts look right before you wire the insight into a segment.
+
+## Try it
+
+Take a metric your team tracks, such as average order value, and decide its level before you build anything. If the value should ride on a contact record or feed a segment, define the measure and add the Individual dimension so every row is a person. If the value is a company wide or per category number, group by that attribute instead and plan to use it in reporting. Then run the insight and open it in Data Explorer to confirm the row count matches the level you chose, because the row count tells you immediately whether you built a profile metric or a group metric.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, omitting the Individual dimension when the result must be a personalization attribute. Without grouping by the person, the metric describes a group and cannot be attached to a profile, a segment member, or a copy field. If the goal is one value per customer, the individual must be a dimension.
+
+Second, expecting batch calculated insights to reflect the newest records immediately. They run on a schedule, so the value can lag, and real time totals belong to a different insight type. A scenario that demands the freshest possible number is not asking for a calculated insight.
+
+Third, pointing a measure at a field that the base object and its joins do not expose. The measure cannot reference data the object does not surface, so the insight fails or returns nothing meaningful. Choose the base object with the fields you need, or add the join that reaches them, before you define the measure.
+
+## Decision rules to carry forward
+
+Decide the level first. If the answer needs one value per person, group by the Individual dimension, because a missing dimension turns a profile metric into a group metric. Define the measure and the dimension in their exact roles, with the measure as the metric function applied to a field and the dimension as the grouping attribute. Choose the base object for the fields it exposes. Set the currency for any currency measure. And validate the row counts in Data Explorer before the insight reaches a segment or a record page.
+
+## What's next
+
+The next lesson is Lesson 36 - Choosing Between Calculated, Streaming, and Real-Time Insights, Data Actions, and Enrichments (en-1c). It moves from building one insight to choosing the right one, and it separates the compute step from data actions, which act on a signal, and enrichments, which display it in another system.
+
+[^1]: Salesforce Help, "Enhance Data with Insights," (https://help.salesforce.com/s/articleView?id=data.c360_a_insights.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Create a Calculated Insight Using Builder," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_calculated_insight_using_builder.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Analyze Sales Data with Calculated Insights," (https://help.salesforce.com/s/articleView?id=data.c360_a_analyze_ci_dc4sales.htm&language=en_US&type=5)
+[^4]: Salesforce Developers, "Exercise 7: Enhance Data with Calculated Insights," (https://developer.salesforce.com/workshops/agentforce-workshop/data-cloud/7-create-calculated-insights)
+[^5]: Salesforce Help, "Considerations for Using Multiple Currencies in Data Cloud," (https://help.salesforce.com/s/articleView?id=data.c360_a_multi_currency_considerations.htm&language=en_US&type=5)

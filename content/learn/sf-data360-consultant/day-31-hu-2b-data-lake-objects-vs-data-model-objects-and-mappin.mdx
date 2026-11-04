@@ -1,0 +1,103 @@
+---
+title: "Lesson 31: Data Lake Objects vs Data Model Objects and Mapping Streams to the Model"
+slug: day-31-hu-2b-data-lake-objects-vs-data-model-objects-and-mappin
+series: sf-data360-consultant
+lesson: 31
+excerpt: "Raw data lands in a data lake object and usable data lives in a data model object, and only mapping turns one into the other. This lesson separates the two layers, explains the mapping rules, and shows why a single unmapped key leaves an entire stream inert."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Model Objects, Data Mapping, Identity Resolution]
+---
+
+# Lesson 31: Data Lake Objects vs Data Model Objects and Mapping Streams to the Model
+
+A consultant loads a customer file into Data 360, watches Refresh History show a successful run, and tells the client the data is in. A week later the client asks why a segment built on that freshly loaded data returns nobody. The rows are there and the stream is green; the mapping of a required key is not. The data loaded, and the data was never usable.
+
+This lesson is about the seam where ingestion meets the model. Requirement hu-2b sits in the Harmonization and Unification domain, worth 17% of the Salesforce Certified Data 360 Consultant exam. Its text asks you to model data in Data 360, focused on the difference between data lake objects and data model objects, the mapping between them, required keys, and the ingestion order that makes mapping work. Every later feature in this course assumes that seam is wired correctly, so this objective carries more weight than its single requirement id suggests.
+
+By the end you should be able to look at any stream and answer three questions without guesswork. Where does the raw data live? Where does the data the platform actually reads live? And what has to be true for a record to reach identity resolution, insights, and segments rather than sitting in storage.
+
+## Deep Dive
+
+### A data stream lands raw data into a Data Lake Object
+
+A data stream is the configured connection that brings a source into Data 360, and when it runs, its rows land in a Data Lake Object, usually shortened to DLO. A DLO is a container for the data brought into Data 360, and it is created automatically from the data a stream delivers, though you can also create one by hand.[^1] The DLO is the stream-shaped, as-ingested table. Its field names mirror the source system, its column set is whatever the source shipped, and it exists to stage the data rather than to serve the Customer 360 model.
+
+That staging role is easy to underrate. The DLO is not a lesser object; it is the durable landing copy that every later step reads from, and you can inspect it on its own from the Data Lake Objects tab. What you cannot do is treat its columns as model attributes before they are mapped. An unmapped DLO column carries no meaning for identity resolution, for a calculated insight, or for a segment, because none of those features read the DLO directly. They read the model. The DLO is the raw material, and until something shapes it, it stays raw.
+
+Two details about DLOs matter on the exam. First, a DLO can hold data with keys and characteristics such as a primary key, an event date time, and a record modified field, and once you create a DLO you cannot change the data types of its fields.[^1] Second, a stream created from a file or API source can reuse an existing DLO, but only when that DLO is not already in use by another source, and the stream that created the DLO in the first place defines characteristics such as the primary key and the event date time.[^5] Reuse is a real design option, not a curiosity, and it comes back later in this lesson.
+
+### A Data Model Object is the harmonized, standard-shaped object the platform reads
+
+A Data Model Object, or DMO, is a harmonized grouping of data created from data streams, insights, and other sources.[^1] Where the DLO is shaped like the source, the DMO is shaped like the Customer 360 Data Model: a person is an Individual, an email address is a Contact Point Email, and a purchase is represented through an object built for that purpose. The DMO is the semantic object the rest of Data 360 queries, so it is the layer that identity resolution, calculated insights, and segments actually consume.
+
+The single most compressed statement of the whole objective is one line of Salesforce documentation: a DLO is mapped to a DMO.[^1] That line carries the relationship in both directions. The DLO supplies staged columns, and the DMO turns them into reusable model attributes through mapping. When a stream targets a DMO, you map the Data Lake Object's fields onto the Data Model Object's fields, and those mapped fields are what downstream features can read. A stream that never maps to a DMO leaves its data stranded in the staging layer, loaded and unreachable.
+
+So the layers are distinct. The Data Lake Object is the raw, stream-shaped table that must be mapped onto a Data Model Object to become model data. They are not two names for the same object, and a DLO is not already a model sitting under a different title. The entire point of the mapping step is that these are different shapes; the mapping is the translation between them.
+
+### Mapping is the join between the two layers
+
+Mapping is where a raw column becomes a model attribute. Data ingested by all data streams is written to DLOs, and after creating your streams you associate your DLOs to DMOs, because only mapped fields and objects with relationships can be used for segmentation and activation.[^2] On the Data Stream detail page you click Start Data Mapping, and the field mapping canvas shows your source DLOs on the left and the target DMOs on the right. You connect a DLO to a DMO and then connect individual fields.
+
+The mapping rules are specific, and the exam likes them because they are easy to state and easy to get backwards. You can map a DLO to one or more DMOs.[^3] You can map only one DLO field to a given DMO field, so a single DMO field cannot be fed by two source DLO fields. You can, however, map one DLO field to more than one DMO field within the same DMO, which is how one source column can serve several attributes. A single DLO can map to more than one DMO, and a DMO can be fed by more than one stream, and Data 360 then keys and consolidates the result. When automapping is available it calculates and applies field mappings once you choose a specific DMO, and you then adjust and save; mappings and relationships are set up automatically only for streams deployed through standard data bundles, so for custom streams you own the work.[^4]
+
+That last point is the practical one. The convenience path runs out exactly where real projects live, which is custom data from systems the standard bundles do not cover.
+
+### Required keys are what make the mapping usable
+
+A mapping can look complete and still do nothing. The fields that decide whether it is useful are the required keys, and the most important of them is the Individual ID, which ties a record to a person. For the party area of the model, the data mapping requirements call out that you must map the Individual object and either a Contact Point or the Party Identification object, and that the reference to the Individual inside other objects is carried through the Party attribute, which behaves as a foreign key to Individual.Id.[^4] Mapping a DMO in the Profile or Other category requires the primary key, and you can save the mapping only after mapping it; an Engagement DMO requires the primary key and the Event dateTime field before it will save.[^4]
+
+The failure mode is quiet and specific. If a required key such as Individual ID is left unmapped, or is mapped from a source column that arrives empty, the record cannot join to a person. It sits in the DMO, it counts as a row, and it never attaches to anyone, so identity resolution and relationship based features silently skip it. There is no error, only an absence, which is why the opening scenario is so common: the load succeeded, the key did not, and nobody noticed until a segment came back empty.
+
+The Individual ID must also be mapped from a source column that is actually populated and consistent. A key that is present in one system but stripped of leading zeros by a CRM, or padded with trailing spaces by a warehouse, is not one key; it is two, and the person on the other end never matches. Mapping is where you decide which source column feeds the key, so mapping is where that decision either helps or hurts.
+
+### Ingestion and mapping order matters because relationships point at targets
+
+Relationships in the model are directional: an engagement object points at the Individual it belongs to. That direction has a consequence for the order in which you do the work. Map the parent or referenced object first, so that when a dependent object is mapped, its relationship target already exists. Mapping an engagement object before the Individual it references leaves the link unresolved, because the target records are not there to bind to yet.
+
+The rule of thumb generalizes cleanly. Ingest and map Individual and the other referenced objects first, then map the contact point, engagement, and dependent objects that point at them. The technical reason is that a many to one relationship such as Contact Point Email to Individual is satisfied when the Party field on the child mapping points at the Id on the parent, and that link is only complete when both sides exist.[^4] Build the child first and you build a pointer to nothing.
+
+This is the same discipline a relational database administrator applies when loading a parent table before its child table that carries a foreign key, and it is worth saying out loud in a design review because it changes the sequence of a migration plan.
+
+### One stream can serve many objects
+
+A single wide source table often holds more than one kind of thing: a person, a channel through which they are reached, and an interaction that happened on that channel, all in one row. In a multi object mapping, one DLO feeds several DMOs at once. You map the person columns to Individual, the email or phone columns to a contact point object, and the interaction columns to an engagement object, each with its own key, from the same staged table.
+
+The skill this objective tests is knowing which block of columns belongs to which object. Get the blocks and their keys right, and a single stream populates a coherent slice of the model. Get them wrong, and you either scatter person attributes into an engagement object where they cannot be matched, or leave a relationship dangling because the foreign key on the child points at a parent field you never filled.
+
+There is also a reuse path that matters here. If the data you need is already in a DLO, you do not reload it to reach a second DMO. Add a second mapping from the existing Data Lake Object to the target Data Model Object, and you reuse the staged data without re ingesting the source. Re ingesting an identical stream duplicates the data, cloning the DLO adds a copy you then have to keep in step, and querying the DLO to reload it through an API spends effort the mapping step already provides.
+
+### Config walkthrough: from stream to mapped model
+
+1. In Data 360, open the Data Streams tab and either create a new stream or open an existing one to see its Data Lake Object and its current mapping.
+2. On the stream's mapping step, click Start Data Mapping, then Select Objects, and add the target Data Model Object from the Data Model entities list on the right of the canvas.
+3. Map each DMO field to a source DLO field, leaving genuinely unavailable fields unmapped rather than guessing a source. Remember that one DLO field can feed more than one DMO field.
+4. Map the required keys first. Point the source column that feeds Individual ID, and any parent key, at the key field so identity resolution and relationships have something to bind to. For an Engagement DMO, map the Event dateTime field as well or the mapping will not save.
+5. To reuse already ingested data, add a mapping from the existing DLO to an additional DMO instead of creating and reloading a duplicate stream.
+6. Order the work so referenced objects such as Individual are mapped before the contact point and engagement objects that point at them.
+7. Save the mapping, then refresh or run the stream, and open the target object on the Data Model screen to confirm that rows and keys populated as expected.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, assuming the Data Lake Object is the model. The Data Lake Object is the raw, stream-shaped table that must be mapped onto a Data Model Object to become model data, and until its fields are mapped they are not available to identity resolution, insights, or segments. The tempting answer treats the landed table as if the platform could read it directly. It cannot; only the model is queried, which is exactly why the DLO is not the model.
+
+Second, leaving a required key such as Individual ID unmapped because the DMO appears to have rows. This is the trap the opening scenario walks into. In that failure the Individual ID was never mapped from a populated source column, and a row count would never have revealed it, because a row count tells you data loaded while saying nothing about whether the record can join to a person. An unmapped or empty key means identity resolution skips the record even though the data is present.
+
+Third, mapping in the wrong order. Creating and mapping a dependent object before the objects it references leaves relationships unresolved, because the target records do not exist yet. A pointer to a record that has not arrived is still a broken pointer, and it will not fix itself when the parent finally loads, because the mapping bound the wrong fields from the start.
+
+## The decision rules to carry out
+
+Keep the layers straight. Raw data lands in a Data Lake Object, usable data lives in a Data Model Object, and only mapping turns one into the other. Map the required keys, above all the Individual ID, from a source column that is populated and consistent, or the whole stream stays inert. Map referenced objects before the objects that point at them. Remember that one stream can serve many objects, and that one existing DLO can feed an additional DMO without a reload.
+
+## What's next
+
+Lesson 32 - Extending the Model with Custom Data Model Objects and Relationships (hu-2c)
+
+[^1]: Salesforce Help, "Data Objects in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_lake_objects.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Data Mapping," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_mapping.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Map Data Model Objects," (https://help.salesforce.com/s/articleView?id=data.c360_a_map_custom_data_model_objects.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Data Mapping Requirements in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_required_data_mappings.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Using an Existing Data Lake Object to Create a Data Stream," (https://help.salesforce.com/s/articleView?id=data.c360_a_guardrails_existing_data_lake_object.htm&language=en_US&type=5)

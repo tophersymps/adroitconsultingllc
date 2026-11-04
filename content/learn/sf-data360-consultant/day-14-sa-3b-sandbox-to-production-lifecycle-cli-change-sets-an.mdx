@@ -1,0 +1,107 @@
+---
+title: "Lesson 14: Sandbox-to-Production Lifecycle: CLI, Change Sets, and Environment Parity"
+slug: day-14-sa-3b-sandbox-to-production-lifecycle-cli-change-sets-an
+series: sf-data360-consultant
+lesson: 14
+excerpt: "Objective sa-3b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to manage the development lifecycle with the CLI, change sets, and API based deployment. Lesson 14 covers provisioning Data 360 in a sandbox, reactivating dormant connections, promoting a DevOps data kit three ways, and the environment parity discipline that prevents most failures."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Sandbox, Deployment, Salesforce CLI]
+---
+
+# Lesson 14: Sandbox-to-Production Lifecycle: CLI, Change Sets, and Environment Parity
+
+An admin creates a Full Copy sandbox, logs in, and expects the connectors to be humming. Instead every connection shows Inactive and no data is flowing. The admin refreshes the sandbox twice, changes the data space prefix, and reinstalls a package, none of which helps. The actual cause is written on the tin: connections replicate into a sandbox without their stored credentials, so they land inactive and wait to be authorized. No amount of refreshing changes that.
+
+This lesson covers objective sa-3b, part of the Data 360 Setup and Administration domain, worth 13% of the Salesforce Certified Data 360 Consultant exam. The objective asks you to manage the development lifecycle with available tooling, focused on provisioning Data 360 in sandboxes and promoting configuration with the CLI, change sets, and API based deployment. We cover which sandboxes can run Data 360 and the one prerequisite that gates everything, the provisioning sequence and its waiting periods, why connections arrive inactive, the three deployment paths for a DevOps data kit, the Connect REST API's asynchronous model, and environment parity as the habit that keeps a promotion from failing after the package is already installed.
+
+## Deep Dive
+
+### Data 360 runs in all sandbox types but provisions metadata only
+
+Data 360 runs in all sandbox types, including Developer, Developer Pro, Partial Copy, and Full Copy, but it provisions metadata only. Even when you create a Partial Copy or a Full Copy sandbox, your production data stays protected, because no data is replicated into Data 360 sandboxes. What lands in the sandbox is the metadata: the definitions of streams, models, calculated insights, and the rest, not the records. So a sandbox is a place to build and test configuration, and the data it holds is data the sandbox ingested on its own, not a copy of production's rows.[^1]
+
+The prerequisite that gates everything is production. To use Data 360 in a sandbox, Data 360 must already be provisioned in production, because a sandbox inherits Data Cloud licenses from the source production org. If the production org is not operating Data 360 under a Data Cloud license, Data 360 cannot be turned on in the sandbox at all. This is not a soft dependency that a clever workaround can bypass. The license has to exist at the source before the sandbox can match it, so an org that is still evaluating Data 360 has nowhere to stand up a sandbox copy.
+
+Why does the platform tie sandbox provisioning to production rather than letting each sandbox buy its own license? Because the entire lifecycle model assumes production is the trunk and sandboxes are branches off it. A sandbox is meaningful only as a rehearsal space for something that will eventually run in production. If production has not adopted Data 360, there is nothing to rehearse toward, and the licenses the sandbox would bill against do not exist. The practical answer to a client who wants to "try Data 360 in a sandbox first" is that production provisioning comes first, and the sandbox follows.
+
+### Provisioning a sandbox is a sequence
+
+Provisioning a sandbox is a sequence, and the order matters as much as the steps. First, turn on Data 360 in production. In the sandbox, open Company Information and click Match Production Licenses; the license synchronization can take up to a day, and until it completes the Data Cloud Setup menu is unavailable. The required precursor is matching production licenses so the Data Cloud license syncs, and until that finishes, the Data Cloud Setup menu stays hidden, which is the single most common source of "the menu is missing" confusion. Then open Data Cloud Setup in the sandbox and click Get Started to provision Data 360, which can also take time. Sandboxes created before Data 360 sandbox support generally need a refresh.[^1]
+
+The license match is narrow by design. The license match process copies only Data 360 licenses and does not copy organization preferences, values, metadata, or permissions, so custom configurations, integrations, and other metadata are set up manually in the sandbox.[^1] That is a feature, not a gap: you want a clean place to test configuration changes, not a byte-for-byte clone of production preferences that might mask a deployment gap. The exam cares that you know the match moves licenses only, because a candidate who expects permissions to ride along will misjudge what still has to be built.
+
+Two waiting periods are worth memorizing because they explain most "it is broken" tickets in the first hour of a sandbox. The license sync can take up to twenty-four hours, and provisioning through Get Started can take a few minutes on its own. A consultant who clicks Get Started before the license sync has completed sees no menu and assumes a defect. The correct response is patience and sequence, not a support case. If a sandbox predates Data 360 sandbox support, the answer is a refresh, because the platform cannot retrofit the provisioning onto a sandbox that was copied before the capability existed.
+
+### Connections do not carry their authorization into a sandbox
+
+Connections do not carry their authorization into a sandbox. Connections replicate, but the stored credentials do not, so they arrive in an Inactive state. After provisioning, wait about an hour for background processing, then activate each connection and supply its authorization details: for Other Connectors select the connector and choose Activate, and for the Salesforce CRM home org connector activate it and supply the sandbox org credentials. Data actions, data action targets, and data share targets also need explicit activation.[^1] The one-line exam answer for a sandbox whose connections show Inactive is to activate each connection and provide its authorization details.
+
+The reason credentials do not replicate is a security boundary. Authorization data for an external source is a secret, and copying secrets from production into every sandbox would spread live credentials across lower environments that are often shared or less protected. So the platform copies the connection's shape, its name, its target, and its configuration, and deliberately withholds the secret. The sandbox arrives ready to be authorized and unable to process data until you do. Every failure path that ignores this, refreshing, redeploying, or renaming, leaves the connection inactive because none of them touch the missing secret.[^5]
+
+The Salesforce CRM home org connector has its own quirk worth knowing. When you activate it, the org ID shown changes from the production org ID to the current sandbox org ID, because activating the copied home org connection in the sandbox creates a connection to the sandbox itself as the data source.[^5] So a connection that reads "Production Org Id" before activation is not misconfigured; it becomes the sandbox the moment you activate and supply the sandbox credentials. Beyond connections, three more component families need explicit activation: data actions and data action targets are enabled from their own pages, and data share targets are edited to add the connection configuration before they turn active.[^1]
+
+### For deployment, the DevOps data kit is the unit of promotion
+
+For deployment, the DevOps data kit is the unit of promotion. A typical pipeline is to build and test in a sandbox, create a DevOps data kit, publish it, and move it to production. You can deploy by linking the kit to outbound and inbound change sets, by downloading the kit manifest as a package.xml and using the Salesforce CLI (sf project retrieve start, then sf project deploy start), or by the Connect REST API, which is asynchronous and is the supported programmatic path.[^2][^4] The kit is the cargo, and the three paths are three ways to move it, and the exam will frame a scenario around whichever path the question names.
+
+The change set path is the most familiar to admins who grew up on the platform. You create an outbound change set in the sandbox, add the kit as the component, and deploy it to production where an inbound change set receives it. The CLI path is the most scriptable. You download the kit manifest, which becomes a package.xml that names every metadata component in the kit, then retrieve the metadata into a Salesforce DX project and deploy it to production.[^2] The CLI path also handles the awkward case of moving metadata between two production orgs by routing through a temporary sandbox, because the CLI can authorize two orgs in one project and push a manifest between them.
+
+The environment that can deploy depends on the pairing. A DevOps kit uses change sets only when the sandbox and production share a lineage, meaning the sandbox was created from that production org, and the CLI is available for the sandbox-to-production and production-to-production directions alike.[^2] A standard kit, by contrast, moves through Package Manager and only from the default data space. Reading a scenario, the first question is whether the deploy is a promotion or a distribution, because that decides kit type, and the second is whether the two orgs are linked, because that decides whether change sets are even on the table.
+
+### The Connect REST API deploy endpoint replaced the older single-click flow
+
+The Connect REST API deploy endpoint replaced the older single-click flow, and it offers an asynchronous deployment process for both standard and DevOps data kits. It requires an OAuth access token with Data 360 Connect API scopes, and it requires the Data 360 Architect permission set. You create a job with async mode enabled, since omitting async mode risks a timeout, then poll the job status endpoint until it reports Completed or Error. For DevOps kits you specify only the kit developer name; for standard kits you specify the components to deploy.[^3]
+
+The asynchronous model is the heart of the API and the heart of its most likely exam question. A synchronous request that waits for a multi-component deployment to finish would hold the connection open long enough to time out, so the endpoint is built to accept the job, return a jobId immediately, and let you poll for the result. If a deployment request times out, the fix is usually to set async mode so the deployment processes asynchronously, not to add components, change data spaces, or strip permissions. The permission set is required for the deploy; it is never the cause of a timeout, which is why the "remove the permission set" distractor is the trap on that question.
+
+The request shapes differ by kit type for a principled reason. A DevOps kit is a promotion artifact whose contents are fixed when it was published, so the API just needs its developer name and it deploys the whole kit. A standard kit is a distribution artifact that may carry several components, so the API asks which components to deploy using the input representation object. The success response is a 202 Accepted carrying the jobId, and you then call the status endpoint until jobStatus reads Completed or Error.[^3] When jobStatus is Error, the errors array names the cause, and the usual suspects are inactive connectors, a duplicate API name already in the target data space, and an environment parity mismatch on the data space name.
+
+### Environment parity is the discipline that prevents most failures
+
+Environment parity is the discipline that prevents most failures. Deploy a DevOps kit to the same data space it was built in, keep data space names consistent across source and target, and avoid manually created objects in the target that a kit is expected to own. Duplicate API names in the target data space and name mismatches are the frequent causes of a failed deployment, and the error surfaces at deploy time, after the package has already been installed.[^3] The pain of this failure is its lateness: the install succeeds, the admin feels done, and the deploy then fails with an error that points at a naming mismatch nobody noticed.
+
+The first parity rule is the data space. A DevOps kit must deploy to the same data space it was created in, so if the sandbox built the kit in a data space called Analytics and production has no such data space, the deploy fails with an environment parity error. The Connect REST API documentation says it plainly: verify that the target data space name exactly matches the data space configuration you used when creating the kit in the sandbox.[^3] The CLI documentation adds the build-time counterpart: make sure a data space with the same prefix name exists in both the sandbox and the production org before you build the kit.[^2]
+
+The second parity rule is uniqueness. A component that already exists in the target data space with the same API name collides with the incoming kit, so a deployment fails on a duplicate. This is why "manually created objects in the target that a kit is expected to own" is a documented hazard: if someone built a data lake object by hand in production with the same API name the kit carries, the deploy has two things claiming one name and stops. The discipline is to decide, before the first promotion, which objects the kit owns and to leave the target's hands off them. Parity is not a step you perform once; it is a property you maintain across every promotion.
+
+## Config Walkthrough
+
+Six steps take a new sandbox to a verified production deployment.
+
+1. Confirm Data 360 is provisioned in production, then in the sandbox open Setup, search Company Information, and click Match Production Licenses. The license sync can take up to a day, so start here and let it run.
+
+2. After the license sync completes, open Data Cloud Setup in the sandbox and click Get Started to provision Data 360. This is the step that is missing until the license match lands, so do not expect the menu to be there early.
+
+3. Wait roughly an hour, then under Salesforce Integrations or External Integrations activate each connection and enter its authorization details. Remember that data actions, data action targets, and data share targets also need explicit activation.
+
+4. In the sandbox, create a DevOps data kit under Developer Tools, add and publish components, then download the kit manifest to get package.xml. Confirm the data space exists with the same prefix in both orgs before you build.
+
+5. In a Salesforce DX project, run sf project retrieve start --manifest manifest/package.xml, then sf project deploy start to push the kit to production, or link the kit to outbound and inbound change sets. Either path works; the CLI path is the one to script.
+
+6. Verify the deployment: open the deployed kit in production and confirm its data streams, data models, and calculated insights are present in the target data space. A deploy that reports success still deserves a visual check, because a wrong data space or a missing mapping can slip past a green status.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, creating a Data 360 sandbox and expecting connections to work immediately. Connections replicate without authorization data and arrive Inactive until you reactivate them. The strongest distractor here is "refresh the sandbox," which feels decisive and does nothing, because a refresh does not carry credentials into the sandbox either. The move is to activate each connection and supply its authorization, after the roughly one hour of background processing that provisioning needs.
+
+Second, skipping Match Production Licenses. Without it the sandbox has no Data Cloud license and the Data Cloud Setup menu stays unavailable, which looks like a broken org and is really an unfinished prerequisite. The required precursor is matching production licenses so the Data Cloud license syncs, and the sync can take up to a day. A candidate who jumps to "reinstall the package" or "enable left side navigation" is answering the wrong question; there is no package to reinstall and no navigation toggle that grants a license.
+
+Third, deploying a DevOps kit to a different data space than its source, or omitting the async flag on a Connect REST API deploy. Both cause failures that surface only at deploy time. The data space mismatch produces an environment parity error after the package is already installed, and the missing async flag produces a timeout because the request waits for work the endpoint is designed to run in the background. Parity mismatches and missing async mode share a theme: the failure appears late, so the discipline has to be front-loaded before the first promotion.
+
+## What a consultant should walk away with
+
+Two constants govern every sandbox promotion question: match production licenses first, then reactivate the connections that arrive inactive. Remember that Data 360 provisioning in a sandbox depends on production having Data 360 first, that the license match copies licenses only, and that a sandbox older than Data 360 sandbox support needs a refresh. For the move itself, reach for a DevOps kit and pick your path: change sets when the orgs are linked, the CLI for anything scriptable including production to production, and the Connect REST API when you need a programmatic deploy, always with async mode set and the Data 360 Architect permission set assigned. Then hold environment parity on both axes, the data space name that must match and the API names that must stay unique, so the deploy does not fail after the install already looked successful.
+
+## What's next
+
+Lesson 15 - Diagnosing Data Stream and Ingestion Errors (sa-4a). You can now move configuration from a sandbox to production. Lesson 15 turns to the moment a stream goes red in production: reading refresh history, decoding the error codes that point at objects, fields, file sizes, and overlapping jobs, and using problem record data lake objects to find the rows that failed instead of losing them.
+
+[^1]: Salesforce Help, "Create a Data 360 Sandbox," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_cloud_sandbox_create.htm&language=en_US&type=5)
+[^2]: Salesforce Developers, "Use CLI to Deploy Changes from a Sandbox to Data 360," (https://developer.salesforce.com/docs/data/data-cloud-dev/guide/dc-deploy_data_kit_using_cli.html)
+[^3]: Salesforce Developers, "Use the Connect REST API to Deploy Data 360 Data Kits," (https://developer.salesforce.com/docs/data/data-cloud-dev/guide/dc-deploy-data-kits-using-connect-api.html)
+[^4]: Salesforce Help, "Deploy Data 360 Changes from a Sandbox," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_cloud_sandbox_deploy.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "CRM Connections in a Sandbox," (https://help.salesforce.com/s/articleView?language=en_US&id=data.c360_a_crm_connections_in_a_sandbox.htm&type=5)

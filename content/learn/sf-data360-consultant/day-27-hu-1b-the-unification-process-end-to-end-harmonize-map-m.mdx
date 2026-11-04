@@ -1,0 +1,107 @@
+---
+title: "Lesson 27: The Unification Process End to End: Harmonize, Map, Match, Reconcile, Unify"
+slug: day-27-hu-1b-the-unification-process-end-to-end-harmonize-map-m
+series: sf-data360-consultant
+lesson: 27
+excerpt: "Requirement hu-1b in the Harmonization and Unification domain (17 percent of the Salesforce Data 360 Consultant exam) asks you to define the purpose, process, and supported use cases of unification, tracing the process in order from harmonizing and mapping to matching, reconciling, and producing the unified profile. Lesson 27 walks the pipeline step by step, from the data lake object through match rules and reconciliation to the unified profile and the unified link, and explains how each step consumes the one before it."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Identity Resolution, Match and Reconciliation]
+---
+
+# Lesson 27: The Unification Process End to End: Harmonize, Map, Match, Reconcile, Unify
+
+A consultant inherits a ruleset that returns a consolidation rate of 41 percent, which the business reads as broken. The instinct is to loosen the match rules and rerun. The consultant does the opposite: she checks the mapping first, finds that the source's phone field was never mapped to Contact Point Phone, fixes the mapping, and reruns. Consolidation climbs without a single looser rule, and no strangers get merged. The order of operations is the whole lesson, because almost every unification problem traces back to a step that was skipped, sequenced wrong, or quietly incomplete before matching ever ran.
+
+Requirement hu-1b sits in the Harmonization and Unification domain, worth 17 percent of the Salesforce Certified Data 360 Consultant exam, and it asks you to define the purpose, process, and supported use cases of unification, tracing the process in order from harmonizing and mapping to matching, reconciling, and producing the unified profile. Lesson 26 defined the source profile, the unified profile, and the unified link. This lesson takes those objects and walks the pipeline that produces them, in order, and shows why each step can only consume what the previous step created.
+
+You will cover the fixed order of the unification pipeline, what harmonizing and mapping produces, how match rules turn mapped records into groupings, how reconciliation decides the single displayed value, what the finished unified profile and link contain, and why the process is tuned by measurement rather than run once.
+
+## Deep Dive
+
+### Unification runs in a fixed order, and each step consumes the previous one
+
+Unification is the core of the Harmonize and Unify stage, and it runs in a fixed order: connect and land the data, harmonize by mapping to the Customer 360 Data Model, configure match rules, configure reconciliation rules, then let identity resolution run and publish unified profiles. Each step consumes the previous step's output. You cannot match data you have not mapped, and you cannot reconcile a field that no match rule brought together. When a question asks what happens first, start from the data stream and the data lake object, never from the unified profile.
+
+The order is not a bureaucratic preference; it is a dependency chain. Data streams land data lake objects, and only mapped data model objects are visible to matching. Match rules can only compare fields that exist in the model and are populated by mapping. Reconciliation can only choose among values that matching brought into the same group, so a field that never came together through a match has nothing to reconcile. Each link in the chain justifies the next, and breaking any one of them stalls the pipeline silently rather than loudly.
+
+The exam states this as a sequence question, and the correct sequence is harmonize and map, match, reconcile, produce unified profiles. The strongest distractor reverses mapping and matching, which fails because match rules can only see mapped fields. Any sequence that starts with reconcile or with unify has the dependency backwards: you cannot resolve a conflict among values you have not yet grouped, and you cannot produce a unified profile before you have grouped the records that belong to it.
+
+### Harmonize and map turns data lake objects into mapped data model objects
+
+Harmonizing and mapping consumes the data lake objects landed by data streams and produces mapped data model objects. You map each data lake object field to the correct data model object attribute, choosing standard or custom objects, and you set relationships between objects such as an individual and its contact points. The product is a normalized model in which every source name, email, and phone field lives in the same standard attributes, which is exactly what makes comparison across sources possible.
+
+The standardized structure is the point. The Customer 360 Data Model is the standardized model that makes data interoperable, and data mapping is the process of connecting fields in your data lake objects to the standardized fields within its data model objects.[^1] Key attributes like names, IDs, email addresses, and phone numbers are the ones that matter most for linking an individual's data into a unified profile.[^1] Mapping is also where you satisfy the required mappings identity resolution depends on: the Individual object with its primary key, and at least one contact point or the party identification object, related through the party attribute.[^2]
+
+Two practical notes follow. First, when you map a data model object in the Profile or Other category you must map the primary key field before the mapping will save, and in the Engagement category you must also map the event dateTime field.[^2] Second, when multiple data streams harmonize into a single data model object, different records can carry the same key values, and fully qualified keys, which combine a source key with a key qualifier, prevent those collisions from being misread.[^1] Skip either and you still get a model, just one whose keys are ambiguous. And because matching only sees mapped fields, an unmapped phone number is not a partial match opportunity; it is no match opportunity.
+
+### Match rules consume the mapped model and produce groupings
+
+The match stage consumes the mapped data model objects and the match rules in the active ruleset, and it produces groupings: sets of source profiles judged to be the same entity. A match rule is made of one or more criteria, and how those criteria combine is the mechanics the exam tests. All criteria within a single rule must be satisfied for that rule to link profiles, while a unified profile is created if any single match rule in the ruleset is activated. That difference between "all criteria in a rule" and "any rule in the ruleset" is the difference between a strict rule and a forgiving ruleset.
+
+More criteria make a rule stricter and yield more, smaller unified profiles; fewer criteria consolidate more aggressively. Match methods decide how values compare, and the common ones are exact, fuzzy, and normalized. Exact requires data to match precisely with no typos or alternative formats, fuzzy tolerates similar matches such as slightly different spellings, and normalized matches the same underlying information regardless of formatting, for email, phone, and address.[^3] The phrase the product uses for a strict email comparison, normalized email, is the same idea as a normalized phone: strip the formatting, then compare.
+
+Two consequences deserve your attention. Because the ruleset fires if any rule matches, adding a loose rule makes the whole ruleset more aggressive even if the other rules are strict, which is how a careful team accidentally over matches. And because methods such as fuzzy and normalized transform values only for comparison, you can tune matching without changing stored values or what the unified profile displays. Matching decides who belongs together; it does not decide what the profile shows. Salesforce notes that a balanced set of match rules across different types of criteria improves consolidation rates for individuals and accounts.[^4]
+
+### Reconciliation decides what the unified profile displays
+
+Reconciliation consumes the groups produced by matching together with the object level and field level reconciliation rules, and it produces the reconciled attribute values shown on the unified profile. For a field that can hold only one value, the rule decides which single value to keep. Last Updated takes the most recently modified value, Most Frequent takes the most common value, and Source Priority takes the value from the highest priority source. You can apply these rules at the object level and override them at the field level, and when fields hold similar data such as an identifier, the product warns you to select which source the unified profile should use.[^5]
+
+Walk the sequence the exam describes. A unified profile shows one value for first name while the contributing sources disagree, and the question asks what decided that value. The answer is the reconciliation rule assigned to the field, such as Last Updated or Source Priority. Match criteria only decide whether records link; they do not choose which value displays, so a rule with the highest criteria count is irrelevant to a display question. The order in which data streams ran and the data space assignment are also irrelevant, because display is governed by the reconciliation rule and nothing else.
+
+The other fact to hold is what reconciliation does not do. It determines only what the unified profile displays and never changes source data. It does not update the connected source systems with the winning value, and it does not apply to email and phone contact points, which retain all of their unique values across sources rather than being reduced to one.[^5] It also runs after matching, not before, because it needs groups to reconcile within. An answer that says reconciliation repairs a failed match, or that it rewrites a field the sources never brought together, has misunderstood both the order and the scope.
+
+### The final product is the unified profile and the unified link
+
+The final product is the unified profile and the unified link. The unified profile holds one row per unified entity with its reconciled attributes, and the unified link object connects that row to every contributing source profile and its data, so any use case can traverse back to the sources. Identity resolution processes rulesets on a schedule, from as frequently as every 60 minutes up to 24 hours depending on the data source, and each data source is processed on its own timeline according to when data is received and how many changes accumulate.[^6] Salesforce also offers real time identity resolution that identifies a known customer during an engagement.[^6] Output lands in the data model objects the ruleset creates, and when a ruleset ID is used, that identifier is appended to the generated object and API names.
+
+Two scheduling details are worth committing to memory. Rulesets are scheduled to run at least once per day after publication, and to avoid unnecessary credit consumption you can disable automatic runs while you configure and use a manual run instead.[^7] Rulesets also will not run if no records have changed since the previous run, because batch and federated data are preprocessed and only new or changed records are sent for matching.[^6] That preprocessing is why a ruleset can appear idle between changes without anything being wrong: there is nothing new to match, so there is nothing to run.
+
+### The process is not one and done, you measure and iterate
+
+The process is not one and done. You publish the ruleset, run it, measure the consolidation rate, then adjust criteria, match methods, or reconciliation rules and rerun. The consolidation rate on the ruleset's identity resolution summary details the results of the last successfully completed run, and Salesforce suggests comparing two rulesets' rates to decide which better meets your needs.[^7] More criteria or higher precision match methods raise accuracy and lower consolidation; looser settings consolidate more and risk merging different people.
+
+The tuning lever matters because it separates two things people conflate. Match methods such as exact, normalized, and fuzzy transform values only for comparison and do not change stored values, so you can tune matching without changing what a unified profile displays, which is governed separately by reconciliation. If the complaint is "the wrong person is on this profile," the lever is matching. If the complaint is "the right person is on this profile but the wrong name shows," the lever is reconciliation. Treating those as the same problem produces a fix that addresses neither.
+
+Salesforce's own guidance keeps the loop tight. Developing balanced match rules across different types of criteria improves consolidation rates, and to reduce usage costs it recommends keeping only one active ruleset.[^7] The practical rhythm is publish, run, read the rate, and change one thing at a time so you can attribute the effect. A unification configuration is a maintained asset with a measurement cycle, not a setting you flip once and forget.
+
+## Config Walkthrough
+
+Run the pipeline in five steps.
+
+1. Harmonize first: in the Data Model area, map each data lake object field to the correct standard Customer 360 Data Model object and attribute, and set the relationships to the contact point objects through the party reference.
+
+2. Configure match rules in the Identity Resolutions ruleset, adding criteria that link the source profiles representing the same person or account, and choosing the match method for each criterion.
+
+3. Configure reconciliation rules at the object level, then override specific fields where a different rule applies, remembering that contact points are excluded.
+
+4. Publish the ruleset and run identity resolution, which processes the mapped data on its own schedule or on a manual run.
+
+5. Inspect the resulting unified profile and unified link, measure the consolidation rate, and adjust criteria or match methods before rerunning.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, reversing match and reconcile. Match groups records first, then reconciliation picks the displayed value; reconciliation cannot cause a match, and matching never resolves a conflicting value. Any sequence that puts reconcile before match has the dependency backwards, and the fix is to ask whether the question is about grouping or about display.
+
+Second, believing a reconciliation rule can repair a failed match, or that you can reconcile a field that never came together through mapping and matching. Reconciling operates on a group; if the records never matched, there is no group and nothing to reconcile. The repair for a failed match lives in mapping and match criteria, not in the reconciliation rule.
+
+Third, thinking unification is a single run. Rulesets are published, processed on a recurring schedule, and tuned by measuring the consolidation rate and iterating. An answer that configures once and walks away has missed that the rate is a measurement you act on, and that the configuration is expected to change as the data and the business do.
+
+## Decision rules to take away
+
+Memorize the order: harmonize and map, match, reconcile, produce unified profiles, and place any question about grouping before any question about displayed values. Harmonizing and mapping turns data lake objects into a mapped Customer 360 Data Model with the required keys and contact point relationships, and matching can only see what mapping exposed. Match rules combine criteria as all of one rule and any rule in the ruleset, with exact, fuzzy, and normalized methods deciding how values compare, and more criteria or higher precision yields more, smaller unified profiles. Reconciliation decides what the unified profile displays, using rules such as Last Updated, Most Frequent, and Source Priority, and it determines only what the unified profile displays and never changes source data; it does not touch contact points and it runs after matching. The finished output is the unified profile plus the unified link back to every contributing source record. And the whole thing is a loop: publish, run, read the consolidation rate, change one lever at a time, and rerun, keeping the match lever and the display lever distinct.
+
+## What's next
+
+Next is Lesson 28 - Match and Reconciliation Rules in Practice: Criteria, Methods, and Conflict Resolution (hu-1c). It goes deep on the two rule types this lesson placed in sequence, covering which criteria to combine and how, how exact, fuzzy, and normalized methods behave under real data, and the conflict resolution choices that decide what a unified profile shows when sources disagree.
+
+[^1]: Trailhead, "Map Data Effectively and Create Unified Customer Profiles," (https://trailhead.salesforce.com/content/learn/modules/data-cloud-connect-and-unify/map-and-unify-data)
+[^2]: Salesforce Help, "Data Mapping Requirements in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_required_data_mappings.htm&language=en_US&type=5)
+[^3]: Trailhead, "Unify Your Data with Effective Identity Resolution Strategies," (https://trailhead.salesforce.com/content/learn/projects/explore-data-cloud-core-functionality/unify-your-data)
+[^4]: Salesforce Help, "Default and Custom Match Rules," (https://help.salesforce.com/s/articleView?id=data.c360_a_match_rules_criteria.htm&type=5)
+[^5]: Salesforce Help, "Unify Sales Data with Identity Resolution," (https://help.salesforce.com/s/articleView?id=data.c360_a_unify_data_dc4sales.htm&type=5)
+[^6]: Salesforce Help, "Processing Frequency for Identity Resolution," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_processing_frequency.htm&type=5)
+[^7]: Salesforce Help, "Create Identity Resolution Rulesets," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_ruleset_create.htm&type=5)

@@ -1,0 +1,114 @@
+---
+title: "Lesson 46: Operating Segments: Refresh, Membership Counts, Editing and Versioning, and Sharing"
+slug: day-46-ac-2b-operating-segments-refresh-membership-counts-editi
+series: sf-data360-consultant
+lesson: 46
+excerpt: "A segment keeps changing after you build it: counts move, schedules fire, and other teams go looking for it. Lesson 46 of the Salesforce Data 360 Consultant course covers the operating side of segments, from post-publish membership and count drivers to safe edits, data space access, and retirement."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Segments, Activation, Data Governance]
+---
+
+# Lesson 46: Operating Segments: Refresh, Membership Counts, Editing and Versioning, and Sharing
+
+A campaign goes live on a Monday. By Wednesday the email team is in a panic, because the audience behind their journey has lost a third of its members and nobody touched the rules. The consultant opens the segment, sees nothing obviously wrong, and starts editing criteria to fix it. That edit posts a new membership to the destination on the next publish and quietly changes the audience a running campaign was built around. The original count movement was routine. The fix is what caused the incident.
+
+Operating a segment is a different job from building one. Requirement ac-2b, in the Data Activations and Utilization domain worth 20% of the Salesforce Data 360 Consultant exam, asks you to manage segments within Data 360, covering refresh and publish schedules, membership counts and why they change, editing and versioning, and sharing and permissions. This lesson covers the mechanical side of a segment's life after creation: how it refreshes, why its count moves, how to change it without breaking a campaign, who can see it, and how to retire it.
+
+The habit to build is a short diagnostic order. Before you touch a rule, check the schedule, then the last publish, then the count drivers, then the sharing model. Almost every report that a segment is broken resolves in that order, and almost every self-inflicted incident comes from skipping it.
+
+## Deep Dive
+
+### Publishing turns a segment rule set into current membership
+
+A segment is a saved rule set. The rules by themselves put nobody into a destination. Publishing is the step that runs the rules, computes who currently qualifies, and sends that membership to the activation targets wired to the segment. When you create a standard segment you choose the publish schedule at the same time, and the two publish types behave differently.
+
+Standard publish supports longer intervals, and the standard schedule is 12 or 24 hours.[^1] These are the cadences for a considered audience: a nightly list for an email team, a daily feed into a warehouse. Rapid publish exists to shorten the gap between a rule set and the destination. When you create a segment, you can choose rapid publish to run on a daily schedule at a 1-hour or 4-hour interval, and rapid segments are prioritized in the publish queue.[^2] The option you want when a standard segment must reach a destination frequently is rapid publish at a shorter interval such as 1 or 4 hours.
+
+The trade is real. Rapid publish can only activate to Marketing Cloud Engagement, Data 360, and file storage targets such as Amazon S3, SFTP, Google Cloud Storage, and Microsoft Azure, and you can create only a limited number of rapid segments.[^2] You cannot change a standard publish to a rapid publish after the segment is created, so the publish type is a creation-time decision.[^2] Both publish types let you configure the lookback window, so choosing rapid does not force you to shrink the data range.
+
+There is a third option that is easy to overlook. If you are still adding filters, you can select Don't refresh and add the schedule later, and a segment with the Don't refresh schedule is simply not published to activation targets.[^3] The mistake is treating Don't refresh as harmless. A segment that was publishing and is switched to Don't refresh stops feeding its destinations, while the activation on the other side keeps expecting data that will never arrive.
+
+Treat the schedule as a contract with the destination. Changing the interval changes when the audience moves, and downstream campaigns, journeys, and reporting are built around the cadence you promised. Change a schedule because the business changed its freshness need, and tell the teams that consume the audience.
+
+### Each publish creates or updates the segment membership record, so membership is a snapshot
+
+The second thing to internalize is what publishing actually writes. Each time you publish a segment, a data model object is created or updated to store segment membership information, and to identify who is in a segment you use the Segment Membership DMO, whose type is Segment_Membership.[^4] Membership is therefore a snapshot of the last completed publish, not a live query that answers on demand.
+
+The DMO comes in two forms. The latest segment membership holds the profile IDs included in the most recent publish, and the history segment membership holds the profile IDs from the previous publish within the last 30 days.[^4] When a publish starts and a member no longer satisfies the criteria, that member is removed from the membership table.[^4] Because the object is updated rather than appended to, it shows current state with a short tail, not an audit log.
+
+This changes how you answer a business question. Membership is a snapshot of the last completed publish. When someone asks who was in the audience at a specific moment three weeks ago, the platform membership object will not answer, so do not promise that it will. You can query membership in Data Explorer, with SOQL, or through the segmentation REST API, and you can surface it in a dashboard, but you are reading the current snapshot, not a historical ledger.[^4]
+
+You can also expose membership during a live session. You can add the segment ID and a membership timestamp field from the membership object to a real-time data graph, which lets a running experience know whether the current visitor is in a given segment without waiting for the next batch. That is a read of the same snapshot the batch pipeline maintains, refreshed on the graph's own schedule, so it does not turn membership into a live record either.
+
+### Counts move for several reasons, and none of them is usually a bug
+
+The count on a segment is a number people trust, so when it moves the instinct is to treat it as a defect. Resist that. Counts move for a small set of ordinary reasons, and naming the likely driver is faster than opening the rule builder. The plausible explanation for a sharp overnight drop with no rule change is that existing members aged out of the lookback window, or an upstream identity resolution rerun consolidated duplicates.
+
+Walk the drivers. New or updated source data enters the lookback window and qualifies new members, which raises the count. Existing members age out of the window and drop off, which lowers it. A change to the lookback window, or a container window that overrides part of the criteria, narrows or widens the data range and moves the count in either direction. An upstream identity resolution rerun consolidates duplicates, lowering the count, or splits an over matched profile, raising it. A calculated insight refresh shifts who clears a metric threshold, which moves anyone whose membership depends on that insight.
+
+What these drivers share is that they act on the data the segment reads, not on the segment itself. Nothing in the rule set changed, which is exactly why the count moved without an edit. When you can point to the driver, you can separate a real audience problem, such as a broken data stream, from a routine count change that needs no action. Diagnose the drivers before you edit any rule, because editing a rule to chase a count that will settle on its own changes the audience for no reason.
+
+### Editing a live segment is a high impact action, so version by copy
+
+Data 360 lets you edit a segment's rules or properties after creation, and changing the segment name does not change the segment API name.[^5] The platform keeps the definition and lets you refine it. What it does not do is preserve a full history of who was in the audience, because each publish updates the membership object rather than appending a version to it. That combination is why a published segment should be treated as a contract.
+
+The risk is timing. A published segment has at least one activation consuming it, and the next publish sends whatever the new rules produce. Edit the rules in place during a running campaign and the destination receives a different audience on the next cadence, which can drop people mid journey or add people who should not be there yet. The safe pattern is to build a copy, adjust the criteria in the copy, preview the copy to confirm the population, and then repoint the activation to the new segment. The original keeps serving the campaign until you deliberately switch.
+
+The copy pattern also gives you the version history the platform does not hold. Because membership records are overwritten, capture counts and rule changes in your own documentation rather than relying on membership rows for auditing. A short change log per high value segment, listing the owner, the last rule change, the published count, and the date, answers most audit questions and lets you reconstruct what an audience looked like when a campaign ran.
+
+### Segments are governed by data space and by permission sets
+
+Where a segment lives and who can open it are two separate controls, and both are easy to get wrong. A segment belongs to a data space, and users outside that space cannot see or use it. Building, scheduling, and publishing segments require an activation focused permission set such as Data Cloud Architect, Data Cloud Activation Manager, or Data Cloud Activation Specialist.[^1] Previewing a segment additionally requires permission to view or edit segments plus access to the underlying data in Data Explorer.[^3]
+
+This explains the most common missing segment report. When a team cannot find a segment built by another team, the most likely cause is that the segment and its data are in a different data space, or the team lacks the needed permission set. It is almost never a case of the system archiving or deleting the audience. The audience exists; the team is simply not inside its boundary.
+
+Plan sharing at the data space level before you design the audience, not after. If two teams need the same audience, decide whether they share a data space or whether one team owns the segment and exposes the result through an activation, and grant view or edit only to the teams that own the audience. When you debug access, check the data space first and the permission set second, and you will find the cause faster than by scrolling the segment list.
+
+### Segments accumulate, so retire them in order
+
+Segments pile up. Every test audience, every superseded campaign build, and every proof of concept stays in the catalog unless someone retires it, and each one costs processing when it publishes and confuses the next person who reads the list. Retiring a segment is a sequence, and the order matters because the segment sits above the activations that consume it and the schedule that feeds them.
+
+Remove or pause the activations that consume the segment first, so no destination is still expecting data from an audience you are about to stop. Then stop the publish schedule, so the segment stops computing and stops creating membership. Only then archive or delete the segment. Retire in that order and no destination is left holding a promise that will not be kept. Retire in the wrong order, and a destination keeps waiting for a publish that will never come.
+
+Ownership is the other half of a tidy catalog. Keep an owner and a review date on high value segments, and periodically compare the published count against the business expectation. A documented catalog with clear ownership is easier to govern, easier to audit, and far cheaper than an undocumented pile of similar looking audiences whose purpose nobody can reconstruct.
+
+## Config Walkthrough
+
+Operating a segment is a six step routine once the diagnostic order is habit.
+
+1. In the Data 360 app, open Segments and select the segment you want to operate.
+2. Review its schedule and publish type, standard or rapid, and confirm the destination supports that cadence. The standard schedule is 12 or 24 hours, and rapid runs at a 1-hour or 4-hour interval on supported destinations.[^1][^2]
+3. Open Preview, or query the Segment Membership object, to compare the current count against the business expectation. Preview needs segment view or edit permission plus access to Data Explorer.[^3]
+4. To change behavior safely, duplicate the segment, edit the criteria in the copy, preview it, then repoint the activation to the new segment. Do not edit a live audience mid campaign.
+5. Manage access by data space and permission set, granting view or edit only to the teams that own the audience.
+6. To retire a segment, remove its activations first, stop the schedule next, then archive it, and record the change.
+
+## Try it
+
+Open one published segment and answer four questions before you change anything. What is its publish schedule and publish type, and does the destination need that cadence? When did it last publish, and what did that publish produce? Which driver, new data landing, members aging out, a window change, or an identity resolution rerun, best explains any recent count movement? Who owns it, and can the people who need it reach it through their data space and permission set? If you can answer all four, you understand the segment. If you cannot, you are about to edit a contract you have not read.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, editing a live segment in place and changing what the destination receives on the next publish. The rules look local to you, but the audience they produce goes to a running campaign. Duplicate, adjust, preview, then repoint the activation instead of editing under a running campaign.
+
+Second, treating membership as a real-time record for auditing. The Segment Membership object is created or updated on publish, so it reflects the last completed run rather than a history of every run. Use documented counts and rule changes rather than membership rows for history.
+
+Third, chasing a count change as if it were a bug. Lookback windows, container overrides, upstream identity resolution reruns, and calculated insight refreshes all move counts, and they do it without a rule edit. Diagnose those drivers before editing rules, or you will change a working audience to chase a number that was behaving correctly.
+
+## Decision rules to carry forward
+
+Read a segment as a contract with a destination. Its schedule is a freshness promise, its membership is a snapshot of the last completed publish, and its count is a moving value driven by data the segment reads. When a count moves, name the driver before you touch a rule: new data in the window, members aging out, a lookback or container change, a unification rerun, or an insight refresh. When you must change behavior, copy, adjust, preview, and repoint, so the live audience stays stable. When access is unclear, check the data space first and the permission set second. When a segment is finished, remove its activations first, stop its schedule second, and record the change third. A segment operated that way is easy to govern and hard to break.
+
+## What's next
+
+The next lesson is Lesson 47 - Activation Targets and Setup: What an Activation Is and Connecting a Destination (ac-3a). This lesson kept the segment on its own side of the fence; the next one crosses it, taking a finished audience and wiring it to a destination through an activation target.
+
+[^1]: Salesforce Help, "Publish a Segment in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_publish_segment.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Increase Segment Refresh from Data 360 to the Activation Targets," (https://help.salesforce.com/s/articleView?id=data.c360_a_rapid_segment_publish.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Create a Standard Segment in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_segment.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Segment Membership Data Model Object," (https://help.salesforce.com/s/articleView?id=data.c360_a_segment_membership_data.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Edit a Segment," (https://help.salesforce.com/s/articleView?id=data.c360_a_edit_segment.htm&language=en_US&type=5)

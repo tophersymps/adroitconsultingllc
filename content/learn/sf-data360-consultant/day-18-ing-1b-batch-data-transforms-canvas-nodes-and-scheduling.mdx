@@ -1,0 +1,121 @@
+---
+title: "Lesson 18: Batch Data Transforms: Canvas, Nodes, and Scheduling"
+slug: day-18-ing-1b-batch-data-transforms-canvas-nodes-and-scheduling
+series: sf-data360-consultant
+lesson: 18
+excerpt: "Requirement ing-1b in the Data Source Connection and Ingestion domain (18% of the Salesforce Data 360 Consultant exam) asks you to explain data transformation capabilities within Data 360. Lesson 18 of the Salesforce Data 360 Consultant Certification course covers creating a batch data transform, building its graph of nodes on the canvas, and scheduling it."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Batch Transforms, Ingestion]
+---
+
+# Lesson 18: Batch Data Transforms: Canvas, Nodes, and Scheduling
+
+An architect opens the batch data transform canvas, drops a join between two objects, and saves. The output is wrong: some customer rows appear many times, and the transform runs slowly enough to miss its window. Nothing in the canvas is broken. The problem is the graph itself. The join matched on a key that repeats on both sides, so every match multiplied the rows, and a filter that should have run before the join ran after it instead. The data design, not the SQL, is what produced the explosion.
+
+That failure is what this lesson prevents. Requirement ing-1b sits in the Data Source Connection and Ingestion domain, worth 18% of the Salesforce Data 360 Consultant exam, and asks you to explain data transformation capabilities within Data 360, focused on creating and scheduling a batch data transform and building its transformation graph of nodes. The exam tests whether you know the node types, what a transform node really is, and how scheduling and naming work.
+
+The skill here is thinking in graphs. A batch data transform is a high level view of the flow of data, drawn as nodes in a canvas, and each node does one job.[^3] Get the node order right and the transform is fast and correct. Get it wrong and you spend the day reconciling row counts.
+
+## Deep Dive
+
+### A batch data transform is built in the in app canvas
+
+You build a batch data transform in the in app canvas. Open the Data Transforms tab, click New, pick Batch Data Transform, and select the data source, which can be data lake objects or data model objects.[^1] If the source is data model objects you also choose a data space, and a transform that runs on data model objects is restricted to that space. A transform that runs on data lake objects is not associated with a data space at all, so it reads the wider data lake.[^1]
+
+The canvas is the high level view of the flow of data, where all your data objects are available and you add, manipulate, and write data.[^3] The full sequence of operations is visible as nodes wired together, and when you run the transform it applies the function of each node in order and writes the results to the target object. Creating batch data transforms requires the Data Cloud Architect permission set, so an analyst who cannot find the New button is usually missing that assignment, not a setting.[^1]
+
+Two structural rules shape everything you build. The transform ends with one or more output nodes, and you cannot save a batch transform without an output node. Input and output nodes must also be the same family: you cannot pair a data lake object input node with a data model object output node, or the reverse.[^2] Decide up front whether the transform lives in the data lake or the data model, and keep it there.
+
+You can also create and access batch data transforms through custom code, but the in app builder is the canvas this lesson describes, and it is the one the exam frames questions around.[^3] The canvas keeps every step visible, which is the point: when the output is wrong you can see exactly which node produced the wrong rows, rather than reading a stack of SQL and guessing.
+
+### Add input by selecting objects and columns, which creates input nodes
+
+You add input by clicking Add Input Data, selecting the objects to include, then choosing which columns of each object to carry into the input. You can select Name to take all columns of an object, and if you added several source objects you select each object one at a time and then choose its columns, because the Selected Columns panel shows only the columns for the object currently selected.[^1] Each input selection produces an input node on the canvas.[^1]
+
+Choosing columns is not busywork. Processing only the columns you need is one of the most reliable ways to make a transform faster, because the fewer columns a transform carries, the less work every downstream node does.[^4] A habit worth building: select only the columns the flow actually needs, and add more later if you must. That single habit prevents most of the wide record slowness that turns a quick transform into a long one.
+
+Input nodes feed the nodes you add, and the last node writes to the target data object. Everything downstream reads from these inputs, so if the input is too wide, every node after it pays the cost.
+
+### The graph is built from nodes, and each node does one job
+
+You build the graph by clicking the Add Node button between two nodes or at the end of the flow, then choosing the node type. To make the Add Node button appear between two nodes, hover the cursor over the connecting line.[^1] A batch data transform can hold multiple input and output nodes along with multiple append, join, aggregate, filter, transform, and update nodes.[^2]
+
+The documented node types map cleanly to the verbs in a requirement. An append stacks rows from multiple inputs into a single result, so it makes the result longer, not wider.[^2] A join combines objects on matching keys and adds columns from the joined object, so it makes the result wider. A filter removes rows you do not need in the target, and filter values are case sensitive.[^2] An aggregate rolls rows up to a higher level of granularity, using functions such as Sum, Count, Average, Minimum, and Maximum.[^2][^5] An update node swaps column values from another source when key pairs match.[^2]
+
+The exam tip worth memorizing is the verb to node map: stack rows is append, match on keys is join, remove rows is filter, roll up is aggregate, and compute or convert is a transform node. Which node would an architect add to stack rows from two different input objects into one flow? Append. A join is the strongest distractor, and it is wrong because a join combines rows on matching keys and produces a wider result, not a longer one.
+
+Two practical notes on those nodes. First, an update node is different from an append: it swaps column values from another source only where key pairs match, so it rewrites cells rather than adding rows. A team that has just acquired several companies, for example, can replace selected account names from an uploaded spreadsheet based on matching account IDs instead of overwriting every row.[^2] Second, filter values are case sensitive, so a filter that looks correct can silently keep the wrong rows when the case does not match the data.[^2]
+
+You can preview as you go. Select any node in the canvas to preview the results of that node, and the preview shows the intermediate output before you commit the transform.[^1]
+
+### A transform node is a group of transformations that run in sequence
+
+A transform node is a group of transformations, formulas that run in sequence. Built in transformations include concatenation and column type conversion, and a custom formula lets you combine date, string, and numeric operations with window functions and case statements.[^3] When you select a transform node, you see its transformation details, and you can add one or more transformations to each transform node so that each modifies the data in a unique way.[^2]
+
+So when an architect needs to concatenate two fields and convert a text column to a date inside a batch transform, the work happens in a transform node, which groups transformations and formulas that run in sequence. Putting that work in the data stream mapping is the tempting wrong answer, and it is wrong because mapping relates source fields to model fields, it does not concatenate or convert values. The identity resolution ruleset and the target DMO definition are also wrong for the same reason: neither is where per row computation lives.
+
+You can preview any node or any single transformation step before saving. Select a transformation step in the left panel to preview the results of that transformation in the Preview tab, and select any node in the canvas to preview the results of that node.[^3] That preview is the cheapest debugging tool on the canvas, because it lets you confirm each stage before you run the whole thing against production volume.
+
+### The first run pulls data, then you run it manually or on a schedule
+
+The first time you run a batch transform it pulls in data and defines it according to your steps. After that you either run the transform manually or set it up to run at scheduled intervals, so the output refreshes as the underlying data updates.[^3] This is the defining behavior of batch: it is a repeatable series of operations, and the schedule is a run setting you choose, not a fixed property baked into the transform.
+
+That flexibility answers a common exam scenario. A requirement that asks for an on demand refresh is still solved by a batch transform, because you can run it manually. The trap is assuming a batch transform must follow a fixed built in schedule. It does not. You decide whether it runs on demand, on a schedule, or both.
+
+Scheduling is also where performance discipline pays off. Validate the design before you schedule it in production, start with a smaller data volume, and test at production scale in a sandbox before you commit, especially when you are near the recommended limits on joins or total nodes.[^4] Most transforms finish within an hour, some run for several hours, and the maximum runtime before a transform is stopped is twenty four hours.[^4] A graph that is slow at demo scale is a graph that can miss its window at production scale.
+
+The recommended limits are guidelines, not hard walls, but crossing them should trigger extra testing. Keep join nodes to about twenty five per transform, total nodes to about one hundred fifty, and output nodes to about five.[^4] If you need more joins than that, pre join small reference datasets upstream or persist intermediate results to a data lake object so a later transform can pick them up. And keep each transform focused: several smaller transforms run in sequence usually perform better than one monolithic transform with many joins, wide records, and large aggregations.[^4]
+
+### Naming, currency, and where the output goes
+
+Each batch transform is assigned both a transform name and a definition name. The definition name identifies a specific transform definition and lets you combine multiple definitions into a single transform.[^3] A single transform can be associated with up to five definitions, and they are combined into one composite transform, with each definition distinguishing the particular manipulation it applies.[^1] So when a question asks what the definition name does, the answer is that it identifies a specific transform definition and lets you combine multiple definitions into a single transform. Confusing the transform name with the definition name is the trap, and treating the definition name as the refresh schedule is wrong because scheduling is a separate run setting.
+
+Currency is a transform level setting worth knowing. You can set a currency on the transform to convert data with multiple currencies to a single value, and if several transforms write to the same target they should share the same currency.[^1] Without a currency set on multi currency data, the values remain unchanged, which silently breaks aggregations that mix currencies.
+
+A common operating pattern is to keep the heavy work in the data lake and the consumer ready output in the data model, so that marketers and analysts can reach it through data model objects while data aware specialists work in the lake. Remember that input and output nodes must be the same family, so a single transform cannot cross between them; build the bridge with two transforms instead.[^2]
+
+Finally, the output is a data object, not a segment. Batch output can be used as input to other batch transforms or in other downstream processes, so you can chain transforms into a pipeline.[^3] Use batch transforms to prepare data for identity resolution, segmentation, and calculated insights, or to derive data for Salesforce reports.[^3] Knowing this keeps you from promising an exam answer where a transform activates an audience directly; it does not, the downstream step does.
+
+## Config Walkthrough
+
+Creating and scheduling a batch data transform takes six moves.
+
+1. Open the Data Transforms tab in Data 360 and click New, then select Batch Data Transform and click Next. You need the Data Cloud Architect permission set to create one.[^1]
+
+2. Select the data source. If it is data model objects, pick the data space from the dropdown, because the transform output applies only to that space.[^1]
+
+3. Click Add Input Data, select the objects to include, choose the columns for each object under Selected Columns (or select Name for all), then click Next to place the input nodes on the canvas.[^1]
+
+4. Hover the line between nodes to reveal the Add Node button, then insert append, aggregate, filter, transform, join, or update nodes and configure each one. Add filters before joins and before aggregations to cut the volume cheaply.[^1][^4]
+
+5. Select any node or transformation step to preview its results in the Preview tab, then set the target object and give the transform a descriptive name. Save, and confirm the auto populated definition name.[^1]
+
+6. Run the transform manually, or set it to run at scheduled intervals, and set the currency in the transform settings when multi currency data is involved.[^1][^3]
+
+Try it: build a two input transform, an append, and a filter, preview each node, and watch the row count change as you move through the graph. Seeing the count move at each node is the fastest way to learn what each node does.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, assuming a batch transform must follow a fixed built in schedule. It does not. You can run it manually or schedule it at intervals, so a scenario asking for an on demand refresh is still solved by a batch transform.
+
+Second, confusing the transform name with the definition name. The definition name is what identifies a specific transform definition and allows several definitions to be combined into one composite transform. The run schedule is a separate setting and does not live in the name.
+
+Third, believing a transform node is a single formula. A transform node is a group of transformations that run in sequence, and it is where built in concatenation and column type conversion or custom formulas live. When a scenario needs concatenation or a type conversion, the answer is a transform node, not a mapping, not a ruleset, and not the target definition.
+
+## The decision rules to carry out of this lesson
+
+When you build a batch data transform, decide the family first, because inputs and outputs must both be data lake objects or both be data model objects, and a data model object transform is bound to one data space. Then map the verbs to the nodes: stack rows is append, match on keys is join, remove rows is filter, roll up is aggregate, and compute or convert is a transform node. Keep the data narrow, filter before joins and aggregations, and preview every node before you save. Finally, remember that the first run pulls the data and every run after that is either manual or scheduled, the definition name is what lets you compose several definitions into one transform, and the output is a data object that downstream steps such as identity resolution, segmentation, and calculated insights consume.
+
+## What's next
+
+Lesson 19 - Streaming Data Transforms and Real-Time Preparation (ing-1c). That lesson turns to the other end of the preparation layer, covering how streaming data transforms work and how to prepare data for real time use.
+
+[^1]: Salesforce Help, "Create a Batch Data Transform," (https://help.salesforce.com/s/articleView?id=data.c360_a_batch_transform_create.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Work with Nodes in Batch Data Transforms," (https://help.salesforce.com/s/articleView?id=data.c360_a_batch_transform_nodes_overview.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Batch Data Transforms," (https://help.salesforce.com/s/articleView?id=data.c360_a_batch_transform_overview.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Best Practices for Batch Data Transforms," (https://help.salesforce.com/s/articleView?id=data.c360_a_batch_transform_best_practices.htm&language=en_US&type=5)
+[^5]: Trailhead, "Get Started With Batch Data Transforms in Data 360," (https://trailhead.salesforce.com/content/learn/modules/batch-data-transforms-in-data-cloud-quick-look/get-started-with-batch-data-transforms-in-data-360)

@@ -1,0 +1,107 @@
+---
+title: "Lesson 15: Diagnosing Data Stream and Ingestion Errors"
+slug: day-15-sa-4a-diagnosing-data-stream-and-ingestion-errors
+series: sf-data360-consultant
+lesson: 15
+excerpt: "Objective sa-4a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to diagnose common issues with tooling, focused on reading refresh history, decoding common ingestion error codes, and using problem record DLOs. Lesson 15 covers the refresh history surface, the CRM and SFTP error codes, zero copy volume ceilings, and problem records."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Troubleshooting, Data Streams, Ingestion]
+---
+
+# Lesson 15: Diagnosing Data Stream and Ingestion Errors
+
+A dashboard reports ten thousand fewer customers than the source system, and the team files a product bug. Then someone opens the data stream's Refresh History, sees a Problem Records count that climbs every cycle, clicks into the problem record DLO, and finds rows tagged with a null primary key. Nothing was broken. The bad rows were being quarantined instead of landed, and the count told the story for anyone who knew where to look.
+
+This lesson covers objective sa-4a, part of the Data 360 Setup and Administration domain, worth 13% of the Salesforce Certified Data 360 Consultant exam. The objective asks you to use tooling to diagnose and troubleshoot common issues, focused on reading refresh history, decoding common ingestion error codes, and using problem record DLOs. We cover where ingestion health lives on a stream, the CRM errors that point at objects and permissions, the SFTP errors that map to file size and scheduling, the zero copy timeouts that come from volume, problem records as the quarantine for bad rows, and the judgment call about which errors need action at all.
+
+## Deep Dive
+
+### Ingestion health lives on the data stream
+
+Ingestion health lives on the data stream. Open a data stream and check its Last Run Status; when it shows Error or Failure, open the Refresh History tab and click the error icon in the Status column. The error details popup shows an error code and a Download Log link for the full exception. Refresh History shows per-cycle statistics such as Refresh Date, Refresh Mode, Duration, Records Processed, Records Added, Records Removed, and Problem Records, and it is retained for a limited window, so investigate promptly.[^2][^4] The stream is the object you watch, and Refresh History is the panel that turns a vague "records are missing" into a specific error code.
+
+The retention window is small, and that changes how you work. Refresh History summarizes the last fifty refresh operations for a stream, which sounds like a lot until a stream runs every fifteen minutes and the window shrinks to a few hours.[^4] An error that fired overnight can age out of the panel before an admin looks at it the next morning, so the operational rule is to capture the Refresh History detail while the failure is fresh, downloading the log rather than hoping to revisit it. The Download Log link on the error popup is what saves the full exception, and a log in hand survives the retention window even after the panel forgets the cycle.
+
+Reading the columns, not just the status, is where diagnosis actually happens. Records Processed tells you the run did work; Records Removed can show a full refresh reclaiming stale rows; and Problem Records is the count that explains a shortfall, which is why it deserves its own column in the panel and its own section later in this lesson. A run that reports success with a nonzero Problem Records count is not a failure, it is a partial landing, and treating it as a clean run is how a data quality problem hides in plain sight for weeks. The column that converts a mystery into a number is the one people skip.
+
+### CRM stream errors usually point at the connected org's objects or permissions
+
+CRM stream errors usually point at the connected org's objects or permissions, not at Data 360. An INVALID_TYPE error means the CRM object is not accessible; an INVALID_FIELD error means a field was deleted or access to it was lost. The fixes are to confirm the object and field still exist and that the connector's permission set still has Read, View All Records, and View All Fields on the object. An OPERATION_TOO_LARGE error means a related entity the stream references lacks access, so you grant Read and View All on the related objects.[^1][^4] The pattern across all three is that the fix lives in the connected org or in the connector permission set, never in a Data 360 setting.
+
+Start with the field case because it is the most common. When a CRM stream fails with INVALID_FIELD, the first checks are whether the field still exists and the connector permission set still has View All Fields on the object. A field that was deleted in the source org, or whose Read access was pulled from the Data Cloud Salesforce Connector permission set, produces exactly this error, and the fix is to restore the field and its Read access. There is a specific wrinkle worth memorizing: if you delete a custom field and then add it back, a scheduled or manual refresh can still fail to update records or status until you re-enable Read access for the field after adding it back.[^4] The field reappears, but its permission does not, and the stream keeps failing on a field that visibly exists.
+
+OPERATION_TOO_LARGE deserves its own explanation because the name misleads. It is not about your data volume; it is about access on related objects. When an entity is related to another entity, Data 360 checks whether the related record also has granted permissions before returning a row, and that additional query can overload the operation as the original query expands for each related entity.[^1] The fix is to grant Read and View All access to all the related objects the stream touches, even ones you are not ingesting directly, because the relationship still forces a permission check. A candidate who reads "too large" as "too many rows" reaches for volume tuning and stays stuck.
+
+### SFTP stream errors map cleanly to causes
+
+SFTP stream errors map cleanly to causes, which is why they are worth memorizing as pairs. STREAM_JOB_STATUS_FAILURE often means the file is too large; for SFTP the total per run is 4.5 GB and each individual file is 500 MB. STREAM_JOB_STATUS_CANCELLED means that two consecutive jobs ran on the same data stream, so keep one job per stream at a time. Data read has a different length than expected means the connector cannot handle multiple files inside a zip, so merge the files or ingest the folder with a wildcard. Unable to position the current position points at SFTP concurrent connection limits, fixed by staggering stream schedules.[^1][^2]
+
+Take the cancellation error first because it is the one most often misread. STREAM_JOB_STATUS_CANCELLED occurs when two consecutive jobs are run for the same data stream, so make sure you are running one job only at any given time in a data stream.[^1] The cause is scheduling, not the data and not permissions. A stream whose schedule is too aggressive, or a manual refresh fired while a scheduled one is mid-flight, produces overlapping jobs and a cancellation. The fix is to adjust the cadence so two runs never race. A candidate who reaches for permissions or file size on this code is answering a different question.
+
+The remaining SFTP errors each name their own remedy. A file too large returns STREAM_JOB_STATUS_FAILURE against the 4.5 GB per-run and 500 MB per-file ceilings, so you split the extract or reduce what one run pulls. The "Data read has a different length than expected" exception appears when more than one zip file is present in the SFTP directory matching the stream's ingestion criteria, because the connector does not support multiple files in a zip, so you merge them or ingest the unzipped folder with a wildcard.[^1][^2] And "Unable to position the current position from -1 to 0" comes from SFTP servers enforcing a limit on simultaneous connections, so if several streams share one connection and fire at once, they exceed the limit; the documented fix is to stagger the schedules by roughly thirty minutes.[^1]
+
+### Zero copy connector time-outs come from volume
+
+Zero copy connector time-outs come from volume, not from permissions or configuration. A "Time out in polling job" error and an EXEC_JOB_EXEC_ERR occur when the source exceeds the connector's optimal data volume. Redshift, Snowflake, Databricks, and BigQuery each have their own documented volume ceilings that keep zero copy streaming healthy, expressed as a combination of GB and row counts. When a zero copy stream times out, the answer is to reduce the volume pulled per cycle rather than to change permissions.[^1] The instinct to widen access is the strongest wrong answer here, because the error is quantitative, not authorization.
+
+The ceilings are specific and worth carrying into the exam as a set. Redshift is 234 GB or one billion rows; Snowflake is 20 GB or 750 million rows; Databricks is 23 GB or 500 million rows; and Google BigQuery is 10 GB or 100 million rows.[^1] Those numbers are the boundary above which a zero copy stream stops being healthy and starts timing out. Because a zero copy connector federates the query to the external platform rather than copying the data, the volume per cycle is what strains the polling job, and both the gigabyte figure and the row figure matter because a connector can trip either one.
+
+The practical remedy follows directly from the cause. When a zero copy stream times out, you reduce the data volume pulled per cycle, typically by narrowing the query or the federated table so each retrieval is smaller, rather than by touching permissions that were never the issue. This is the same diagnostic discipline the whole lesson teaches: read the error code, and let it point at the class of cause, whether that class is access, size, scheduling, or volume. Zero copy timeouts are the volume class, and no amount of permission changes moves the ceiling.
+
+### Problem Records capture bad rows instead of dropping them
+
+Problem Records capture bad rows instead of dropping them. When records fail ingestion due to formatting errors or mismatches, Data 360 isolates them into a Problem Records Data Lake Object (DLO). You monitor this in three places: the Data Stream Fields tab shows the associated problem record DLO name, Refresh History shows the failed-record count per run, and Data Explorer lets you inspect the problem DLO contents to find the root cause. In Spring 26 the capability extended from S3, GCS, and Azure Storage to all structured ingest connectors.[^3][^5] When someone asks where to inspect offending rows, the answer is to inspect the Problem Records DLO via Data Explorer, and the record home tells you which DLO to open.
+
+The mechanics are worth spelling out because the isolation is deliberate. Rather than fail an entire batch when one record is malformed, Data 360 writes the bad record to the problem record DLO and continues, which favors availability over strict correctness. The DLO is named PR_DLO_Name, where the name identifies the data stream the record came from, and Data 360 stores problem records for thirty days, though deleting the data stream deletes its problem record DLOs sooner.[^3] You query the DLO like any other, through Data Explorer, the Query Editor, or the Query API, and grouping the rows by their error code turns a vague shortfall into a ranked list of causes.[^3]
+
+Each problem record carries an error code that names why it was rejected, and the four you will meet most describe distinct fixes. NOT_NULL_CONSTRAINT_VIOLATION means a required field, usually the primary key, arrived null. TRANSFORM_EVALUATION_ERROR means a field transformation failed for that row, so the record was partially rejected. DUPLICATE_ROW means multiple records in the same batch shared a primary key. UNHANDLED_ERROR is the catch-all for a row processing error that fits nowhere else.[^3] Reading the distribution of these codes is the fastest way to route a fix, because a wall of null-key violations points at a mapping problem and a scattering of transform errors points at specific values a transformation did not anticipate.
+
+### Not every error needs action
+
+Not every error needs action, and telling transient from real is part of the job. A one-time error in Refresh History followed by consistent successful ingestions is usually transient and self-resolved on retry; if the stream keeps ingesting successfully afterward, no remediation is required. The judgment call is whether the error is isolated or a pattern. A field that still produces errors after you remove it from the source file can persist because the field remains in the staging bucket, which is cleared by deleting the stream's jobs through the ingestion API.[^2] The exam expects you to resist both extremes: chasing every blip and ignoring a growing Problem Records count.
+
+The intermittent-error guidance is explicit in the product documentation. Occasionally a one-time error appears in the Refresh History of an SFTP stream and then subsequent ingestions complete successfully with no action taken, and that pattern indicates a temporary issue resolved automatically on retry; if the stream is consistently ingesting successfully after a one-time error, no mitigation is required.[^2] So the first question about any single error is whether it is isolated or recurring. A lone red icon among a column of green is noise until a second one appears, and treating that lone error as an incident wastes the time you need for the pattern that actually matters.
+
+The staging-bucket case is the one that looks like a product defect and is not one. If a field keeps producing errors after you removed it from the source file, the field can still be present in the staging bucket, and removing it from the file is not enough to clear it. The documented remedy is to follow the ingestion API steps: get the stream's jobs, delete them to clear the staging bucket, then create a new ingestion job with a clean schema.[^2] A consultant who understands that the staging layer has its own state will fix this in minutes, while a consultant who edits the source file repeatedly will watch the same error return.
+
+## Config Walkthrough
+
+Six steps move from a red stream to a routed fix.
+
+1. Open the data stream and read Last Run Status; if it is Error or Failure, open the Refresh History tab. This is always the first surface, because it names the cycle and the mode that failed.
+
+2. In the Status column, click the error icon to open Error Details and note the error code, such as STREAM_JOB_STATUS_FAILURE or INVALID_FIELD. The code is the routing key for everything that follows.
+
+3. Click Download Log to read the full exception, which names the object or field at fault. Save the log, because Refresh History keeps only a limited window and the cycle will age out.
+
+4. For CRM errors, open the connected org's Object Manager, confirm the object and field exist, and confirm the connector permission set still has Read, View All Records, and View All Fields. Restore Read access on any field you recently re-added.
+
+5. For problem records, open the Data Stream Fields tab to find the Problem Records DLO name, check the failed count in Refresh History, then query the DLO in Data Explorer or Query Editor. Group by error code to rank the causes.
+
+6. To reset a stuck field, follow the documented ingestion API steps: get the stream's jobs, delete them to clear the staging bucket, then create a new ingestion job with a clean schema. Then confirm the errors stop on the next cycle.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, adding more permissions when the real problem is volume or scheduling. STREAM_JOB_STATUS_FAILURE and STREAM_JOB_STATUS_CANCELLED are about file size and overlapping jobs, not access, and zero copy timeouts are about the GB and row ceilings, not permission. The permission reflex is strong because a large share of Data 360 problems are permission problems, but on these codes it is wasted motion. Read the code, then route to the right class: access, size, scheduling, or volume.
+
+Second, treating an INVALID_FIELD error as a product defect. It almost always means a field was deleted or the connector lost access, not that Data 360 is broken. The first checks are whether the field still exists and the connector permission set still has View All Fields on the object, and the fix is to restore the field and its Read access. The deleted-and-readded field is the specific sting here, because the field is visibly back and the stream still fails until you re-enable Read on it.
+
+Third, chasing every transient error or ignoring refresh history retention. Isolated one-time errors followed by successes need no action, and refresh history is kept only a limited time, so the discipline is to investigate patterns and to capture logs early rather than reacting to noise or relying on a panel that has already aged out. A candidate who treats a one-time error as an incident, or who waits a week to open Refresh History, gets both halves of this trap wrong.
+
+## What a consultant should walk away with
+
+Read the error code before changing anything: failure, cancelled, and invalid field each point at a different fix, and so do the zero copy timeouts. Route by class. CRM errors point at the connected org's objects and the connector permission set, so confirm the object and field exist and that Read, View All Records, and View All Fields are still granted. SFTP errors map to file size, overlapping jobs, zip handling, and concurrent connection limits, so check the 4.5 GB and 500 MB ceilings, one job per stream, merged files, and staggered schedules. Zero copy timeouts mean volume, so reduce what each cycle pulls against the documented GB and row ceilings. When rows go missing, inspect the Problem Records DLO via Data Explorer and group by error code. And judge before you act: an isolated one-time error that is followed by clean runs needs nothing, while a rising Problem Records count is a pattern worth a fix.
+
+## What's next
+
+Lesson 16 - Monitoring and Investigation Tooling Across Data 360 (sa-4b). You can now read a single stream's health and decode its errors. Lesson 16 widens the lens to the monitoring and investigation surfaces across Data 360, so a consultant can watch an entire implementation rather than one stream at a time and investigate an issue across the components that feed it.
+
+[^1]: Salesforce Help, "Troubleshoot Data Stream Errors," (https://help.salesforce.com/s/articleView?id=data.c360_a_troubleshoot_data_stream_errors.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Data 360: Troubleshooting SFTP Data Stream Ingestion Errors," (https://help.salesforce.com/s/articleView?id=004947530&language=en_US&type=1)
+[^3]: Salesforce Help, "Monitoring Data Stream Problem Records," (https://help.salesforce.com/s/articleView?language=en_US&id=data.c360_a_datastream_dlo_problem_record.htm&type=5)
+[^4]: Salesforce Help, "Troubleshooting CRM Connections," (https://help.salesforce.com/s/articleView?id=data.c360_a_refresh_history.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Troubleshoot Ingestion Errors with Problem Records DLOs," (https://help.salesforce.com/s/articleView?id=release-notes.rn_cdp_2026_spring_problem_records_dlo.htm&release=262&type=5)

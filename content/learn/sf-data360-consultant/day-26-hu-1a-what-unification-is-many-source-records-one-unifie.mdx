@@ -1,0 +1,104 @@
+---
+title: "Lesson 26: What Unification Is: Many Source Records, One Unified Profile, and the Unified Link"
+slug: day-26-hu-1a-what-unification-is-many-source-records-one-unifie
+series: sf-data360-consultant
+lesson: 26
+excerpt: "Requirement hu-1a in the Harmonization and Unification domain (17 percent of the Salesforce Data 360 Consultant exam) asks you to define the purpose, process, and supported use cases of unification, starting with what unification produces and the problem it solves when many source records describe the same person. Lesson 26 covers the fragmentation problem, why a unified profile is a system of reference rather than a golden record, the unified link, the mapping that unification depends on, and the downstream cost of getting matches wrong."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Unification, Identity Resolution]
+---
+
+# Lesson 26: What Unification Is: Many Source Records, One Unified Profile, and the Unified Link
+
+A marketing team proud of its data quality counts 240,000 customers. Finance counts 186,000. The two numbers came from the same company and the same month, and nobody is lying. The marketing platform holds one row per email subscription, the commerce system holds one row per shipping address, the service desk holds one row per case, and the same human being shows up in all three with a different key and a slightly different name. There is no clean answer to how many customers the business actually has, because the source systems never agreed on what a customer is. That gap is what unification exists to close.
+
+Requirement hu-1a sits in the Harmonization and Unification domain, worth 17 percent of the Salesforce Certified Data 360 Consultant exam, and it asks you to define the purpose, process, and supported use cases of unification, starting with what unification produces and the problem it solves when many source records describe the same person. This lesson opens the Harmonize and Unify stage. Everything the Analyze and Act stage does, from segmentation to personalization to activation, reads the output this stage produces, so the vocabulary here is load bearing for the rest of the course.
+
+You will cover the fragmentation problem harmonization and unification solve, the distinction between a system of reference and a golden record, the objects a ruleset writes, why unification needs mapped data model objects rather than raw streams, and the two results a consultant has to explain to the business: consolidation rate and determinism.
+
+## Deep Dive
+
+### Harmonization and unification solve the fragmentation problem
+
+Harmonization and unification are the second stage of Data 360, and they solve a specific, mundane problem: the same customer exists as separate records in CRM, marketing, service, commerce, and external systems, with different keys and different values. Each of those source records is a source profile. Unification is the process that decides which source profiles describe the same real world entity and links them behind one unified profile, so downstream features can treat the customer as one. Without it, every count, segment, and activation inherits the duplication of the sources.
+
+Sit with how ordinary the problem is. A customer signs up for email with a personal address, later buys something under a work address, and calls support from a mobile number. Three systems, three identities, one person who is now invisible as a single customer. The fragmentation is not a defect in any one system; each system is behaving correctly for its own purpose. The defect only appears when you try to make a decision that spans them, because you cannot count, segment, or personalize against an entity that no system models whole.
+
+Unification is the stage that creates the whole. It sits after ingestion, after transformation, and after harmonization, and it consumes the harmonized model rather than the raw feeds. That ordering matters: the product decisions you make for the model feed directly into whether unification can see the fields it needs to match on.
+
+### A unified profile is a system of reference, not a golden record
+
+Salesforce is explicit that a unified profile is not a golden record. Identity resolution is the processing engine that generates unified profiles from source profile data, and those unified profiles act as a system of reference that unlocks the source data. The platform does not pick winning values or override any existing data while it unifies profiles.[^1] The analogy Salesforce uses is a key ring: each ring holds many keys that all belong to the same person, and each key opens a different lock. The unified profile is the ring, and the source records are the locks.[^6]
+
+That framing has a direct consequence for how you talk about the output. What identity resolution produces is a unified profile that acts as a system of reference, with unified links back to the source records. It does not replace the source values in the systems of origin, and it does not merge records into one best copy. The option that describes a golden record which replaces values in the source systems is the strongest distractor on the exam because reconciliation does pick a value to display, but what it picks is only what the unified profile shows. The source systems keep their own values untouched, and each use case can select the view of the customer that suits it.[^1]
+
+The consultant lesson is determinism, and the exam tests it as a definition. Given the same source data and the same ruleset, the same groupings result, so unification is reproducible and explainable. The statement that is accurate is that two runs over the same source data and ruleset produce the same groupings. The distractor that matching is probabilistic is wrong because fuzzy and normalized methods compare values but the ruleset logic still produces the same matches for the same data. And the option that determinism means source records are permanently merged, or that reconciliation rewrites every conflicting field at the source, is wrong because unification never changes source data at all.
+
+### The ruleset stores its output in the unified profile and the unified link
+
+The ruleset stores its output in data model objects that it creates, and two of them are the ones you have to know by name. The unified profile is the reconciled view: one row per unified individual or account, holding the reconciled attributes. The unified link object connects that unified profile to all of the source profile records and other source data, so you can traverse back to the raw values and choose which source to trust for a given purpose. Salesforce calls the link objects a bridge between source objects and unified profile objects, and they carry the source record identifier, the data source, the data source object, and the unified record identifier so the origin of every contributing record stays traceable.[^2]
+
+The link objects come in a family that mirrors the profile. There is a unified link for the individual and unified links for the contact points: unified link contact point email, unified link contact point phone, unified link contact point address, unified link contact point app, and unified link party identification.[^2] When a ruleset uses a ruleset identifier, that identifier is appended to the object and API names created during identity resolution, which is how two rulesets on the same entity keep their outputs apart. This is worth knowing operationally, because a team that names objects by hand will collide with the generated names the moment a second ruleset exists.
+
+The link is what makes the system of reference real. Without it you would have a reconciled profile with no way to answer "which source said this?" The link lets a service agent open the unified profile and then walk to the exact CRM record, commerce record, or marketing record that contributed a value, which is also what makes the output auditable.
+
+### Unification does not run on raw streams, it runs on mapped data model objects
+
+Data lands in data lake objects, and unification does not operate on those raw rows. You harmonize by mapping data lake object fields to standard Customer 360 Data Model objects such as Individual, Account, Contact Point Email, Contact Point Phone, Contact Point Address, and Party Identification. Identity resolution only offers match and reconciliation options on objects that are properly mapped, and certain objects must be mapped for individuals or for accounts. Salesforce states the dependency plainly: set up identity resolution rulesets after transforming and mapping source data to data model objects, and mapping must be completed before creating rulesets.[^3]
+
+The required mappings are specific. The Individual object must be mapped with its primary key, and at least one contact point object or the Party Identification object must be mapped in the data streams for unification and activation to work, with the Individual reference carried through the Party attribute that points at the Individual Id.[^4] The Individual object connects to its contact points through that party reference, and the relationships are many to one from contact point to individual, because many contact points can belong to one individual. Get the mapping wrong or incomplete and the match rules simply cannot see the field, so unification fails quietly at the model layer rather than throwing an error. A field that was never mapped is invisible to matching, which is the second trap the exam tests: unification does not run directly on data streams, and a data lake object field that was never mapped might as well not exist.
+
+This is where the lesson connects back to lesson 25's data sharing and forward to segmentation. The harmonized, mapped model is the shared substrate that unification, calculated insights, and segmentation all read. A mapping decision is not a private choice for the data engineer; it decides what every downstream feature can see.
+
+### Consolidation rate and determinism are the two outcomes you have to explain
+
+Two outcomes matter to a customer, and the consultant owns both of them. Consolidation rate is how many source profiles collapse into fewer unified profiles. More criteria and more precise match methods lower it, because stricter matching links fewer records; looser methods raise it, because they link more. The consolidation rate on a ruleset's identity resolution summary details the results of the last successfully completed run, and Salesforce suggests comparing the consolidation rates of two rulesets to decide which better meets your needs.[^5]
+
+Determinism is the second outcome: the result is explainable, because you can show why two records linked and why a field shows one value. Explaining both is the consultant's job, because over matching merges strangers and under matching leaves duplicates, and both outcomes are visible to the business. Over matching is the scarier failure, because two different people become one customer and their transaction histories blend. Under matching is the more common failure, and its cost is subtler.
+
+When unification produces several unified profiles that actually belong to one customer, the most direct downstream effect is that segment counts and activation sends inflate because the customer appears as several members. One person receives the same campaign four times, the segment size is wrong, and the metrics that leadership reads are wrong with it. The distractors are wrong for the reasons this lesson has already given you: source records are never permanently deleted, reconciliation rules do not stop running, and the platform never loosens match rules on its own. Tightening matching is a decision a human makes and then reruns.
+
+### Everything downstream in Analyze and Act depends on the unified layer
+
+Everything downstream depends on the unified layer, and that dependency is why a weak ruleset compounds. Segmentation counts one member per unified profile instead of one per source record, so the segment is only as accurate as the matches. Activation publishes one row per unified individual with its contact points, so duplicate profiles become duplicate sends. Personalization and analytics read the reconciled attributes, so a wrong displayed value becomes a wrong experience. Data graphs and calculated insights join on unified keys, so a missed match becomes a missing join.
+
+The cost of getting unification wrong is therefore compounded rather than contained. A weak ruleset produces inflated segment counts, duplicate sends, wrong personalization, and misleading metrics, and every one of those errors is downstream of the matches. This is the argument for treating the identity layer as a product with owners and review cycles rather than a one time configuration task. When you can explain a consolidation rate and point to the link that justifies a match, you can defend the numbers the business sees. When you cannot, every downstream metric is a guess dressed up as a fact.
+
+## Config Walkthrough
+
+Review the unification layer in four steps.
+
+1. In the Data 360 app, open Data Streams and confirm the streams that will feed unification have landed their data lake objects.
+
+2. Open the Data Model area, select the standard data model object for the entity (Individual or Account), and confirm each source field is mapped to the right attribute and that the contact point objects are related through the party reference.
+
+3. Open the Identity Resolutions tab and review the active ruleset to see which match rules and reconciliation rules produce the unified profile.
+
+4. View a unified profile to inspect the reconciled attributes, then open its unified link object to confirm which source profile records it connects to.[^2]
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, saying a unified profile is a golden record that overwrites source values. Identity resolution links records and reconciliation only decides what displays, so no source data is ever changed. Any answer that has unification replacing or repairing the systems of origin has misread what the platform is for, and Salesforce says outright that identity resolution does not create golden records and is not a master data management system.[^3]
+
+Second, assuming unification runs directly on data streams. Matching operates on mapped data model objects, so a data lake object field that was never mapped is invisible to match rules. A perfect ruleset over an unmapped email field still cannot match on email, and the failure will not announce itself.
+
+Third, treating the result as unpredictable. The same sources and the same ruleset produce the same groupings, which is what lets you explain and audit why records linked. An answer that says the result varies run to run, or that matching is a black box, contradicts determinism and the audit trail the link objects provide.
+
+## Decision rules to take away
+
+Unification exists because the same person is several records across systems, and no single source can count or personalize against that fragment. A unified profile is a system of reference: it holds the reconciled attributes for one entity and unlocks the source records through unified links, and it never overwrites the systems of origin. The ruleset writes the unified profile and the unified link objects, and with a ruleset identifier in play, that identifier becomes part of the generated object names. Unification runs on harmonized, mapped data model objects, not on raw streams, so map the Individual or Account with its key and at least one contact point or the party identification before you expect matching to work. Expect two outcomes you must be able to explain: a consolidation rate that shows how aggressively source profiles collapse, and determinism that shows the same inputs always produce the same groupings. And treat the identity layer as the foundation of Analyze and Act, because inflated segment counts, duplicate sends, wrong personalization, and misleading metrics are all downstream of the matches.
+
+## What's next
+
+Next is Lesson 27 - The Unification Process End to End: Harmonize, Map, Match, Reconcile, Unify (hu-1b). It takes the concepts defined here, the source profile, the unified profile, and the unified link, and walks the pipeline in order, covering how harmonizing and mapping feed match rules, how the match stage produces groupings, how reconciliation decides what the unified profile displays, and why the whole process is tuned by measuring rather than run once.
+
+[^1]: Salesforce Help, "About Identity Resolution," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution.htm&type=5)
+[^2]: Salesforce Help, "Unified Link Objects and Relationships to Unified Objects," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_data_modeling_unified_and_link_objects.htm&type=5)
+[^3]: Salesforce Help, "Unify Source Profiles," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_unify_source_profiles.htm&type=5)
+[^4]: Salesforce Help, "Individual Object Data Modeling Requirements," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_data_modeling_individual.htm&type=5)
+[^5]: Salesforce Help, "Create Identity Resolution Rulesets," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_ruleset_create.htm&type=5)
+[^6]: Trailhead, "Map Data Effectively and Create Unified Customer Profiles," (https://trailhead.salesforce.com/content/learn/modules/data-cloud-connect-and-unify/map-and-unify-data)

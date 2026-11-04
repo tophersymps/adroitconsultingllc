@@ -1,0 +1,103 @@
+---
+title: "Lesson 50: Acting Outside the Platform: Activation, Data Shares, and Downloads"
+slug: day-50-ac-4b-acting-outside-the-platform-activation-data-shares
+series: sf-data360-consultant
+lesson: 50
+excerpt: "Requirement ac-4b in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks you to act on data outside the platform. Lesson 50 covers activation to external destinations, data shares and downloads as delivery, and how to choose the mechanism that fits a business goal."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Activation, Data Shares, Zero Copy]
+---
+
+# Lesson 50: Acting Outside the Platform: Activation, Data Shares, and Downloads
+
+Three teams walk in with three requests that sound like the same request. Marketing wants the high-value segment in an advertising platform by tomorrow morning so the campaign can launch. The BI team wants to query harmonized customer data and a lifetime value insight from its own warehouse without loading copies into it. A partner system that only ingests flat files wants the same audience dropped somewhere it can pick up. All three want "the data out." None of them needs the same mechanism, and building the wrong one for any of them wastes a cycle and leaves the consumer empty handed.
+
+That is the decision requirement ac-4b trains. The requirement sits in the Data Activations and Utilization domain, which is 20% of the Salesforce Data 360 Consultant exam, and it asks you to act on data outside the platform: activation to external destinations, downloads and data shares as delivery, and choosing the mechanism that fits a business goal. Outside the platform means the data leaves Salesforce, and the shape of the departure is dictated by who receives it.
+
+This lesson defines activation and activation targets, explains data shares as a query-access delivery path rather than a messaging path, covers file-based delivery for consumers that cannot take an API, and gives you the rule that turns a vague "we need the data out" into the right mechanism. The whole lesson is exam aligned to ac-4b, and the traps it covers are the ones the exam builds its wrong answers around.
+
+## Deep Dive
+
+### Activation publishes a segment to an activation platform
+
+Activation is the process that publishes a segment to an activation platform so you can take action on that audience. An activation target stores the authentication and authorization for one destination.[^1] The plan is a short sequence: you create the segment, create or reuse an activation target, build an activation that maps segment attributes to the destination's fields, and then publish the segment. Data 360 supports a range of destinations, including Marketing Cloud Engagement, Marketing Cloud Personalization, a Data 360 target, a Data 360 Loyalty target, Commerce Cloud, external file storage like Amazon S3 or SFTP, and external advertising platforms.[^1]
+
+The attribute mapping step is where most field-level errors surface. In the activation you select the activation membership object, which is the data model object whose rows carry the audience, and then you map each data model attribute to its partner field on the destination.[^2] When a required partner field has no mapped attribute, the activation cannot deliver that field, and the failure shows up downstream as a blank column rather than as an error at save time. Map every field the destination expects, and give contact point attributes their maximum count and sort order so the destination knows which email or phone to prefer.[^2]
+
+Publishing is the last mile. You publish the segment with Publish Now, or you let the publish schedule run, and the activation target picks up the membership.[^3] The standard publish schedule is 12 or 24 hours, and rapid segments publish on a 1 or 4 hour interval.[^3][^6] The amount of time a publish takes depends on your volume and the target, and when you hit the segment publish concurrency limit Data 360 defers other segments until the running ones fall below the limit, so a segment scheduled for a specific time sometimes starts late.[^3] Treat the publish schedule as a real constraint, not a formality, when you promise a marketing team a delivery time.
+
+A concrete worked example ties this together. The marketing team wants the high-value segment in the advertising platform nightly. You open the segment, go to Activations, click New, pick the external platform activation target, select the membership object, map the audience attributes to the ad platform's fields, name the activation, and save. Then you publish the segment so the target picks up the membership on schedule. When someone asks "which mechanism," the answer is an activation that publishes the segment to an external platform activation target, because the consumer is a channel and the shape is an audience push.
+
+### Activation targets are destination-specific
+
+Activation targets are not interchangeable. Each target is built for one destination type and stores that destination's connection details, so a target that fits an advertising platform does not fit a Snowflake connection and does not fit file storage. Data 360 has a target type that writes segment membership back inside Data 360 itself, which is useful when you want to build on the segment internally instead of sending it anywhere. When a segment is published to the Data 360 target, the activated records update the Audience DMO, and you can read them from the Data Explorer or retrieve them with the Query API.[^2]
+
+There is a specific limit worth memorizing. The Data 360 Loyalty activation target is a single target; per the documentation you can create one activation target for Salesforce, so you do not provision a fresh loyalty target per campaign.[^1] More generally, the platform caps the total number of activation targets, and each segment can be sent to an activation target only one time, which is a hard limit.[^6] Those two facts kill a family of wrong exam answers that assume you can fan one segment out to the same target repeatedly or stand up unlimited targets without thinking about the ceiling.
+
+Segment membership materializes as an activation membership object, and you select which membership object to send and map its attributes to the partner fields.[^2] That is why the target type and the mapped fields have to agree. If you map communication fields that the destination does not accept, the mapping fails, and the failure traces back to a target type that does not match the fields you are trying to send. Choose the target for the destination first, then map to it, and the two stay consistent.
+
+### Data shares are the delivery mechanism for analytics and machine learning
+
+A data share exposes data lake objects, data model objects, and calculated insight objects to an external system without copying the data, and zero copy sharing gives near real-time access.[^4] That is the sentence to hold onto: a share is query access to harmonized data and calculated insights, delivered without loading a copy into the consumer's system. It is the right mechanism when the consumer is a warehouse, a BI tool, or a data science platform that will run its own queries.
+
+The build has two objects. You create a data share, choose a data space, and select the DLOs, DMOs, or calculated insight objects to include. Then you create a data share target, which sets up the connectivity with the external system, and you link the share to the target.[^4] For a Snowflake consumer, the data share target is a Snowflake connection authorized with an enrollment ID that the Snowflake administrator generates, and you link the share to it with the Link/Unlink Data Share Target action on the data share record.[^5]
+
+The linking step is not optional bookkeeping. Until a data share is linked to a data share target, it does not appear in the external system.[^5] A share that was created and saved but never linked is invisible to the consumer, and the reported symptom is "the external account cannot see it." When you hear that symptom, the most likely cause is that the data share is not linked to the data share target. So when a BI team needs direct query access to harmonized objects and calculated insights without loading copies into its warehouse, the answer is a data share linked to a data share target, because that is the mechanism that gives query access without a copy.
+
+### Choosing the mechanism is the exam skill
+
+The exam skill is matching the mechanism to the consumer. Push an audience to a channel to run a campaign: activation. Give a BI team or a data science team direct query access to harmonized data or calculated insights: data share. Trigger an event-driven handoff to a system that expects a call, such as a webhook, a platform event consumer, or a stream: data action. Keep the CRM record enriched so a rep sees the value inline: enrichment write-back. Match the destination's appetite, not the tool you like best.
+
+The mistakes cluster on one side of the line. Choosing a data share to send a marketing audience to an ad platform is wrong, because a share gives query access to harmonized data and calculated insights for analytics, while sending a segment to a channel destination is activation. The reverse mistake is just as common: building an activation when the analytics team only wanted to query the data. Ask who consumes the output and what they will do with it. If they will message the audience, it is activation. If they will query the data, it is a share. If they will react to a single change event, it is a data action.
+
+There is a second-order version of this decision. When two mechanisms would both technically work, pick the one that avoids a stale copy. A share keeps the data in Data 360 and lets the consumer query it live, so nothing goes out of date. A nightly activation or a file drop creates a copy that ages from the moment it lands. If the consumer can query, prefer the share, and reserve the copy-based mechanisms for consumers that genuinely cannot.
+
+### Downloads and file-based delivery
+
+Downloads and file-based delivery cover the case where the destination cannot accept an API or a live share. A file or download delivery lands the audience or dataset somewhere a downstream process can pick it up, for example an SFTP destination or an object store. Data 360 supports file storage activation targets that publish segments and batch data model objects to external file storage platforms, including Amazon S3, SFTP, Google Cloud Storage, and Microsoft Azure blob storage.[^1]
+
+The rule for choosing this path is the same rule as everywhere else: name the downstream consumer first. When a target system ingests only flat files, a file-style or external platform activation is the fit. When the consumer can query, prefer a share so you avoid stale copies. File delivery is not a lesser path, it is the correct path for the consumer whose ingestion is built around files, and forcing a share onto a system that expects a file drop leaves it waiting for something that never arrives.
+
+### Governance travels with every outward path
+
+Consent and data use rights travel with the data, and they are evaluated when a segment is activated, so sending data to a destination you are not permitted to use it for is a compliance failure rather than a config quirk. The segment, the activation target, and the destination together decide what leaves the platform and under what basis, and you should be able to say, for each activation, which audience went where and why it was lawful to send it.
+
+Data shares carry a governance nuance that catches people out. Data shares do not honor the data governance policies enforced by Data 360, so those policies have to be applied at the data share target.[^4] The recipient of a share is a named external account, which makes the share scope an access control decision: you are deciding who can query harmonized and calculated data directly. Sharing also includes the IndividualGDPRState object automatically so the recipient can honor consent using the Individual ID.[^5]
+
+Record the destination, the attributes, and the lawful basis for every activation and every share. Confirm the destination is active before publishing, because an activation aimed at a disabled or draft target goes nowhere and the failure looks like a delivery problem rather than a configuration one. Governance is not a review that happens after the design. It is a constraint you design to, and naming it in the plan is what keeps an outbound path defensible when someone asks why a specific customer received a specific message.
+
+## Config Walkthrough
+
+1. Create or reuse an activation target: on the Activation Targets tab, click New, choose the destination type (for example Data 360, Data 360 Loyalty, or External Platforms), name it, and select a data space.
+2. Open the segment you want to publish, go to Activations, click New, select the activation target, and choose the activation membership object to send.
+3. Map each data model attribute to its partner field, set contact point attributes with their maximum count and sort order, then name and save the activation.
+4. Publish the segment (Publish Now, or let the publish schedule run) so the activation target picks up the membership.
+5. For a data share, open the Data Shares tab, click New, name the share, choose a data space, and select the data lake object, data model object, or calculated insight object to share.
+6. Create a Data Share Target (for example a Snowflake connection authorized with its enrollment ID), then open the data share and use Link/Unlink Data Share Target to link it; an unlinked share stays invisible to the external system.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, choosing a data share to send a marketing audience to an ad platform. A share gives query access to harmonized data and calculated insights for analytics, while sending a segment to a channel destination is activation. If the deliverable is a message to customers, the mechanism is activation.
+
+Second, believing a data share works as soon as it is created. A share must be linked to a data share target before the external system can see it, and a Snowflake target needs the connector enrollment ID to authorize the connection. Creating and saving the share is half the job; linking it is the other half.
+
+Third, treating every destination the same. A Data 360 activation target writes membership back inside Data 360, external platform targets push the audience out, and each org permits only one Data 360 Loyalty activation target, so mapping failures trace back to a target type that does not match the mapped fields. Match the target type to the fields you actually need to send.
+
+## Decision rules to carry forward
+
+Match the mechanism to the consumer every time: activation for a channel, data share for an analytics consumer, data action for an event consumer, and enrichment for an inline value on a record. When a consumer can query, prefer a share so you avoid stale copies, and reserve file and activation deliveries for consumers that cannot. Confirm the destination is active and the share is linked before you promise delivery, and carry consent and data use rights with every outward path. Those rules are what ac-4b tests, and they are what keeps an outbound design honest.
+
+## What's next
+
+Lesson 51 - Data 360 Data in Salesforce Flows: Elements, Objects, and Limits (ac-5a)
+
+[^1]: Salesforce Help, "Activation Targets in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_activation_targets.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Create an Activation for a Data 360 Target," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_data_cloud_activation.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Publish a Segment in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_publish_segment.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Data Shares," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_shares.htm&language=en_US&type=5)
+[^5]: Snowflake Documentation, "Set up Salesforce Data Cloud for Zero-Copy," (https://docs.snowflake.com/en/user-guide/data-integration/zero-copy/salesforce/setup-salesforce)
+[^6]: Salesforce Help, "Data 360 Limits and Guidelines," (https://help.salesforce.com/s/articleView?id=data.c360_a_limits_and_guidelines.htm&language=en_US&type=5)

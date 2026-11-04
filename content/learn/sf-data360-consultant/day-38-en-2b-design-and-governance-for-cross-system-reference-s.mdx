@@ -1,0 +1,111 @@
+---
+title: "Lesson 38: Design and Governance for Cross-System Reference: Source of Truth, Sync versus Query, Permissions, and Duplication"
+slug: day-38-en-2b-design-and-governance-for-cross-system-reference-s
+series: sf-data360-consultant
+lesson: 38
+excerpt: "Requirement en-2b in the Data Enhancements, Sharing, and Analysis domain (18% of the Salesforce Data 360 Consultant exam) covers the design and governance consequences of referencing Data 360 data: who owns each element, copy versus live read, permissions, and the risk of duplicating unified data."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "13 min read"
+tags: [Data 360, Data Governance, Enrichments]
+---
+
+# Lesson 38: Design and Governance for Cross-System Reference: Source of Truth, Sync versus Query, Permissions, and Duplication
+
+A project ships a beautiful contact page. The unified loyalty tier, the churn score, and the lifetime value all appear as fields, copied nightly from Data 360. Six weeks later a director notices the churn score on the page disagrees with the churn score in the segment report by two days of movement. Nobody knows which number is right, and the "single source of truth" the project promised has quietly become a second source. The reference worked. The governance did not.
+
+This lesson covers requirement en-2b, "Explain how to reference Data 360 data from other systems," with a focus on the design and governance consequences of cross-system reference: which system is the source of truth, sync versus query, permissions, and the pitfalls of duplicating unified data. It sits in the Data Enhancements, Sharing, and Analysis domain, worth 18% of the Salesforce Certified Data 360 Consultant exam, and it picks up exactly where Lesson 37 stopped. Lesson 37 taught you to wire a reference. This lesson teaches you to justify it, secure it, and keep it honest.
+
+## Deep Dive
+
+### Decide which system is authoritative for each element
+
+Before wiring a reference, decide which system is authoritative for each data element. Data 360 is the system of reference for the unified profile and the computed insights, while the source systems remain authoritative for their own raw records. That split is not a preference; it falls out of how unification works. Identity resolution links source profiles into unified profiles using match and reconciliation rules, and the reconciliation process does not delete or change any source profile data. Source systems stay authoritative for their own records, and Data 360 is the system of reference for the unified profile and computed insights. Nothing about the unified view transfers ownership of the raw record away from the system that created it.[^1]
+
+The trap is a copy field. A copy field enrichment copies a value into an org field, and that creates a second copy of a value that already has an owner. The copy is not the source of truth, but it looks like one to anyone reading the record page. Name the owner of each element and make the copied or derived view read-mostly, so the copies do not compete with the source. If a support agent can edit the copied churn score, you have created an edit path into a value that Data 360 owns and that will be overwritten on the next sync anyway.
+
+### Sync versus query: choose by freshness, not by convenience
+
+The reference paths differ in whether data is copied or read live, and that difference drives the design. A copy field enrichment copies and synchronizes a value into a Salesforce field. It consumes credits, it needs a destination field and integration-user permissions,[^4] and it can go stale between syncs because it runs on a schedule. A related list reads the DMO live through the lookup, so it reflects current Data 360 data each time the page renders. An API query reads on demand and is never cached, so the caller always gets the live answer.
+
+Choose copy when the value must appear in reports, formula fields, or automation, because only a real field participates in those platform features. Choose a live read when freshness matters more than local availability. When an architect needs a Data 360 value live on a record page with no local copy, the answer is a related list enrichment that reads the DMO through its lookup. That path creates no duplicate and cannot drift, because there is nothing to drift.
+
+The failure mode here is a design that claims real-time behavior while relying on a scheduled copy field. If a scenario says "the moment the score changes" or "immediately after the event," a nightly copy cannot satisfy it, no matter how the requirement is worded. The copy field answers "when is it convenient to move this value," not "how fast can the page show it."
+
+A worked scenario makes the choice concrete. A service team wants a churn risk band on the Case record so a macro can branch on it, and the band refreshes once a day from Data 360. The macro and the report both need a real field, so a copy field is the right path, and the daily lag is acceptable because the band changes slowly. Now change one word: the team wants the band to update the instant a support interaction lowers it. That requirement cannot ride a nightly copy, so the reference becomes a related list or a live API read, and the design changes from a field to a lookup. Same value, different path, and the deciding factor is the freshness the business actually needs.
+
+### Referencing data does not grant access to it
+
+The single most common cause of a related list that exists but shows nothing is a missing permission. Referencing data does not grant access to it. A related list enrichment is visible only to users whose permission set grants access to the data space it reads, and copy field enrichments depend on the integration user having field permissions and on the object sharing allowing the record to be read. The enrichment is not a permissions back door; it is a display surface that inherits the access of the viewer.[^2]
+
+When enhanced security data spaces are enabled, access is controlled by parent. Granting Controlled by Parent access on a data space lets a user view data in a child object as long as they have access to view the related parent object. In practice that lets a user see an enriched related list on a Contact record without granting them Data 360 access or the ability to view unified profiles directly, which is often exactly the intent. Design the permission set that maps the data space as part of every enrichment, or the enrichment will exist and show nothing.
+
+The mechanics are specific enough to plan around. You configure the data space mapping on the permission set under Data Cloud Data Space Management, and for a copy field you also need the creating user to hold the right feature permission, such as the Data Cloud Architect permission set, and to be assigned access to the data space the enrichment draws from. Feature permissions can further restrict access inside a data space and act only within that data space,[^6] so a permission set with Read at the object level can still be trimmed to no view inside one particular data space.[^3]
+
+### The data space is the unit of governance and access
+
+Access to Data 360 data in other systems is granted at the data space, not at the individual object, and that single fact shapes most permission designs. A data space is a logical partition of the data, often aligned to a brand, a region, or a reporting audience, and the related list and the copy field both read from a data space you select when you build them. Two enrichments against the same DMO in two different data spaces can show two audiences two different slices of the same table.
+
+That design has a consequence worth stating plainly. If the unified data was partitioned to keep a sensitive brand isolated, the enrichment inherits the partition. A related list built on the default data space exposes whatever that data space holds, so building on the wrong data space can leak data across a boundary the org deliberately drew. When you plan a reference, agree on the data space first, then the object, then the lookup field, because the data space is the widest of the three decisions and the hardest to reverse after go-live.
+
+The permission set is where the data space mapping lives. You assign access to the data space on the permission set under Data Cloud Data Space Management, and the related list becomes visible to a user only when that mapping reaches them. For a copy field, the integration user needs the data space access and the field permissions together, because the copy has to read from the source data space and write to a destination field. A design that grants one and forgets the other produces the same empty result as no permission at all.
+
+### The biggest governance risk is proliferating copies of unified data
+
+The biggest governance risk of cross-system reference is proliferating copies of unified data. Each copy field, each cached export, and each hand-maintained matching field becomes a place where values diverge and where sensitive data leaks outside Data 360 controls. A copied value does not inherit Data 360 field-level security. A value copied onto a broadly visible Contact field is exactly as visible as that field, regardless of how carefully the source was protected. The copies diverge from the source and do not inherit Data 360 field-level security, so they can mislead users and expose sensitive data.
+
+That double failure, wrong values and exposed data, is why the exam treats duplication as a design decision rather than a display detail. Prefer live references for sensitive elements, and restrict who can create copies. Keep copied fields read-only where the platform allows it, so no user can edit a value that will be overwritten. Where a copy is genuinely required, copy the least sensitive form of the value, and never copy a protected element onto a field with broad visibility.
+
+Duplication also has an audit cost that rarely appears in the original design. Every copy is a row of data outside the retention and deletion controls of the system that owns it, so a deletion request honored in the source leaves the copy untouched until someone remembers it exists. If a regulation requires that personal data be removable, an inventory of every copied field is part of compliance, not an optimization. Record where each copy lives, who can see it, and what deletes it, at the moment you create it, because reconstructing that map after the fact is far more expensive than writing it down once.
+
+### Every reference depends on a stable key
+
+Every cross-system reference depends on a stable key, and governance means monitoring the key, not only the value. A copy field needs a one-to-one unified link, a related list needs the lookup ID to match, and a data action needs its primary and related objects to share a many-to-one or one-to-one relationship. If identity resolution re-homes a person, or a source record key changes, references built on a copied value can point at the wrong record or a stale one. The value looks right and belongs to the wrong person, which is worse than an empty field because nobody flags it.
+
+Unification is the process that can move keys, so it is the process to watch. Because source data is never overwritten, a re-run of identity resolution can change which source records link to a unified individual without touching a single source record. A related list survives that change because it reads the current link live. A copied value does not, because it was written before the re-home. Where a reference must survive re-homing, favor the live read, and where a copy is unavoidable, treat the matching field as monitored metadata rather than set-and-forget configuration.
+
+Treat the join key as configuration under change management, not as set-and-forget plumbing. When a new source system is onboarded, when a match rule is retuned, or when a reconciliation rule changes which value wins for a unified field, the unified link that a copy field depended on can point somewhere new. Put the identity resolution ruleset and the enrichment on the same review list, and re-check the copies whenever the ruleset changes. A periodic reconciliation that compares a sample of copied values against their Data 360 source is cheap insurance, and it catches the drift before a user does.
+
+### Enrichments and data actions are budgeted decisions
+
+Enrichments and the queries behind them consume Data 360 credits, so the number of related lists and copy fields and the frequency of data actions are budgeted decisions, not free ones. Salesforce documents that enriched related lists and copy field enrichments both impact credit consumption,[^5] and a data action that publishes outside the platform is subject to delivery allocation limits.[^7] Pair every reference with its access requirement and its cost, and decide the acceptable lag at the same time.
+
+The design that fails is the one that claims real-time behavior while relying on a scheduled copy field, or that exposes unified data to a broad audience to avoid building a permission set. Both trade a real cost for the appearance of a feature. The exam rewards catching that trade, because it is the difference between a reference a business can trust and one it will quietly stop using.
+
+### A six-step governance walkthrough
+
+1. Classify each referenced element as authoritative in a source system or derived in Data 360, and name the owner before choosing a path.
+
+2. Choose copy versus live read: use a copy field enrichment when the value must be local for reports or automation, and a related list or API query when freshness matters more.
+
+3. Grant the access the reference needs: create or extend a permission set that maps the data space for related lists, and set integration-user field permissions plus record sharing for copy fields. Enable Controlled by Parent on the data space when the intent is to show the list without granting Data 360 access.
+
+4. Limit duplication: minimize copied values, keep copied fields read-only where possible, and avoid copying sensitive elements onto broadly visible fields.
+
+5. Monitor the join key and freshness: track the identity resolution output and the sync schedule, and set the expected lag explicitly so no consumer assumes real-time values from a batch copy.
+
+6. Budget the credits: review the number of enrichments and the frequency of data actions against consumption, and remove references that no longer serve a use case.
+
+## Exam Traps
+
+The first trap is assuming an enrichment grants its own access. A related list is visible only to users with data space access, so a design without a matching permission set shows an empty related list. The build is correct and the experience is broken, and the fix is a permission set, not a rebuild.
+
+The second trap is treating a copied unified value as protected like its source. A copy field places the value in an org field, where it is only as secure as that field's own field-level security and sharing, not the source's protections. When a scenario hides a sensitive value behind Data 360 controls and then copies it to a common field, the copy is the leak.
+
+The third trap is expecting a scheduled copy field to be real time. A copy field syncs on a schedule and can lag, so a scenario that requires live values needs a related list or an API query instead. If the requirement uses words like "current" or "as of this second," a copy field is the wrong tool.
+
+## The decision rules to carry out of this lesson
+
+For any cross-system reference, decide who owns the value, whether it is copied or read live, and who may see it, because the reference itself grants none of those three. Source systems stay authoritative for their own records, and Data 360 is the system of reference for the unified profile and computed insights. A related list enrichment that reads the DMO through its lookup gives you the value with no local copy. When you must copy, remember that the copies diverge from the source and do not inherit Data 360 field-level security, so they can mislead users and expose sensitive data. Watch the join key as carefully as the value, and budget the credits the reference consumes.
+
+## What's next
+
+Lesson 39 - Reporting on Unified Data: Report Types, DMOs, and What to Configure First (en-3a) turns this governance thinking toward the reporting surface. Once the unified data is trustworthy and access is governed, the next question is how users actually analyze it: which report type reads a single object, which one joins related DMOs, and what has to be configured before the report builder will even show the data.
+
+[^1]: Salesforce Help, "Identity Resolution Terminology," (https://help.salesforce.com/s/articleView?id=data.c360_a_identity_resolution_terms.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Manage Data Cloud Data Access Levels for Salesforce Users," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_access_levels_setting.htm&language=en_US&type=5)
+[^3]: Trailhead, "Grant Permissions to Data 360," (https://trailhead.salesforce.com/content/learn/modules/data-cloud-enrichments/grant-permissions-to-data-cloud)
+[^4]: Salesforce Help, "Create a Copy Field Enrichment," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_copy_field_enrichment.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Enrichment Considerations," (https://help.salesforce.com/s/articleView?id=data.c360_a_enrichment_considerations.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Manage Feature Access for Data Space-Aware Data Cloud Features," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_spaces_feature_access.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Data Actions in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_actions_cdp.htm&language=en_US&type=5)
