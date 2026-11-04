@@ -1,0 +1,109 @@
+---
+title: "Lesson 25: Choosing and Governing Collaboration: Data Shares, Cross-Boundary Permissions, and When to Ingest"
+slug: day-25-ing-3c-choosing-and-governing-collaboration-data-shares-c
+series: sf-data360-consultant
+lesson: 25
+excerpt: "Requirement ing-3c in the Data Source Connection and Ingestion domain (18 percent of the Salesforce Data 360 Consultant exam) asks you to describe Data 360's collaboration capabilities, including Zero Copy, covering how to choose and govern collaboration patterns: outbound data shares, permissions across the sharing boundary, and when ingestion is the better design. Lesson 25 covers the share and target mechanics, the governance split at the boundary, curation, bilateral provisioning, and the workload tests that argue for ingestion."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Shares, Zero Copy]
+---
+
+# Lesson 25: Choosing and Governing Collaboration: Data Shares, Cross-Boundary Permissions, and When to Ingest
+
+A partnership team ships a customer segment to a retail partner's Snowflake account and tells the legal reviewer that the payment fields are masked. The share goes live, the partner's analyst runs a query, and the columns come back in the clear. Nothing inside Data 360 broke. The masking still does exactly what it was configured to do for Data 360 users, and it has no effect on what the partner sees, because a data share does not carry Data 360's governance with it across the boundary. That is the failure this lesson exists to prevent, and it is the single most common governance error in cross-boundary collaboration.
+
+Requirement ing-3c sits in the Data Source Connection and Ingestion domain, worth 18 percent of the Salesforce Certified Data 360 Consultant exam, and it asks you to describe Data 360's data collaboration capabilities, including Zero Copy, covering how to choose and govern collaboration patterns: outbound data shares, permissions across the sharing boundary, and when ingestion is the better design. Lesson 23 defined Zero Copy and the sources that support it; lesson 24 opened up the mechanics of federation. This lesson is the architect's decision and governance layer that sits on top of both.
+
+You will cover how an outbound share is assembled and delivered, the governance rule that decides where access is actually enforced, why a share is a curated object list rather than an exposed data space, the provisioning both sides need before anything works, and the workload tests that point a design toward ingestion instead of federation.
+
+## Deep Dive
+
+### Outbound collaboration is delivered through data shares
+
+Data 360 delivers outbound collaboration through data shares, and the shape of that object matters as much as the outcome. You assemble the Data 360 objects you intend to expose, which can include data lake objects, data model objects, and calculated insight objects, give the share a unique name, and select the applicable data space.[^2] The share is the container for the curated set of objects; the data space is the partition the share is assembled from, which is why the people who build a share have to be working inside the right data space or they will assemble it from the wrong slice of data.
+
+A data share on its own has nowhere to go. You create a data share target, which sets up connectivity to the external system, and then you link the active share to that target.[^1] The share must reach active status before you can link it, so the order is build the share, confirm it is active, create the target, then link. Once linked and accepted, the external administrator sees the objects as read only tables or views inside their own account. Nothing is loaded into the external system to make any of that work. Zero copy data sharing with data shares lets you share Data 360 objects without loading the data into an external system and gives you near real time access to that data.[^1]
+
+One target per external system is the unit of connectivity, and the link is what makes the share visible. An unlinked share is invisible to the outside world no matter how many objects it contains, and a linked share is visible only through the target it is linked to. When the exam describes an architect who must let a partner's Snowflake account read a harmonized profile object and a calculated insight score without loading a copy into Snowflake, the right sequence is to create a data share with the objects, create a data share target, then link the active share to the target, and let the partner accept it. Building an inbound data stream from Snowflake, or publishing an outbound ETL job, both act in the wrong direction, and turning on acceleration only changes latency for inbound federation, which is a different feature entirely.
+
+### Data shares do not honor Data 360 governance policies, so access is enforced at the data share target
+
+This is the rule the objective is built around, so commit it to memory in the platform's own words. Data shares do not honor Data 360 governance policies, so access is enforced at the data share target.[^1] Inside Data 360, object, field, and record level access policies plus dynamic data masking decide who sees what: object level security controls which users can reach a whole object, field level security hides individual attributes such as a credit card number, and record level security filters rows by ownership, region, or reporting hierarchy.[^4] Those policies are real and they are enforced for anyone working inside the platform. They simply stop at the sharing boundary.
+
+Across the boundary, the enforcing layer changes. Access to the shared objects is governed by the external system's own role based access control and by the named data share target you configured. The receiving system's privileged administrators can view and query all records of the data lake objects mapped to data model objects in the share, and what they can do with those records depends on the security construct defined in that external system.[^1] The practical consultant lesson is that a question asking where masking or an access policy applies to shared data is looking for the target, not the policy set that governs the objects inside Data 360. If trade or legal requires the partner to see masked values, that masking has to exist as a view, a policy, or a column restriction on the receiving side, because the Data 360 policy will not travel with the rows.
+
+There is a related nuance worth holding onto, because the exam likes it. The option that a governance policy blocks sharing until one is attached to the share itself is wrong. Sharing is not gated on a policy being attached to the share, and shares accept data lake objects, data model objects, and calculated insight objects rather than only data lake objects. Masking configured inside Data 360 is not enforced on the shared objects inside the external system either. The only correct statement among those distractors is the one that says governance does not follow the data and is applied at the target.
+
+### Curate the share rather than exposing a data space
+
+Administrators explicitly select which objects go into a data share, and that explicit selection is the thing that keeps outbound collaboration governed. A share is a curated object list, not a window onto an entire data space. Only approved data model objects, data lake objects, and calculated insights reach the named consumer, and the consumer can query only what you assembled. Exposing everything the space holds is the failure mode that turns a governed collaboration into an uncontrolled export, and it is the third trap the exam tests: an architect who points a partner at a whole data space instead of assembling an explicit object list has given up control of the boundary.
+
+Curation pairs with least privilege on the target. Create a named target per consumer so that access can be revoked for one partner without disturbing the others. If four partners share a single target, unlinking the share to cut off one of them cuts off all four. When each partner has its own target, revoking means unlinking that partner's share from that partner's target, and everyone else keeps working. That kind of revocation is a governance control you can only exercise if you designed for it up front.
+
+The mechanics reinforce the point. When you add a Data 360 object to a data share it becomes accessible through the linked data share target, and when you remove it, it becomes inaccessible through that target.[^2] The share is therefore a living allow list that you can tighten without rebuilding the connection. One documented limit is worth knowing when you plan a data space: you cannot share an external data lake object, or a data model object mapped to an external data lake object, with an external data lake.[^2] A curated share is also the place to curate for regulation, because data sharing includes the individual consent state object so you can link and honor consent data for an individual at the data share target.[^2]
+
+### Both sides must be provisioned before a collaboration works
+
+A collaboration crosses an organizational boundary, so it needs provisioning on both sides, and half a setup saves cleanly while every query fails. Inside Data 360, the people who build and publish shares need Data 360 permissions to work with the share and target objects, they need access to create data shares and to link shares to targets, and they must work inside the correct data space so the share is assembled from the right partition.[^3] Building a share is not a task for a user with default access, and the exam expects you to know that the object level permissions for shares and share targets are the same family that governs the rest of Data 360 administration.
+
+On the external side an administrator creates the users and credentials needed to access Data 360 data and accepts the share. Inbound connectivity mirrors this pattern in reverse. Your external administrator grants a role that can read the source schema, and Data 360 stores and uses the connection credentials to reach it. The inbound direction is a data stream, not a share, so the provisioning question there is whether the external read role and the credentials are in place before the connection is created, because a connection that saves without a working read role is a connection whose streams never land a row.
+
+The failure mode is planning only one side. An architect who configures everything in Data 360 and waits for the partner account to see the objects has built a share that is linked to a target the partner never accepted. The second half of the work lives entirely outside Salesforce, and it has to be scheduled and owned by a person, not assumed.
+
+### Ingest instead of federating when the workload is repeated, heavy, and lives inside Data 360
+
+Federation and ingestion are not a matter of fashion; they answer different workload shapes, and the objective asks you to know the tests. Ingest instead of federating when the workload is repeated, heavy, and lives inside Data 360. Four situations push toward a data stream and a persisted data lake object. First, segments that join a large external table on every activation, because each run pays the external query cost again. Second, data that must remain available while the source is down. Third, sources that cannot be reached at runtime under the security policy, where a live query would be a boundary violation rather than a performance problem. Fourth, history that must be retained for audit, because a federation query returns rows and forgets them.
+
+Ingesting also buys predictability. A persisted copy gives you a stable dataset whose performance you can plan against, and Data 360 transformations run once rather than on every query. The trade is real and you should state it plainly: ingestion costs storage and ingestion credits, and it introduces a freshness gap between the source and the copy, because the copy is only as current as its last refresh. Federation removes exactly that trade, which is why it is attractive, and why it is the wrong default for a workload that runs constantly and heavily.
+
+The exam scenario that tests this is scheduling language. A team runs an hourly process that joins a very large external order table to Data 360 profiles, and the source warehouse is unavailable during a nightly maintenance window. Both signals point the same way. The recommendation is to ingest the order table into a data lake object and build the process on persisted data, because a repeated heavy join plus a hard availability requirement is a description of ingestion's strengths. File federation still depends on the source at query time and so inherits the same downtime, and a cache is a latency optimization rather than a governed system of record for orders. Keeping the live federation and accepting the failures is the answer that ignores the availability requirement.
+
+### Federation reshapes the data model, not just the pipeline
+
+Federation is not only a pipeline choice; it reshapes the data model you build on top of it, and the architect has to design for that. Whether the federation is a share that lets the partner query your objects or a federated query that reads their objects,[^5] the durable pattern is to keep the customer spine in Data 360 as ingested, harmonized data model objects and to federate the high volume transaction or product detail the warehouse already governs. You then build calculated insights and segments that join across the boundary and activate them the normal way. The customer identity stays inside the platform where identity resolution and governance can reason about it, and the bulky event detail stays where it is already managed.
+
+Two consequences follow from that split, and the exam asks about both. First, every activation that reads a federated object pays the query cost again, so precompute what the business will re-read instead of re-querying the source on every send. Second, anything you activate outward or share outward has left the Salesforce governance boundary, so decide and document what may be exposed before it leaves. The same governance split that applies to a data share applies to anything federated and then written out, because the moment the data is read by a system you do not control, that system's access control is the only one left in the path.
+
+That is why federation design and governance design are the same conversation in this objective. You are choosing where the customer record lives, where the heavy detail lives, and which of the two you let cross the boundary. Get the split wrong and you either pay for repeated heavy queries or you export data you cannot control.
+
+## Config Walkthrough
+
+Walk the outbound and inbound paths in six steps.
+
+1. In Data 360, open the Data Shares tab and create a share. Give it a unique name, select the applicable data space, and assemble the data lake objects, data model objects, and calculated insight objects you intend to expose.
+
+2. Save the share and confirm it reaches active status, because a share must be active before it can be linked to a target.
+
+3. Open the Data Share Targets tab and create a target for the external system using the account identifiers and authentication parameters supplied by that system's administrator.
+
+4. Return to the share's record home page, click Link/Unlink Data Share Target, and link the active share to the data share target. Then have the external administrator accept the share so the objects appear as read only tables or views in their account.[^3]
+
+5. Confirm the governance split explicitly: object, field, and record level access policies and dynamic data masking govern objects inside Data 360, while access to the shared objects is enforced by the external system's role based access control at the target.
+
+6. For the inbound direction, verify the external administrator granted the read role and provided credentials before creating the connection, and record in the design which objects are ingested and which are federated, with the reason for each.
+
+## Exam Traps
+
+Three traps dominate this objective, and each one has a specific wrong answer the exam will offer you.
+
+First, assuming that Data 360 governance policies and dynamic data masking travel with the data into a data share. Data shares do not honor those policies, so the receiving system's access control governs the shared objects. The distractor that sounds reassuring, that masking configured in Data 360 is enforced on the shared objects inside the external system, is the trap. It describes a product that carries policy across an organizational boundary, which this one does not do.
+
+Second, federating a workload that runs constantly and heavily. Repeated large joins over live external data pay external and Data 360 compute on every run, and that pattern belongs on an ingested, persisted data lake object. The distractor that keeps the live federation and accepts periodic failures, or that leans on a cache as the system of record, both miss that a cache is a latency tool and a live query inherits the source's downtime.
+
+Third, sharing a whole data space instead of assembling an explicit object list. Data shares are curated on purpose, so only the objects an administrator adds are exposed to the named target. A design that points the consumer at everything the space holds has removed the allow list that makes the collaboration governable, and no amount of target level configuration restores the control you gave up when you stopped curating.
+
+## Decision rules to take away
+
+Before you recommend a collaboration pattern, decide two things. What may leave each system, and who enforces access on the other side once it has left. Data 360 governance policies do not cross the sharing boundary with the data, so the enforcing layer on shared objects is the external system's role based access control and the named data share target. Outbound collaboration is a data share, a link to a data share target, and an acceptance by the receiving administrator, with nothing loaded on the far side. Assemble an explicit object list and create a named target per consumer so you can revoke one partner without disturbing the rest. Provision both sides, because a share that is built but not accepted, or a connection whose read role was never granted, is work that never lands. And when a workload is repeated, heavy, and lives inside Data 360, or when the data has to survive the source's downtime or be kept for audit, ingest it and build on persisted data, accepting storage cost and a freshness gap in exchange for predictable performance. Keep the customer spine ingested and federate the bulky detail the warehouse already governs, then watch the two consequences: repeated activations re-pay the query cost, and anything shared or activated outward has left the governance boundary.
+
+## What's next
+
+Next is Lesson 26 - What Unification Is: Many Source Records, One Unified Profile, and the Unified Link (hu-1a). It turns the corner from getting data in and across boundaries to making it agree, covering why many source records describing the same person are a problem, what a unified profile actually is, and how the unified link connects that profile back to the source records it was built from.
+
+[^1]: Salesforce Help, "Data Shares," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_shares.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Create a Data Share," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_data_shares.htm&type=5)
+[^3]: Salesforce Help, "Link or Unlink Data Shares and Data Share Targets," (https://help.salesforce.com/s/articleView?id=data.c360_a_link_data_shares_with_data_share_target.htm&type=5)
+[^4]: Salesforce Help, "Object, Field, and Record Level Security," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_access_policies.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Share Data with Databricks Using Query Federation," (https://help.salesforce.com/s/articleView?id=data.c360_a_access_data_from_databricks.htm&type=5)
