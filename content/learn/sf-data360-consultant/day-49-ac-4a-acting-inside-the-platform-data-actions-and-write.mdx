@@ -1,0 +1,104 @@
+---
+title: "Lesson 49: Acting Inside the Platform: Data Actions and Write-Back"
+slug: day-49-ac-4a-acting-inside-the-platform-data-actions-and-write
+series: sf-data360-consultant
+lesson: 49
+excerpt: "Requirement ac-4a in the Data Activations and Utilization domain (20% of the Salesforce Data 360 Consultant exam) asks you to act on data inside the platform. Lesson 49 covers data actions, write-back to CRM records, and why the unified profile is a different trigger than a CRM record."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Actions, Enrichments, Activation]
+---
+
+# Lesson 49: Acting Inside the Platform: Data Actions and Write-Back
+
+A loyalty program moves a customer into its top tier. The tier value lives in the loyalty platform, streams into Data 360, and gets harmonized onto the unified profile. Only after that does it show up on the CRM Contact as a copied value. The service desk is supposed to call that customer within minutes of the upgrade. The team builds a record-triggered flow on the CRM Contact that fires when the tier field changes. It never fires on the real event, because the CRM copy is not what changed first. The tier changed on the unified profile, and nothing was watching that.
+
+That gap is what requirement ac-4a closes. The requirement sits in the Data Activations and Utilization domain, which is 20% of the Salesforce Data 360 Consultant exam, and it asks you to act on data inside the platform: data actions, write-back to CRM records, and what changes when the unified profile is the trigger rather than a source-system record. Acting inside the platform means the action either travels out as an event to another system or lands back on a Salesforce record as a value. Knowing which of those a scenario needs is the whole skill.
+
+This lesson defines data actions and their targets, explains why a harmonized profile change is a different trigger than a source-system change, walks the write-back mechanisms, and draws the line between an enrichment that writes a value into your org and an activation that pushes an audience out of it. Everything here maps to ac-4a and to the traps the exam sets around the direction of the write.
+
+## Deep Dive
+
+### Data actions are the near real-time acting mechanism inside Data 360
+
+A data action is the event mechanism inside Data 360. You monitor changes in a data model object or a calculated insight object, and when a change matches your rules, Data 360 sends a change data event to a target.[^1] The supported targets are a Salesforce Platform Event, a webhook, Marketing Cloud Engagement, and Amazon Kinesis.[^3] A Salesforce Platform Event target publishes to the core event bus so a flow can react to the change. A webhook target posts an HTTP payload whose integrity is protected by a Salesforce-generated secret key. An Amazon Kinesis target sends change data capture events to a stream for downstream processing.[^3]
+
+The build is short, and it revolves around two rules. You choose the target, select a data model object or a calculated insight object as the primary object, and then attach an event rule and an action rule. The event rule decides which change fires the action. The action rule decides whether the change qualifies, and it can combine AND and OR conditions.[^2] When a qualifying row is added, updated, or deleted in the primary object, Data 360 emits the event to the target.[^2] When the target is the Salesforce Platform, the payload is published with the standard event DataObjectDataChgEvent, and Data 360 does not enforce publishing limits when that event is consumed on the platform, for example by a flow.[^1]
+
+The split between the two rules is where the design work lives. The event rule is coarse: a record was created, updated, or deleted. The action rule is the filter that decides whether this specific change is worth waking another system for. Set the action rule too loose and the target drowns in noise while every consumer has to re-filter what it receives. Set it too tight and the meaningful change never leaves Data 360 at all. Together the two rules are the contract between the harmonized model and the downstream system, and you either write that contract deliberately or you inherit the consequences.
+
+Take the loyalty case from the opening. The primary object is the unified profile data model object. The event rule is "a record is updated." The action rule is "loyalty tier equals top tier." When the harmonized tier value rolls up to the top tier, the action fires and Data 360 emits an event to the target. If the target is a Salesforce Platform Event, a flow catches the event and opens a service case. That is the shape of acting on a harmonized change inside the platform: the rule watches the reconciled value, and the event carries the changed attributes so the consumer has what it needs without a second lookup.
+
+### The trigger is a DMO or CIO change, not a contact clicking something
+
+The important distinction is what fires the action. The trigger is a data model object or calculated insight object change, not a person clicking a button in a source system. Because the unified profile object rolls data up from many sources, a single update to a harmonized attribute, a new loyalty tier or an updated contact point, can fire an action that a source-system-only trigger never would. The source system changed its own copy. The unified profile changed the reconciled truth. Those are different events, at different times, and only the second one reflects what the business actually believes about the customer.
+
+Treat the unified object as the event bus. The rule watches harmonized values, so downstream automation reacts to the reconciled truth rather than to one channel's copy of it. That is a genuine design advantage: you stop writing one integration per source system and start writing one rule against the single version of the customer that Data 360 produced. A change that arrives from the loyalty platform, the ecommerce platform, and the service desk gets resolved into one unified value, and the data action fires once, on the value the organization trusts.
+
+This is also why the naive flow on the CRM record fails. The CRM Contact holds a copy, and a copy lags the harmonized value by the sync window. A trigger on the copy fires late, or fires on a value that is about to be overwritten, or never fires because the copy happened to already match. A trigger on the unified profile fires on the change itself. When the scenario says "the moment the harmonized profile changes," it is describing a DMO or CIO trigger, and the mechanism that carries it outward is a data action.
+
+### Write-back is the other half of acting inside the platform
+
+Data 360 enrichments push harmonized data and insights into Salesforce records.[^4] There are two shapes you will use. A copy field enrichment writes a value from a data model object or a calculated insight object onto a CRM field, so a rep or a service agent reads the harmonized value inline.[^5] A related list enrichment surfaces Data 360 records on a record page, so a contact's email engagements from every enterprise system appear together in one list.[^4] Copy fields work on records with a one-to-one relationship to a Unified Individual, Unified Account, Individual, or Account DMO, and a one-dimensional or multi-dimensional aggregatable calculated insight object can be the source.[^5]
+
+The Setup path is concrete. Go to Setup > Enrichment > Copy Field, click New, and choose the data space, the Data Cloud object, and the target object. Name the enrichment, then map the source field to the target field and click Save and Start Sync.[^7] Copy field enrichments read from a DMO or a calculated insight object, and they run as a batch job that syncs values between Data 360 and your org records, so the first load can take hours or days depending on volume while later syncs only push changed records.[^5] Plan the go-live around that first sync, not around the moment you click Save.
+
+What matters for the exam is the direction. Nothing leaves Salesforce. The value arrives on the object the rep or service agent already opens, and the CRM record stays the system of engagement while Data 360 stays the system of insight. A copy field enrichment that lands the harmonized lifetime value on the Account, or the calculated health score on the Asset, is write-back. It is the quiet half of acting inside the platform, and it is the half most teams actually need first.
+
+### Enrichment write-back and activation are different jobs that start from the same data
+
+The cleanest way to hold this in your head is that a data action emits a near real-time change event to a target, while an enrichment copies a harmonized value onto a CRM field or related list. One is event-shaped and travels to a consuming system. The other is value-shaped and lands inside your org on a record. Both begin from the same harmonized data and calculated insights, which is exactly why they get confused.
+
+The confusion has a cost. An enrichment copies a calculated or harmonized attribute onto a CRM field or related list so a human or a flow can use it inline. An activation publishes a whole segment to a target platform so an external system can act on the audience. One writes a value into your org. The other pushes an audience out of it. Choosing activation when the need is an inline value on a record is a common design error, and it shows up as a segment built, a target configured, and a rep who still sees an empty field on the record page.
+
+So the question to ask is who consumes the result. If a person or a flow reads the value on a Salesforce record, the mechanism is write-back. If an external audience platform consumes a set of customers, the mechanism is activation, which is the subject of the next lesson. If a downstream system reacts to a change event, the mechanism is a data action. The destination decides the mechanism, and naming the destination first is how you avoid building the wrong one.
+
+### Data actions differ from activation in latency and shape
+
+An activation typically publishes a segment on a schedule or on demand and sends the full membership to a destination. A data action is event-shaped and near real-time: it fires per changed row and carries the changed attributes, not a whole audience. When the need is to alert the service desk the moment a high-value profile changes, a data action with an event rule watching the loyalty DMO and an action rule on the tier value fits. When the need is to send an audience to a nightly advertising push, activation fits.
+
+Shape follows from the use case. An activation is a list: here are the customers in this segment, sent on a cadence. A data action is a signal: this one thing just changed, here are the fields that changed. If you find yourself trying to make an activation react within seconds, you have the wrong tool, because activations are tied to a publish schedule. If you find yourself trying to make a data action send a whole audience, you are fighting the event model. Match the mechanism to the shape of the need, not to the tool you used last time.
+
+There is one more distinction worth holding. A data action can be triggered by change data capture events, by streaming events that arrive from an SDK or an ingestion API, or by streaming calculated insights built on that streaming data.[^1] That range is why data actions are the right answer for "react the moment something changes" scenarios, while activations are the right answer for "reach this audience on a cadence" scenarios. The exam will phrase one as an urgent reaction and the other as a scheduled push, and you should hear the difference in the wording.
+
+### Respect the timing
+
+After you save and publish a data action, the configuration can take about 15 minutes to complete before events flow, and after that it triggers only when a row is added, updated, or deleted in the primary object.[^2] A flow that consumes a DMO trigger depends on the data stream refresh schedule, so there can be delays between the underlying change and the flow firing.[^6] State the latency budget rather than promising instant reaction, and say plainly that a newly published rule is quiet for a few minutes by design, not because it is broken.
+
+Watch the state of the pieces. Confirm the data action target is active rather than draft, because a draft target places the action in draft too.[^2] A draft action emits nothing, and the symptom is identical to a bad rule: no events. When you are debugging "nothing is happening," check the target state first, then the rules, then the latency window, in that order. Most reported failures are one of those three, and two of them are not failures at all.
+
+## Config Walkthrough
+
+1. In Data 360, go to the Data Actions tab and click New; choose to build the action from scratch or import it from data kits and packages.
+2. Select the data action target (create one on the Data Actions Target tab if needed) and click Next; if the selected target is in draft state, the action also stays draft.
+3. Select a data space, then choose a data model object or calculated insight object type, and select the primary object the rule will watch.
+4. Optionally select a related object to enrich the action, then define the event rule and the action rule conditions (the action rule can combine AND and OR conditions).
+5. Enter the action name, click Save and Publish, and allow time for the configuration to complete before you expect events.
+6. For write-back instead of an event, create a copy field or related list enrichment so harmonized Data 360 data lands on the CRM record page.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, assuming a flow or Data 360 can write back into Data 360 from a flow. A flow can read DMO and CIO data but cannot create, update, or delete Data 360 data, so the write lands on the CRM object instead. Data 360 is read-only from a flow, and any answer that has a flow updating a data model object is wrong.
+
+Second, confusing enrichment write-back with activation. Enrichment copies a value onto a CRM field or related list, while activation publishes a whole segment to an external destination. Picking activation when the need is an inline value on a record builds an audience nobody downstream asked for and leaves the record page empty.
+
+Third, expecting instant events. A newly published data action can take some minutes to finish configuration, and a DMO-triggered flow depends on the data stream refresh, so nothing happening yet is expected latency, not a broken rule. Check the target state and the refresh schedule before you rebuild anything.
+
+## Decision rules to carry forward
+
+Act inside the platform when the result belongs inside Salesforce or travels as an event, and act outside it when an external audience needs the data. Reach for a data action when the need is a near real-time reaction to a harmonized profile change. Reach for write-back when the need is a value or a list on a record the rep already opens. Always name the consumer first, confirm the target is active, and state the latency budget instead of promising instant reaction. These are the rules ac-4a tests, and they are the rules that keep a design honest.
+
+## What's next
+
+Lesson 50 - Acting Outside the Platform: Activation, Data Shares, and Downloads (ac-4b)
+
+[^1]: Salesforce Help, "Data Actions in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_actions_CDP.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Create a Data Action in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_create_a_data_action_in_customer_data_platform.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Data Action Targets in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_action_target_in_customer_data_platform.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Enrich Your Org with 360 Data and Insights," (https://help.salesforce.com/s/articleView?id=data.c360_a_enrich_your_org_with_data_and_insights.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Enrichment Considerations," (https://help.salesforce.com/s/articleView?id=data.c360_a_enrichment_considerations.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Trigger Flows with Data 360 Data," (https://help.salesforce.com/s/articleView?id=platform.flow_concepts_trigger_data_cloud.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Enrich Your Org with 360 Data and Insights: Copy Field Steps," (https://help.salesforce.com/s/articleView?id=xcloud.pfs_copy_field.htm&language=en_US&type=5)
