@@ -136,10 +136,10 @@ afterEach(() => {
 /* ── the matrix ────────────────────────────────────────────────────────── */
 
 describe("exam naming matrix — dataset shape", () => {
-  it("covers all 12 shipped series with the seeded kind split (8 course-completion, 4 certification-prep)", () => {
-    expect(SERIES).toHaveLength(12);
+  it("covers all 13 shipped series with the seeded kind split (8 course-completion, 5 certification-prep)", () => {
+    expect(SERIES).toHaveLength(13);
     expect(SERIES.filter((s) => s.kind === "course-completion")).toHaveLength(8);
-    expect(SERIES.filter((s) => s.kind === "certification-prep")).toHaveLength(4);
+    expect(SERIES.filter((s) => s.kind === "certification-prep")).toHaveLength(5);
     for (const s of SERIES) {
       expect(s.kind, `${s.slug} must declare examKind`).toMatch(/^(course-completion|certification-prep)$/);
       expect(s.questionCount, `${s.slug} must have an exam document`).toBeGreaterThan(0);
@@ -368,6 +368,6 @@ describe("evidence table", () => {
         ...rows.map((r) => `| ${r.series} | ${r.kind} | ${r.rendered} | ${r.card} | ${r.phrase} |`),
       ].join("\n"),
     );
-    expect(rows).toHaveLength(12);
+    expect(rows).toHaveLength(13);
   });
 });
