@@ -83,6 +83,7 @@ describe("atlas-launch mirror", () => {
       "salesforce-data-architect",
       "salesforce-sharing-visibility-architect",
       "sf-omni-consultant",
+      "sf-data360-consultant",
       "does-not-exist",
     ]) {
       expect(isPubliclyLaunchedSeries(slug)).toBe(false);

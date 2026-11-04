@@ -577,8 +577,8 @@ describe("published projection vs full registry", () => {
     }
   });
 
-  it("keeps the full registry complete — 12 pins over every authored course", () => {
-    expect(Object.keys(FIGURE_PINS_ALL)).toHaveLength(12);
+  it("keeps the full registry complete — 13 pins over every authored course", () => {
+    expect(Object.keys(FIGURE_PINS_ALL)).toHaveLength(13);
     for (const [slug] of REAL_COURSES) {
       expect(FIGURE_PINS_ALL[slug], `${slug} is unpinned in the registry`).toBeTypeOf(
         "string",

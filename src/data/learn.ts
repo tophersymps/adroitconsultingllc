@@ -9327,6 +9327,16 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
+  },
+  {
+    "slug": "sf-data360-consultant",
+    "name": "Salesforce Data 360 Consultant",
+    "description": "Prep course for the Salesforce Certified Data 360 Consultant certification, formerly the Data Cloud Consultant credential. Covers solution positioning, setup and administration, data source connection and ingestion, harmonization and unification, data enhancements, sharing and analysis, and data activations and utilization.",
+    "gradient": "from-cyan to-sky-600",
+    "examKind": "certification-prep",
+    "lessons": [],
+    "totalLessons": 0,
+    "curriculumLessons": 52
   }
 ];
 

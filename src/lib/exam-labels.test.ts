@@ -40,6 +40,7 @@ const EXPECTED_KIND: Record<string, ExamKind> = {
   "salesforce-data-architect": "certification-prep",
   "salesforce-sharing-visibility-architect": "certification-prep",
   "sf-omni-consultant": "certification-prep",
+  "sf-data360-consultant": "certification-prep",
 };
 
 /** api-contracts.md §C copy table, verbatim. */
@@ -61,7 +62,7 @@ function readSeriesJson(slug: string): { name: string; examKind: ExamKind } {
   return JSON.parse(fs.readFileSync(file, "utf8")) as { name: string; examKind: ExamKind };
 }
 
-describe("exam-labels / 12-series matrix (waves.md §3.0)", () => {
+describe("exam-labels / 13-series matrix (waves.md §3.0)", () => {
   it("covers every series in content/learn — no series is untested", () => {
     const onDisk = fs
       .readdirSync(LEARN_DIR, { withFileTypes: true })
@@ -70,7 +71,7 @@ describe("exam-labels / 12-series matrix (waves.md §3.0)", () => {
       .sort();
 
     expect(onDisk).toEqual(Object.keys(EXPECTED_KIND).sort());
-    expect(onDisk).toHaveLength(12);
+    expect(onDisk).toHaveLength(13);
   });
 
   it.each(Object.keys(EXPECTED_KIND).sort())("%s → expected full/short/phrase", (slug) => {

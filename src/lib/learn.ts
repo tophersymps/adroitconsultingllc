@@ -273,6 +273,7 @@ const SERIES_SHORT_LABELS: Record<string, string> = {
   "salesforce-sharing-visibility-architect": "Sharing & Visibility",
   "salesforce-data-architect": "Data Architect",
   "sf-omni-consultant": "OmniStudio Consultant",
+  "sf-data360-consultant": "Data 360 Consultant",
 };
 
 /** Short display label for a series (band tag pill), humanized when unmapped. */
