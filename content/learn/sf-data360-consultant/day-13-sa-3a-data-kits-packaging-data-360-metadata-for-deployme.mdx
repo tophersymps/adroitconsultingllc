@@ -1,0 +1,110 @@
+---
+title: "Lesson 13: Data Kits: Packaging Data 360 Metadata for Deployment"
+slug: day-13-sa-3a-data-kits-packaging-data-360-metadata-for-deployme
+series: sf-data360-consultant
+lesson: 13
+excerpt: "Objective sa-3a in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to manage the development lifecycle with the two data kit types, what they package, and how data kits pair with packages. Lesson 13 covers standard versus DevOps kits, the packaging boundaries, the per-save limits, and how managed packages lock metadata."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Kits, Deployment, Packaging]
+---
+
+# Lesson 13: Data Kits: Packaging Data 360 Metadata for Deployment
+
+A consultant builds a clean identity resolution ruleset and three calculated insights in a full sandbox, tests them, and then tries to ship them to production with a change set. The change set hangs at validation and throws a mismatch error. Nothing was built wrong. The consultant packaged the work in a standard data kit, and standard data kits are not supported in change set deployments. The whole afternoon was lost to picking the wrong container.
+
+This lesson covers objective sa-3a, part of the Data 360 Setup and Administration domain, worth 13% of the Salesforce Certified Data 360 Consultant exam. The objective asks you to manage the development lifecycle with available tooling, focused on the two data kit types, what they package, and how data kits pair with packages. We cover why Data 360 metadata travels inside a data kit rather than a package directly, the two kit types and the one rule that separates them, the packaging boundaries that force a two-package design, the per-save limits that fail a large data model, and what happens to metadata inside a managed package.
+
+## Deep Dive
+
+### Data 360 metadata is deployed through data kits
+
+Data 360 metadata is deployed through data kits, and the reason is architectural. A package can only carry components the packaging framework understands, and Data 360 components are not among them. So Data 360 metadata must be added to a data kit before it can be packaged. A data kit is a container purpose-built for Data 360 components, and you cannot package Data 360 metadata directly: you add components to a data kit, then add the data kit to a package. The package is the thing that actually installs in another org, but the data kit is where the Data 360 pieces live while they are inside it.[^1]
+
+The critical distinction is what a kit carries. The Data 360 metadata a kit holds represents definitions, for example calculated insights, data streams, and data model objects, not the data itself. Deploying a kit moves configuration, not records. That single sentence resolves a surprising share of exam questions, because the tempting mental model is that promoting a stream also promotes the rows it produced. It does not. The definition of the stream, its schema, its fields, and its mapping travel; the records that stream pulled in production do not reappear in the target just because the kit landed. The target org starts ingesting on its own schedule once the configuration is there and a connection is authorized.
+
+Why does this matter operationally? Because it sets expectations with stakeholders. A business user who hears "we deployed the stream to production" may assume last quarter's customer data is now live in production. It is not. The configuration is live; the data arrives when the stream next runs. Setting that expectation before a cutover prevents a panicked call the morning after a go-live, when a dashboard looks empty because the production stream has not completed its first refresh yet.
+
+### There are two data kit types
+
+There are two data kit types, and the exam expects you to route a scenario to the right one every time. A standard data kit packages Data 360 features to share or distribute solutions. It is created from the default data space and can be deployed to any data space in the target org. A DevOps data kit migrates metadata from a sandbox org to a production org. It can be created from any data space, and it must be deployed to the same data space in the target org. Choosing the wrong type is the root of most deployment failures, which is why the distinction carries so much weight in the exam.[^6]
+
+Read those two definitions side by side and the shape emerges. The standard kit is built for distribution: it starts from the default data space and lands anywhere, because a partner or an internal team shipping a solution does not know or care which data space the subscriber will use. The DevOps kit is built for promotion: it starts from any data space but lands in the same data space, because sandbox and production are meant to mirror each other and the kit is moving a change through a lifecycle, not distributing a product.
+
+The two types also carry different supported component sets. Most core components, including calculated insights, connectors, data lake objects, data model mappings, data transforms, identity resolution, segments, and zero copy federation, are supported by both. A handful are DevOps only, such as code extension, data governance tags, related list enrichments based on identity resolution, and predictive models created from scratch with no code. And some elements are supported by neither, including Marketing Cloud Personalization and Commerce Cloud activations and activation templates, so those cannot be shipped in a kit at all and have to be rebuilt or handled another way in the target.[^1] Knowing that the support tables differ is what stops you from promising a client that "everything" in the sandbox will move.
+
+### Change sets require a DevOps data kit
+
+Change sets require a DevOps data kit. A standard data kit is not deployed through change sets. You move sandbox to production with a DevOps data kit plus outbound and inbound change sets, or with the Salesforce CLI, the Metadata API, or the Connect REST API. Standard data kits are also used for local sandbox replication, moving assets from the default data space into a non-default data space within the same org.[^4][^5] If a question describes a change set moving something from sandbox to production, the answer is the DevOps data kit, and the standard data kit is the strongest wrong answer on the page.
+
+The reason standard kits cannot ride a change set is the same reason they can land anywhere: they are built for distribution, not for promotion. A change set is inherently a move between two orgs that share a lineage, sandbox and its production parent, and it carries the assumption that the target mirrors the source. That assumption is exactly what the DevOps kit is designed around. A standard kit is built around the opposite assumption, that the target may be a stranger org entirely.
+
+The standard kit's second job is easy to miss. Beyond distribution, a standard data kit is the tool for local sandbox replication, moving configuration from the default data space into a non-default data space inside one org. Since the standard kit can deploy to any data space, it can move assets between data spaces locally. The supported components for that local deployment include calculated insights, CRM data streams, data action targets, data lake objects, Ingestion API streams, segments, and streaming apps.[^1] A consultant who only remembers the distribution story is missing half the use cases the exam can frame.
+
+### Packaging has hard boundaries
+
+Packaging has hard boundaries, and three of them are load-bearing. First, you cannot add Data 360 metadata to an unlocked package.[^2] Second, since Winter 25 an org cannot put Data 360 metadata and non Data 360 metadata in a single package, so create two packages: one for Data 360 metadata and one for everything else.[^2] Third, a package can contain one or more data kits, so the relationship is one package to many kits, not one to one.[^2] A candidate who assumes a package holds a single kit, or that both kinds of metadata can share one package, has the model backwards.
+
+The unlocked package restriction catches people because the word "unlocked" sounds more permissive than "managed." With unlocked packages, the source is open and the subscriber can change it, which is fine for platform metadata and not permitted for Data 360 metadata. Data 360 components travel in managed or unmanaged packages that carry a data kit, not in unlocked packages. So the packaging decision is made in part for you: if Data 360 metadata is in scope, the unlocked path is closed.
+
+The separation of Data 360 and non Data 360 metadata into two packages is a change that landed in Winter 25 and is easy to forget if you learned the older flow. The practical consequence is that a hybrid solution, say a set of Data 360 segments plus a custom object and a permission set, needs two packages installed in sequence. The sequence matters, because components in the second package may depend on the data kit that landed in the first. That dependency is the reason the third boundary, the publishing sequence, exists.
+
+The deployment order is published as the data kit's publishing sequence, so components deploy in that order. The system generates an initial sequence by creation date, and where components depend on each other you reorder them explicitly.[^3] The canonical example is a segment that depends on a calculated insight: the calculated insight has to be published before the segment, or the segment deploys against a metric that does not yet exist in the target. Get the sequence wrong and the deployment either fails or, worse, succeeds with a broken dependency that only surfaces when the segment is next recalculated.
+
+### There are practical save limits
+
+There are practical save limits, and they turn a large data model into a job for the patient. A data kit can hold a limited number of objects per save operation, and when that limit is exceeded the entire save is rejected with nothing saved partially, so large data models are added in smaller batches. In the current product that ceiling is fifty objects per save.[^4] The all-or-nothing behavior is the important part: a save that tips over the limit does not keep the first forty-nine objects and reject the fiftieth, it discards the whole batch, so you redo the work.
+
+A second limit governs who can change what. Objects deployed by a data kit can only be updated by modifying and redeploying that same kit, and standard and DevOps kits cannot be used interchangeably to update the same object. Objects created manually in the org cannot be updated by any data kit.[^4] This is the rule that bites teams who hand-tweak a deployed object and then wonder why their fix disappears on the next release. The kit is the source of truth for everything it deployed; editing the target directly is a change the next deployment will overwrite.
+
+There is a subtlety inside the save limit that trips people during a large migration. A data lake object's field mapping is only written into the kit when the data lake object and its target data model object are saved together in the same save. If you split them across batches, the DLO lands in the kit but its field mapping does not, and the deployed object arrives without its mappings. The fix is to group each DLO with its target DMO inside one batch, staying under the fifty-object ceiling.[^4] A demonstrated understanding of that coupling is what separates someone who has actually run a large migration from someone who has only read the overview.
+
+### Managed packages lock all Data 360 feature metadata
+
+For managed packages distributed to other orgs, all Data 360 feature metadata is locked. After a subscriber installs the package and deploys the kit components, the components are locked: subscribers can add components but cannot modify or delete the deployed mappings or components, and any direct edits are overwritten when the kit is redeployed.[^2] That protects the publisher's configuration, which is the whole point of a managed package, but it means subscriber changes must go through supported extension points rather than direct edits.
+
+The lock serves a real purpose. A partner ships a solution with a carefully tuned identity resolution ruleset and a set of segments that depend on it. If every subscriber could edit those mappings, the partner would field support tickets for every customer's local variation, and upgrades would clobber those edits anyway because redeployment overwrites them. Locking the metadata means the partner owns the shipped configuration and the subscriber extends around it. For the exam, the takeaway is simple: locked means add-only for the subscriber, and direct edits are not durable.
+
+Why does the platform overwrite direct edits rather than protecting them? Because the kit is declarative and idempotent. Each redeployment reasserts the publisher's definition, so anything a subscriber changed that conflicts with that definition loses. This is the same source-of-truth principle as the save limit rule, applied across an org boundary. A subscriber who needs a different segment filter builds a new segment rather than editing the shipped one, and that new segment survives every future upgrade.
+
+## Config Walkthrough
+
+Building a data kit is a short sequence, and the type choice in step three is the decision that everything else hangs on.
+
+1. In the sandbox org, open Data Cloud Setup. This is the Data 360 setup surface, separate from the standard Setup menu.
+
+2. Under Developer Tools, click Data Kits, then New. Data Kits is where every kit in the org is listed and where you start a new one.
+
+3. For Data Kit Type, select DevOps to move changes to production, or Standard to package a shared solution. This is the decision that determines the data space rule that follows, so make it deliberately rather than by habit.
+
+4. Name the data kit, add an optional description, and Save. The description is worth writing honestly, because the person who opens this kit in six months may not be you.
+
+5. Add components by clicking Add next to each section (Data Streams, Data Lake Objects, Data Models, Calculated Insights, Data Transforms, and so on), saving within the objects per save limit. Group each data lake object with its target data model object in the same save so the field mappings travel with it.
+
+6. Review the component list and the publishing sequence to confirm dependencies deploy in order, then Publish the data kit. Dependencies such as a segment on a calculated insight must be ordered so the dependency publishes first.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, using a standard data kit for a change set deployment. Standard kits are not supported in change sets, so the deployment fails or never gets off the ground. The fix is to use a DevOps data kit. The standard kit is the strongest distractor in this area because it is a real, correct tool for distribution and local replication, and a candidate who only remembers "data kit" will reach for it. The move that decides the question is reading the deployment path, not the component list.
+
+Second, deploying a DevOps kit to a different data space than where it was created. DevOps kits must target the same data space, while standard kits may deploy to any data space. A DevOps kit is moving a change between two orgs that mirror each other, so the data space has to match on both sides. This is also the cause of the environment parity error, where the failure message says the target data space name does not match the data space used when the kit was created. The instinct that any data space will do is the mistake, and it is wrong because the DevOps kit is not a distribution artifact, it is a promotion artifact.
+
+Third, assuming a data kit carries data, or that manually created objects can be updated by a kit. Kits carry metadata definitions only, never records, and objects created manually in the org cannot be updated by any data kit. Both halves of this trap share a root cause: treating the kit as a data mover or a universal editor rather than what it is, a versioned container of component definitions. The rows follow the configuration on the next refresh, and anything you built by hand in the target stays outside the kit's control.
+
+## What a consultant should walk away with
+
+Match the kit to the path. Change sets and sandbox to production mean a DevOps data kit. Shipping a solution to other orgs, or replicating assets across data spaces in one org, means a standard data kit. Remember that Data 360 metadata must be added to a data kit before it can be packaged, that a package can hold one or more kits, and that Data 360 and non Data 360 metadata go in separate packages. Keep every save under the fifty-object limit and group each data lake object with its target data model object so the field mappings survive. Respect the publishing sequence so dependencies deploy in order, and treat the kit as the source of truth for everything it deployed, because direct edits are temporary. When a deployment fails, ask the two diagnostic questions first: was the kit the right type for the path, and did the data space match.
+
+## What's next
+
+Lesson 14 - Sandbox-to-Production Lifecycle: CLI, Change Sets, and Environment Parity (sa-3b). You now know what a data kit is and which type to reach for. Lesson 14 takes the DevOps kit and drops it into a full lifecycle: provisioning Data 360 in a sandbox, reactivating the connections that arrive inactive, promoting configuration with the CLI, change sets, and the Connect REST API, and holding environment parity across the move.
+
+[^1]: Salesforce Developers, "Data 360 Extensibility Readiness Matrix," (https://developer.salesforce.com/docs/data/data-cloud-dmo-mapping/guide/c360a-api-isv-readiness-data.html)
+[^2]: Salesforce Developers, "Packages and Data Kits," (https://developer.salesforce.com/docs/data/data-cloud-dev/guide/packages-data-kits.html)
+[^3]: Salesforce Help, "Create and Publish a Standard Data Kit," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_stream_bundle_package_kits.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Data 360: Data Kit Considerations & Common Issues," (https://help.salesforce.com/s/articleView?id=003960830&language=en_US&type=1)
+[^5]: Salesforce Help, "Data 360: Availability and Limitations of Cross-Environment Migration Using Data Kits," (https://help.salesforce.com/s/articleView?id=005385637&language=en_US&type=1)
+[^6]: Salesforce Help, "Data Kits," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_package_kits.htm&type=5)
