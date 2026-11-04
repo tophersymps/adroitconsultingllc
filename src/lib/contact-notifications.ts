@@ -1,4 +1,3 @@
-import "server-only";
 import type { ContactLeadPayload } from "@/shared/contracts";
 
 export interface ContactNotificationResult {
