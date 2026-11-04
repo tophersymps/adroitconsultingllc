@@ -1,0 +1,117 @@
+---
+title: "Lesson 17: Data Transform Types: Batch vs Streaming and When Each Applies"
+slug: day-17-ing-1a-data-transform-types-batch-vs-streaming-and-when-e
+series: sf-data360-consultant
+lesson: 17
+excerpt: "Requirement ing-1a in the Data Source Connection and Ingestion domain (18% of the Salesforce Data 360 Consultant exam) asks you to explain data transformation capabilities within Data 360. Lesson 17 of the Salesforce Data 360 Consultant Certification course covers the two transform types, batch and streaming, and the latency and complexity trade-offs that decide which one a scenario needs."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Transforms, Ingestion]
+---
+
+# Lesson 17: Data Transform Types: Batch vs Streaming and When Each Applies
+
+A team ingests clickstream events continuously and wants an abandoned cart email to go out the moment a shopper leaves a full cart behind. The architect reaches for the only transform the team has used before, a batch data transform, and schedules it every fifteen minutes. The emails go out, late, in bursts, and the shopper has usually already bought the item somewhere else. The latency requirement was measured in seconds. A fifteen minute schedule cannot deliver seconds, no matter how the transform is tuned.
+
+That mistake is what this lesson prevents. Requirement ing-1a sits in the Data Source Connection and Ingestion domain, worth 18% of the Salesforce Data 360 Consultant exam, and asks you to explain data transformation capabilities within Data 360, focused on the two transform types, batch and streaming, and the latency and complexity trade-offs that decide which one a scenario needs. The exam presents scenarios and expects you to read the requirement for latency and weight of logic, then pick the transform type that fits.
+
+The decision rule for the whole lesson fits in one line: near real time and simple logic is streaming, scheduled and heavy logic is batch. Everything below explains why, and where the tempting wrong answers come from.
+
+## Deep Dive
+
+### What a data transform is, and the two types you choose between
+
+A data transform in Data 360 moves data between objects with logic applied. It reads from a data lake object (DLO) or a data model object (DMO), applies a SQL statement or a graph of operations, and writes the result to a target DLO or DMO. Transforms live on the Data Transforms tab in Data 360. At creation time there are exactly two types to choose from: Batch Data Transform and Streaming Data Transform. Every transform has a source and a target, and the source and the target must be different objects.[^1][^2]
+
+The two types are not interchangeable versions of the same tool. A streaming transform is, at heart, a SQL statement that runs continuously against an incoming flow. A batch transform is a graph of nodes you assemble on a canvas, and it can express joins, aggregations, and branching that a single statement cannot. The type you choose therefore changes not only latency but also what the transform is capable of doing at all.
+
+Two facts about that setup are worth planting early. First, the transform type is a property you pick at creation, not something the platform infers from how the data arrives. Second, because the source and target must differ, a transform always writes somewhere new, which is what lets transforms chain into a pipeline. A batch transform can write a DLO that another batch transform reads; a streaming transform writes an object that downstream streaming steps can pick up.
+
+The reason this matters for the exam is that scenarios describe ingestion patterns as a distractor. A streaming data stream can feed a batch data transform, and a batch data stream can feed a streaming data transform. How the source delivers data does not decide the transform type. The required latency and the weight of the logic decide it.
+
+### Batch data transforms run a repeatable series of operations on stored data
+
+A batch data transform is a repeatable series of operations that you run when your data updates. The first time you run it, it pulls in data and defines it according to your steps. After that you can run it manually or set it up to run at scheduled intervals, so the output refreshes as the underlying data updates.[^1] This is the workhorse for data that needs heavy preparation, not instant reaction.
+
+Batch is the right tool for work that consumes stored data in bulk: preparing inputs for identity resolution, building segmentation ready objects, feeding calculated insights, and deriving data for Salesforce reports.[^1] Its visual canvas editor gives you more capability than a streaming transform, because you can join, aggregate, and append data from multiple objects and add formulas and filters.[^4] The scenario that fits a batch data transform is the one with a scheduled cadence and real transformation work, for example joining three objects, aggregating, and preparing an object for identity resolution on a nightly cadence. That single example is the shape of a batch problem: multiple inputs, real joins, an aggregation, and a schedule measured in hours, not seconds.
+
+The trade is latency for capability. Batch output can be a few minutes or a few hours old, depending on the schedule and the volume, and in exchange you get joins, aggregations, and a graph of nodes that streaming cannot express. Choose batch whenever the result does not need to exist the instant a source record changes and the logic is heavy.
+
+A worked example makes the cadence concrete. A retail team wants a customer lifetime value field on the unified profile. The field joins orders, returns, and support cases, aggregates them per customer, and lands the result on an object that identity resolution and segmentation both read. None of that work must be instant, and all of it is heavy, so a nightly batch transform is the right fit. The profile is at most a day stale, and the business accepts that.
+
+### Streaming data transforms process records as they arrive and cannot be edited
+
+Streaming data transforms read and process records as they flow in and write the output to a target object in near real time.[^2] They are activated immediately when you save them. That immediacy has a hard edge: they activate immediately when saved and cannot be modified, only deleted and recreated.[^2] The Considerations page states the rule plainly, you cannot change a streaming data transform after saving it, so if you must change it you delete it and create another one.[^3]
+
+That immutability is a deliberate design signal, not an accident. Streaming logic is meant to be simple and stable. If you find yourself wanting to edit a streaming transform every week, the transform is probably doing work that belongs in batch. Because streaming transforms run continuously, they are the choice when a downstream step such as real time activation must react to an event seconds after it is ingested. A streaming data transform that reads the events and writes the prepared output is what a real time requirement needs.
+
+There are operational edges to know. A streaming transform can take up to thirty minutes after creation to read, process, and begin writing to the target; after that initial sync it picks up new or updated records within a few minutes.[^3] Subqueries are not supported, and if the transform references a key qualifier field as a source or destination it fails validation.[^3] If the status shows Error, you click Retry.[^3] And to stop one, you delete it, which fits the delete and recreate model.
+
+The phrase near real time deserves a precise meaning, because exam scenarios lean on it. A streaming transform starts writing soon after it is created, then keeps pace with new and updated records within a few minutes as they arrive.[^3] That is fast enough for a real time activation to react seconds after an event, provided the transform itself stays simple, which is why the SQL is limited to a single statement with no subqueries.[^3]
+
+### The decision rule is latency versus complexity
+
+The whole objective reduces to a single trade-off. If the requirement is near real time, such as acting on a clickstream event or an abandoned cart the moment it happens, choose a streaming data transform. If the requirement is periodic and involves joins across several objects, aggregation, window functions, or prepared inputs for identity resolution or segmentation, choose a batch data transform.
+
+The common mistake is to force heavy logic into streaming just because the source is streaming. The source and the transform type are separate decisions, so a high volume clickstream can still feed a batch transform if the prepared output is only needed hourly. The discipline is to ingest with a streaming data stream and prepare the heavy transformation in batch when the result does not need to be instant. Try it: take a requirement, underline every latency word in it, and highlight every join, aggregate, or unify verb. Seconds and on arrival point to streaming. Daily, scheduled, aggregate, and unify point to batch. The words in the requirement usually settle the question before the rest of the scenario does.
+
+A second worked example tests the reverse instinct. A bank ingests card transaction events continuously and needs a fraud scoring input. The events arrive as a stream, but the scoring model needs the last thirty days of transactions aggregated per card, which is a window calculation over stored history. The source is streaming and the transform is batch, because the latency requirement is a nightly refresh, not seconds. Following the source and choosing streaming here would fail, because streaming cannot express that aggregation with subqueries or window functions.
+
+### Data spaces, sources, and targets differ by transform type
+
+Both transform types can read and write DLOs and DMOs, and the choice between them changes one important thing. A transform that runs on data model objects is scoped to a single data space, so its output applies only within that space. A transform that runs on data lake objects is not associated with a data space at all. When you create a transform you select the source type, and if you picked Data Model Object you also choose the data space from the dropdown, which restricts that transform to reading and writing inside the selected space.[^2][^5]
+
+The target follows the same pattern. You can point the target at an existing DLO or DMO, or create a new one inline during setup. Streaming transforms that create a new target ask you to define the shape of that object up front, because the SQL you write determines the columns and data types of the new object.[^2] This is the practical reason streaming logic stays simple: the schema is fixed the moment you save, so the transform cannot quietly grow new columns the way a batch canvas can be edited later.
+
+A useful side effect is versioning. Because a streaming transform cannot be edited, deleting and recreating one is the only way to change it, which means every change produces a clean new definition rather than an in place edit. Batch transforms, by contrast, you edit freely, including after major source changes. Pick the type whose change model matches how stable your logic really is.
+
+### Batch and streaming are two ends of the same preparation layer
+
+Think of batch and streaming as two ends of one preparation layer, not as competing products. Batch output can feed other batch transforms and downstream processes, so you can chain transforms into a pipeline. Streaming output lands in an object that downstream streaming steps can pick up. In a mature architecture you often use both: a streaming transform to clean and enrich events as they arrive, and a batch transform to join that prepared stream to slow moving reference data before identity resolution or segmentation.[^1][^3]
+
+A worked architecture shows the split. A streaming transform cleans and normalizes clickstream events as they land, writing a tidy events object. A batch transform then joins that object to a slowly changing customer table and aggregates daily engagement per customer for a segment. The streaming half handles arrival, the batch half handles depth, and neither could do the other's job well. That is the pattern to reach for when a scenario describes both a live event source and a periodic, join heavy output.
+
+In exam scenarios, read for the words that signal latency. In real time, as events arrive, and immediately point to streaming. Daily, scheduled, aggregate, and unify point to batch. When a scenario explicitly asks for preparation within seconds of an event, no fixed schedule qualifies, however short. When a scenario asks for a nightly join and aggregation, streaming cannot do the heavy lifting and would be overkill for the schedule.
+
+## Config Walkthrough
+
+Creating either transform starts the same way and then branches.
+
+1. In Data 360, open the Data Transforms tab. If it is hidden, click More and select Data Transforms.[^2]
+
+2. Click New, then choose either Batch Data Transform or Streaming Data Transform and click Next. This is the only place the type is decided, so choose deliberately.
+
+3. Choose the source type, Data Model Object or Data Lake Object. If you picked Data Model Object, select the data space from the dropdown, because the transform is then restricted to that space.[^2]
+
+4. Name the transform, and for a batch transform set the currency when multi currency sources are involved. If several transforms write to the same target, give them the same currency.[^1][^2]
+
+5. Set the Target Object to an existing DLO or DMO, or select Create New to define one inline, then click Next. A transform that creates a new target defines that object's shape from the SQL or canvas you build.
+
+6. For a batch transform, build the canvas and schedule the run. For a streaming transform, enter the SQL expression, click Check Syntax, and Save. Remember that saving a streaming transform activates it immediately, so verify the syntax before you save rather than after.[^2]
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, assuming a streaming data transform can be edited after it saves. It cannot. Streaming transforms activate immediately on save and cannot be changed, so the only way to alter one is to delete it and create a new transform. If a scenario asks how to change streaming logic, the answer involves delete and recreate, not edit.
+
+Second, treating the ingestion pattern as the transform type. A streaming data stream can feed a batch data transform, and the reverse is also possible, so never pick the transform type from how the source delivers data. Pick it from the required latency and the weight of the logic.
+
+Third, assuming a transform writes straight into a segment or an activation. It does not. Transforms write DLOs and DMOs, and downstream steps such as identity resolution, segmentation, and activation consume those objects. The transform prepares data; it does not activate it.
+
+A fourth trap hides inside the first: assuming a streaming transform can be tuned by editing its schedule. There is no schedule to edit. A streaming transform has no run interval, because it runs continuously, and because it cannot be changed after saving, the only lever you have is to delete it and build a new one with different SQL. Batch, by contrast, has a schedule you set and change freely, so when a scenario asks how to speed up an existing transform, check which type it is before you propose a faster interval.
+
+## The decision rules to carry out of this lesson
+
+When a scenario describes a transformation, ask two questions. How fresh must the result be, and how heavy is the logic? If the answer is seconds and on arrival with simple logic, choose a streaming data transform, and accept that it is fixed once saved. If the answer is scheduled, with joins, aggregation, or prepared inputs for identity resolution or segmentation, choose a batch data transform, and use the canvas to build the graph. Choose the type from the requirement, not from how the data is delivered. And remember that both types write DLOs and DMOs, which downstream steps consume, so the transform is preparation, never activation.
+
+## What's next
+
+Lesson 18 - Batch Data Transforms: Canvas, Nodes, and Scheduling (ing-1b). That lesson goes deep on the batch path, covering how to create a batch data transform, build its graph of nodes, and schedule it.
+
+[^1]: Salesforce Help, "Batch Data Transforms," (https://help.salesforce.com/s/articleView?id=data.c360_a_batch_transform_overview.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Set Up a Streaming Data Transform," (https://help.salesforce.com/s/articleView?id=data.c360_a_streaming_transform_setup.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Considerations for Working with Streaming Data Transforms," (https://help.salesforce.com/s/articleView?id=data.c360_a_streaming_transform_considerations.htm&language=en_US&type=5)
+[^4]: Trailhead, "Get Started With Batch Data Transforms in Data 360," (https://trailhead.salesforce.com/content/learn/modules/batch-data-transforms-in-data-cloud-quick-look/get-started-with-batch-data-transforms-in-data-360)
+[^5]: Salesforce Help, "Create a Batch Data Transform," (https://help.salesforce.com/s/articleView?id=data.c360_a_batch_transform_create.htm&language=en_US&type=5)
