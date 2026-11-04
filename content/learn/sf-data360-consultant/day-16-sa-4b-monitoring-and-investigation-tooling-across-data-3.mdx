@@ -1,0 +1,114 @@
+---
+title: "Lesson 16: Monitoring and Investigation Tooling Across Data 360"
+slug: day-16-sa-4b-monitoring-and-investigation-tooling-across-data-3
+series: sf-data360-consultant
+lesson: 16
+excerpt: "Requirement sa-4b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to use tooling to diagnose and troubleshoot common issues. Lesson 16 of the Salesforce Data 360 Consultant Certification course covers the monitoring surfaces, the exploratory tools, and the audit trails, and shows you which one answers which question."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Monitoring, Setup Audit Trail]
+---
+
+# Lesson 16: Monitoring and Investigation Tooling Across Data 360
+
+An admin opens Data 360 because marketing says the daily audience counts are wrong. She spends the morning editing a data stream mapping, then a calculated insight, then she rebuilds the segment. The numbers do not move. Three hours in she opens Data Explorer, looks at the object the segment actually reads, and finds that the source file never loaded because the stream failed two days earlier. The data was wrong, not the model. She changed three things for nothing because she was looking in the wrong place.
+
+That is the failure this lesson exists to prevent. Requirement sa-4b sits in the Data 360 Setup and Administration domain, worth 13% of the Salesforce Data 360 Consultant exam, and asks you to use tooling to diagnose and troubleshoot common issues, focused on the monitoring surfaces, exploratory tools, and audit trails that support diagnosis and ongoing operations. The exam wants you to match each question to the surface that answers it, so you find the cause before you touch configuration.
+
+The skill here is triage. Data 360 spreads its evidence across several surfaces: a stream health dashboard, a data browser, a unified profile viewer, a SQL workspace, and an audit trail. A consultant who knows which surface to open first closes an incident in minutes. One who guesses and keeps changing settings turns a small ingestion failure into a week of chasing the wrong problem. The decision rule for the whole lesson is simple: data correctness is Data Explorer, unified identity is Profile Explorer, and configuration history is the Setup Audit Trail.
+
+## Deep Dive
+
+### The Data Stream Control Center centralizes stream health
+
+The Data Stream Control Center is a dashboard that pulls data stream management into a single view, where you can assess stream status, evaluate data quality, and identify ingestion issues.[^1] You reach it from the Connect and Mix area: expand the Control Center tab and the dashboard opens, already filtered to show data for today. It answers the first question in almost every ingestion incident, which is whether the streams that feed the objects you care about actually ran.
+
+The dashboard breaks stream health into a few widgets. Enabled Data Streams by Status shows the total number of streams processed in the past 24 hours, broken down by status: Standby (no retrieval method or scheduled hour to run), In Progress, Successful, and Failed.[^1] Enabled Data Stream Status by Source does the same grouping per connected source, so a glance tells you that one connector out of many is the one failing. The Data Streams Scheduled to Process heat map shows stream volume by hour across the last 24 hours, and only streams with a scheduling hour appear in it, which makes it a fast way to spot an hour in which nothing ran.
+
+Two widgets matter most when you are diagnosing. The Insights panel flags known problem conditions: a data stream that the platform disabled in the past three days, a file whose size or row count is close to exceeding the permitted size (and oversized files fail to process), and streams that stopped retrieving new files after processing for at least seven days.[^1] The Failed Data Streams by Day widget covers the last seven days, lets you filter the widget by data source, and lets you hover a day to view the failures grouped by error type. From there, View in Data Stream List jumps you straight into the stream list filtered to the streams that failed on that specific day.[^1]
+
+The operational consequence of ignoring this surface is time. Without the Control Center you hear about failures from the business, days late, and you rebuild the timeline from memory. With it, you open one dashboard, see which source is red, and jump to the failing streams for the day the problem started. When a report is wrong and the question is "did the data arrive," start here, not in configuration.
+
+### Data Explorer is the tool for validating data and formulas
+
+With Data Explorer you can validate data lake objects, data model objects, calculated insights, and data graphs to confirm that your data and your formulas are accurate.[^2] If you do not see the Data Explorer tab, the fix is permissions: ask an admin to enable Data Explorer permissions.[^2] You select a data space, then choose the object type (Data Lake Object, Data Model Object, Calculated Insights, or Data Graphs) and the specific object, and you can edit which columns show and filter the rows to the ones that matter.
+
+This is the surface you open before you touch any configuration. When someone reports an unexpected record count or a metric that looks wrong, Data Explorer is where you verify what actually landed. It is the fastest way to separate a data problem from a modeling problem. If the rows are missing from the data lake object, the fault is upstream, in the stream or the source, and no amount of calculated insight tuning will fix it. If the rows are in the DLO but the data model object is missing them, the fault is in mapping. If both carry the data and a calculated insight returns the wrong number, the fault is the insight's SQL.
+
+A worked example makes the split concrete. A segment that should contain 40,000 customers contains 12,000. Open Data Explorer, select the data model object the segment reads, filter on the segment's key field, and read the row count. If the DMO holds 40,000 matching rows, the segment filter is the problem. If the DMO holds 12,000, the DMO is the problem and your next stop is the mapping or the transform that builds it. One look separates two candidate causes, and you have changed nothing yet.
+
+### Profile Explorer validates unification, and Query Editor interrogates the same data directly
+
+Profile Explorer gives you a complete view of a unified profile for an account or an individual, and it exists to validate that identity resolution produced the unified customer views your business expects, including spotting discrepancies between source records and the unified profile.[^3] You use it to check whether the right records linked and whether the reconciled attributes took the value you expected from the source you expected. When a manager asks which tool shows a complete unified view of one customer for validation, the answer is Profile Explorer. The Data Stream Control Center is the tempting wrong answer, and it is wrong because it monitors stream status and quality, not the contents of a unified profile.[^3]
+
+Two conditions shape what you see. Profile Explorer shows profile data only when the Last Job Status of the most recent ruleset run is Successful, and only for the unified individual records of the data space and object you selected during configuration.[^3] A blank or partial view usually means the ruleset has not finished, or you are looking at the wrong space. Check the ruleset's Last Job Status before you conclude that unification is broken.
+
+Query Editor is the worksurface beside it. It is a SQL surface where you build and run queries against data lake objects, data model objects, calculated insight objects, and data graphs.[^6] A workspace defines which objects and metadata your queries can reach, so you select a data space when you create the workspace and the editor offers only the objects in that space.[^6] To run a query you open the Query Editor tab, select or create a workspace, choose the object, build the SQL, run it, and save it if you want it for later.[^6] When a high volume query is slow because the filter is not on the object's indexed field, you can add a secondary index to speed it up; the Explore and Optimize surface treats secondary indexes as the lever for high volume queries.[^3] Reach for one when the object is large and the field is one you filter on constantly.
+
+### The Setup Audit Trail records administrative and configuration changes
+
+The Setup Audit Trail tracks administrative and configuration changes in Salesforce Setup to provide an auditable history of who changed what and when, supporting security monitoring and forensic investigations.[^4] It logs key admin activities such as profile and permission changes, new app or integration configuration, security setting updates, and metadata changes.[^4] When the question is who changed this permission set yesterday, the audit trail is the record. Trusting your memory about who changed a permission is the classic mistake, and the audit trail exists precisely so you do not have to reconstruct admin actions from recollection.
+
+You reach it from Setup. Use the Quick Find box to find and select View Setup Audit Trail. The page first shows the 20 most recent setup changes, each with the date of the change, who made it, and what the change was.[^5] To get the complete picture you download it: from the View Setup Audit Trail page, the download gives your org's complete setup history for the past 180 days, and after 180 days setup entity records are deleted.[^5] That retention limit drives a standing operating practice. Because Salesforce keeps only a limited history natively, a consultant exports the audit trail on a cadence and stores it in an external log management, SIEM, or archival system to meet longer term audit and compliance requirements.[^4] The recommended cadence is every six months: on the View Setup Audit Trail page, click Download setup audit trail for last six months.[^4]
+
+So when an admin needs a durable record of permission set and integration changes for compliance, the recommended action is to download the Setup Audit Trail periodically and store it externally. Relying on Salesforce's built in retention indefinitely is the tempting wrong answer, and it is wrong because the history is not retained indefinitely: records older than 180 days are deleted.[^5] Treat the export as routine operations, not as something you do after an incident, because by then the window may already have closed.
+
+### When the source is a connected org, the audit trail you need is the source org's
+
+A CRM data stream can be fed by a connection to a separate Salesforce org. When a stream like that starts failing after a field was deleted, the change that broke it did not happen at home. The deleted custom field belongs to the connected org, so the record of that deletion is in the connected org's Setup Audit Trail, not the home org's. The investigation is to open the connected org, download its audit trail, and filter for actions such as Deleted custom field or Permanently deleted custom field around the date the errors started.
+
+This is the trap the exam likes most on this objective. Checking only the home org's Setup Audit Trail is the strongest looking wrong answer, and it is wrong because the object and the field live in the connected org. The home org's audit trail will faithfully show every change made at home and none of the change you are actually chasing. When a stream failure appears right after a schema change and the source is external, the first place to look is The connected org's Setup Audit Trail for deleted custom field actions around the error date.
+
+A worked example. A CRM stream has loaded contacts for months, then reports mapping failures on a Monday. The home org's audit trail shows nothing unusual over the weekend. The connected org's audit trail shows a Permanently deleted custom field action on the Saturday, on the very field the stream maps. The fix lives in the source org: restore the field or remap the stream, and the stream recovers. Nothing at home needed to change, and a home only investigation would have missed the cause entirely.
+
+### Monitoring is also about consumption, identity, and access
+
+Diagnosis is not only about broken rows. Data 360 Setup Home carries the tenant details you hand to support when you raise a case. Data 360 runs on both Salesforce's first party infrastructure and public cloud infrastructure, referred to as a functional domain, and the Data 360 Id, instance, and tenant endpoint appear on the home page of Data Cloud Setup.[^7] If you are unsure which instance you are on, or you need to describe the incident precisely, that page is the source of truth. Access to Data Cloud Setup requires the system admin profile or the Data Cloud Architect permission set.[^7]
+
+Consumption is a monitoring surface too, because Data 360 features are metered and consume credits: data storage is metered, and service usage is metered and includes records processed, queried, or analyzed, plus segmentation and activation.[^8] Watching usage protects cost as well as health, because a runaway transform or a segment that refreshes far too often shows up in consumption before it shows up on a bill. Finally, identity and access close the loop. When the question is whether a user should even be able to see a given piece of data, Login History and the user's access summary tell you whether that person could reach the object at all, which is a different investigation from whether the data is correct. Keeping those two questions apart saves hours, because access problems and data problems have entirely different fixes.
+
+## Config Walkthrough
+
+Six moves cover the common investigations. Work through them in this order and you will almost always land on the cause before you change anything.
+
+1. To watch stream health, open the Connect and Mix area in Data 360, expand the Control Center tab, and review enabled streams by status, then failed streams by day. If one source is red, filter the failed streams widget by that source and use View in Data Stream List to jump to the day's failures.[^1]
+
+2. To validate data, open the Data Explorer tab and inspect the data lake object, data model object, calculated insight, or data graph in question. Confirm whether the rows you expect are present before you assume a modeling fault.[^2]
+
+3. To validate unification, open Profile Explorer and review a unified profile for a representative individual or account. Confirm the most recent ruleset run succeeded and that you are in the correct data space before you read the profile.[^3]
+
+4. To run ad hoc SQL, open Query Editor, create or open a workspace, select the object, and run a query. Remember that the workspace is scoped to a data space, so it can only reach that space's objects.[^6]
+
+5. To audit configuration changes, in Setup search View Setup Audit Trail, review the recent actions, and click Download setup audit trail for last six months to capture the full retained history.[^4][^5]
+
+6. For a CRM stream fed by an external org, download the connected org's audit trail and filter for deleted custom field actions around the error date, not the home org's.[^4]
+
+Try it: pick one object your team reports on, open Data Explorer, and confirm its row count against what the business expects. That single habit catches most data problems before they reach a dashboard.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, auditing only the home org. Changes to a connected CRM org's objects and fields are recorded in the connected org's audit trail, so when a stream from an external org fails after a schema change, check the source org too. The home org record will be complete and useless for that question.
+
+Second, trusting memory about who changed a permission. The Setup Audit Trail is the record of administrative and configuration changes, so it is the answer to who changed what and when. Do not answer that question from recollection, and do not point the reviewer at a surface that tracks something else.
+
+Third, looking in configuration for a data problem. Data Explorer and Profile Explorer reveal whether the issue is the data or the model before you change anything. Changing mappings, insights, or segments while the underlying rows are wrong moves the problem around without ever fixing it. Verify the data first, then change configuration only if the data is right.
+
+## The decision rules to carry out of this lesson
+
+When a report or a metric is wrong, ask three questions in order. Did the data arrive? Open the Data Stream Control Center and check stream status and the failed streams view for the affected source and day. Is the data correct once it landed? Open Data Explorer and confirm the rows and formulas in the DLO, DMO, or calculated insight. Is the unified view what the business expects? Open Profile Explorer and read a representative profile. Only after those three come back clean do you change configuration, and if you must change a permission or an integration, record who and when through the Setup Audit Trail. For an external source, extend the audit to the connected org, and export the audit trail on a six month cadence so the history survives past the 180 day window.
+
+## What's next
+
+Lesson 17 - Data Transform Types: Batch vs Streaming and When Each Applies (ing-1a). That lesson moves from diagnosing data to shaping it, and covers the two transform types, the latency and complexity trade-offs, and how to decide which one a scenario needs.
+
+[^1]: Salesforce Help, "Data Stream Control Center," (https://help.salesforce.com/s/articleView?id=mktg.dato_data_datastream_control_center.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Data Explorer," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_explorer.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Explore and Optimize," (https://help.salesforce.com/s/articleView?id=data.c360_a_explore_and_optimize.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Setup Audit Trail Control," (https://help.salesforce.com/s/articleView?id=xcloud.shr_set_up_audit_trail.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Monitor Setup Changes with Setup Audit Trail," (https://help.salesforce.com/s/articleView?id=xcloud.admin_monitorsetup.htm&language=en_US&type=5)
+[^6]: Salesforce Help, "Create Queries in Query Editor," (https://help.salesforce.com/s/articleView?id=data.c360_a_query_editor_create_queries.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Find Your Instance and Endpoint Information," (https://help.salesforce.com/s/articleView?id=data.c360_a_find_your_functional_domain.htm&language=en_US&type=5)
+[^8]: Salesforce Developers, "Cost and Usage," (https://developer.salesforce.com/docs/data/data-cloud-dev/guide/dc-cost-usage.html)
