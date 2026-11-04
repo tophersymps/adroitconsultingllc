@@ -1,0 +1,103 @@
+---
+title: "Lesson 10: Data Cloud Setup Home, Data Spaces, and Organization-Wide Settings"
+slug: day-10-sa-1b-data-cloud-setup-home-data-spaces-and-organization
+series: sf-data360-consultant
+lesson: 10
+excerpt: "Objective sa-1b in the Data 360 Setup and Administration domain (13% of the Salesforce Data 360 Consultant exam) asks you to configure Data 360 permissions, permission sets, and organization-wide settings. Lesson 10 covers provisioning, the Data Cloud Setup Home details you record for support, data space creation and its limits, and the Feature Manager."
+date: "November 3, 2026"
+author: "Adroit Consulting"
+readTime: "14 min read"
+tags: [Data 360, Data Cloud Setup, Data Spaces, Feature Manager]
+---
+
+# Lesson 10: Data Cloud Setup Home, Data Spaces, and Organization-Wide Settings
+
+A consultant onboards a second brand into an existing Data 360 org and starts building segments the same day. Two weeks later the two brands' profiles are blended together, an analyst in one region can see customers from a market she has no responsibility for, and the team is unpicking identity resolution after the fact. The modeling was not the problem. The org had one data space, nobody created a second one, and a single partition does exactly what a single partition does: it puts every brand, region, and department into one bucket.
+
+That failure is cheap to prevent and expensive to fix, which is why the exam tests the setup layer before it tests anything clever. This lesson covers objective sa-1b, part of the Data 360 Setup and Administration domain, worth 13% of the Salesforce Certified Data 360 Consultant exam. The objective asks you to configure Data 360 permissions, permission sets, and organization-wide settings, focused on provisioning, the Data Cloud Setup areas, data space creation and limits, and org-wide settings such as the Feature Manager. We walk through the Setup Home values you record for support cases, the provisioning sequence, the rules that govern data spaces, and the Feature Manager that turns features on.
+
+## Deep Dive
+
+### Data Cloud Setup is the admin console for Data 360
+
+Data Cloud Setup is the admin console for Data 360. You reach it from the Setup gear menu, or by searching for Data Cloud Setup in Salesforce Setup. Its navigation groups work into areas such as User Management, Feature Management, Salesforce Integrations, External Integrations, and Developer Tools. Knowing those areas by name matters on the exam, because questions describe a task and expect you to route it to the right area. User and permission work sits under User Management. Feature toggles sit under Feature Management. Connector and stream setup sits under the integration areas, split between Salesforce and external systems. Developer Tools is where the API-facing and diagnostic work lives.
+
+The Setup Home page is the first place to look after provisioning, because it shows four values you will need later. The Home Org Id identifies the org itself. The Home Org Instance names the instance. The Tenant Endpoint is the host your integrations, web SDKs, and mobile apps point at, and the tenant ID is the string before the first period of that endpoint, so an endpoint of `c360a.salesforce.com` carries a tenant id of `c360a`.[^1] The functional domain is the public cloud region hosting the tenant. That last value is the one support asks for when you open a case, in the same way an admin once supplied a Marketing Cloud MID. A consultant who records all four values on day one saves a scramble later, because a support case is exactly the moment you least want to be hunting through menus.
+
+It helps to know which of the four values feeds what downstream. The tenant endpoint is what you paste into a website beacon or a mobile SDK so that events can reach the tenant, and the tenant id embedded in it is what the integration configuration expects. The Home Org Id and Home Org Instance are identity values you quote in a case rather than wire into an integration. The functional domain is purely informational and diagnostic: it tells you which of Salesforce's public clouds the tenant sits on, which is the fact an incident report needs when one region is affected and another is not. None of the four is a secret key, and none of them is the same thing as an API credential, so record them in the runbook where a responder can find them quickly.
+
+### Provisioning turns Data 360 on
+
+Provisioning turns Data 360 on, and the first thing to know is that you often do not do it yourself. When the org auto provisions, setup completes on its own and an admin welcome email marks the moment. In Developer Edition and sandboxes, or when auto provisioning is unavailable, an admin has to do it by hand: open Data Cloud Setup, click Get Started, then wait for provisioning to finish before configuring anything.[^2] Setup can take a few minutes on a clean Developer Edition org and longer in busier orgs, so the practical rule is that provisioning is a wait rather than an instant toggle. If you try to build a data stream or create a data space while provisioning is still running, the menus simply are not there yet, and no amount of refreshing makes them appear.
+
+Provisioning errors are not silent. The Data Cloud Setup Home page surfaces the message and lets you retry, which is where you look first when an org that should be provisioned behaves as if it is not. A sandbox adds a wrinkle. It has to be licensed to match production before Data 360 will turn on inside it, and that license synchronization can take time, so an admin who opens Data Cloud Setup too early sees the menu unavailable rather than an error message. The sequence is provision production, match the sandbox licences, wait for the sync, then provision the sandbox. Skipping the sync step is the single most common reason a sandbox appears to have no Data 360 at all.
+
+Keep the welcome email and the Setup Home page together as your provisioning record. The email marks the moment the org was licensed for Data 360, and the Setup Home values tell you where the tenant actually lives. When a support case opens weeks later, those two facts are what the support engineer asks for first, and a consultant who filed them on day one spends the call fixing a problem rather than hunting for an id. There is nothing clever about this habit, and that is the point: the expensive part of an incident is the five minutes of archaeology it forces on whoever takes the ticket.
+
+### Every Data 360 org starts with one default data space
+
+Every Data 360 org starts with one default data space, and that single partition is the thing most teams outgrow. A data space is a logical partition that segregates data, metadata, and processes by brand, region, or department.[^3] Until you create others, all Data 360 objects map to the default space. That is why a single-brand pilot runs perfectly and a multi-brand rollout goes wrong: the pilot never needed a second partition, so nobody built one. The exam wants you to know the licensing edge here. The standard Data Cloud and Customer Data Platform licenses include only the default data space, and more require the Data Spaces add-on license. The standard license includes only the default data space, and more require the Data Spaces add-on. A data space is a partition inside one Data 360 instance, not a distinct tenant, so you do not solve the multi-brand problem by buying a second org or by assuming the platforms keeps them separate on its own.
+
+Data spaces are created under Feature Management in Data Cloud Setup. You open Feature Management, click Data Spaces, click New, and give the space a unique name that identifies its brand, region, or department, plus an optional description of its purpose.[^4] Everything downstream, the data lake objects, the data model objects, and the processes built on them, is then associated with that space. The space is the boundary, and the boundary has to exist before the data lands in it.
+
+A worked example makes the boundary concrete. A retailer runs one Data 360 instance for two banners and buys the Data Spaces add-on. Under Feature Management it creates a space named for the first banner with prefix BN1 and a second with prefix BN2. When it later maps the Individual data model object into both spaces, the objects become `BN1_Individual__dlm` and `BN2_Individual__dlm`, and each data lake object is associated with the space that should own it, with or without filters. Analysts assigned to the first banner's permission set see the first banner's profiles, and the second banner's team sees its own. One instance now behaves like two partitions, which is exactly the outcome the failed rollout in the opening was missing. The retailer did not need a second org, a second licence for a new instance, or a second identity resolution run; it needed one add-on and a decision about prefixes made before the first space was saved.
+
+### Data space prefixes are set once and cannot change after save
+
+Data space prefixes are set once and cannot change after save, because the prefix is baked into the API names of every object that lives in more than one data space. If the Individual data model object exists in a space with prefix DS1 and another with prefix DS2, the two objects are `DS1_Individual__dlm` and `DS2_Individual__dlm`.[^4] The prefix is what tells them apart. The prefix cannot be changed after save because it is part of object API names, so a prefix chosen badly is a rebuild, not a rename. That is the single most expensive small mistake in Data 360 administration, and it is entirely avoidable: plan the prefix before you click Save. A prefix starts with a letter and includes up to three alphanumeric characters, so `DS1` and `BR2` are valid shapes and a value that begins with a digit is not.
+
+A data space carries consequences beyond naming. Each space gets its own data space permission set. That permission set cannot be placed in a permission set group, and it does not count against the Data Cloud permission set license allotment, which is why you can hand out space-scoped access without consuming licences. A data space also cannot be deleted once objects depend on it, so the delete path closes as soon as the space is in use. Deleting and recreating a space to change its prefix therefore does not work, because objects already depend on the space and that dependency blocks deletion. You can change a space's name and description freely; the prefix is the locked part, and the lock is deliberate. The platform is protecting every downstream object, policy, and process that already references the prefixed API name.
+
+### The Feature Manager is where an admin enables and disables Data 360 features
+
+The Feature Manager is where an admin enables and disables Data 360 features. It appears only when there are features to turn on or off, so a missing Feature Manager usually means nothing is pending rather than something is broken.[^5] It also controls the optional left side navigation that replaces the older tab layout. Existing customers enable or disable the left side navigation from the Feature Manager in Data Cloud Setup, selecting Enable next to Data 360 Left Side Navigation, and users who had pinned tabs reset their navigation from the pencil icon on the navigation bar.[^6]
+
+Beta and AI connectors often must be enabled here before their connection type appears under External Integrations. That single fact explains the most common setup ticket in Data 360. A team cannot see a specific connector as a source option in the connection wizard, though other connectors work. The first thing the admin should check is whether the connector feature is enabled in the Feature Manager. The wizard content is governed by org feature enablement, not by the user's profile, profile permissions, data space prefix, or locale, so changing the profile changes nothing. When a connector is genuinely absent from the list and other connectors are fine, the feature was never turned on, and the fix lives in the Feature Manager, not in the user record.
+
+Try it in a Developer Edition org. Create one scratch data space with a prefix you are willing to keep, map a single data stream into it, and watch how the object API names pick up the prefix. Seeing `BN1_Individual__dlm`-style names appear where you expected a plain object name is the fastest way to internalize why the prefix is permanent. Then open the Feature Manager and confirm that it is empty when nothing is pending, so you recognize the empty state as normal rather than as a problem.
+
+### Data space aware features apply permissions only within the data spaces associated with a permission set
+
+Data space aware features apply permissions only within the data spaces associated with a permission set. By default, standard permission sets map to the default data space. To let a user work in another space, you associate their permission set with that space through the Data Cloud Data Space Management setting, where you edit Data Space Scopes and add the target data space.[^7] This is how one org runs several brands in a single Data 360 instance while keeping each team scoped to its own data, metadata, and processes. The model is layered on purpose: standard Data 360 permission sets grant role-based object permissions, and the space scoping restricts where those permissions bite. Assigning a data space through a permission set does not by itself grant access to data, and row-level filtering is a separate job handled by access policies rather than by the space. The space decides which objects a user can reach; the policy decides which rows and fields they see inside them.
+
+The distinction between the two layers trips people up in practice. A new analyst is assigned a standard Data 360 permission set, so they can reach the objects that permission set covers in the default data space. Move that person to a second brand and the object permissions do not follow unless the permission set is scoped to the second space as well. Data space aware features are exactly the ones that respect this scoping, so the space-scoped permission set is the mechanism that keeps a brand team inside its own data. Get the scoping wrong in one direction and a user sees nothing; get it wrong in the other and a user reaches objects they were never meant to open. Test with a real user in each space before you declare the rollout done.
+
+### Configuration walkthrough
+
+Five steps take an admin from an unprovisioned org to a scoped, multi-space setup.
+
+1. From the Setup gear, select Data Cloud Setup, then open Setup Home to record the Home Org Id, Home Org Instance, Tenant Endpoint, and functional domain. Keep those four values in the runbook you hand to support.
+
+2. If Data 360 is not yet provisioned, click Get Started in Set Up Data Cloud and wait for provisioning to complete before continuing. Do not start building data streams while the state is still provisioning.
+
+3. Under Feature Management, click Data Spaces, then New. Enter a unique name and a prefix of up to three alphanumeric characters starting with a letter, add an optional description, and Save. Confirm the prefix is right before you save, because it is permanent.
+
+4. Under Feature Management, open Feature Manager to enable or disable individual Data 360 features and to toggle the left side navigation. If a connector is missing from the connection wizard, enable it here first.
+
+5. To scope a user to a data space, open the permission set, go to Data Cloud Data Space Management, edit Data Space Scopes, and add the target data space. Remember the default mapping: a standard permission set points at the default space until you change it.
+
+## Exam Traps
+
+Three traps dominate this objective.
+
+First, assuming you can add data spaces freely. The standard Data Cloud and Customer Data Platform licenses include only the default data space, and more require the Data Spaces add-on license. A consultant who promises a brand its own space and then discovers the add-on was never purchased has promised a feature that cannot be turned on. Confirm the licence before you promise the partition, and remember that a data space is a partition inside one instance rather than a separate org. The distractor that says each brand is a separate org is wrong for exactly this reason: a data space lives inside a single Data 360 instance, so the partition is logical, not a second tenant.
+
+Second, expecting to edit a data space prefix later. The prefix cannot be changed after save because it is part of object API names, and the tempting workaround of deleting and recreating the space is blocked once objects depend on it. A wrong prefix is a rebuild, so the time to get it right is the thirty seconds before Save, not the day after go-live. The delete-and-recreate distractor is the strongest wrong answer here, and it fails because dependent objects refuse the delete.
+
+Third, expecting a new connector to appear in the connection wizard before its feature is enabled. Beta and AI connectors must be turned on in the Feature Manager first, so the first thing to check is whether the connector feature is enabled in the Feature Manager, not the user's profile or locale. The wizard reflects org feature enablement, and an admin who chases the user record is fixing the wrong layer. The profile distractor is strong because profile changes usually do affect access, but the connector list is governed by feature enablement, not by who is logged in.
+
+## What a consultant should walk away with
+
+Route tasks to the right Data Cloud Setup area. Treat provisioning as a wait, and check the Setup Home page first when something looks unprovisioned. Confirm the licence before promising a second data space. Plan the prefix before you save, because it is permanent and it becomes part of object API names. Check the Feature Manager before blaming the user's profile when a connector is missing. And remember that scoping a permission set to a space decides which objects a user can reach, while access policies decide which rows and fields they see inside those objects. Do those five things in order and the multi-brand rollout that went wrong in the opening simply does not happen.
+
+## What's next
+
+Lesson 11 - Data Governance Basics: Tags, Classifications, and Metadata (sa-2a). With a provisioned org and at least one data space in place, the next question is how to describe the data so that policy can act on it. Lesson 11 covers tags, classifications, and the metadata layer that lets governance scale past hand-edited permissions.
+
+[^1]: Salesforce Help, "Find Your Instance and Endpoint Information," (https://help.salesforce.com/s/articleView?id=data.c360_a_find_your_functional_domain.htm&type=5)
+[^2]: Salesforce Help, "Set Up and Turn On Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_setup_provision.htm&type=5)
+[^3]: Salesforce Help, "About Data Spaces," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_spaces.htm&type=5)
+[^4]: Salesforce Help, "Create a Data Space," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_spaces_create.htm&type=5)
+[^5]: Salesforce Help, "Enable Data 360 Features," (https://help.salesforce.com/s/articleView?id=data.c360_a_feature_manager.htm&type=5)
+[^6]: Salesforce Help, "Simplify Your Navigation with the Updated Data 360 Menu," (https://help.salesforce.com/s/articleView?id=release-notes.rn_cdp_2026_winter_nav_resources.htm&language=en_US&release=264&type=5)
+[^7]: Salesforce Help, "Manage Feature Access Across Multiple Data Spaces," (https://help.salesforce.com/s/articleView?id=data.c360_a_manage_multiple_data_spaces.htm&type=5)
