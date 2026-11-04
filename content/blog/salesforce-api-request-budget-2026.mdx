@@ -1,0 +1,83 @@
+---
+title: "Forty Thousand Calls to Move Four Thousand Records"
+slug: salesforce-api-request-budget-2026
+excerpt: "The Salesforce API allocation is one budget the whole org shares, counted in calls. Batching requests is the lever, and most integrations never reach for it."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "November 04, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [Salesforce, API, Integrations, Performance, Architecture]
+bannerImage: "/banners/salesforce-api-request-budget-2026.webp"
+ogImage: "/banners/salesforce-api-request-budget-2026-og.jpg"
+---
+
+A nightly integration moves four thousand opportunities and spends four thousand calls doing it. It has run for a year without incident. It will keep running right up until two other integrations have a busy day in the same twenty-four-hour window, and then every API consumer the org has stops at once, including the monitoring that would have told you why.
+
+That ceiling is not a rate limit on one client. Salesforce allocates API calls to the org, per rolling day, and every authenticated caller draws from the same pot: the nightly job, the middleware, a partner's app, and the managed packages somebody installed two years ago. One integration can spend the allocation another one needed, and neither codebase says so.
+
+## The limit is counted in calls, and the org shares it
+
+An Enterprise Edition org gets a base allocation of 100,000 calls per twenty-four hours, plus 1,000 for every Salesforce user license. Fifteen licenses put the ceiling at 115,000 calls. Developer Edition gets 15,000, and a Full Sandbox gets five million, which is why the limit almost never bites until a workload reaches production.[^1]
+
+What counts is wider than most teams assume. The Lightning Platform REST and SOAP APIs count, Bulk API and Bulk API 2.0 count, and most Connect REST APIs count. Calls Salesforce itself issues from certain connected apps, the mobile app being the usual example, do not. Calls made from an installed managed package do count, so a vendor's polling loop is spending your allocation, and that package is not on your architecture diagram.[^1]
+
+![One allocation, every consumer, one 24-hour window: an Enterprise Edition org's ceiling is 100,000 base calls plus 1,000 per license, which is 115,000 calls for the whole org, served normally within entitlement, still served past the line for paid orgs, and refused at the hard cap, while four ordinary consumers such as a nightly record sync, a middleware polling loop, an installed managed package and CI tooling all draw from that single pot, where only the nightly sync's spend is knowable because 4,000 records at one call each is arithmetic](</diagrams/salesforce-api-request-budget-2026/1-one-budget.png>)
+
+The platform grades that ceiling in two stages. When an org crosses its entitlement, Salesforce keeps serving requests for a while, so an unexpected spike does not break a working integration. A hard cap sits behind that informal allowance to protect the instance, and the spillway applies only to paid orgs in active status, so trial and developer orgs stop at the line.[^1] The first symptom is therefore not an error, it is a slower day, and the outage arrives once the allowance is gone.
+
+A second limit fires first in a different situation. Any inbound request running twenty seconds or longer counts against a concurrency limit of 25 for a production org or sandbox, and past that the API returns `REQUEST_LIMIT_EXCEEDED` and refuses new requests until the long ones finish.[^1] An integration that opens 30 slow queries at once can lock the org out of its own API without spending a meaningful share of the daily allocation, which is a [query-shape problem](/field-notes/salesforce-ldv-query-performance-2026) wearing a capacity costume.
+
+## Fan-out is what drains it
+
+One call per record is the shape of nearly every SDK example, because an example runs against one record. Point that loop at a real data set and the number of records becomes the number of calls, one for one: 4,000 opportunities, 4,000 calls, roughly 3.5 percent of the org's day spent on a job that finished in minutes. Add an hourly sync, a data-quality sweep and a middleware retry policy, and the allocation is gone before the business day starts.
+
+Three properties make fan-out hard to catch. It fails late, because the spillway absorbs the first overage. It is unattributed, because Setup reports what the org spent and never who spent it. And the largest consumers are the ones nobody owns, because a managed package's polling loop does not show up in a code review.
+
+Then there is the retry multiplier. A 4,000-record load that retries once per record on a transient 503 is 8,000 calls on the bad night, which is exactly the night the budget was tight. Retrying is the right instinct and it belongs in a deliberate [recovery layer](/field-notes/salesforce-error-recovery-2026); retrying per record, inside a loop that should have been batched, turns a blip into an outage.
+
+The fix is not more calls. It is asking the API to carry more than one record per request, because the allocation does not count records.
+
+## Batching changes the arithmetic
+
+Four request shapes carry many records, and each one counts as a single call against the allocation.
+
+![The same 4,000-record load across four request shapes: one call per record costs 4,000 calls, sObject Collections at 200 records per call costs 20, Composite Graph at up to 500 nodes costs 8, and five collection subrequests inside one Composite call costs 4, a thousand-fold reduction for identical work](</diagrams/salesforce-api-request-budget-2026/2-cost-of-shape.png>)
+
+sObject Collections is the smallest change with the largest effect. A single POST carries up to 200 records, of one object type or several, and the whole request counts as one call.[^8][^9] The 4,000-record loop becomes 20 calls.
+
+Composite sequences up to 25 subrequests into one call, and as many as five of those can be sObject Collections or query operations, with the output of one feeding the next by reference id.[^3][^4] Five collection subrequests of 200 records is 1,000 records in a single call, so the same load costs four. Composite Graph does not beat that on raw count: it raises the ceiling to 500 nodes per payload, and its real value is atomicity, because each graph is implicitly all-or-none, so a set of related writes either commits or rolls back together.[^5][^6][^7]
+
+![Which request shape to use, in decision order: a load over 2,000 records goes to Bulk API 2.0, related writes that must commit or roll back together go to Composite Graph, chaining one subrequest's result into another goes to Composite, and everything else goes to sObject Collections](</diagrams/salesforce-api-request-budget-2026/3-shape-decision.png>)
+
+Above roughly 2,000 records, stop batching and go asynchronous. Salesforce's own guidance is that a data operation over 2,000 records belongs in Bulk API 2.0, and anything smaller belongs in bulkified synchronous calls, which is the composite family.[^2] Bulk carries a separate allocation of 15,000 batches per rolling day, covering up to 150 million records.[^2]
+
+Two details separate a working composite from a confusing one. The ten-minute REST timeout applies to the entire composite request rather than to each subrequest, so a composite that looks comfortable per call can still time out as a whole.[^1] And a composite that returns success overall can carry a failed subrequest, which is why Winter '27 added the `CompositeApi` and `CompositeApiSubrequest` event types to `EventLogFile`, making the request and each subrequest outcome separately queryable.[^11]
+
+## Meter it before you optimize it
+
+The allocation is readable from several surfaces, and each one answers a different question. [^10]
+
+![Six places the API meter is readable and the question each answers: Setup's System Overview API Usage shows the last 24 hours, the Company Information entitlement shows the thirty-day trend, the Sforce-Limit-Info header reports what is left from inside the client, the limits REST resource returns the same number programmatically, API Usage Notifications emails an owner at a chosen percentage, and EventLogFile says which integration spent the calls](</diagrams/salesforce-api-request-budget-2026/4-where-to-read-the-meter.png>)
+
+Setup's System Overview page reports what the org spent in the last twenty-four hours, and Company Information aggregates the same figure across thirty days, which shows a trend rather than a bad afternoon. On the client side, the `Sforce-Limit-Info` response header on any REST call reports how much is left, which costs nothing to log, and the `/limits` resource returns it programmatically for a dashboard.[^1][^10]
+
+Two controls carry the ongoing work. API Usage Notifications emails a nominated user when usage crosses a percentage you pick, and it is the only alert on the list that fires before the ceiling does.[^1] Event Monitoring records what the platform served, and that converts an org-level number into attribution, including the composite subrequests a success status would otherwise hide.[^11]
+
+Then run the allocation like a budget with owners: decide how many calls each integration may spend per day, read the header or the event log, and give the overage to whoever owns the consumer that caused it. Cutting the largest fan-out in an org is usually one afternoon's work with sObject Collections, and it buys headroom for the next integration before anyone has to buy more calls. The org-wide figure in Setup is a smoke alarm: it tells you the building is warm, not which room.
+
+The limit is not really about volume. It is about the shape of the requests, decided by whoever wrote the integration, usually by adapting an example that ran against one record. A request carrying 200 records and a request carrying one are the same request as far as the allocation is concerned, and that gap is the entire lever.
+
+[^1]: Salesforce, "API Request Limits and Allocations," Developer Limits and Allocations Quick Reference, allocation by edition and license type, the 24-hour aggregate, concurrent request and timeout limits, the monitoring surfaces and over-limit behaviour, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-api.html)
+[^2]: Salesforce, "Bulk API and Bulk API 2.0 Limits and Allocations," the 2,000-record synchronous and asynchronous crossover, 15,000 batches per rolling 24 hours and 150 million records, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-bulkapi.html)
+[^3]: Salesforce, "Composite," REST API Developer Guide, a series of REST API requests in one POST and the entire series counting as a single call toward API limits, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-composite.html)
+[^4]: Salesforce, "Send Multiple Requests Using Composite," REST API Developer Guide, up to 25 subrequests, five of them sObject Collections or query operations, and reference-id chaining, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-composite-post.html)
+[^5]: Salesforce, "Composite Graph," REST API Developer Guide, available in REST API version 50.0 and later, with the entire request counting as a single call toward API limits, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-graph.html)
+[^6]: Salesforce, "Composite Graph Limits," REST API Developer Guide, 75 graphs per payload, depth of 15, 500 nodes per graph and per payload, and processing halted after 14 graph failures, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-graph-limits.html)
+[^7]: Salesforce, "Using Composite Graphs," REST API Developer Guide, allOrNone implicit on every graph, the independence rules and the guidance to keep graphs small, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-graph-introduction.html)
+[^8]: Salesforce, "sObject Collections," REST API Developer Guide, actions on multiple records in one request and the entire request counting as a single call toward API limits, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-sobjects-collections.html)
+[^9]: Salesforce, "Create Records Using sObject Collections," REST API Developer Guide, up to 200 objects including objects of different types, and the rollback option, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-composite-sobjects-collections-create.html)
+[^10]: Salesforce, "Limits," REST API Developer Guide, the limits resource reporting the org's current API usage programmatically, [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-rest/guide/resources-limits.html)
+[^11]: Mohith Shrivastava, "The Salesforce Developer's Guide to the Winter '27 Release," Salesforce Developers Blog, 5 October 2026, the CompositeApi and CompositeApiSubrequest event types on EventLogFile, [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/10/developers-guide-to-the-winter-27-release)

@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-api-request-budget-2026",
+    "title": "Forty Thousand Calls to Move Four Thousand Records",
+    "excerpt": "The Salesforce API allocation is one budget the whole org shares, counted in calls. Batching requests is the lever, and most integrations never reach for it.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "November 04, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "API",
+      "Integrations",
+      "Performance",
+      "Architecture"
+    ],
+    "bannerImage": "/banners/salesforce-api-request-budget-2026.webp",
+    "ogImage": "/banners/salesforce-api-request-budget-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "nextjs-bundle-import-graph-2026",
     "title": "The Import Graph Decides What Your Next.js Bundle Ships",
     "excerpt": "Next.js 16.4 gives you and your agent a queryable view of the module graph. A deferred component still ships if one other module imports it.",
