@@ -1,0 +1,77 @@
+---
+title: "Your Agents Will Outgrow Your Source Control"
+slug: agents-outgrow-source-control-2026
+excerpt: "Commits in OpenAI's monorepo grew 1,378% under Codex and push reliability fell below 90%. Source control is the first shared system agents outgrow."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 05, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [AI Infrastructure, Agentic AI, Git, CI/CD, Platform Engineering, Developer Productivity]
+bannerImage: /banners/agents-outgrow-source-control-2026.webp
+ogImage: /banners/agents-outgrow-source-control-2026-og.jpg
+---
+
+On November 2, OpenAI published the engineering account of a rewrite most teams would defer indefinitely. Commits landing on master in its monorepo have grown 1,378% since the first quarter of 2024, and the company estimates 2,442% growth by the end of 2026. Under that load its source control system spent part of last year serving slow fetches, slow pushes and failed merges, with reliability at times below 90%.[^1]
+
+The replacement backend, Pando, keeps the Git protocol and client intact and took ten weeks from kickoff to production.[^1] The rebuild is not the lesson. The lesson is which two things a Git server is normally required to do, and which of them OpenAI stopped doing. Those assumptions sit in every self-hosted Git host, CI cache and review bot your agents are about to lean on.
+
+## The write rate moved first
+
+Source control does not fail like a service: there is no stack trace and no error page. Push latency drifts, a fetch that took two seconds takes nine, a merge fails once and then again, and every dashboard watching application uptime stays green because the bottleneck sits on the developer path.
+
+Agents change the volume in two places at once. They add writers, and they multiply readers. OpenAI's own sentence contains the mechanism. One engineer now has several changes ready for CI at the same time, and each push can set several jobs fetching the same commit.[^1] Commit count is the number teams instrument. Fetch count is the number that decides whether the host holds.
+
+GitHub's platform telemetry shows the same shape at a scale nobody has to be OpenAI to reach. Across the twelve months ending September 30, developers pushed 17.9 billion times, more than 2024 and 2025 combined, and commits reached 34.3 billion.[^2] The third series matters most. GitHub Actions ran 45.4 billion jobs in that window, up from 8.0 billion two years earlier: pushes grew 3.4 times and the jobs they trigger grew 5.7 times.[^2] Readers are multiplying faster than writers, which is the wrong direction for a system built around one canonical copy of history.
+
+More than 40% of pull requests in September started with an agent's first draft, up from 17% in March, and new repositories carrying an agent configuration file averaged eight times the commits of new repositories without one.[^2] Google Cloud's survey of more than 1,400 senior IT leaders found 83% saying their infrastructure needs upgrades for production-grade agentic systems.[^3] The number worth putting on a dashboard this week is readers per push.
+
+![One agent change becomes one push, each push can set several CI jobs fetching the same commit, and each job pulls its own copy](</diagrams/agents-outgrow-source-control-2026/1-readers-per-push.png>)
+
+## Two assumptions worth giving up
+
+Pando starts from a list of things Git serving systems treat as requirements, then deletes two of them.[^1]
+
+The first is a consistent, point-in-time view of every reference, which requires coordination across the whole repository. OpenAI modeled the two conventional ways to get it. One is three-phase commit across full replicas, where a majority of replicas must accept each ref update over multiple round trips. The other is an object-store write-ahead log, where every push updates a single shared manifest through compare-and-swap. Both put a shared coordination point on the push path, so replica disk speed, or one manifest round trip, sets your push latency however much storage you add.[^1]
+
+Pando keeps serializability only where it is needed, on a single ref. A push stores its packfile as an immutable blob, and each time the branch moves Pando records a ref version naming the new tip, the pack that produced it, and the earlier ref versions it depends on. The only contended key is the ref pointer, guarded by an atomic compare-and-swap, so a push costs O(1) metadata reads and writes whatever its size, and a fetch costs O(log Δ) reads, where Δ is how far behind the client is in ref versions.[^1] The price is stated plainly: a client reading several branches cannot assume those reads describe one point in time, and during a full clone two clients can observe the same two branches in opposite orders.[^1] Work that depends on the order of updates to one branch sees no difference. Tooling that joins many refs into one report sees a contract change.
+
+The second assumption is that the server should compute a custom answer for every reader. A conventional Git server takes the client's haves and wants, computes the difference, compresses it and sends a one-off packfile, work that is expensive and resistant to caching. Pando serves the same bytes to many clients instead, answering a fetch with URIs to stored packs it selected from what the client already has. Returning packs by reference has been in the Git protocol since version 2, where the client declares it accepts URIs in place of objects and downloads each one before the connectivity check.[^4] The read side is where the numbers get useful: over 99% of pack bytes come from local disk cache, a petabyte a day is delivered by a handful of CPU cores, and clone and fetch operations saturate 10 Gbps links on ordinary cloud virtual machines.[^1]
+
+![Two assumptions and their replacements: coordinating every ref update gives way to causal consistency with only the ref pointer contended, and a packfile per client gives way to reused immutable packs](</diagrams/agents-outgrow-source-control-2026/2-assumptions-replaced.png>)
+
+## What the tradeoffs cost
+
+Advertising only a trunk branch by default is what keeps packs reusable, and it has a known cost. Push to one branch many times, or stack one feature branch on another, and the client resends everything outside trunk.[^1] In OpenAI's monorepo the median packfile came out under 20 KiB and the 99th percentile under 3 MiB, which they call a sensible trade because a single pack then lets any reader with trunk history fetch the branch.[^1] A heavier repository gets bigger packs from the same choice, so size your runners for it.
+
+The ref advertisement is its own trap. Serving a consistent view of every ref is expensive: with millions of branches the advertisement alone can exceed 100 MiB, and every negotiation pays it.[^1] Fast repositories also need compaction or fetch planning collapses, because catching up trunk after a day would otherwise mean downloading tens of thousands of individual packfiles. Pando groups pushed packs into covers that scale geometrically, up to four levels in production today, and the covers double as a skip list so planning stays logarithmic in how far behind a client is.[^1]
+
+One idea sits underneath all of it: separate the immutable artifact from the mutable pointer. Artifacts are large, content-addressed, cacheable and cheap to serve to many readers at once. Pointers are tiny, transactional, and the only thing that has to be exactly right. Most Git hosting couples the two, which is why a push and a clone end up competing for the same disk.
+
+![The two paths and where their cost lands: a push streams its pack to blob storage, validates it in one pass and commits one metadata transaction, while a fetch resolves haves and wants to stored packs and lets clients fetch them in parallel from regional cache](</diagrams/agents-outgrow-source-control-2026/3-push-and-fetch-paths.png>)
+
+## What to do before you need this
+
+Few teams will rebuild Git. The useful work is measurement first, then the cheapest lever.
+
+Measure three things on your own host: pushes per day per repository, fetches per push counting the CI jobs that fetch the same commit, and p95 push latency beside host error and retry rates. If one push routinely draws more than three separate fetches, you are running an architecture that assumes one reader per write.
+
+Then find your shared coordination point: whatever serializes writers who have nothing to do with each other. That might be one [merge queue](/field-notes/merge-queue-trunk-based-2026), one lock, one review bot or one platform quota. Adroit's own delivery pipeline hit a shared write ceiling, and the fix was not more capacity but fewer writes. Batching changes into waves, and decoupling documentation-only edits from rebuilds, took deploy volume from over a hundred a day to about six. That lever exists in almost every pipeline and is usually cheaper than the infrastructure the queue seems to be asking for. The same arithmetic applies to a [shared CI cache](/field-notes/ci-cache-infrastructure-2026), which is a coordination point wearing the costume of an optimization.
+
+Three rules transfer to anything you build on this path. Content-address your artifacts and cache them, because immutable bytes are the only thing you can hand to many readers for free. Keep the pointer small and transactional, so writes serialize on the smallest possible object. And pick consistency per object rather than per system, so a read across branches may be approximate while a write to one branch stays exactly ordered. For the migration itself, copy the shape of the rollout: run the new backend as a read/write-through proxy beside the old one, deduplicate and combine requests before proxying so the old system stays healthy, then move workloads one at a time and clients in phases until the integrations follow. That is how a critical backend is replaced without a flag day.[^1]
+
+One last detail is worth stealing: the conformance suite came before the performance work, because agents wrote much of the implementation and had to check their changes against standard Git behaviour. If agents are writing the replacement, the test suite is the specification.
+
+Start with readers per push. If that number is climbing, the queue is already on the calendar, and the only question left is whether you measure it before it pages you.
+
+![Replacing a critical backend without a flag day: proxy the new system beside the old one, deduplicate requests to protect it, move workloads one at a time as the cache warms, then ship clients in phases](</diagrams/agents-outgrow-source-control-2026/4-migration-shape.png>)
+
+[^1]: Aaron Friel, Taylor Blau and Ted Nyman, "Scaling Git at OpenAI," OpenAI Engineering, 2 November 2026. Commit growth, sub-90% reliability, the ten-week build, causal consistency, the O(1) and O(log) costs, cache and bandwidth figures, packfile sizes, compaction levels, the migration pattern, the conformance suite. [openai.com](https://openai.com/index/scaling-git-at-openai/)
+
+[^2]: GitHub, "Octoverse: Commits, pushes, reach new highs in 2026 as developers build with agents," 28 October 2026. Twelve months to September 30: 17.9 billion pushes, 34.3 billion commits, 45.4 billion Actions jobs, over 40% of September pull requests agent-started. [github.blog](https://github.blog/news-insights/octoverse/octoverse-commits-pushes-reach-new-highs-in-2026-as-developers-build-with-agents/)
+
+[^3]: Google Cloud, "State of AI infrastructure report overview," 7 July 2026. Survey of more than 1,400 senior IT leaders; 83% of organizations require infrastructure upgrades for production-grade agentic AI. [cloud.google.com](https://cloud.google.com/blog/products/compute/state-of-ai-infrastructure-report-overview)
+
+[^4]: Git project, "Git Wire Protocol, Version 2," Documentation/gitprotocol-v2.adoc. The packfile-uris capability and the client declaration that it accepts URIs in place of objects. [github.com](https://github.com/git/git/blob/master/Documentation/gitprotocol-v2.adoc)

@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "agents-outgrow-source-control-2026",
+    "title": "Your Agents Will Outgrow Your Source Control",
+    "excerpt": "Commits in OpenAI's monorepo grew 1,378% under Codex and push reliability fell below 90%. Source control is the first shared system agents outgrow.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 05, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Agentic AI",
+      "Git",
+      "CI/CD",
+      "Platform Engineering",
+      "Developer Productivity"
+    ],
+    "bannerImage": "/banners/agents-outgrow-source-control-2026.webp",
+    "ogImage": "/banners/agents-outgrow-source-control-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-api-request-budget-2026",
     "title": "Forty Thousand Calls to Move Four Thousand Records",
     "excerpt": "The Salesforce API allocation is one budget the whole org shares, counted in calls. Batching requests is the lever, and most integrations never reach for it.",
