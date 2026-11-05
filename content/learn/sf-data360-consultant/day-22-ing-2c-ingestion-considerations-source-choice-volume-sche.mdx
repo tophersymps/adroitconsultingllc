@@ -30,6 +30,8 @@ The use case also decides the connector family, not just the pattern. For Salesf
 
 The trap is choosing by habit. A consultant who has just built a streaming ingest reaches for streaming again for a weekly forty million row file, then wonders why the pipeline fights them. The bulk pattern exists for exactly that load. Lesson 20 covered connectors and data streams, and lesson 21 covered categories and refresh modes; this lesson sits one level above both and asks which path the use case should take.
 
+![Ingestion path selection: the shape of the movement picks the pattern, bulk for large periodic loads and streaming for near real time micro-batches, while the requirement picks the connector family, a CRM data stream or data bundle, a file connector, the Ingestion API, or a federated source. One connector can serve both patterns.](</diagrams/day-22-ing-2c-ingestion-considerations-source-choice-volume-sche/1-path-choice.png>)
+
 ### Volume and cadence matter
 
 Volume and cadence matter, and they are separate dials. The multiple ingest patterns of the Ingestion API let the same data stream accept large periodic loads and near real time micro batches, so you do not need to stand up a second stream just to take a weekly file alongside live events. The bulk pattern of the Ingestion API is the one built for that periodic CSV load, while the streaming pattern carries the incremental updates; one stream can serve both. An exam scenario that asks how to handle both a backfill and live updates in one dataset is pointing at one stream with both patterns rather than two.
@@ -39,6 +41,8 @@ Cadence is the other dial, and it is a business question before it is a technica
 The available schedules are not infinite. A data stream schedule supports hourly, daily at a chosen hour, weekly on a chosen day and time, and monthly on a chosen day and time, with all times in UTC, while object store connectors add five, fifteen, and thirty minute intervals for sources that can keep up.[^2] That menu sets the ceiling on freshness for a scheduled pull: if the business needs seconds, no schedule will deliver it, and the answer is a streaming or event driven path instead.
 
 For genuinely large or slowly changing external datasets, there is a third option that sidesteps the volume problem: data federation with caching lets Data 360 query the data where it lives and hold only a cache, rather than duplicating the whole table into Data 360. The trade is the same one that governs cadence. If refreshing more often than the source changes buys nothing, then federating a slow moving multi-terabyte table can save more than it costs. Weigh volume and cadence together and let the business freshness requirement break the tie.
+
+![One data stream takes both ingest patterns: the bulk pattern feeds CSV files on a daily, weekly or monthly schedule, and the streaming pattern feeds incremental updates as changes are captured. The available schedules are hourly, daily, weekly and monthly, all in UTC, with five, fifteen and thirty minute intervals added by object store connectors.](</diagrams/day-22-ing-2c-ingestion-considerations-source-choice-volume-sche/2-volume-cadence.png>)
 
 ### Schema drift is the most common silent cause of failure
 
@@ -50,6 +54,8 @@ After any source schema change, reopen the data stream and confirm the columns a
 
 Treat schema drift as a standing risk, not a one time event. Sources evolve. A column rename that ships quietly in a source release, a data type that changes when a source team migrates a table, a required field that becomes optional: each one can push a healthy stream into a failing one. The operational habit that absorbs all of it is the same. After every source release that touches a streamed object, reopen the stream and confirm the columns and the DLO to DMO mappings before you trust the next run.
 
+![Schema drift as a failure chain: a source release adds, renames or retypes a column, the stream keeps running on its schedule, the data lake object to data model object mapping breaks because the field data types must be compatible, and the refresh fails every night until someone reopens the stream and corrects the mapping.](</diagrams/day-22-ing-2c-ingestion-considerations-source-choice-volume-sche/3-schema-drift.png>)
+
 ### Refresh History and Refresh Now
 
 Diagnosis starts on the data stream record page. The Refresh History tab summarizes the stream's recent refresh operations, including the errors that occurred, and shows fields such as refresh date, refresh mode, duration, status, records processed, records added, records removed, and problem records.[^3] Read the fields in that order. A run that ingested zero records but reports success is a different problem from a run that failed outright, and a run with a high problem record count is a data quality problem rather than a connectivity one. A status of success with zero records added usually means nothing changed at the source, not that the stream is idle.
@@ -57,6 +63,8 @@ Diagnosis starts on the data stream record page. The Refresh History tab summari
 When you have fixed a cause, Refresh Now reruns the data stream on demand from the Data Streams tab. The exam wants you to understand that Refresh Now is a rerun, not a repair. A run that failed because of schema drift or a mapping mismatch will fail again until the cause is fixed, so the sequence is always diagnose, fix, then rerun.
 
 For the Ingestion API connector there is a documented connector status page a developer or admin can check to confirm the connector is healthy. The connector app status reports Schema Required, which means a schema file is still needed and the app is effectively inactive; Needs Data Stream, which means a schema exists but no data stream has been created yet; and In Use, which means at least one data stream exists and the connector is ready to receive events.[^5] Treat repeated failures on the same stream as a signal to inspect the source data and the mapping rather than to keep pressing Refresh Now, because the second and third failure add nothing that the first one did not already tell you.
+
+![Diagnosis from Refresh History: the tab reports refresh date, refresh mode, duration, status, records processed, records added, records removed and problem records. Success with zero records added means nothing changed at the source, a failed status points at credentials, permissions, schema drift or a network route, and a high problem record count is a data quality problem rather than a connectivity one.](</diagrams/day-22-ing-2c-ingestion-considerations-source-choice-volume-sche/4-refresh-history.png>)
 
 ### Deletes and retries have their own expectations
 
@@ -67,6 +75,8 @@ File based and API data streams delete differently. A file based stream deletes 
 Retries deserve their own rule too, and the rule is counterintuitive until you have seen it. Because incremental refresh reprocesses a few of the most recent rows from the previous run to guard against a gap at the boundary, seeing a small number of records processed again is normal. Read the reprocessing as expected behavior, because the last few records from the previous run are reprocessed to prevent data loss, not as corruption or a duplicate key failure that needs cleanup.[^2] The exam offers corruption and duplicate-key distractors here and expects you to reject both.
 
 The boundary detail is worth holding onto. An incremental update extracts changes from the start time of the prior extraction to the current time, and the small overlap at that boundary is deliberate insurance against a record that was committed at the edge of the window. The overlap is why the same record can appear in two consecutive runs and still be correct. Nothing about it signals damage, and nothing about it calls for a full refresh. A full refresh is a different tool for a different problem.
+
+![Three delete mechanisms in Data 360: an incremental stream relies on a Delete Record Flag that the source sets before the next update run, a file based stream needs a delete file with a Deletion_ prefix and an upsert refresh mode, and the Ingestion API takes a delete operation on both the bulk and streaming patterns, processed asynchronously.](</diagrams/day-22-ing-2c-ingestion-considerations-source-choice-volume-sche/5-deletes.png>)
 
 ### Environment and ownership considerations round out the picture
 
