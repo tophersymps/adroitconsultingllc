@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "state-of-the-stack-november-2026",
+    "title": "State of the Stack, November 2026: The Meter Arrived",
+    "excerpt": "Salesforce started registering agents and metering their calls, Kubernetes charted a spec for workload behavior, and the mid-tier models halved in price.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 06, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Architecture",
+      "AI Agents",
+      "Salesforce",
+      "DevOps",
+      "Design Systems",
+      "Project Management",
+      "Next.js"
+    ],
+    "bannerImage": "/banners/state-of-the-stack-november-2026.webp",
+    "ogImage": "/banners/state-of-the-stack-november-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "agents-outgrow-source-control-2026",
     "title": "Your Agents Will Outgrow Your Source Control",
     "excerpt": "Commits in OpenAI's monorepo grew 1,378% under Codex and push reliability fell below 90%. Source control is the first shared system agents outgrow.",
