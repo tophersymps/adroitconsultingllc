@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "component-state-contract-2026",
+    "title": "One Loading Flag Cannot Describe Four Kinds of Waiting",
+    "excerpt": "A loading boolean cannot tell an initial load from a refresh, a pending save, or an optimistic update. The state contract that can, and what each state owes.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "November 9, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Design Systems",
+      "Interface Patterns",
+      "Design Engineering",
+      "Accessibility",
+      "React"
+    ],
+    "bannerImage": "/banners/component-state-contract-2026.webp",
+    "ogImage": "/banners/component-state-contract-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "state-of-the-stack-november-2026",
     "title": "State of the Stack, November 2026: The Meter Arrived",
     "excerpt": "Salesforce started registering agents and metering their calls, Kubernetes charted a spec for workload behavior, and the mid-tier models halved in price.",
