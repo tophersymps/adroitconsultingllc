@@ -39,6 +39,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "async-batch-inference-2026", voice: "af_heart", storagePath: "blog/async-batch-inference-2026/af_heart.mp3", timingsStoragePath: "blog/async-batch-inference-2026/af_heart.timing.json" },
   { slug: "backlog-refinement-story-slicing-2026", voice: "af_heart", storagePath: "blog/backlog-refinement-story-slicing-2026/af_heart.mp3", timingsStoragePath: "blog/backlog-refinement-story-slicing-2026/af_heart.timing.json" },
   { slug: "backup-restore-validation-2026", voice: "af_heart", storagePath: "blog/backup-restore-validation-2026/af_heart.mp3", timingsStoragePath: "blog/backup-restore-validation-2026/af_heart.timing.json" },
+  { slug: "benefits-realization-consulting-delivery-2026", voice: "af_heart", storagePath: "blog/benefits-realization-consulting-delivery-2026/af_heart.mp3", timingsStoragePath: "blog/benefits-realization-consulting-delivery-2026/af_heart.timing.json" },
   { slug: "build-once-deploy-digest-2026", voice: "af_heart", storagePath: "blog/build-once-deploy-digest-2026/af_heart.mp3", timingsStoragePath: "blog/build-once-deploy-digest-2026/af_heart.timing.json" },
   { slug: "certificate-renewal-pipeline-2026", voice: "af_heart", storagePath: "blog/certificate-renewal-pipeline-2026/af_heart.mp3", timingsStoragePath: "blog/certificate-renewal-pipeline-2026/af_heart.timing.json" },
   { slug: "ci-cache-infrastructure-2026", voice: "af_heart", storagePath: "blog/ci-cache-infrastructure-2026/af_heart.mp3", timingsStoragePath: "blog/ci-cache-infrastructure-2026/af_heart.timing.json" },
