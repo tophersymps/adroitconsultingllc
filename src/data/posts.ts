@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "benefits-realization-consulting-delivery-2026",
+    "title": "On Time, On Budget, and No Benefit",
+    "excerpt": "A project can hit every milestone and still return nothing. Benefits realization is the discipline that makes the value claim measurable, owned, and reviewable.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "November 10, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "Benefits Realization",
+      "Delivery Practice",
+      "Stakeholder Management",
+      "Value",
+      "Consulting Delivery"
+    ],
+    "bannerImage": "/banners/benefits-realization-consulting-delivery-2026.webp",
+    "ogImage": "/banners/benefits-realization-consulting-delivery-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "component-state-contract-2026",
     "title": "One Loading Flag Cannot Describe Four Kinds of Waiting",
     "excerpt": "A loading boolean cannot tell an initial load from a refresh, a pending save, or an optimistic update. The state contract that can, and what each state owes.",
