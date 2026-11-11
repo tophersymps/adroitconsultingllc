@@ -1,0 +1,83 @@
+---
+title: "Your Field Was Encrypted. Your Archive Was Not."
+slug: salesforce-field-encryption-boundary-2026
+excerpt: "Winter '27 extends Shield key management to archives and backups. That makes it the moment to map what field-level encryption changes, and what still leaves it."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "November 11, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [Salesforce, Security, Shield, Encryption, Architecture]
+bannerImage: "/banners/salesforce-field-encryption-boundary-2026.webp"
+ogImage: "/banners/salesforce-field-encryption-boundary-2026-og.jpg"
+---
+
+A field gets encrypted because an auditor asked a question, and the answer looks like a checkbox: switch on Shield Platform Encryption, mark the field, move on. Then the list view that sorted by that field stops sorting. An integration that filtered on it returns zero rows and no error. A flow that used it in a Get Records element saves and never matches.
+
+None of that is the encryption failing. It is the encryption working exactly as documented, on a decision nobody made deliberately.
+
+## The archive gap closed. Map the others.
+
+Shield Platform Encryption can now encrypt data in the Archive app with root keys managed in the same key hierarchy, in a single click, using Salesforce-managed keys, bring-your-own-key, or Shield External Key Management with keys held in AWS Key Management Service [^1]. Salesforce's own write-up frames the release as closing a compliance gap: archived records and backed-up data sat outside field-level encryption coverage, so a regulated organization held the same personal data protected in production and unprotected in cold storage [^2]. Regulators do not differentiate between live and archived customer data, and a breach of unencrypted archived records triggers the same mandatory reporting as a breach of production.
+
+Which leaves the coverage map. Field-level encryption protects a value inside a record. Everything else the platform does with that value, filtering it, sorting it, serializing it into a paused interview, duplicating it into a sync field, is a separate decision whose documented consequences are usually read after the change instead of before it. Two of them decide whether the project ships: the encryption scheme, which decides what the org can still do with the field, and the boundary, because the value exists in more places than the record you encrypted.
+
+## The scheme decides what still works
+
+Shield Platform Encryption defaults to probabilistic encryption, which uses a random initialization vector for every encryption, so the same plaintext produces different ciphertext each time. It is the stronger scheme, and it is why a query like `WHERE LastName = 'Smith'` cannot run against a probabilistically encrypted field: there is no stable ciphertext to compare against [^3].
+
+Deterministic encryption replaces the random vector with a static, field-specific one. The ciphertext for a value becomes stable within that field in that org, which is what makes equality matching, uniqueness checks, and reporting filters possible. The trade is pattern leakage: enough observed ciphertext can build a cleartext-to-ciphertext dictionary for one field, which is why the static vector is scoped to a single field in a single object, so a dictionary built against one field buys nothing against the next [^3].
+
+It also comes in two flavours, and the choice is not cosmetic. Case-sensitive matches exactly, so a query for Jones will not return jones. Case-insensitive stores a lowercase duplicate of your data as a custom field, which is how case-agnostic filtering works and also why encrypting one field that way takes your custom field count from 200 to 201 [^4].
+
+Then the field list, which is shorter than teams expect. Deterministic encryption covers custom URL, email, phone, text, and text area fields. It does not cover date, date/time, long text area, rich text area, or description fields, and not Chatter, files, or attachments [^4].
+
+What that costs is a list of features, not limitations:
+
+- SOQL loses `LIKE`, `STARTS WITH`, `ORDER BY`, and `GROUP BY` against a deterministic field, and a grouping that runs anyway is inaccurate [^4].
+- Reports and list views keep equals and not equal to. Contains and starts with do not work, which takes Refine By filters with them [^4].
+- Compound names break apart: the ciphertext for William Jones is not the concatenation of the ciphertexts for William and Jones, so a name search must query the columns individually [^4].
+- Lead import matching and deduplication work with deterministic encryption, not probabilistic, and searching for duplicate accounts or contacts to merge returns nothing when Account Name or Contact Name is encrypted either way [^5].
+- Encrypted fields cannot be used in criteria-based sharing rules, similar opportunities searches, or external lookup relationships, which is one more reason the [record sharing model](/field-notes/salesforce-record-sharing-model-2026) has to be designed before encryption lands [^5].
+- In Flow, encrypted fields cannot be used as filter or sort criteria in Get Records, Delete Records, Update Records, condition requirements, or record choice sets. You can still hold the value in a variable and branch on it in the logic [^5].
+
+![The three encryption schemes side by side: probabilistic uses a random vector, so equality filters, sorting and unique indexes are unavailable; case-sensitive deterministic uses a static field-specific vector and supports equality filters plus single and two-column indexes; case-insensitive deterministic supports equality filters and stores a lowercase duplicate that consumes one custom field slot](</diagrams/salesforce-field-encryption-boundary-2026/1-scheme-trade.png>)
+
+## Where the plaintext leaves the boundary
+
+Encrypting a field does not encrypt every copy of the value.
+
+Paused flow interviews are the first exit. When a flow or process waits to resume, its interview is serialized to the database, and any encrypted field it loaded into a variable is not always encrypted at rest in that copy. The triggers are wider than a user pausing a flow: a Wait element, a scheduled action, and orchestration steps, including asynchronous background, interactive, and MuleSoft steps [^5]. That last set matters because orchestration is the tool you reach for when a process spans days.
+
+The User Email field is the second exit, and the widest. Encrypt it and Salesforce's own Product & Service Notifications stop arriving, including org migration emails. Activity features that depend on user emails, calendar invitations especially, can break, and email-based Login Discovery Handler lookups stop working, which can block logins outright [^5].
+
+Two sync features quietly keep an unencrypted copy. Lightning Sync, and Einstein Activity Capture without Sync Email as Salesforce Activity, duplicate the User Email field into the database when users join their sync configurations, and that duplicate stays unencrypted even when the source field is not. Einstein Conversation Insights needs case-insensitive deterministic encryption there; encrypt User Email probabilistically and features including video calls stop working [^5].
+
+Web-to-Case keeps its own seam. The feature works when Lead fields are encrypted, but the Web Company, Web Email, Web Name, and Web Phone fields are not encrypted at rest [^5].
+
+![The encryption boundary and its exits: a record whose fields are encrypted, beside the copies that leave the protected path, including a serialized flow interview waiting on a Wait element or an asynchronous orchestration step, an unencrypted User Email duplicate created by Lightning Sync and Einstein Activity Capture, Web-to-Case web fields outside encryption at rest, and files and attachments that deterministic encryption cannot cover](</diagrams/salesforce-field-encryption-boundary-2026/2-boundary-exits.png>)
+
+## The rollout order that survives production
+
+**Inventory the uses before choosing the scheme.** For each field, record whether it is indexed, whether it is unique, whether it is an external ID, and which integrations read it. The scheme follows from that inventory, not from sensitivity alone. Indexes are the sharp edge: an indexed field requires deterministic encryption, case-insensitive deterministic encryption has limited standard-index support, on Contact Email, Lead Email, Email Message Relation, and Name, and queries against those can perform poorly on large tables. The fix is a custom index through Support, and because enablement rebuilds indexes and runs long on a high-volume field, it belongs off-peak [^4].
+
+**Prove it in a full copy.** Salesforce's guidance is to enable encryption in a full-copy sandbox and test there before production. The reason is not performance: the user-visible impact is close to zero, and what breaks is filtering. Enable the field in the sandbox, then run every report, list view, integration, and flow that touches it [^5].
+
+**Run Encryption Sync after every scheme change, and wait for it.** Rotating the deterministic tenant secret, or changing a field's scheme, leaves the indexes behind filtering stale. Sync rebuilds them in batches and must not be interrupted: changing the encryption policy mid-sync, or generating, uploading, or deleting key material, aborts it. Size the window with Support and run it off-peak [^4].
+
+![The encryption sync rule as a state machine: a scheme change or a tenant secret rotation leaves the field indexes stale so filters return wrong results, Encryption Sync rebuilds them in batches during an off-peak window, filters recover once it completes, and changing the policy or key material during the sync aborts it](</diagrams/salesforce-field-encryption-boundary-2026/3-sync-state.png>)
+
+**Batch the enablement, and leave the keys alone while it runs.** Encryption and decryption cost application-tier time, and one unbatched job across millions of records can interrupt the message queue and degrade search org-wide [^5].
+
+One more dependency arrives with the archive change. Under the Cache-Only Key Service, an org's data encryption keys are fetched on demand from a key service the customer hosts, and the cache is flushed on average every 72 hours, some operations nearer 24. Keeping that service available is the customer's job, not Salesforce's [^6]. If archives and backups now sit behind the same key hierarchy, the list of things that can stop production grew by one, and it is a service you run.
+
+A coverage map separates the decisions still yours from the ones the platform already made. Winter '27 removed one entry from the list. The scheme, the exits, and the sync are still open, and they are cheaper to decide before a field is encrypted than after.
+
+[^1]: Salesforce, "Encrypt Archive App Data with Shield Platform Encryption," Winter '27 Release Notes, root keys managed in Shield Platform Encryption, with Salesforce-managed keys, BYOK, or External Key Management backed by AWS KMS, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_security_pe_archive.htm&language=en_US&release=264&type=5)
+[^2]: Christina Ragone, "Close the Gap: Encrypt Every Stage of Your Data Lifecycle," Salesforce 360 Blog, October 2026, archived and backed-up data outside Shield Platform Encryption coverage, BYOK extended to Archive and Backup & Recover, and the same reporting obligations for archived data, [salesforce.com](https://www.salesforce.com/blog/encrypt-every-stage-data-lifecycle/)
+[^3]: Salesforce, "How Deterministic Encryption Supports Filtering," probabilistic encryption using a random initialization vector, the inability to filter on random ciphertext, the field-specific static vector, and the dictionary risk, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.security_pe_deterministic_overview.htm&language=en_US&type=5)
+[^4]: Salesforce, "Considerations for Using Deterministic Encryption," available field types, filter operators, compound field queries, custom field allocation for case-insensitive encryption, index support and query performance, and the requirement to run Encryption Sync after a scheme change or tenant secret rotation, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.security_pe_deterministic_considerations.htm&language=en_US&type=5)
+[^5]: Salesforce, "General Shield Platform Encryption Considerations," criteria-based sharing rules, external lookup relationships, lead import matching, the merge tool, Web-to-Case web fields, the User Email behaviours, Lightning Sync and Einstein Activity Capture duplicates, serialized paused flow interviews including orchestration steps, and the guidance to test in a full-copy sandbox and batch large jobs, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=sf.security_pe_considerations_general.htm&language=en_US&type=5)
+[^6]: Salesforce, "Bring Your Own Key (BYOK) Option," Cache-Only Key Service fetching data encryption keys on demand from a customer-hosted key service, the key cache flushed on average every 72 hours, some operations nearer 24, [help.salesforce.com](https://help.salesforce.com/s/articleView?id=xcloud.security_shield_pe_byok.htm&language=en_US&type=5)

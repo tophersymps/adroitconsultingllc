@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-field-encryption-boundary-2026",
+    "title": "Your Field Was Encrypted. Your Archive Was Not.",
+    "excerpt": "Winter '27 extends Shield key management to archives and backups. That makes it the moment to map what field-level encryption changes, and what still leaves it.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "November 11, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Security",
+      "Shield",
+      "Encryption",
+      "Architecture"
+    ],
+    "bannerImage": "/banners/salesforce-field-encryption-boundary-2026.webp",
+    "ogImage": "/banners/salesforce-field-encryption-boundary-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "benefits-realization-consulting-delivery-2026",
     "title": "On Time, On Budget, and No Benefit",
     "excerpt": "A project can hit every milestone and still return nothing. Benefits realization is the discipline that makes the value claim measurable, owned, and reviewable.",
