@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "timeout-deadline-budget-agent-pipeline-2026",
+    "title": "One Timeout Cannot Tell Slow Work From a Hang",
+    "excerpt": "Your stack will wait ten minutes on an answer the user abandoned at ten seconds. Five local timeouts cannot fix that. One inherited deadline can.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 12, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Agentic AI",
+      "Distributed Systems",
+      "Reliability",
+      "Timeouts",
+      "Observability"
+    ],
+    "bannerImage": "/banners/timeout-deadline-budget-agent-pipeline-2026.webp",
+    "ogImage": "/banners/timeout-deadline-budget-agent-pipeline-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-field-encryption-boundary-2026",
     "title": "Your Field Was Encrypted. Your Archive Was Not.",
     "excerpt": "Winter '27 extends Shield key management to archives and backups. That makes it the moment to map what field-level encryption changes, and what still leaves it.",
