@@ -1,0 +1,95 @@
+---
+title: "When the Byte Count Lies, Data Becomes Protocol"
+slug: rsc-flight-framing-boundary-2026
+excerpt: "React's Flight transport got CVE-2026-126187 on November 10. The patch shipped October 14, and the flaw is a framing failure your own streams can have."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "November 13, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [React, Next.js, Security, Streaming, Web Development]
+bannerImage: "/banners/rsc-flight-framing-boundary-2026.webp"
+ogImage: "/banners/rsc-flight-framing-boundary-2026-og.jpg"
+---
+
+## The identifier arrived a month after the patch
+
+On November 10, 2026, CVE-2026-126187 was assigned to a critical remote code execution in React Server Components, and GitHub's advisory database published its review of the entry.[^1] The patch had gone out four weeks earlier, on October 14, in React 19.3.1 and its sibling release lines.[^3] Nothing about the vulnerability changed in the meantime. What changed is that the entry now sits in the database that Dependabot alerts are built from, which is why a scanner that stayed quiet through October may be flagging it now.[^2]
+
+React's changelog for 19.3.1 describes the fix in four words: "React Server Components: Improve transport protocol," pointing at pull request #37845.[^3] That is a fair description of a patch that has nothing to do with a missing authorization check. The flaw is in how the framework frames a stream.
+
+Three packages carry the vulnerable transport: `react-server-dom-webpack`, `react-server-dom-parcel`, and `react-server-dom-turbopack`, in every release from 19.0.0 through 19.3.0. Fixes were backported to 19.0.9, 19.1.10, 19.2.9, and 19.3.1.[^1] Next.js ships its own copy of the same transport, so its advisory covers `next` 16.0.0 through 16.4.0, patched in 16.4.1, with 15.5.28 on the 15.x line.[^4][^5] An app that never renders React on a server, or that uses no bundler plugin with Server Components support, is out of scope.[^1]
+
+React's advisory is careful about how reachable the bug is. It "only affects extremely rare cases where responses transport multiple typed arrays and an attacker-controlled value."[^1] Read that precondition closely and it is a statement about message framing, not a business-logic mistake. This is the companion to the [patch-pipeline argument we made after the October release](/field-notes/nextjs-image-optimization-ssrf-2026), and it asks the prior question: what makes a byte count trustworthy in the first place.
+
+![Timeline of the Flight transport fix: React and Next.js shipped patches on October 14, 2026, while the CVE identifier and the advisory-database entry that feeds dependency scanners did not arrive until November 10](</diagrams/rsc-flight-framing-boundary-2026/1-cve-timeline.png>)
+
+## Two kinds of row, one byte count
+
+React Server Components move UI over a protocol called Flight, and Flight is a stream of rows. Text rows are line-delimited JSON. Binary rows carry typed arrays and announce themselves with a hexadecimal byte count and no trailing newline. StepSecurity captured this payload from a real server render while reconstructing the bug:[^6]
+
+```
+:N1794388011926.9922
+1:I["victim-module",[],"*"]
+2:o4,ABCD0:{"msg":"hello","mod":"$1","ta":"$2"}
+```
+
+Two of those row types matter here. The `I` row is a module row: it tells the client to resolve a module reference through the bundler, which in a webpack build ends in `__webpack_require__(id)`, and the module runs. The `o` row is a binary row promising an exact byte count, and the parser consumes that many bytes as data, whatever they contain.
+
+The reader is a small state machine. It reads a hexadecimal row id up to a colon, reads a tag byte, then scans to a newline or consumes an exact byte count. Nothing in that loop binds an offset to a row boundary, and nothing scans payload bytes, because payload bytes are data. That is the design, not an oversight: scanning content would be the wrong job for a transport. But it means a framing error moves the boundary, and once the boundary moves, data becomes protocol. The same property shows up on the platform side whenever raw bytes cross a subscription, which is why [binary payloads over Realtime](/field-notes/supabase-realtime-binary-payloads) deserve the same care.
+
+On the writing end, StepSecurity found the copy was the fix. When the Flight writer serializes a typed array above 2,048 bytes, it does not copy it. It wraps the application's own ArrayBuffer in a view and hands the view to the destination. Instrumenting the same render on the vulnerable and fixed builds shows the difference: on 19.2.8 a 4,096-byte view reports a backing buffer of 8,192 bytes, the live shared buffer, while on 19.2.9 the backing buffer is exactly 4,096, a copy made at the boundary.[^6]
+
+![How Flight frames a stream: text rows are line-delimited JSON, binary rows carry a hexadecimal byte count, and the parser reads a row id, a tag, then either a newline or an exact number of bytes without ever scanning payload content](</diagrams/rsc-flight-framing-boundary-2026/2-flight-rows.png>)
+
+## One starved row is enough
+
+Now the failure. The vulnerable writer's large-chunk path skipped zero-length chunks. The header string and the view were queued as two separate entries, so when the skip fired it dropped the view and left the header on the wire, promising a byte count with no bytes behind it. No error, no log.[^6]
+
+The parser had no way to notice. It reached the starved header, consumed the following bytes in the stream as that row's payload, and swallowed the headers and payloads of the rows behind it. Then it resynchronized at whatever offset the arithmetic landed on. Two effects follow. The starved row resolves as a Uint8Array over swallowed bytes: wrong, but valid. The row whose header was eaten never resolves, and anything referencing it hangs. That hang is the opening. A smuggled module row can claim the swallowed row's id, and the application then consumes the attacker's module where data should have been.[^6]
+
+Three details make the chain work in practice. Filler bytes that are valid hexadecimal characters glue onto the next row id, so the attacker ends the payload with a tiny valid row to force a clean resynchronization at the next legitimate byte. Module chunks initialize lazily, so the planted row has to be reachable from a row the application reads, and root references are the natural vehicle. And the attacker only has to control the contents of one sibling typed array in a response that carries several.[^6]
+
+None of this is a parser defect in the ordinary sense. The parser did what the format told it to do. The format trusted a length that nothing reconciled.
+
+It is also not the first time. In December 2025 the same protocol produced CVE-2025-55182, scored 10.0, an insecure deserialization flaw in the Flight protocol reachable with a crafted POST. Unit 42 reported the exploit as near-100% reliable with no code changes needed against default configurations, and later observed post-exploitation activity.[^7] Both bugs carry the same weakness classification, CWE-502, deserialization of untrusted data.[^1]
+
+![The desynchronization: a header promising 4,096 bytes arrives with none, the parser swallows the rows behind it, resynchronizes inside attacker-controlled padding, and a planted module row claims a swallowed row id](</diagrams/rsc-flight-framing-boundary-2026/3-desync.png>)
+
+## Patch it, then fix the framing you own
+
+The repo work first.
+
+Upgrade Next.js to 16.4.1 or later on the 16.x line, or 15.5.28 on 15.x. The transport fix is included in both, and Next.js bundles its own copy of it, so bumping React alone leaves the vulnerable code in place.[^4][^5] If you depend on the `react-server-dom-*` packages directly, move to 19.0.9, 19.1.10, 19.2.9, or 19.3.1 on the line you already track.[^1] The Next.js advisory's wording is unusually blunt for a precondition this narrow: there is no known workaround, and you should upgrade even if your application does not contain such functions.[^5] Then re-run the scanner, because the advisory-database entry that landed on November 10 is the input those alerts read.[^2]
+
+The design work is the part that outlives this advisory.
+
+Copy at the boundary. Do not pass several views over one shared ArrayBuffer across a serialization boundary. The fixed Flight writer hands over an exact-size buffer instead of a window onto a larger one, and that one change removes the class.[^6]
+
+Fail closed on a short read. A length prefix that was not honoured is a protocol error, not an invitation to resynchronize. If your reader has a resync path, ask what it can resynchronize onto, and make the answer something it can prove. A reader that restarts mid-stream at an offset it computed for itself is a reader someone can aim, which is why the fix removed the starved header rather than teaching the parser to recover from one.
+
+Measure the mismatch. A response that announces N bytes and delivers fewer is detectable at a proxy or a CDN for almost nothing, and both numbers are already on the wire. StepSecurity's hardening list puts the check there, and it belongs in yours.[^6]
+
+Keep egress control on server and edge workloads. Parser-level code execution still needs a network to matter.[^6]
+
+None of this is exotic to React. WebSocket is a framing layer whose payload length is carried in 7, 16, or 64 bits, and the same shape recurs in HTTP chunked bodies, in server-sent events, and in every job stream a team writes for itself.[^8] Framing is where a protocol decides how much of the stream it will believe. That makes it a security boundary, not a parsing detail.
+
+![Where each layer of framing is owned: the framework transport is fixed by upgrading, your own stream handler is fixed by copying at the boundary and failing closed on a short read, the proxy or CDN can watch average byte-count mismatch, and the network layer holds egress control](</diagrams/rsc-flight-framing-boundary-2026/4-framing-controls.png>)
+
+[^1]: GitHub Advisory Database entry GHSA-xqc2-xf4c-x3h3, CVE-2026-126187, unauthenticated remote code execution in React Server Components. Ranks Critical at CVSS 4.0 score 9.5 under CWE-502, lists the affected `react-server-dom-*` ranges and patched versions, and states the multiple-typed-array precondition with the server and bundler exclusions. Published October 14, 2026, added to the database and reviewed November 10, 2026. See the [GitHub advisory](https://github.com/advisories/GHSA-xqc2-xf4c-x3h3).
+
+[^2]: GitHub Docs, "About Dependabot alerts," stating that Dependabot alerts are powered by the GitHub Advisory Database. See [About Dependabot alerts](https://docs.github.com/en/code-security/dependabot/dependabot-alerts/about-dependabot-alerts).
+
+[^3]: React release 19.3.1, dated October 14, 2026, listing "React Server Components: Improve transport protocol" against pull request #37845. See the [19.3.1 release notes](https://github.com/react/react/releases/tag/v19.3.1).
+
+[^4]: Next.js Security Update for Upstream Vulnerabilities, October 14, 2026, published out-of-band with patches in `next` 16.4.1 and 15.5.28. See the [Next.js security update](https://nextjs.org/blog/nextjs-security-update-october-14-2026).
+
+[^5]: Next.js advisory GHSA-673q-mjm6-r5xr, critical, CVSS 4.0 score 9.5, affected `>=16.0.0 <=16.4.0`, patched in 16.4.1, with the workaround section reading "There is no known workaround for affected applications with such `use cache` functions." It names GHSA-xqc2-xf4c-x3h3 as the related upstream advisory. See the [Next.js advisory](https://github.com/vercel/next.js/security/advisories/GHSA-673q-mjm6-r5xr).
+
+[^6]: StepSecurity, "React Server Components Flaw Lets Attackers Execute Code Through Smuggled Flight Rows," by Owais Shaikh, November 12, 2026. Source of the captured Flight payload, the boundary reconstruction, the 2,048-byte copy threshold, the 19.2.8 versus 19.2.9 buffer comparison, the starved-header and resync sequence, the lab reproduction, and the hardening list. See the [StepSecurity analysis](https://www.stepsecurity.io/blog/cve-2026-126187-react-flight-rce).
+
+[^7]: Unit 42, "Exploitation of Critical Vulnerability in React Server Components," covering CVE-2025-55182, disclosed December 3, 2025 at CVSS 10.0 as insecure deserialization in the Flight protocol, with near-100% exploit reliability and no code changes required on default configurations. See the [Unit 42 brief](https://unit42.paloaltonetworks.com/cve-2025-55182-react-and-cve-2025-66478-next/).
+
+[^8]: RFC 6455, "The WebSocket Protocol," Section 5.2, defining payload length as a 7-bit field extended to 7 plus 16 or 7 plus 64 bits when a length-indicator bit is set. See [RFC 6455](https://www.rfc-editor.org/rfc/rfc6455.html).

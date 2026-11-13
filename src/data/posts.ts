@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "rsc-flight-framing-boundary-2026",
+    "title": "When the Byte Count Lies, Data Becomes Protocol",
+    "excerpt": "React's Flight transport got CVE-2026-126187 on November 10. The patch shipped October 14, and the flaw is a framing failure your own streams can have.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "November 13, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "React",
+      "Next.js",
+      "Security",
+      "Streaming",
+      "Web Development"
+    ],
+    "bannerImage": "/banners/rsc-flight-framing-boundary-2026.webp",
+    "ogImage": "/banners/rsc-flight-framing-boundary-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "timeout-deadline-budget-agent-pipeline-2026",
     "title": "One Timeout Cannot Tell Slow Work From a Hang",
     "excerpt": "Your stack will wait ten minutes on an answer the user abandoned at ten seconds. Five local timeouts cannot fix that. One inherited deadline can.",
