@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-flow-run-context-inheritance-2026",
+    "title": "The Flow Said User Context. The Caller Said Otherwise.",
+    "excerpt": "A Flow's run context is a setting on the flow, but the caller can override it. Winter '27 adds the option that makes user context an actual boundary.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "November 16, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Flow",
+      "Security",
+      "Architecture",
+      "Winter '27"
+    ],
+    "bannerImage": "/banners/salesforce-flow-run-context-inheritance-2026.webp",
+    "ogImage": "/banners/salesforce-flow-run-context-inheritance-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "rsc-flight-framing-boundary-2026",
     "title": "When the Byte Count Lies, Data Becomes Protocol",
     "excerpt": "React's Flight transport got CVE-2026-126187 on November 10. The patch shipped October 14, and the flaw is a framing failure your own streams can have.",
