@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "text-to-sql-semantic-layer-2026",
+    "title": "The SQL Was Valid. The Number Was Wrong.",
+    "excerpt": "An analytics agent can run a valid query and return a wrong number. The schema cannot define your metrics, so the definition needs a home the agent can read.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Text to SQL",
+      "Semantic Layer",
+      "Data Engineering",
+      "AI Agents",
+      "Analytics"
+    ],
+    "bannerImage": "/banners/text-to-sql-semantic-layer-2026.webp",
+    "ogImage": "/banners/text-to-sql-semantic-layer-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-flow-run-context-inheritance-2026",
     "title": "The Flow Said User Context. The Caller Said Otherwise.",
     "excerpt": "A Flow's run context is a setting on the flow, but the caller can override it. Winter '27 adds the option that makes user context an actual boundary.",
