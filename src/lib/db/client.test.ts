@@ -19,20 +19,32 @@ import { getSupabaseClient, invalidateDbToken, resetDbTokenCache } from "./clien
 import { notifyAuthChanged } from "@/lib/hooks/useAuth";
 
 type TokenResponse = { ok: boolean; json: () => Promise<{ token: string | null }> };
+type CapturedClientConfig = {
+  dataApi: {
+    getToken: () => Promise<string | null>;
+    options: { global: { fetch: typeof fetch } };
+  };
+};
 
 let fetchMock: ReturnType<typeof vi.fn>;
+let capturedConfig: CapturedClientConfig | undefined;
 
 /**
  * getSupabaseClient() builds the client singleton only once per module, so the
- * captured getToken comes from the FIRST createClient() call and stays valid
- * across tests (invalidateDbToken only clears the token cache).
+ * captured config comes from the FIRST createClient() call and stays valid
+ * across tests even when Vitest 5's default `clearMocks: true` clears
+ * `mock.calls` between tests (invalidateDbToken only clears the token cache).
  */
-function tokenProvider(): () => Promise<string | null> {
+function ensureClientConfig(): CapturedClientConfig {
   getSupabaseClient();
-  const [config] = createClientMock.mock.calls[0] as [
-    { dataApi: { getToken: () => Promise<string | null> } },
-  ];
-  return config.dataApi.getToken;
+  if (!capturedConfig) {
+    throw new Error("createClientMock was not invoked");
+  }
+  return capturedConfig;
+}
+
+function tokenProvider(): () => Promise<string | null> {
+  return ensureClientConfig().dataApi.getToken;
 }
 
 /**
@@ -41,18 +53,17 @@ function tokenProvider(): () => Promise<string | null> {
  * test drives it directly.
  */
 function dataApiFetch(): typeof fetch {
-  getSupabaseClient();
-  const [config] = createClientMock.mock.calls[0] as [
-    { dataApi: { options: { global: { fetch: typeof fetch } } } },
-  ];
-  return config.dataApi.options.global.fetch;
+  return ensureClientConfig().dataApi.options.global.fetch;
 }
 
 beforeEach(() => {
   process.env.NEXT_PUBLIC_NEON_DATA_API_URL =
     "https://ep-test.apirest.c-13.us-east-1.aws.neon.tech/neondb/rest/v1";
 
-  createClientMock.mockImplementation(() => ({}));
+  createClientMock.mockImplementation((cfg: CapturedClientConfig) => {
+    capturedConfig = cfg;
+    return {};
+  });
 
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
