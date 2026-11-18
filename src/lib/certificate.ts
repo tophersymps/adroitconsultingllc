@@ -156,6 +156,7 @@ export function certificateCourseName(series: string, fallbackName: string): str
   if (series === "omni-studio-cert") return OMNI_COURSE_NAME;
   if (series === "sf-omni-consultant") return "Salesforce OmniStudio Consultant";
   if (series === "sf-data360-consultant") return "Salesforce Data 360 Consultant";
+  if (series === "sf-agentforce-sales-consultant") return "Salesforce Agentforce Sales Consultant";
   return fallbackName;
 }
 

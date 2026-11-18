@@ -10209,6 +10209,16 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
+  },
+  {
+    "slug": "sf-agentforce-sales-consultant",
+    "name": "Salesforce Agentforce Sales Consultant",
+    "description": "Prep course for the Salesforce Certified Agentforce Sales Consultant certification. Covers the sales lifecycle, consulting and implementation strategies, practical Agentforce Sales expertise across the Lead to Opportunity to Quote to Close process, data management for sales solutions, and the predictive and generative AI features available in Agentforce Sales.",
+    "gradient": "from-orange-500 to-rose-600",
+    "examKind": "certification-prep",
+    "lessons": [],
+    "totalLessons": 0,
+    "curriculumLessons": 41
   }
 ];
 

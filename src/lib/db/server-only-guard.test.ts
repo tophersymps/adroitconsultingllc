@@ -41,7 +41,7 @@ const PRIVILEGED = [
   // shipping the unpublished catalogue to the browser.
   "src/lib/learn-public.ts",
   // t_5fdeb918 (decision t_af115dd1 D1): the FULL course→constellation
-  // registry. It names all twelve authored slugs, so it must never be compiled
+  // registry. It names all fourteen authored slugs, so it must never be compiled
   // into a client chunk — the shipped `FIGURE_PINS` is the four-series
   // published projection.
   "src/components/Constellations/chart/figure-pins.server.ts",
