@@ -14,6 +14,13 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    /*
+     * Cap worker processes at 4 (default forks pool) to prevent CPU starvation
+     * and 5000ms timeouts on subprocess/scroll-timer tests (`audio-injection`,
+     * `AudioPlayerScroll`, `LearnHub.requests`). Keep the default pool rather
+     * than `vmThreads`, which breaks `node:vm` context assumptions in route tests.
+     */
+    maxWorkers: 4,
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next", "scripts"],
