@@ -1,0 +1,95 @@
+---
+title: "Kubernetes Resizes Pods. The QoS Class Is Still Frozen."
+slug: kubernetes-qos-class-requests-limits-2026
+excerpt: "In-place pod resize is stable. The QoS class your requests-to-limits ratio picked at creation is not, and it decides who gets evicted when the node runs out."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 18, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: ["DevOps", "Kubernetes", "Resource Management", "Quality of Service", "SRE", "Platform Engineering", "Autoscaling"]
+bannerImage: "/banners/kubernetes-qos-class-requests-limits-2026.webp"
+ogImage: "/banners/kubernetes-qos-class-requests-limits-2026-og.jpg"
+---
+
+Almost every Kubernetes manifest in production carries two numbers per container that nobody defended in a design review. `requests.cpu: 250m` and `limits.cpu: 500m` arrived in a scaffold generator on day one, survived three service migrations, and now sit under a checkout service handling real money.
+
+Those two numbers do three jobs. The request is a promise the scheduler banks when it places the Pod, and an accounting denominator the horizontal autoscaler divides by. The limit is a hard ceiling the kernel enforces. The ratio between them is a third thing nobody typed and everybody shipped: a Quality of Service class, assigned when the Pod is created, which fixes that Pod's position in the eviction order and how much memory protection its cgroup gets.
+
+Since Kubernetes 1.35 the numbers are editable on a running Pod. The class is not. The part you can now tune is the cheap part, and the part you cannot tune is the part that decides what breaks during an incident.
+
+## The class is the decision nobody made on purpose
+
+The Kubernetes documentation draws the line cleanly. A container's CPU or memory request is what the scheduler uses to choose a node, and the amount the kubelet reserves for that container. A limit is what the kubelet enforces so the container cannot use more than you allowed [^1]. Request 256Mi on an 8GiB node with no neighbours and the container is free to use far more than 256Mi. Add a limit and it is not.
+
+Kubernetes reads the relationship between request and limit to assign one of three classes [^2].
+
+- **Guaranteed.** Every container in the Pod has a CPU limit and a CPU request, both greater than zero, and they are equal. Same for memory. Nothing else qualifies.
+- **Burstable.** The Pod fails the Guaranteed test, but at least one container declares a CPU or memory request or limit.
+- **BestEffort.** No container declares any CPU or memory request or limit at all.
+
+A node in trouble reads that class, not your intentions. When the kubelet runs short of a resource it evicts BestEffort Pods first, then Burstable, then Guaranteed, and only Pods exceeding their requests are candidates in the first place [^2]. So `requests.cpu: 250m` with `limits.cpu: 500m` is Burstable, which means a team that thought it was being careful, by setting limits for safety, opted into a lower rung of the ladder than it would have got by setting requests equal to limits.
+
+There is a second consequence that is easier to miss. Under Memory QoS, beta and enabled by default as of Kubernetes 1.37, the class also decides how much protection the kernel gives the cgroup. Guaranteed Pods get a hard reservation the kernel will not reclaim, Burstable Pods get a soft one, and BestEffort Pods get nothing [^2]. The same pair of numbers that sets the eviction order also sets reclaim behavior. The class is a real engineering decision. It is usually made by a scaffold generator.
+
+![Three QoS classes compared: Guaranteed requires a CPU and memory request equal to the limit on every container so it is evicted last and gets a hard memory reservation, Burstable is anything in between so it is evicted second with soft protection, and BestEffort declares no CPU or memory request or limit at all so it is evicted first with none](</diagrams/kubernetes-qos-class-requests-limits-2026/1-three-classes.png>)
+
+## The limit is a hard stop, and it is loud
+
+A limit is not a target. It is an enforcement boundary, and the mechanism differs by resource in a way that changes what a breach looks like [^1].
+
+For CPU, the kernel throttles. On Linux the limit becomes a bandwidth constraint held in the cgroup: within each period the group may use up to its quota of CPU time, and once the quota is spent every thread in the group is throttled until the next period replenishes it [^3]. The default period is 100 milliseconds [^3]. Kubernetes derives the quota from your CPU limit, so a container with a 1 CPU limit is granted 100 milliseconds of CPU time per 100 millisecond window.
+
+That deserves a concrete case. Give a container a 1 CPU limit on an 8-core node and let it fan out to eight threads. All eight are runnable at once, so the group burns its whole 100 millisecond quota in about 12.5 milliseconds of wall time and then every thread is frozen for the remaining 87.5 milliseconds of the window. A request that lands inside that freeze waits for the period to roll over. This is why a CPU limit produces p99 latency spikes in clean multiples of 100 milliseconds, and why a service can look comfortably under its allocation on a dashboard and still be slow. The counters that prove it are `nr_throttled` and `throttled_time` in the cgroup's `cpu.stat` [^3].
+
+Memory fails differently, because the kernel cannot throttle an allocation the way it can freeze a thread. Memory limits are enforced reactively with out-of-memory kills, and only when the kernel detects memory pressure, so a container can spend a while above its limit and then die [^1]. The tell is a container terminating with reason `OOMKilled` and exit code 137 [^1].
+
+One default earns its own warning. If you declare a limit and no request, Kubernetes copies the limit and uses it as the request [^1]. The copy is silent, and it changes the class. In the other direction, a Burstable container with no memory limit is not protected at all: the kubelet substitutes node allocatable memory in place of the limit when it computes the throttling threshold [^2]. Omitting a limit is not a neutral choice either.
+
+![The 100 millisecond CFS window: a container with a one CPU limit on an eight core node holds a 100 millisecond quota, so eight simultaneously runnable threads consume the whole quota in about 12.5 milliseconds and every thread is throttled for the remaining 87.5 until the next period; the same container with requests equal to limits has no quota to exhaust, and the diagnostic counters are nr_throttled and throttled_time in cpu.stat](</diagrams/kubernetes-qos-class-requests-limits-2026/2-throttle-window.png>)
+
+## Who dies first, and how fast
+
+Node-pressure eviction is the kubelet reclaiming resources on its own, which is a different mechanism from the API-initiated eviction you get from a drain [^4]. When a monitored resource crosses a threshold the kubelet selects Pods, sets their phase to Failed, and terminates them.
+
+Two details make it sharper than most teams assume. First, the kubelet does not respect PodDisruptionBudgets or `terminationGracePeriodSeconds` during node-pressure eviction. A soft threshold uses the `evictionMaxPodGracePeriod` you configured, and a hard threshold uses a zero-second grace period, meaning immediate shutdown [^4]. A PodDisruptionBudget protects you from voluntary disruption. It does not protect you from a node running out of memory.
+
+Second, the thresholds are defaults most clusters never override. The kubelet's default hard eviction thresholds are `memory.available<100Mi`, `nodefs.available<10%`, `imagefs.available<15%`, `nodefs.inodesFree<5%` and `imagefs.inodesFree<5%` [^4]. It evaluates them on a housekeeping interval that defaults to 10 seconds [^4], which is also the window in which a fast memory climb can outrun the eviction manager entirely and reach the kernel OOM killer first. Before it terminates end-user Pods, the kubelet tries to reclaim node-level resources, such as deleting unused container images when disk is starved [^4].
+
+One documented trap is worth knowing because it reads as an application bug. On Linux the kubelet treats file-backed memory on the active LRU list as not reclaimable, so a Pod doing heavy block-backed local I/O can push a node into a MemoryPressure state and be evicted while its own usage is legitimate [^4]. The documented workaround is to set the memory limit and the memory request to the same value for containers likely to perform intensive I/O [^4], which is another way of saying: make them Guaranteed.
+
+Requests are the lever, and under-provisioning them is not only a capacity problem. `requests.cpu: 250m` on a Pod that regularly peaks at 600m makes that Pod a candidate the moment the node runs short, because it is the Pod exceeding its request. That is a selection rule, not a measurement.
+
+![How the kubelet picks victims under node pressure: it reclaims node level resources first, such as unused images, then evicts in the order BestEffort, then Burstable Pods exceeding their requests, then Guaranteed; the default hard thresholds are available memory below 100Mi, node filesystem below 10 percent, image filesystem below 15 percent and 5 percent of inodes, checked every 10 seconds, and a hard threshold kills with no grace period and ignores PodDisruptionBudgets](</diagrams/kubernetes-qos-class-requests-limits-2026/3-eviction-order.png>)
+
+## Resizable now, but not above your class
+
+In-place pod resize reached stable in Kubernetes 1.35, after alpha in 1.27 and beta in 1.33 [^5]. The current release line is 1.37, with 1.37.1 published on 15 September 2026 [^7]. Instead of deleting and recreating a Pod to change its CPU or memory, you patch the desired values through the resize subresource and the kubelet applies them to the running container, usually without a restart.
+
+The vocabulary tells you what actually happened. `spec.containers[*].resources` is now the desired state, `status.containerStatuses[*].resources` is what is configured on the running container, and `allocatedResources` is what the kubelet committed for scheduling [^6]. While a resize is pending the scheduler sizes the Pod against the maximum of all three [^6], so a Pod being scaled up is not double-counted.
+
+A resize can also be refused. The kubelet reports `PodResizePending` with reason `Infeasible` when the node cannot fit the change, and `Deferred` when it might fit later. Deferred resizes are retried in a defined order: PriorityClass first, then QoS class with Guaranteed ahead of Burstable, then longest waiting [^5][^6]. Restart behavior is per resource. `resizePolicy` lets you declare CPU as `NotRequired`, so a CPU change lands in place, and memory as `RestartContainer`, which most runtimes need because they cannot grow a heap they already committed [^5][^6]. Kubernetes 1.35 also lifted the ban on decreasing a memory limit, guarded by a best-effort check that current usage sits below the new limit [^5]. Pod-level resources, the aggregate budget a Pod's containers share, followed the same path: beta in 1.34 and in-place resize of that budget beta in 1.36 [^8].
+
+Now the wall. The QoS class is determined when the Pod is created and stays fixed for the Pod's lifetime, and a resize that would produce a different class is rejected by admission [^2]. You cannot resize a Burstable Pod into Guaranteed, and you cannot rescue a BestEffort Pod by adding requests. If the class is wrong the Pod has to be replaced, which puts the class in the same bucket as the container image and the volume mounts: a creation-time decision. In-place resize is also still prohibited alongside swap, the static CPU manager and the static memory manager, and resources other than CPU and memory remain immutable [^5].
+
+So the numbers are tuning parameters now and the class is still architecture. It decides the two worst days of your quarter, and it is set by a ratio in a YAML file. Spend ten minutes on it in the design review, before the first deploy, instead of finding out during a re-create at 2am. If a platform team owns the scaffold that file came from, that is the same argument as [golden paths that make the safe configuration the easy one](/field-notes/platform-engineering-golden-paths-2026). And when a Pod does go away, the [shutdown path](/field-notes/graceful-shutdown-deploy-path-2026) picks up where this leaves off.
+
+![The in-place resize path and its one wall: patch the resize subresource, the kubelet reports PodResizePending as Deferred or Infeasible or moves on to PodResizeInProgress before the new values are allocated, retries are ordered by PriorityClass then by QoS class then by how long they waited, and a resize that would change the QoS class is rejected by admission because the class is fixed at creation](</diagrams/kubernetes-qos-class-requests-limits-2026/4-resize-path.png>)
+
+[^1]: Kubernetes, "Resource Management for Pods and Containers," the request as a scheduling input, limits enforced by throttling and OOM kills, the silent request-equals-limit default. [kubernetes.io](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
+
+[^2]: Kubernetes, "Pod Quality of Service Classes," the three class criteria, the rule that only Pods exceeding requests are eviction candidates, the Memory QoS beta defaults and reservation tiers, and the rule that a resize changing the class is rejected by admission. [kubernetes.io](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/)
+
+[^3]: The Linux Kernel documentation, "CFS Bandwidth Control," the quota-and-period model, throttling until the next period, the 100 millisecond default period, and the `nr_throttled` and `throttled_time` fields in `cpu.stat`. [docs.kernel.org](https://docs.kernel.org/scheduler/sched-bwc.html)
+
+[^4]: Kubernetes, "Node-pressure Eviction," the eviction signals, default hard thresholds, the 10 second housekeeping interval, reclaiming node-level resources before evicting Pods, the disregard for PodDisruptionBudgets and grace periods, and the active file memory caveat with its limit-equals-request workaround. [kubernetes.io](https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/)
+
+[^5]: Natasha Sarkar, "Kubernetes 1.35: In-Place Pod Resize Graduates to Stable," 19 December 2025, the GA timeline, memory limit decreases and their best-effort guard, the deferred-resize priority order, and the prohibitions alongside swap and the static CPU and memory managers. [kubernetes.io](https://kubernetes.io/blog/2025/12/19/kubernetes-v1-35-in-place-pod-resize-ga/)
+
+[^6]: Kubernetes, "Resize CPU and Memory Resources assigned to Containers," stable since v1.35, desired, actual and allocated resources, the scheduler's use of the maximum of the three, the resize conditions, retry priority, and the per-resource resizePolicy options. [kubernetes.io](https://kubernetes.io/docs/tasks/configure-pod-container/resize-container-resources/)
+
+[^7]: Kubernetes, "Releases," the 1.37 line with 1.37.1 published 15 September 2026. [kubernetes.io](https://kubernetes.io/releases/)
+
+[^8]: Kubernetes, "Resize CPU and Memory Resources assigned to Pods," pod-level resources beta since v1.36, in-place resize of the aggregate budget applying without restart, and the validation that Pod-level requests must be at least the sum of container requests. [kubernetes.io](https://kubernetes.io/docs/tasks/configure-pod-container/resize-pod-resources/)

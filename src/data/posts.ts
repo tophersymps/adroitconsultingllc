@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "kubernetes-qos-class-requests-limits-2026",
+    "title": "Kubernetes Resizes Pods. The QoS Class Is Still Frozen.",
+    "excerpt": "In-place pod resize is stable. The QoS class your requests-to-limits ratio picked at creation is not, and it decides who gets evicted when the node runs out.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 18, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "DevOps",
+      "Kubernetes",
+      "Resource Management",
+      "Quality of Service",
+      "SRE",
+      "Platform Engineering",
+      "Autoscaling"
+    ],
+    "bannerImage": "/banners/kubernetes-qos-class-requests-limits-2026.webp",
+    "ogImage": "/banners/kubernetes-qos-class-requests-limits-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "text-to-sql-semantic-layer-2026",
     "title": "The SQL Was Valid. The Number Was Wrong.",
     "excerpt": "An analytics agent can run a valid query and return a wrong number. The schema cannot define your metrics, so the definition needs a home the agent can read.",
