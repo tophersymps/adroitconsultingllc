@@ -1,0 +1,93 @@
+---
+title: "Lesson 24: Teams and the Permission Model: Account Teams, Opportunity Teams, Permission Set Groups"
+slug: day-24-pa-3b-teams-and-the-permission-model-account-teams-oppor
+series: sf-agentforce-sales-consultant
+lesson: 24
+excerpt: "Account Teams and Opportunity Teams for named collaborators, Opportunity Splits for revenue credit, and the three tiers of the permission model with permission set groups and muting. It teaches how to pick the security model by the shape of the requirement and serves requirement pa-3b."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Account Teams, Opportunity Teams, Permission Set Groups, Muting]
+---
+
+# Lesson 24: Teams and the Permission Model: Account Teams, Opportunity Teams, Permission Set Groups
+
+A sales enablement lead asks for a small change that turns into an argument. A solutions engineer has been helping close deals with a rep in the same role, and the engineer now needs to edit two fields the rep cannot: a support tier field and a renewal risk field. The enablement lead's first proposal is to clone the rep's profile and add the two field permissions to the clone. The consultant pushes back, because profiles are one per user and every profile is one more thing to maintain through each release. The cleaner answer is a permission set that grants exactly those two field permissions to exactly that engineer. Same outcome for the user, a fraction of the maintenance for the org, and it is the difference between a model that scales and one that accumulates copies.
+
+That small decision sits inside a larger one that the exam tests repeatedly: given a business requirement, which security model applies. The requirement has a shape, and the shape selects the mechanism. Partnerships that need record access select a team. Capabilities that need permissions select a profile or a permission set. A stable bundle of capabilities selects a permission set group. One capability you need to withhold from a group selects a muting permission set. Get the shape right and the answer falls out; get it wrong and you spend the engagement undoing it.
+
+This lesson serves requirement pa-3b, the second half of the security-model objective, in the Practical Application of Agentforce Sales Expertise domain, which carries 24 percent of the exam. Where the previous lesson covered record access through sharing, this one covers the mechanisms for named collaborators and the permission architecture underneath them. By the end you will be able to choose between Account Teams and Opportunity Teams by scope, configure default teams, keep revenue credit separate from record access through Opportunity Splits, explain the three tiers of profiles, permission sets, and permission set groups, apply muting and its dependency cascade correctly, and name the layer a requirement belongs to before you name the mechanism.
+
+## Deep Dive
+
+### Teams are for named collaborators, not broad access
+
+Account Teams and Opportunity Teams are the collaboration mechanisms you reach for when a sharing rule would be too broad and manual sharing would be too tedious. An Account Team is a set of users given access to an account, and because the account is the parent of contacts and often of opportunities, that access can extend to the account's children through the team member's access level. Each Account Team Member has a team role such as Account Manager or Sales Rep and an access level of Read Only or Read/Write.[^1] Opportunity Teams work the same way on a single opportunity: each Opportunity Team Member gets access to that deal, with an access level and an optional revenue split.[^2] Teams are the answer when a named, stable group needs access to a specific account or deal rather than to all records of a type.
+
+The shared characteristic that separates teams from sharing rules is that the membership is defined by hand and is small. A sharing rule is the right tool for a group you can pick out in advance from the role hierarchy, because it maintains itself as people move. A team is the right tool for the specific handful of people on this account or this deal, because that set is not derivable from any query and changes record by record. When a requirement names people rather than describing a class of users, a team is usually the answer.
+
+### Account Teams and Opportunity Teams differ by scope
+
+The practical difference between the two teams is scope and change frequency. Use an Account Team when the same people work the whole account across many opportunities and contacts, because an account team member's access reaches the account and its children. Use an Opportunity Team when the collaborating group changes deal to deal, because a team member added to one opportunity gets access to that opportunity and not to the rest of the account. That single sentence is the exam distinction: Account Team means the account, Opportunity Team means the one deal.
+
+A user can be on an Account Team and separately on an Opportunity Team for the same account, and the access is the union of the two, which follows from the same most-permissive-wins principle that governs sharing overall. Adding someone to an opportunity team does not silently grant the account, so if the requirement is that a person work a deal and see its parent account context, you configure both or you open account access through the OWD or a rule. This is the trap worth stating now and again in the exam section: an Opportunity Team member does not get the account by virtue of the team membership alone.
+
+Ownership changes carry a documented behavior worth knowing. Account team members added by a user with group-based access are removed when the account owner changes, even if a keep-team option was selected; to keep members across an ownership change, an admin, a user with Modify All Data, the account owner, or a user higher than the owner in the owner's direct role hierarchy chain must be the one who added them. It is an edge case, but it explains a real class of "the team disappeared" support ticket, and it reinforces that team membership is explicit and fragile where sharing rules are automatic.
+
+### Default teams remove the manual step
+
+Both teams support a default: a user can define a Default Account Team and a Default Opportunity Team in their user settings, and Salesforce adds those members automatically whenever that user owns a new account or opportunity. This removes the manual step at the moment a deal is created, which matters because the moment a rep is busiest is the moment they are least likely to remember to add their support engineer by hand.
+
+The default-team configuration is a small piece of personal productivity that has outsized effect on data quality. When a rep's default opportunity team already contains the solutions engineer, the finance partner, and the executive sponsor with the right access levels, every new deal starts with the right collaborators and the right roles on day one. Without it, teams get added late, sometimes after the deal is already in proposal, which means a collaborator spent the first two weeks working from exports and forwarded emails. Configure defaults as part of onboarding new sellers rather than as an afterthought.
+
+### Opportunity Splits assign credit, not access
+
+Opportunity Splits are the revenue-credit feature that travels with Opportunity Teams, and the first thing to internalize is that credit is not access.[^3] Assigning an Opportunity Team Member grants record access. Assigning an Opportunity Split assigns revenue credit. A requirement about who gets credit for a deal belongs on the split, not on the access level, and a requirement about who can see or edit the deal belongs on the team membership. Keeping those two separate is what keeps forecast reporting honest, because a split that disagrees with the team's access is the kind of thing nobody notices until the commission cycle.
+
+Splits need team selling enabled. Before you can configure opportunity splits, you enable Team Selling in Opportunity Settings, and you enable opportunity splits in Opportunity Splits Settings; both are prerequisites.[^4] A split assigns a percentage of the opportunity's credit to a team member, and for the default split types based on the Opportunity Amount field, the split percentages must total one hundred percent across the members assigned to that opportunity's splits. When splits are enabled, if the opportunity owner is not already on the opportunity team, the owner is added to the team and assigned one hundred percent of the split amount, which users can then adjust. That default is worth telling a client up front, because otherwise the first reaction to enabling splits is confusion about why the owner suddenly appears with a full split.
+
+The exam angle here is the permissions-versus-credit confusion stated as a rule: to create or edit opportunity splits, a user needs Edit on opportunities and must be the opportunity owner or above the owner in the role hierarchy. That is a permission and a role position, not team membership alone. It is another reminder that the access layer and the capability layer are separate, and that a requirement can touch both.
+
+### The permission model has three tiers
+
+The permission model underneath all of this has three tiers and a clear division of labor, and the exam expects you to keep them distinct. A profile is a user's single base set of permissions and settings, and every user has exactly one. Profiles control object permissions, field-level security, app and tab visibility, and login rules. Because a user has one profile, a profile is the wrong place for variation: the moment you build a second profile to handle one user's extra access, you have committed to maintaining that copy across every future release.
+
+A permission set is an additive bundle you assign to a user on top of their profile, and a user can have many.[^5] Permission sets exist so you do not create a new profile for every access variation. The profile defines the minimum a job needs, and permission sets grant the extra capabilities. If a permission is not enabled in the profile but is enabled in a permission set, the user with both has the permission, because permission sets extend access rather than replacing it. When a requirement is that one user in a role needs two additional object or field permissions, the answer is a permission set that grants the extra access to that one user, not a second profile. Profiles are one per user and hard to maintain; permission sets are the additive, maintainable tool.
+
+### Permission set groups bundle personas, and muting subtracts
+
+Permission set groups exist because a mature org accumulates dozens of permission sets, and assigning them one at a time is error-prone. A permission set group bundles permission sets for a job persona, and a user assigned the group receives the combined permissions of every permission set inside it.[^6] A permission set can belong to more than one group, and an update to a permission set propagates to every group that includes it, which is the reuse the feature is built for. When your sales persona always needs the same eight permission sets, you assemble them into a group and assign one thing instead of eight.
+
+When the bundle is right for the persona except for one dangerous permission, you do not split the bundle. You use a muting permission set to remove that one permission for the group's users only.[^7] Muting carries rules the exam expects you to know. Only one muting permission set is allowed per permission set group. Muting affects only users assigned to that group: a user who has the muted permission from a profile, from another permission set, or from a different permission set group still has it, because muting only removes the permission from that group's contribution. The permission sets themselves are not affected; only the group is. Expect the exam to describe a user who holds a permission from a profile and ask whether muting in a group revokes it. It does not.
+
+Muting then cascades through dependencies, and this is the detail most candidates miss. Muting Read on an object also mutes Create, Edit, Delete, View All Records, and Modify All Records, because none of those are usable without read access. Muting Edit also mutes Delete and Modify All Records, muting Delete also mutes Modify All Records, and muting View All Records also mutes Modify All Records. The dependency chain is the platform refusing to leave a user with a permission they could not actually exercise. The Permission Set Group Summary and the User Access Summary both account for muting when they compute effective access, which is where you verify the result rather than guessing from the setup pages.
+
+### Choosing the model by the shape of the requirement
+
+The final exam angle is choosing the security model to fit the requirement's shape, and the fastest way to get it right is to name the layer first. If the need is to see other users' records, the lever is the sharing model: the OWD, the role hierarchy, sharing rules, or a team. If the need is a capability such as creating a type of record or using a feature, the lever is the permission model: a profile, a permission set, or a permission set group. Those two questions, can they see it and can they do it, split the whole objective in half.
+
+Then match the specific mechanism. If ten permission sets always travel together, a group is the answer. If the group is right but one permission is not, a muting permission set is the answer. If a stable group needs an account and its children, an Account Team is the answer, and if a deal-specific group needs one opportunity, an Opportunity Team is the answer. If one user needs a delta on top of a shared role, a permission set is the answer. If a requirement is about revenue credit rather than access, an Opportunity Split is the answer. Name the layer first, then the mechanism, and the scenario resolves cleanly instead of by elimination.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing that muting a permission in a permission set group revokes it everywhere. It does not. Muting affects only users assigned to that group, so a user who has the permission from a profile, another permission set, or another permission set group still has it. Muting subtracts only from that group's contribution, and the permission sets inside the group are untouched.
+
+The second trap is believing an Opportunity Team member automatically gets the account. Membership grants access to that opportunity only. If the requirement also needs account access, that has to come separately from the OWD, the role hierarchy, an Account Team, or a sharing rule. An answer that assumes the account follows the deal is wrong, and it is the mirror of the Account Team's broader reach.
+
+The third trap is believing that two extra object permissions for one user call for a new profile. Profiles are one per user and costly to maintain, so the delta is granted with a permission set instead. Cloning a profile for one user's variation creates a maintenance liability that grows with every release, and it is exactly the anti-pattern permission sets were introduced to end.
+
+## What a consultant should walk away with
+
+Name the layer before you name the mechanism: record visibility goes to the sharing model, and capability goes to the permission model. Reach for an Account Team when a stable group works an account and its children, and an Opportunity Team when the group changes deal to deal and needs that one opportunity, remembering that the deal does not drag the account along with it. Configure default teams so new deals start with the right collaborators. Keep revenue credit on Opportunity Splits and record access on team members, and tell the client that enabling splits puts the owner on the team at one hundred percent by default. In the permission model, give every user one profile as their baseline, use permission sets for additive deltas so you never clone a profile for one user, and bundle a persona's permission sets into a group. When the persona should not have one permission, mute it, and remember that muting only touches that group's users and cascades down the dependency chain, so Read takes Create, Edit, Delete, View All, and Modify All with it. Verify effective access in the group summary rather than assuming.
+
+## What's next
+
+Lesson 25 - Products, Price Books, and Opportunity Products: The Selling Model (pa-4a)
+
+[^1]: Salesforce Developers, "AccountTeamMember," Object Reference for the Salesforce Platform, (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-accountteammember.html)
+[^2]: Salesforce Developers, "OpportunityTeamMember," Object Reference for the Salesforce Platform, (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-opportunityteammember.html)
+[^3]: Salesforce Help, "Opportunity Teams and Opportunity Splits," (https://help.salesforce.com/s/articleView?id=sales.teamselling.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Enable Opportunity Splits," (https://help.salesforce.com/s/articleView?id=sales.teamselling_opp_splits_enable.htm&language=en_US&type=5)
+[^5]: Salesforce Help, "Permission Sets," (https://help.salesforce.com/s/articleView?id=platform.perm_sets_overview.htm&type=5)
+[^6]: Salesforce Help, "Permission Set Groups," (https://help.salesforce.com/s/articleView?id=sf.perm_set_groups.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Muting Permission Sets," (https://help.salesforce.com/s/articleView?id=platform.perm_set_groups_muting.htm&language=en_US&type=5)

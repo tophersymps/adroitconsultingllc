@@ -1,0 +1,94 @@
+---
+title: "Lesson 36: Agentforce Agents in Sales: Topics, Actions, Instructions, and Grounding"
+slug: day-36-pg-1a-agentforce-agents-in-sales-topics-actions-instruct
+series: sf-agentforce-sales-consultant
+lesson: 36
+excerpt: "How an Agentforce agent is assembled in Agent Builder from a role, topics, actions and instructions, how the Atlas reasoning engine routes a request at run time, and how grounding decides whether the answer is true. It serves requirement pg-1a from the Predictive and Generative AI domain."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Agentforce, Agent Builder, Grounding, Salesforce Sales Cloud]
+---
+
+# Lesson 36: Agentforce Agents in Sales: Topics, Actions, Instructions, and Grounding
+
+A sales director asks you to put "an AI agent" in the sales org. You build it from a template, attach a couple of standard actions, and the demo lands well. Three weeks later a rep asks it about an opportunity that closed last quarter and the agent answers with a delivery date that nobody typed into Salesforce. The demo was not a lie and the build was not broken. What happened is the most common failure in this domain: the agent did exactly what it was configured to do, and the configuration left a gap the model filled with something plausible.
+
+The temptation is to treat the agent as one large prompt. You write a paragraph of instructions, you point it at an LLM, and you expect good judgment. That approach breaks for a reason the exam tests directly. A model answering free-form is guessing at intent, scope and facts all at once, and when the request is ambiguous it resolves the ambiguity itself. Agentforce is built the other way around. You hand the model a small number of bounded jobs, a list of things it is allowed to do inside each job, and real records to read before it answers. The structure is the product, and the structure is what a consultant designs.
+
+This lesson serves requirement pg-1a, "Understand what generative AI tools are available in Agentforce Sales," in the Predictive and Generative AI domain, which carries 13 percent of the exam. The objective is small on paper and wide in practice, because the exam expects you to describe an agent in four named parts rather than wave at it as a chatbot, and because the tools here reappear across the rest of the AI domain. By the end of this lesson you can name an agent's role, topics, actions and instructions, explain how the reasoning engine chooses among them, describe the four sources an action can come from, and explain how grounding decides whether the generated answer is true. You will also be able to tell the shipped assistant apart from an agent you built, which is a distinction several questions lean on.
+
+## Deep Dive
+
+### An agent has four parts, and none of them is the model
+
+Agentforce is the Salesforce platform for building agents that act.[^1] Salesforce's own model of an agent is four parts: a role and persona, a set of topics, a set of actions, and instructions.[^4] You build those in Agent Builder, which you open from Setup by entering Agent in Quick Find and selecting Agentforce Agents.[^2] The role and company context set who the agent is pretending to be and what business it assumes it operates in. Topics carve its responsibilities into bounded areas. Actions are the units of work it can actually perform. Instructions shape how it behaves: tone, escalation, what it should refuse.
+
+Read that list as a design order rather than a feature list. The role is context, the topics are scope, the actions are capability, and the instructions are manners plus guardrails. An agent that answers the wrong question confidently is almost always an agent whose topics were scoped too broadly or too vaguely, because scope is the control that constrains everything downstream. Salesforce's architects make the same point a different way: a topic can be thought of as its own small agent with its own instructions and its own tools, and breaking a large job into distinct topics is what makes the agent handle a wider range of scenarios without collapsing into one undifferentiated prompt.[^3]
+
+### The Atlas reasoning engine chooses, it does not follow a script
+
+At run time the Atlas Reasoning Engine reads the user's request and the available context, picks the topic whose scope best fits, and then picks an action to run inside that topic. The engine is choosing between options, not stepping through a script. A user does not have to name a topic, topics do not run in creation order, and the platform does not run every topic and merge the results. The engine classifies the request against the topics it has and commits to one.
+
+That single fact explains most of the behavior that surprises people. Two topics with overlapping scope make the engine's choice unstable, so the same request can land in different places on different days. A topic described in internal jargon the engine cannot match against how customers actually phrase a request will be skipped in favor of a worse-fitting topic that happens to be worded more like the question. And because the engine commits to a topic and then to an action inside it, the reliability of the whole agent is bounded by how cleanly you drew the boundaries. Write the topic description so it mirrors the way the request arrives, and write the scope so it names the edges of the job, not just the job.
+
+### Topics carry a name, a description, a scope, and their own instructions
+
+A topic is a bounded area of responsibility. It carries a label and API name, a classification description, a scope statement, its own instructions, and the list of actions the agent may use while that topic is active. The classification description and the scope do double duty and that is the part consultants miss. The description tells the reasoning engine when to route a request into this topic, and the scope tells the agent what it is and is not allowed to attempt once it lands there. One field is a signpost and the other is a fence, and they are answering different questions.
+
+Topic level instructions refine or override the agent level instructions for the duration of that topic. An agent level instruction might say to keep replies short, while the topic handling escalation says to always offer a human handoff before ending a conversation. When the two conflict, the topic wins while that topic is active, which is exactly how you would want a specialist to behave. Salesforce's field guidance agrees with the practical version: describe the topic the way a customer would ask the question, and write the scope like a job description that constrains what happens inside. Keep them disjoint. When two topics overlap, the engine selects inconsistently, and inconsistent routing is a support ticket you will be reading for months.
+
+You also configure a fallback behavior for requests that match no topic. In a sales deployment the sane fallback hands the request to a human rather than letting the agent improvise an answer from the model's general knowledge. A fallback that tries to be helpful is a fallback that invents a price.
+
+### Actions are the unit of work, and they come from four sources
+
+An action is where the agent stops talking and starts doing. Every action traces back to one of four sources: a Salesforce Flow, an Apex class that exposes an invocable method, a prompt template authored in Prompt Builder, and a standard action that Salesforce ships.[^5] Each action declares typed inputs and outputs, and before the agent runs it the engine fills those inputs from the conversation and from record context. The agent is not improvising a call. It is populating a defined interface and invoking it.
+
+This is the design point consultants get wrong, and it is worth stating as a rule. An agent cannot do anything you have not given it an action for. So the useful discovery question is never "can the agent do X," it is "which existing automation do we expose as the action for X." If the org already runs a Flow that checks order status against the ERP, the work is to make that Flow an invocable action and attach it to the topic that owns order questions. If the only path to the ERP is a nightly batch file with no callable surface, then the honest answer is that no amount of prompt writing will give the agent that capability, and the project needs an integration before it needs an agent.
+
+An action implemented by a Flow inherits that Flow's entry criteria, its sharing behavior, and its governor limits, because the Flow is the thing actually running. A Flow that runs in system context sees records the running user cannot, and a Flow that runs in user context is bounded by that user's access. That distinction becomes a security decision rather than an implementation detail the moment an agent is answering a customer or a rep whose access is narrower than the integration user's. Typed inputs matter for the same reason: an action that expects an Opportunity Id and receives free text will fail in a way that looks like a model problem and is really an interface problem.
+
+### Instructions tell the agent how to behave, grounding tells it what is true
+
+Instructions and grounding are different controls and they are easy to confuse. Instructions tell the agent how to behave. Grounding is retrieving real data at the moment of generation and placing it in the model's context, so the answer is assembled from your records instead of from the model's training. You can write the world's best instruction and still get a false answer, because no instruction supplies a fact the model does not have.
+
+With Agentforce you ground on Salesforce objects, on knowledge articles, and on files and unstructured content through Data Cloud. Structured grounding sends the field values of a record, so the agent can see the Account, the Opportunity, the price book and the contact it is discussing. Unstructured grounding retrieves relevant passages from documents and articles, and that retrieval depends on Data Cloud indexing that content into a search index the agent queries by similarity. That dependency is why Data Cloud appears as a prerequisite in most Agentforce architectures rather than as an optional extra. Grounding is the largest single lever on accuracy. The same model with the same instructions produces very different answers once it can read the right Account, the right Opportunity and the right product catalogue.
+
+The lesson that comes out of this is uncomfortable and it is the one the exam rewards. A generated answer can only be as current as the record grounding retrieved. If a rep asks about a deal and the price book feeding the answer is three quarters old, the agent will quote an old price fluently. That is not a model defect and it is not fixed by a bigger model or by more actions. It is a data currency problem wearing a generative costume, and the fix lives in the data, not in the prompt.
+
+### The assistant rail and a purpose-built agent are two ends of one platform
+
+Einstein Copilot, now surfaced as the Agentforce assistant inside the app, is the rail the user meets first. It sits in a side panel on sales records, understands the record in context, and offers the standard actions and prompts the admin has enabled. Depending on configuration that can mean running a Flow, summarizing a record, or drafting a response to a customer message. The assistant is the general-purpose helper whose action inventory you curate.
+
+A purpose-built agent is the opposite end: a narrow specialist you build for one job, such as qualifying inbound leads or coaching reps on stalled deals, with topics and actions you define from scratch. Treat the two as ends of one platform rather than as replacements for each other. They run through the same Einstein Trust Layer, so masking, zero data retention and audit rules apply to both without extra configuration, and both are bounded by the same access model.[^6] The practical difference is scope and intent: you curate the assistant's action list and leave its behavior general, and you constrain the custom agent's topics tightly and let it go deep on one workflow.
+
+### What actually decides adoption in a sales deployment
+
+The generative surface a sales org asks about most is the sales agent pattern: an agent that prepares the rep before a call, summarizes an account, answers questions across the CRM, and drafts the follow up. Adoption of that pattern depends far less on the model than on three delivery decisions.
+
+First, which records the agent is allowed to see. An agent runs under the running user's access and sharing rules, so a rep without access to an Opportunity gets an agent that cannot discuss it. If your demo used an admin account and the reps use a restricted profile, the agent will appear to lose its memory the moment it is deployed, and the cause is sharing rather than the AI. Second, which actions exist for the workflows you promised. The action list is the contract between what the business asked for and what the agent can do, and a missing action is a missing feature regardless of how good the instructions are. Third, whether the grounding content is current, because an agent confidently quoting last quarter's price book is a data governance failure rather than an AI failure.
+
+The build sequence follows from all of that. In Setup you open Agent Builder, create the agent, and set its role, the company context it should assume, and the agent level instructions. You add the first topic with a name, description and scope, write the topic instructions, and note which requests belong here rather than in a neighboring topic. From the topic you add actions and choose the source for each one, a Flow, an Apex invocable method, a prompt template, or a standard action, then confirm the typed inputs and outputs line up. You turn on Data Cloud grounding for the agent and select the objects, knowledge articles, or search index it may retrieve from. You then use the test panel in Agent Builder to run the requests that should hit each topic and the ones that should not, and tune the topic descriptions until routing is stable. Finally you activate the agent, place it in the Lightning app or the assistant rail, and confirm that the running user's sharing access actually reaches the records the agent needs.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing the agent invents its own actions. It cannot. It can only run the actions attached to the topic it selects, so an answer in which the agent calls an API you never exposed is wrong by construction. When a scenario describes capability the org has not wired up, the missing action is the answer, not a configuration setting on the model.
+
+The second trap is believing grounding requires uploaded documents. Grounding commonly reads Salesforce objects and knowledge articles directly, and Data Cloud is the piece that indexes unstructured content such as files and documents for retrieval. A scenario about an agent reading Account and Opportunity fields is satisfied by structured grounding on those objects, and reaching for a document upload is the wrong move.
+
+The third trap is believing the app assistant and a custom agent are interchangeable. The assistant is the shipped helper whose action list you curate, and a custom agent is scoped to topics and actions you define. A requirement to build a narrow specialist with its own routing is a custom agent; a requirement to add one more helper action to the side panel is a change to the assistant.
+
+## What a consultant should walk away with
+
+Design an agent as four named parts and build them in order: role and company context, then topics with disjoint descriptions and scopes, then actions from the four sources, then instructions at both the agent and topic level. Remember that the reasoning engine chooses a topic by scope match and then an action inside it, so vague or overlapping topics are the root cause of confident wrong answers. Treat the action list as the boundary of what is possible: an agent cannot do what you have not exposed as an action, and the useful discovery question is which existing automation becomes that action. Keep instructions and grounding separate in your own head, because instructions set behavior and grounding sets truth, and an answer is only ever as current as the record grounding retrieved. Then check access before you promise anything, because the agent runs as the user, and retest routing every time a topic description changes.
+
+## What's next
+
+Lesson 37 - Generative AI Tools Compared: Prompt Templates, Email Generation, the Trust Layer, and Bring Your Own Model (pg-1b)
+
+[^1]: Salesforce Developers, "Get Started with Agentforce APIs and SDKs," (https://developer.salesforce.com/docs/ai/agentforce/guide/get-started-agents.html)
+[^2]: Salesforce Help, "Explore the Legacy Agentforce Builder," (https://help.salesforce.com/s/articleView?id=ai.agent_builder_explore.htm&type=5)
+[^3]: Salesforce Architects, "The Agent Development Lifecycle: From Conception to Production," (https://architect.salesforce.com/docs/architect/fundamentals/guide/agent-development-lifecycle.html)
+[^4]: Salesforce Help, "Agentforce Glossary of Terms," (https://help.salesforce.com/s/articleView?id=ai.copilot_glossary.htm&type=5)
+[^5]: Salesforce Developers, "Prompt Builder," (https://developer.salesforce.com/docs/ai/agentforce/guide/get-started-prompt-builder.html)
+[^6]: Trailhead, "Secure Generative AI with Salesforce's Einstein Trust," (https://trailhead.salesforce.com/content/learn/modules/the-einstein-trust-layer/meet-the-einstein-trust-layer)

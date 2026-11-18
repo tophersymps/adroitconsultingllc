@@ -1,0 +1,88 @@
+---
+title: "Lesson 35: Enforcing Sales Data Quality: Duplicate Management, Validation Layers, Normalization, and Stewardship"
+slug: day-35-dm-3b-enforcing-sales-data-quality-duplicate-management
+series: sf-agentforce-sales-consultant
+lesson: 35
+excerpt: "How to enforce data quality in Salesforce: matching rules versus duplicate rules, the Duplicate Record Set work queue, the three layers of field enforcement, normalization with picklists and standards, and the stewardship that keeps controls alive. Serves requirement dm-3b."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Duplicate Management, Validation Rules, Normalization, Data Stewardship]
+---
+
+# Lesson 35: Enforcing Sales Data Quality: Duplicate Management, Validation Layers, Normalization, and Stewardship
+
+An admin runs a 200,000 row Data Loader import of Accounts on a Friday, and on Monday the sales team finds hundreds of duplicates. The org has duplicate rules configured, the matching rule looks reasonable, and the UI would have blocked the worst of them. So the admin concludes the rules are broken. They are not broken. The import walked around them, and nobody had told the admin that Data Loader does not police duplicates the way the UI does unless the option is turned on.
+
+That gap is the theme of this lesson. Every quality control you configure covers some save paths and not others, and the failure mode is never that the control is missing. The failure mode is that the control exists and the write path ignores it. The consultant who says "duplicate rules cover the UI and the API but not a Data Loader run by default" earns the customer's trust; the one who says "we have duplicate rules, so we are covered" does not.
+
+This lesson serves the exam guide's requirement dm-3b, in the Data Management domain, which carries 18 percent of the exam. The objective asks you to discuss approaches for managing sales data quality in Salesforce. By the end of this lesson you will be able to tell a matching rule from a duplicate rule, read a Duplicate Record Set, choose among the three layers of field enforcement, standardize values so downstream systems agree, and put a stewardship model behind the controls so they survive the project team leaving.
+
+## Deep Dive
+
+### Matching rules versus duplicate rules: the distinction the exam loves
+
+Duplicate management in Salesforce is two separate objects that are constantly confused, and the exam tests the distinction. A matching rule defines what counts as a duplicate: which fields are compared, whether the comparison is exact or fuzzy, whether blank values are treated as matches, and on which object it applies. A duplicate rule defines what happens when the matching rule finds a match: Alert the user, Block the save, or Allow the save but add the record to a Duplicate Record Set and report it.
+
+Both objects have limits worth carrying into a build. An org can have up to five active duplicate rules per object, and a duplicate rule can include up to three matching rules, though only one matching rule is active per object in the standard arrangement. Match keys are the mechanism that keeps this fast: when a matching rule runs, it applies match key formulas first to narrow the candidates to the 100 most likely duplicates, then applies the full matching equation only to those.[^1][^2] So a customer who wants fewer duplicates needs a matching rule tuned to their real data, and then a duplicate rule whose action matches their tolerance. Setting a Block action on a matching rule that is too broad stops legitimate business, which is why fuzzy and blank handling are the settings to review first, before you reach for Block.
+
+A worked tuning example makes this concrete. Suppose the customer's account names are entered as "Acme Corp," "ACME Corporation," and "acme corp" with trailing spaces. An exact match on Account Name catches none of those reliably, so the matching rule needs a fuzzy method plus normalization that strips case and punctuation. Then there is blank handling. If the rule treats blank as a match, the very first bulk load creates one enormous duplicate set out of every record with the field left empty, and the steward's queue is useless before it starts. Decide explicitly that a record with no Account Name does not match another record with no Account Name. Blank handling is the first setting to review, well before the action choice of Alert, Block, or Report.
+
+### The Duplicate Record Set is the work queue
+
+When a duplicate rule with a report action fires, Salesforce creates a Duplicate Record Set and one Duplicate Record Item per matching record, which is what the Duplicate Record Sets page lists. That set is the work queue: an admin or steward opens it, compares the records side by side, and merges. For each matching rule run on a record, up to 100 duplicates can be reassigned to a duplicate record set, and if the rule is a cross-object rule, the set includes duplicates on the other object too, such as contacts that duplicate leads.[^1]
+
+Treat the set as an operating queue rather than a report. A queue that nobody opens grows silently, and a set reviewed a month later often contains merges that a rep already made by hand. The practical build is to schedule a recurring duplicate report per object, assign the queue to a named steward, and agree a merge policy before anyone merges anything: who may merge, what the surviving record's values are, and whether related records are reparented. Without that policy, two admins merge the same pair differently and you have traded one data problem for another.[^1]
+
+### Duplicate rules and the save paths they do not cover
+
+Duplicate rules apply to supported standard objects including Account, Contact, and Lead, and to custom objects, and they fire on the UI and API save paths. They do not run in several situations that a scenario will lean on: records created through Quick Create or Community Self-Registration, records restored with the Undelete button, records added by Lightning Sync or Einstein Activity Capture, and records created by a manual merge all bypass the rules.[^1] And the option settings themselves are overridden for records added through the data import tools or written by Salesforce APIs, which is the gap that produced the Friday import in the scene that opens this lesson.[^1]
+
+The single most common way a governed org still accumulates duplicates is the bulk import path. Data Loader is designed for volume and complex mappings rather than duplicate prevention, and it does not enforce the duplicate rules you rely on in the UI unless that checking is explicitly enabled for the load. That is why Salesforce points people at the Data Import Wizard when the goal is to prevent duplicates and at Data Loader when the goal is volume, and why the answer to "why do we have duplicates when the UI blocks them" is almost always the import path.[^6] Always state the entry path alongside the rule when you describe a duplicate control, because a control that does not cover the path that creates the records is not a control.
+
+### Three layers of field enforcement, and they are not interchangeable
+
+There are three layers of field enforcement, and the exam rewards knowing which one actually protects the data. A required field on a page layout stops a user in the UI and nothing else. A validation rule runs on the object and fires on new and updated records regardless of the page layout or the API call the record arrives through, so it is the layer that actually protects the data, and it also applies to records created through the API and through imports.[^3] A field marked universally required on the field definition itself is enforced at the data layer for every save path, including the API, Web to Lead, and automated processes, and it is available only on custom fields.[^4]
+
+Choose deliberately. Page layout required is for user guidance, so a rep sees the field and knows it matters. Validation rules are for business logic, written with a bypass for trusted loads. Universally required is for values that must exist on every record no matter who writes it. Two caveats keep you out of trouble. A validation rule written without a bypass will block an integration or a legacy migration the day it deploys, so decide the bypass before the rule goes live. And a universally required field must be included in your import files or the import fails, and standard fields cannot be made universally required at all, so a business critical standard field such as Amount needs a validation rule rather than the universally required checkbox.[^4]
+
+A bypass done properly is narrow and auditable. Give the trusted integration user a custom permission, have the validation rule check for it, and report on the records that used the bypass so a human sees them. That way the integration keeps writing clean records, the sales users still cannot save an Opportunity without an Amount, and you can prove after the fact which records arrived through the exception. A bypass implemented by deactivating the rule for everyone is not a bypass; it is a control you switched off, and the next scenario the exam writes about a validation rule that "suddenly stopped working" is usually this mistake.
+
+### Normalization: the unglamorous half of quality
+
+Normalization is the unglamorous half of quality, and it is worth real exam points because it prevents whole classes of failure rather than cleaning up after them. State and Country/Territory Picklists replace free text country and state fields with a controlled, standardized set of ISO based values, which fixes reporting, territory assignment, and address validation in one change.[^5] Enabling them is not a switch you flip and forget: you configure the values you want, scan the org for affected data and customizations, map the existing free text values to the standard list, and only then turn the picklists on, because doing it in the wrong order leaves existing records that are incompatible with the new format.[^5]
+
+Phone and email standards matter for a different reason: they are the match keys for duplicate rules and for Einstein Activity Capture. If the same contact is stored as three phone formats, the sync cannot associate the activity, and the duplicate rule that compares phone numbers cannot see the match. Picklist governance covers the rest of the consistency story. Restricted picklists prevent a new value from being typed in, dependent picklists keep a child value valid for its chosen parent, and global value sets keep the same option list consistent across many fields. Every free text field that should have been a picklist is a future consistency defect with an owner and a date attached, so treat a new free text field request as a question: why not a picklist?
+
+### Stewardship: the human layer that keeps controls alive
+
+Technical controls decay without a human layer, so stewardship is a deliverable and not a nice to have. Name a data steward per object or per business domain, and give them the authority to reject a new field request, because the field count grows one reasonable request at a time until nobody can explain half of them. Maintain a data dictionary that records each field's definition, owner, allowed values, and system of record, because the ambiguity that breaks integrations is almost always a definition nobody wrote down. A data dictionary earns its place the first time two systems disagree about what a field means. If the ERP's customer concept includes prospects and the Salesforce Account does not, every sync that matches on that concept misaligns silently, and the fix is a written definition plus a named system of record: for each field, which system is authoritative and which systems follow. "We both own it" is the answer that produces support tickets in month three.
+
+Define a field intake process so a new custom field requires a name, a type, a picklist where one fits, an owner, and a retirement date. Agree the merge policy for duplicates: who may merge, what the surviving record's values are, and whether related records move with the surviving record. Without these three artifacts, the org accumulates fields nobody can explain and duplicates nobody owns. Stewardship is also the answer to a specific exam prompt pattern: when the question asks how to keep quality high after go-live, the accepted answer names the owner and the cadence, not just the feature.
+
+### Continuous improvement closes the loop
+
+Continuous improvement closes the loop, and it is where the exam usually lands when it asks for an approach rather than a setting. Schedule recurring duplicate reports per object so the queue does not silently grow. Keep the completeness dashboards from the measurement work running, with a named recipient rather than a shared inbox. Build exception reports for values that bypass validation, such as records created by an integration that was granted a bypass, so the bypass does not become a permanent hole. Review field usage quarterly and retire what the business has abandoned, using whichever scan is current for the org. Then report quality against the success metrics agreed before the implementation, because a steward who can show forecast accuracy improving has the standing to keep enforcing the controls after the project team leaves.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is swapping the matching rule and the duplicate rule. The matching rule decides what counts as a duplicate, and the duplicate rule decides what happens next, so an answer that says the matching rule blocks the save has the two objects reversed. When a scenario asks you to stop a specific near match, remember that the tuning lives in the matching rule and the action lives in the duplicate rule.
+
+The second trap is believing duplicate rules cover every save path. They do not run on Quick Create, on Community Self-Registration, on Undelete, or on records added by Lightning Sync and Einstein Activity Capture, and they do not police a Data Loader import unless that checking is enabled. An org can have perfect duplicate rules and still import thousands of duplicates, and the exam likes that gap. Read any scenario that mentions a bulk load with that knowledge in hand.
+
+The third trap is treating a page layout required field as data protection. It is UI only, so an integration, a Data Loader job, or a Web to Lead submission writes the record with the field blank. The validation rule or a universally required field is the answer that actually holds, because both apply to paths the page layout never touches.[^3][^4]
+
+## What a consultant should walk away with
+
+Keep the two duplicate objects straight: the matching rule defines what is a duplicate, the duplicate rule decides what happens, and the Duplicate Record Set is the work queue you must staff. Before you promise that duplicates are managed, name the save paths your rules cover and the ones they do not, especially the bulk import path, because that is where governed orgs still collect duplicates. For field enforcement, reach past the page layout: use a validation rule for business logic with a bypass for trusted loads, and a universally required field for values that must exist on every record no matter who writes it. Standardize with State and Country/Territory Picklists, restricted and dependent picklists, and global value sets, and fix phone and email formats because they are your match keys. Then put the human layer behind it: a steward per object, a data dictionary, a field intake process with a retirement date, and an agreed merge policy. Run the queue weekly, the duplicate report monthly, and the field review quarterly, and report it all against the metric the business already cares about. Controls keep the data clean today; stewardship is what keeps them working next year.
+
+## What's next
+
+Lesson 36 - Agentforce Agents in Sales: Topics, Actions, Instructions, and Grounding (pg-1a)
+
+[^1]: Salesforce Help, "Things to Know About Duplicate Rules," (https://help.salesforce.com/s/articleView?id=sales.duplicate_rules_overview.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "Things to Know About Matching Rules," (https://help.salesforce.com/s/articleView?id=sales.matching_rules_overview.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Validation Rules," (https://help.salesforce.com/s/articleView?id=sf.fields_about_field_validation.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Require Field Input to Ensure Data Quality," (https://help.salesforce.com/s/articleView?id=fields_about_universally_required_fields.htm&language=en_US)
+[^5]: Salesforce Help, "Let Users Select States, Countries, and Territories from Picklists," (https://help.salesforce.com/s/articleView?id=sf.admin_state_country_picklists_overview.htm&language=en_US&type=5)
+[^6]: Salesforce, "When to Use Data Loader," Data Loader Guide, (https://developer.salesforce.com/docs/platform/data-loader-impl/guide/when-to-use-the-data-loader.html)

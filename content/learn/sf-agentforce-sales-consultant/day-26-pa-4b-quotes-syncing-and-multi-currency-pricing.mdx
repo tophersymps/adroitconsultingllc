@@ -1,0 +1,106 @@
+---
+title: "Lesson 26: Quotes, Syncing, and Multi-Currency Pricing"
+slug: day-26-pa-4b-quotes-syncing-and-multi-currency-pricing
+series: sf-agentforce-sales-consultant
+lesson: 26
+excerpt: "How to turn an opportunity into a document a buyer signs: enabling quotes, building quote line items from a price book, quote templates that control the customer PDF, the one-way quote sync, and the corporate currency and dated exchange rates that keep multi-currency orgs honest. It serves requirement pa-4b."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Quotes, Multi-Currency, Price Books, Salesforce Sales Cloud]
+---
+
+# Lesson 26: Quotes, Syncing, and Multi-Currency Pricing
+
+A regional sales director calls you on the last day of the quarter with a number that will not close. Her rep built a five-line opportunity, the customer negotiated a twelve percent discount, and she signed off on it three days ago. The amount on the opportunity is still list price. The rep swears she updated the quote. She did. She edited the quote line items and saved, and that edit went nowhere, because the quote and the opportunity were never connected. One action would have moved the number, and nobody had run it.
+
+That gap is the reason this objective exists. Most teams love the pipeline and tolerate the paperwork, so they build products, price books, and opportunity products, then treat quotes as something the back office handles in a spreadsheet. The result is two versions of the truth: the opportunity the forecast reads, and the quote the customer actually signed. When those two drift, the forecast is fiction. The objects that close the gap are Quote, QuoteLineItem, and QuoteTemplate, joined by one sync action, and in a multi-currency org a second layer sits underneath all of them.
+
+This lesson serves requirement pa-4b, in the Practical Application of Agentforce Sales Expertise domain, which carries 24 percent of the exam. The objective asks you to outline the capabilities, use cases, and design considerations for Opportunity Products, Products, Price Books, Quotes, and the impact of multi-currency. By the end you can enable quotes, build the document a buyer signs, explain what the sync overwrites and in which direction, stand up the corporate currency and exchange rates without creating retroactive drift, and name the multi-currency failure modes that break a single deal.
+
+## Deep Dive
+
+### Quote is a child of the opportunity, and a setting turns it on
+
+Quote is the object that turns a deal into a document.[^5] It sits on the opportunity, references a price book, and carries its own currency, expiration date, contact and billing and shipping addresses, and a status.[^1] That status moves through Draft, Needs Review, In Review, Approved, Presented, Accepted, Denied, and Rejected as the negotiation advances. The status is not decoration. Depending on how the client configures approvals and locks, the status gates who can still edit lines and whether the quote can be synced, so a quote parked in a locked state behaves differently from a Draft.
+
+The feature is off until you switch it on. In Setup, under Feature Settings, open Quotes and then Quote Settings, and enable quotes for the org. Until that checkbox is set, the Quotes related list does not appear on the opportunity and reps cannot create a quote record at all. This is the first thing to check when someone tells you quotes are not working, because the answer is frequently that the feature was never enabled in the org rather than that a permission is wrong.
+
+A quote with no line items is an empty shell. You fill it by selecting products from the quote's price book and then adjusting quantity, sales price, and discount per line. The mechanics mirror the opportunity: the quote points at a price book, and the products you can select are the products that have an active entry in that book. A quote against a book the product is not priced in shows the product as unavailable, which is the catalog telling you the price list does not cover it. Get the price book right on the quote and the selection list sorts itself out.
+
+### Quote line items are the same pricing model underneath
+
+QuoteLineItem is the line on the quote, and each one points at a Product2 and a PricebookEntry exactly as an opportunity product does.[^2] The object reference is blunt about the constraint: a quote can have line items only if the quote has a Pricebook2, and a QuoteLineItem must correspond to a Product2 listed in that quote's Pricebook2. The API validates the correspondence when you create or update a line, so a line that has no matching entry in the quote's book is rejected rather than silently priced at zero.
+
+Two behaviors on this object matter for a design. First, adding a QuoteLineItem increments the quote's total by the line's TotalPrice, so the quote total is a consequence of the lines and not a number a rep types. When a scenario says the quote total is wrong, you look at the lines. Second, when multiple currencies are enabled, the line inherits the parent quote's CurrencyIsoCode and you cannot change it. The reference is explicit that the field is always set to the value of the parent quote's currency. That single fact kills the idea of a mixed-currency quote, which is one of the distractors the exam leans on.
+
+Because QuoteLineItem and OpportunityLineItem both resolve through a PricebookEntry, the same price book and product data feed both records. You are not maintaining two catalogs. You are pricing one catalog in two places, and the sync is what lines them up. Once you internalize that, the ordering rule from the earlier products lesson still holds here: no active entry in the book means no line, on either object.
+
+### Quote templates decide what the customer sees
+
+A QuoteTemplate is a record that defines the layout of the generated document: the columns, the header and footer, and the fields rendered into it. You output the template as a PDF or a Word file. You mark one template as the default for the org, and you can override it per quote when a deal needs a different presentation. The build path is Setup, Feature Settings, Sales, then Quotes, where you manage the templates and set the default.
+
+The important distinction is that a template changes presentation, not data. Every number that appears in the customer document already exists on the line items; the template chooses whether to show the discount column, the product code, the tax note, or the terms block. A template that omits a column the customer expects is a delivery defect rather than a data problem, and it is fixed by editing or swapping the template, not by writing a formula field or inventing a new object. This is exactly the shape of the scenario question the objective likes: when a client asks how they get a branded, column-controlled quote document instead of a raw product list, the answer is a quote template attached to the quote.
+
+Versioning is worth setting up at the same time. When a rep revises an offer after a resumed negotiation, incrementing the quote version creates a new quote record linked to the original, so the paper trail of what was offered at each step survives. That history is what protects an approval decision when someone later asks why the discount is where it is. The default template keeps the current document presentable while the version records preserve what came before it.
+
+### Sync is a one-way bridge, and it overwrites
+
+Syncing is the operation that connects the quote back to the deal. When you sync a quote, Salesforce copies the quote's line items onto the opportunity's line items and updates the opportunity Amount from them, so the opportunity reflects what the quote states.[^3] The direction is the part candidates get wrong. The quote is the source and the opportunity is the target. The help page on syncing is specific that replacing the synced quote with another one replaces the existing opportunity line items with the newly synced quote's records, which is the overwrite in plain language.
+
+The field matches are documented, so you do not have to guess them. On the quote-to-opportunity header sync, the opportunity's Synced Quote aligns with the quote's IsSyncing flag, the opportunity's Amount aligns with the quote's TotalPrice, and Pricebook2 aligns on both sides.[^4] On the line level, quantity, unit price, service date, and discount flow across. Because the amount is derived from the lines, a rep who edits the opportunity line items after a sync and then syncs again loses those manual edits: the quote wins on the next sync. Teach that plainly, because "the quote overwrites the opportunity" is the sentence the exam wants.
+
+Two prerequisites sit under the action. The products on the quote must already have entries in the price book the opportunity uses, or the sync has no entry to map the line onto. And a quote that is locked by an approval cannot become the synced quote, so the order is approve, then sync. The trap is treating sync as a two-way merge. It is a push from the paperwork to the pipeline, and the pipeline absorbs whatever the paperwork says.
+
+### How the org gets built, end to end
+
+The build is a short ordered sequence, and the order is the teaching. Work through it this way on a real org.
+
+1. In Setup, under Feature Settings, open Quotes and then Quote Settings, and enable quotes for the org.
+2. In Setup, under Feature Settings, open Sales and then Quotes, create your quote template, and mark one template as the default.
+3. In Setup, under Company Settings, open Company Information and then Manage Currencies, set the corporate currency, and activate the currencies the client transacts in.
+4. On the same Manage Currencies page, enter the exchange rates, and if converted amounts must stay stable over time, enable Advanced Currency Management with dated exchange rates.
+5. On the opportunity, set the price book and the currency, then create the quote and add the products as quote line items.
+6. On the quote, generate the document with the template, then run the sync and confirm the opportunity Amount updates.
+
+Steps three and four are the ones people skip, and a multi-currency client pays for that skip every period close. Steps one through three are also the checks that explain most "quotes are broken" tickets.
+
+### Multi-currency starts with the corporate currency
+
+Multi-currency starts with one decision that is hard to reverse. When you enable multiple currencies in Company Information, you choose the corporate currency. The corporate currency is the base currency the org reports in, and every converted total in the org is expressed in it. You then activate the currencies your users can transact in, and you set an exchange rate for each one.[^6] Each user also has a personal currency, which is the currency in which they see converted values.
+
+The corporate currency is meant to be stable. Changing it after records exist is heavily constrained, so it is a once-with-finance decision made before you activate additional currencies. Get it wrong and you are reconciling against a base that moved under your historical numbers. The conversion between a record's currency and the corporate currency runs through an exchange rate, and without advanced currency management that rate is the current active rate. That is the trap in the design: a rate change today retroactively changes how an older opportunity converts in a corporate-currency report, so the detail is untouched while the summary moves.
+
+Two rules keep a single deal sane. An opportunity uses exactly one currency, and every price book entry for its products must be in that same currency, so you cannot mix currencies on one deal. An opportunity in euros needs euro entries; a rep who adds a dollar-priced product finds no matching entry and the product does not appear. And a quote cannot mix currencies within its line items, because each line inherits the parent quote's currency. Reports and forecasts roll up by converting each record's amount into the corporate currency, so the opportunity stays in its own currency while the summary converts. When records in the org use different currencies, any rollup that spans them is a converted figure, never a raw sum.
+
+### Advanced Currency Management and dated rates
+
+Advanced Currency Management with dated exchange rates is what stops the retroactive drift.[^7] With it enabled, you maintain a rate per currency per date range, so a converted amount uses the rate in effect on the date the amount was recorded rather than today's rate. Turn it on from Manage Currencies, alongside the rates themselves. The help page describes the mechanism precisely: each dated rate is defined by a start date and a conversion rate, and it stays in effect until the day before the next start date for that currency, so the date range can be a single day or all time. When you first enable it, your existing exchange rates become the first set of dated rates and are valid for all time until you define another set.
+
+The payoff is stable history. Converted amounts stop moving when the market moves, which is what finance needs at period close and what any team that compares a pipeline this month to the same pipeline last month needs. The reference lists the objects that consume dated rates, which include opportunities, opportunity products, opportunity product schedules, campaign opportunity fields, opportunity splits, and the reports built on them. That list is worth remembering, because it is also the boundary: dated rates do not reach every currency field in the org, so a design that assumes one uniform conversion everywhere will be surprised by the exceptions.
+
+The trade is upkeep. You enter future-dated rates on a schedule, and you keep them current, because an out-of-date dated rate is just drift with more steps. Salesforce converts in two hops, from the record currency to the corporate currency and then to the user's personal currency, so stale rates can compound across both conversions. For a frozen historical view when you need one, you use analytical snapshots rather than editing the rates under the report.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing quote sync runs both ways. The quote is the source and the opportunity is the target, so syncing overwrites the opportunity's line items and recomputes the amount, and a later edit to the opportunity is discarded the next time the quote syncs. When a question describes a rep who edits the opportunity products and then loses those edits, the answer is the direction of the sync, not a permissions problem.
+
+The second trap is believing that a corporate-currency report sums raw amounts across currencies. Summaries convert each record into the corporate currency before they total, so records in different currencies are never added as-is, and a rate change moves the converted total even though no rep touched a record. The wrong belief produces a forecast that looks like a math error; the right belief produces the question "did the rate change?" The exam answer that describes a straightforward addition of amounts in different currencies is always wrong.
+
+The third trap is believing you can mix currencies on one deal. An opportunity uses one currency and its products must have price book entries in that currency, so adding a differently priced product fails before the numbers are even wrong: there is no entry to bind the line to. The same wall stands in front of a quote, because quote lines inherit the parent quote's currency and cannot override it. Take the deal-level view: one opportunity, one currency, one matching set of entries, and the rollup conversion happens above all of that, not inside it.
+
+## What a consultant should walk away with
+
+Enable quotes before you promise anything, because the related list does not exist without the checkbox. Build the quote as a child of the opportunity against a specific price book, and remember that a quote line resolves through a PricebookEntry just like an opportunity product, so the catalog is shared and the quote total is derived from its lines. Choose the template to control the document the customer signs, and treat a missing column as a template fix rather than a data fix. Run sync deliberately: it pushes the quote onto the opportunity, overwrites the opportunity's line items, and recomputes the amount, so the opportunity after a sync is a copy of the paperwork. In a multi-currency org, lock the corporate currency with finance before you activate anything else, give every deal exactly one currency with matching entries, and enable dated exchange rates under Advanced Currency Management when historical converted amounts have to stop moving. Do those five things and the paperwork and the pipeline agree, which is the only state in which a forecast is worth reading.
+
+## What's next
+
+Lesson 27 - Campaigns and Leads: Scenarios the Objects Support (pa-5a)
+
+[^1]: Salesforce, "Quote | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-quote.html)
+[^2]: Salesforce, "QuoteLineItem | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-quotelineitem.html)
+[^3]: Salesforce Help, "Sync Quotes and Opportunities," (https://help.salesforce.com/s/articleView?id=sf.quotes_synch.htm&type=5)
+[^4]: Salesforce Help, "How Quote Syncing Works," (https://help.salesforce.com/s/articleView?id=sf.quotes_synch_overview.htm&type=5)
+[^5]: Salesforce Help, "Quotes," (https://help.salesforce.com/s/articleView?id=sales.quotes_overview.htm&type=5)
+[^6]: Salesforce Help, "Manage Multiple Currencies," (https://help.salesforce.com/s/articleView?id=sales.admin_currency.htm&type=5)
+[^7]: Salesforce Help, "About Advanced Currency Management," (https://help.salesforce.com/s/articleView?id=sf.administration_about_advanced_currency_management.htm&type=5)

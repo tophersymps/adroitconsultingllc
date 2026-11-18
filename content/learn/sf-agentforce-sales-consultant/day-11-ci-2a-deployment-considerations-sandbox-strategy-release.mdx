@@ -1,0 +1,83 @@
+---
+title: "Lesson 11: Deployment considerations: sandbox strategy, release management, and deployment tools"
+slug: day-11-ci-2a-deployment-considerations-sandbox-strategy-release
+series: sf-agentforce-sales-consultant
+lesson: 11
+excerpt: "Deployment is how configuration, code, and data move from where you built them to where they must run. This lesson covers the sandbox strategy behind release management, what change sets and packages can and cannot carry, and the production gates that decide whether a release lands."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Deployment, Sandboxes, Change Sets, Release Management]
+---
+
+# Lesson 11: Deployment considerations: sandbox strategy, release management, and deployment tools
+
+Your integration test passes in the Developer sandbox on a Thursday afternoon. On Monday morning the same configuration fails in production, and the failure is not in the code. The test looked clean because the sandbox held three Accounts and the flow was written against a table that in production holds four hundred thousand rows. The change set that carried the console also never carried the data your flow depended on, because a change set cannot carry data, and nobody flagged the gap because "deploy" felt like a button rather than a design decision.
+
+The naive approach is to build everything in one sandbox, assemble a change set at the end, upload it, and treat any failure as bad luck. That breaks for a predictable reason. Deployment moves the definition of an org, not the contents of it, and it carries the assumptions of the environment you built in into an environment that does not share them. A team that never decides which sandbox answers which question, and never defines its release window, is not deploying. It is guessing under deadline.
+
+This lesson serves requirement ci-2a in the Consulting and Implementation Strategies domain, which carries 25 percent of the exam. It teaches the vocabulary the exam leans on (source org, target org, deployment connection, change set, package, Metadata API, sandbox, refresh, validate, and release window), the four sandbox types by their real limits, and the production gates that a sandbox deployment never has to clear. After it, you should be able to lay out a repeatable release path for a client, defend it, and explain why each step exists.
+
+## Deep Dive
+
+### The pipeline and the vocabulary that carries it
+
+Deployment is the act of moving configuration, code, and data from where you built them to where they must run, without losing work and without breaking production.[^3] The vocabulary is small, and the exam leans on it hard. The source org is where the change was made. The target org is where it must land. A deployment connection is the authorized link between two orgs that lets a change set travel, and the connection has to be configured on both ends, with outbound permissions on the sending org and inbound permissions on the receiving org. A change set is the point-and-click container. A package is the versioned container. The Metadata API is the underlying interface that the CLI and the deployment tools call.[^4] A sandbox is the isolated copy of production you build in, a refresh rebuilds that sandbox from production, and a validate is a full deployment run that stops short of committing. The release window is the calendar slot you have chosen for the change to go live.
+
+The shape of a healthy pipeline is not complicated once the vocabulary is in your head. You build in a Developer sandbox. You integrate in a Partial Copy or Full sandbox. You run user acceptance testing in a Full sandbox or a clean staging org. You then deploy to production through a controlled path that you can repeat and explain, not a path that depends on one person remembering the order. Get the pipeline in your head and the scenario questions become readable: most of them reduce to deciding where in that pipeline a given change belongs.
+
+### The four sandbox types, by refresh interval, storage, and what they copy
+
+Every deployment question bends around the differences between the four sandbox types, so learn them by refresh interval, storage, and what they copy. A Developer sandbox refreshes every 1 day, holds 200 MB of data (400 MB with a storage upgrade) and 200 MB of files, copies metadata only, and supports no sandbox templates.[^1] If you want one, Enterprise gives you 25 and Unlimited gives you 100. A Developer Pro sandbox also refreshes every 1 day and copies metadata only, but it holds 1 GB of data and 1 GB of files, which is enough to load a subset of records for light testing. A Partial Copy sandbox refreshes every 5 days, holds 5 GB of data, matches your production file storage, and copies metadata plus sample data defined by a sandbox template that is required for this type. A Full sandbox refreshes every 29 days, mirrors production storage, and copies metadata and all data, and it is the only type that supports sandbox templates freely.
+
+The trap inside Partial Copy is the template. Partial Copy copies sample data only for the objects you include in the template, so a template that omits an object hands you an integration test against an empty table. The test passes, the failure ships, and it surfaces in production later. Full sandbox carries a different trap. Twenty nine days between refreshes is a long commitment, so a team that schedules the refresh late loses a week of usable test data, and a team that shares one Full sandbox across integration, UAT, and training collides with itself because the refresh that helps one phase wipes the data another phase was mid-way through. Match the sandbox to the question you are asking of it, not to the one that costs least.
+
+### What a refresh really does, and why the schedule is the whole game
+
+A refresh rebuilds the sandbox from production and overwrites everything already in it.[^2] That single sentence explains most sandbox accidents. Someone refreshes a Full sandbox without telling the team, and the unmerged work another admin had accumulated over three weeks disappears, along with any test data a tester was working through. The org ID changes on every refresh, which means integration endpoints and connected apps pointed at the old ID have to be re-pointed afterward.
+
+That is why refresh dates are planned rather than spontaneous, and why the sandbox with the longest interval, the Full sandbox, gets the most careful scheduling of all. A Developer sandbox that refreshes daily sounds ideal until you remember it starts empty of records, so it is a fast place to prove metadata and a useless place to prove behavior against volume. The practical rule is to write the refresh dates into the release calendar next to the deployment dates, and to treat a refresh as a change with an owner, a notice, and a recovery expectation, exactly the way you treat a deployment.
+
+### Change sets: the point-and-click path and its hard limits
+
+A change set carries metadata only, never records. That is the first thing to fix in your head, because it decides half the exam questions on this objective. A deployment does not move data, and any row data must be loaded separately with a data tool. A change set also reaches only the components you can get to through the Setup menu, so you cannot move a list of contact records or anything outside the metadata model through it. It requires a deployment connection between the two orgs, and you add components by hand rather than by query. When a component references something else, you use the Add Dependencies button to pull in what it needs.
+
+The limit exam writers return to most often is deletion. A change set cannot delete a component in the target org, so a field you removed in the sandbox lives on in production until you delete it manually or through the Metadata API. The change set has no version control either, so the only history of what shipped is whatever you wrote down, and it cannot express order, so a dependency mistake surfaces as a failed deployment at the end of the window. Where change sets break in practice is a hundred-component release with four admins on it: nobody can state what shipped, and the second deployment of the same set behaves differently from the first because the target org moved underneath it.
+
+### Packages: unlocked for distribution, managed for AppExchange
+
+Packages split by audience, and the split is examinable. Unlocked packages are versioned, source-controlled, and metadata only, and they are the right tool when an internal asset has to reach many orgs or refresh repeatedly.[^7] The Salesforce documentation is direct about this: unless you plan to distribute on AppExchange, an unlocked package is the right package type for most use cases, because you organize the metadata, version it from source control, and install each version over the old one while keeping a real upgrade path. Unlocked packages are metadata only, and they can be org-dependent or org-independent, which matters when your configuration expects companion settings to already exist in the target. Unlocked packages give you no intellectual property protection, so anyone who installs one can read its source.
+
+Managed second-generation packages are the AppExchange path. They are versioned, upgradeable, source hidden, and able to run post-install Apex that seeds data. Read the shape of that sentence because it answers a frequent question: no package and no change set carries records, so if data must arrive with the install, the mechanism is a post-install script or a load after the install. The exam probes this trade-off repeatedly. If the deliverable is a commercial app, the answer is a managed package, because it hides the source. If the deliverable is an internal console shipped to a dozen orgs, the answer is an unlocked package, because it versions and upgrades without the packaging overhead of the AppExchange.
+
+### Source-driven deployment and the production gates
+
+Source-driven deployment is the third path and the one mature teams converge on. The Salesforce CLI works against the Metadata API, so you can retrieve, validate, and deploy from a git repository, and Lifecycle Center, formerly DevOps Center, sits on top of that with work items, source-control branches, and pipelines that promote a change through stages. A pipeline stage maps to an environment and a branch, and promoting a work item merges the branch and deploys to the next stage org. The advantage is a single source of truth and a reviewable history. The cost is that every change now exists twice, once in the repo and once in the org, so the org drifts the moment someone edits a flow in production directly. If you adopt this path, you also adopt a rule that production changes go through the pipeline.
+
+Production deployment has gates that sandbox deployment does not. A production deployment requires Apex tests to run in the target org and requires at least 75 percent code coverage, so a build that passed with NoTestRun in a sandbox fails against production.[^5] NoTestRun is not available for production deployments. Validate-only deployment, sometimes called a dry run, runs the whole deployment including tests without committing, and the CLI exposes it as `sf project deploy validate`, which is how you find a coverage problem early instead of at the release window.[^6] The release calendar shapes all of this: Salesforce upgrades production three times a year in Spring, Summer, and Winter, and each upgrade is preceded by a sandbox preview window in which you test your customizations against the new release. Check your Full sandbox refresh timing against that preview window, because a refresh in the middle of it wastes the window.
+
+### Agentforce deployment facts that change the checklist
+
+Agentforce adds facts of its own. Agents travel as metadata, including the agent and its version, the planner bundle, the plugins and functions, and prompt templates from Prompt Builder, so a change set or a package can carry them provided the target org has the licensing and the Einstein features enabled. A deployed agent arrives inactive and must be activated in the target org before anyone can use it. The Einstein Trust Layer settings and the permission sets the agent needs are org settings and access records that do not travel automatically, so a deployment that moves the agent but not its enablement hands you a silent failure. Test agent behavior in the target with Agentforce Testing Center before you let users at it.
+
+The rule that carries the whole topic is one sentence: the deployment moves the definition, the consultant moves the enablement. Metadata arrives. Activation, Trust Layer settings, permission sets, and the license that lets the agent run are your job, and the exam frames the failure exactly there. A team that deploys an agent and declares victory, without activating it and without confirming the Trust Layer is enabled in that org, has shipped an inactive asset and called it a release.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a change set carries data. It carries metadata only, and the documentation is explicit that change sets contain information about the org and not records, so a deployment never moves the row data your flows or reports depend on and any data has to be loaded separately. The second is thinking a change set can delete a component in the target org. Deletion is not a change set operation, so a field or object you removed in the sandbox stays in production until you remove it by hand or through the Metadata API, and a team that assumes otherwise ships a schema it thought it had cleaned up. The third is assuming NoTestRun also validates production. Production requires Apex tests to run locally in the target org, which means a build that cleared a sandbox with NoTestRun fails against production, and validate-only deployment is how you find that out early instead of during the window.
+
+## What a consultant should walk away with
+
+Choose the sandbox by the question it answers, not by the price: Developer and Developer Pro for metadata and light data, Partial Copy for realistic volume against a template you actually populate, and Full for the release-candidate pass, refreshed on a planned date you published to the team. Treat a refresh as a change with an owner and a notice. When you deploy, remember that the container is metadata only, that deletions do not ride along, and that production runs the tests your sandbox did not have to. Before the window opens, validate against production with `sf project deploy validate` and read the coverage result. For Agentforce, add the enablement steps to the same checklist: activate the agent, confirm the Einstein Trust Layer settings and permission sets exist in the target, and run the agent test suite before a user ever touches it.
+
+## What's next
+
+Lesson 12 - Choosing a deployment path: change sets, packages, or source-driven releases (ci-2b)
+
+[^1]: Salesforce, "Sandbox Licenses and Storage Limits by Type," (https://help.salesforce.com/s/articleView?id=platform.data_sandbox_environments.htm&language=en_US&type=5)
+[^2]: Salesforce, "Refresh Your Sandbox," (https://help.salesforce.com/s/articleView?id=platform.data_sandbox_refresh.htm&language=en_US&type=5)
+[^3]: Salesforce, "Deploy Your Changes," (https://help.salesforce.com/s/articleView?id=sf.deploy_overview.htm&language=en_US&type=5)
+[^4]: Salesforce, "Understanding Metadata API," (https://developer.salesforce.com/docs/platform/api-metadata/guide/meta-intro.html)
+[^5]: Salesforce, "Run Apex Tests," (https://developer.salesforce.com/docs/platform/sfdx-dev/guide/sfdx-dev-testing.html)
+[^6]: Salesforce, "project Commands," (https://developer.salesforce.com/docs/platform/salesforce-cli-reference/guide/cli_reference_project.html)
+[^7]: Salesforce, "Unlocked Packages," (https://developer.salesforce.com/docs/platform/sfdx-dev/guide/sfdx-dev-unlocked-pkg-intro.html)

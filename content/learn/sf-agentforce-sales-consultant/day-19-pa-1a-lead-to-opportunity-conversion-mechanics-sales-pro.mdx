@@ -1,0 +1,84 @@
+---
+title: "Lesson 19: Lead to Opportunity: Conversion Mechanics, Sales Processes, and Path"
+slug: day-19-pa-1a-lead-to-opportunity-conversion-mechanics-sales-pro
+series: sf-agentforce-sales-consultant
+lesson: 19
+excerpt: "How to build the front half of a Salesforce sales process: the Lead lifecycle, what conversion actually creates and copies, record types, sales processes, lead processes, and Path. It serves requirement pa-1a from the practical application domain."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Lead Conversion, Sales Processes, Opportunity Stages, Salesforce Sales Cloud]
+---
+
+# Lesson 19: Lead to Opportunity: Conversion Mechanics, Sales Processes, and Path
+
+A sales ops lead hands you a familiar request: the web team captures leads from a form, the inside sales team qualifies them, and the account executives want a clean pipeline once a lead is qualified. The build looks straightforward, so you configure a couple of custom fields on the Lead, set a default record type, and tell the rep to hit Convert. The first conversion produces a surprise. The account that lands in the account executive's list is a Standard record type, even though the lead came in under the Enterprise funnel, because the new owner's profile default won that decision and nobody told you the new owner had a different default. The second surprise arrives a week later, when the same rep reports that the custom qualification field she filled in on the lead is missing from the opportunity. It never mapped, so it stayed behind on the lead.
+
+Both surprises are common, and both are tested directly. The front half of a Salesforce sales process is not complicated, but it rests on a set of conversion and configuration mechanics that behave in ways most people do not expect, and the exam is built around exactly that gap. The exam guide's requirement pa-1a, in the Practical Application of Agentforce Sales Expertise domain, which carries 24 percent of the exam, asks you to construct an end-to-end sales process from Lead to Opportunity to Quote to Close, and this lesson takes the Lead-to-Opportunity segment.
+
+Every build in this space collapses into the same four moving parts: the Lead object and its lifecycle, the conversion that creates the downstream records, the Opportunity record types and business processes that govern stages, and the Path that turns a picklist into guided selling. By the end of this lesson you will be able to map a business funnel to those parts, predict what conversion creates and copies, control which stages each team sees, and combine Path with validation rules so coaching and enforcement live in the right places.
+
+## Deep Dive
+
+### Map the funnel to objects before you configure anything
+
+Start by mapping the business funnel to Salesforce objects rather than to columns in a spreadsheet. A Lead captures an unqualified prospect and carries a Lead Status picklist that describes where the prospect sits in qualification.[^1] When a lead is qualified, it converts into an Account and a Contact, and optionally into an Opportunity, which carries the pipeline, the Amount, and the Close Date that forecasting depends on. The Lead object is the only one of the four that is temporary in this sense: it exists to be qualified and then converted, and its lifecycle is a one-way trip.
+
+If you cannot draw that chain on a whiteboard in one pass, the requirements are not ready for configuration. A confused funnel produces a confused build, because every downstream decision, which record types exist, which stages each team uses, which fields must be populated before a rep can advance, depends on knowing which object owns which part of the journey. Draw the chain, confirm it with the client, and only then open Setup.
+
+### Lead conversion: what it creates and what it copies
+
+Lead conversion is the most heavily tested mechanic in this domain, and the traps hide in the defaults. When you convert, Salesforce creates the records you select and copies standard fields by a fixed mapping. The Lead Company becomes the Account Name, and it also seeds the Opportunity Name and the Account Name on the created records. Lead Source maps to Account Source on the Account and to Lead Source on the Contact and the Opportunity. The Lead Owner becomes the owner of all three records. The Lead's Campaign becomes the Opportunity's Primary Campaign Source. Those mappings happen automatically, and you do not configure them.
+
+Custom fields do not move unless you map them. You map them from Setup under Object Manager for the Lead object, in Fields and Relationships, using Map Lead Fields.[^2] For each custom lead field, you choose the custom Account, Contact, or Opportunity field that should receive the value on conversion. In Lightning Experience, a single custom lead field can map to an Account field, a Contact field, and an Opportunity field at the same time. An unmapped custom field stays on the lead and never reaches the new account, which is exactly why the qualification field went missing in the scene that opens this lesson. Map the fields the downstream records genuinely need, and do it before the first conversion, because the mapping is a configuration decision rather than an afterthought.
+
+### The record type rule on conversion surprises everyone
+
+When a lead converts, the Account, Contact, and Opportunity do not inherit the Lead's record type. Each newly created record receives the new owner's profile default record type, not the profile that ran the conversion and not the Lead's own type. This is the single most commonly missed fact in the domain, and it has a concrete consequence: a lead that came in under an Enterprise funnel can produce a Standard account, because the person converting the lead has Standard set as their profile default. Records created during conversion also receive the default picklist value for account, contact, and opportunity when the mapped standard picklist field is blank, so a blank source does not throw an error; it quietly takes the default.
+
+When an org needs the converted Account to inherit the Lead's record type, you build it deliberately. Two supported routes exist. You can create a formula field on the Lead that returns the record type's developer name and map it through Map Lead Fields, so the value carries across on conversion. Or you can add a record-triggered Flow on the Account that sets the record type from a field the lead carried across. Either way, the inheritance is something you configure, because conversion will not do it for you. This is the fact the exam checks most directly, so fix it in your memory: the new owner's profile default record type wins every time.
+
+### Conversion is one-way and its side effects are permanent
+
+Conversion marks the lead Converted, sets its Status to the converted status you designated, and makes the record read-only for the fields Salesforce manages, which is why editing a phone number on a converted lead fails. Salesforce keeps the links from the lead to the created records, so the audit trail survives and you can see where the account, contact, and opportunity came from. What you cannot do is unconvert. There is no reverse operation, which means a bad conversion is corrected by editing the created records rather than by undoing the conversion.
+
+There is one reassuring side effect worth knowing, because it undercuts an argument people make against conversion. When you merge a lead into an existing Account or Contact, only the empty fields in the target are overwritten. Existing values, including the record Id, are preserved. Conversion does not clobber the account your team spent a year enriching, which is what makes a data-cleanup argument about deduplication honest rather than alarming. The read-only state on the converted lead is a deliberate design, not a permissions problem: if a converted lead's field is read-only and the rep wants to change it, the change belongs on the account, the contact, or the opportunity, not on the lead.
+
+### Opportunity stages live in two places
+
+The Opportunity Stage picklist and the sales process that governs it are two different things, and the exam checks that you know which one wins. The Stage picklist values themselves are defined once on the Opportunity object, as the Opportunity Stage field.[^3] What a given record type can actually select is controlled by a Sales Process, which you create from the Opportunity object's Fields and Relationships area and which lists the subset of stages available for that process. You then assign one sales process to each Opportunity record type.
+
+Adding a value to the global Stage picklist does not add it to any sales process, so a new stage that never appears to a rep is almost always an unsaved or unassigned sales process rather than a broken picklist. Each stage carries a Probability and a Forecast Category, and those two fields feed forecasting and reporting rather than the rep's data entry, which is why a stage that looks cosmetic to a rep can move a forecast number. When the Standard and Enterprise teams need to work different stage sets on the same Opportunity object, the supported pattern is two Opportunity record types, each assigned its own sales process. Two page layouts on one record type will not do it, and there is only one Opportunity Stage picklist to work with.
+
+### Lead processes and Path
+
+The same record type and picklist pattern repeats on the Lead object through Lead Processes. A Lead Process restricts which Lead Status values are available for a Lead record type, and it designates the converted status that marks a lead as successfully converted. If a business runs a short web form funnel and a long enterprise funnel in the same org, you build two lead record types, two lead processes, and a conversion mapping so each becomes the right opportunity type. The short funnel assigns a small set of statuses; the long funnel assigns the deeper qualification stages; and each has a designated converted status.
+
+Path then layers guidance on top. A Path component on the Lead or Opportunity Lightning record page reads the process and shows the stages as a guided bar, with Key Fields and Guidance for Success text per stage. Path requires the record page to use the Lightning experience and a Path Assistant to be enabled for the object and record type. You enable paths from Setup under Path Settings, create the path against an object and a record type, and base it on the picklist that drives the stages.[^4] At each step, show up to five key fields so reps focus on the information that matters at that moment, and write guidance that reads like coaching: what to confirm, what to watch, and what good looks like before the deal moves on.
+
+### Path guides, validation rules enforce
+
+The construct that ties the chain together is the Path Assistant plus disciplined conversion, and the division of labour between coaching and enforcement is where builds go wrong. Path does not enforce anything on its own; it guides. A rep can walk past a nearly empty stage as long as the record saves. Enforcement comes from validation rules and required fields. A common build requires the Opportunity Amount and Close Date before a rep can advance past a stage, and requires the qualification fields before a lead can convert.
+
+Put the enforcement in validation rules that fire on every save, including API and data-loading entry points, and put the coaching in Path. That way a lead loaded through the API cannot skip qualification, and a rep who is working in the UI sees the guidance right where they are deciding. The exam will hand you a funnel requirement and ask what you configure, and the answer is almost never a single feature: it is record types, a sales process, a Path, and a validation rule working as one design. Read those scenarios as build recipes, and name each component.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing the Lead record type carries to the new Account on conversion. It does not. Each created record gets the new owner's profile default record type, which is why an org that needs inheritance must build a formula mapping or a record-triggered Flow to set it. When you see a conversion scenario where the lead's type differs from the converter's profile default, the answer is always the converter's default.
+
+The second trap is believing a new Opportunity Stage picklist value is automatically usable. Stages are defined globally on the Opportunity object, but a Sales Process must include a stage for a record type to select it, so a stage absent from the process is invisible to reps. If a rep cannot see a stage that clearly exists in the picklist, the fix is in the sales process assignment, not in the picklist. The corollary, which the exam also tests, is that two teams needing different stage sets need two record types, each pointed at its own sales process, because there is only one Stage field.
+
+The third trap is believing lead conversion can be undone. Conversion marks the lead Converted, makes the managed fields read-only, and permanently links it to the created records. A converted lead's phone field showing as read-only is the expected state, not a security change and not a record type effect. Any answer that says you can reverse the conversion, or freely edit the converted lead, is wrong.
+
+## What a consultant should walk away with
+
+Draw the Lead to Opportunity chain before you configure anything, and confirm it with the client. Map every custom lead field you intend to carry across, remembering that unmapped fields stay on the lead and never reach the new record. Expect conversion to assign the new owner's profile default record type, and build inheritance explicitly when the business needs it. Treat conversion as permanent: guide the client to correct mistakes on the created records rather than hoping to undo the conversion. For stages, remember that the Opportunity Stage field is global and the Sales Process is what a record type may select, so control stage visibility through record types and their assigned processes, and mirror the pattern on the Lead through Lead Processes. Use Path to coach with key fields and guidance per stage, and use validation rules to enforce the fields a rep must populate before advancing or converting. Coaching in Path, enforcement in validation rules, and the whole chain wired as one design is what a complete Lead-to-Opportunity build looks like.
+
+## What's next
+
+Lesson 20 - Opportunity to Quote to Close: Products, Price Books, Quotes, and Approval (pa-1b)
+
+[^1]: Salesforce, "Lead | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-lead.html)
+[^2]: Salesforce Help, "Map Custom Lead Fields for Lead Conversion," (https://help.salesforce.com/s/articleView?id=sales.customize_mapleads.htm&type=5)
+[^3]: Salesforce, "Opportunity | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-opportunity.html)
+[^4]: Salesforce Help, "Create a Path," (https://help.salesforce.com/s/articleView?id=sales.path_create.htm&type=5)

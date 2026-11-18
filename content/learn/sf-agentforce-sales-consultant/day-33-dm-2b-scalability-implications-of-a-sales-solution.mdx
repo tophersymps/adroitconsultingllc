@@ -1,0 +1,98 @@
+---
+title: "Lesson 33: Scalability Implications of a Sales Solution"
+slug: day-33-dm-2b-scalability-implications-of-a-sales-solution
+series: sf-agentforce-sales-consultant
+lesson: 33
+excerpt: "How to read a sales solution for the costs that grow with volume: storage against the edition allocation, sharing recalculation, reporting and forecasting limits, API request consumption, and why large work must go asynchronous. Serves requirement dm-2b in the Data Management domain."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Scalability, Data Storage, Sharing Recalculation, Asynchronous Apex]
+---
+
+# Lesson 33: Scalability Implications of a Sales Solution
+
+Two years after go-live, the customer calls you back with a list that reads like unrelated complaints. A dashboard times out. Deals duplicate. The nightly integration started failing last quarter. Storage is at 92 percent and climbing. Nobody connects them, but they share a cause. Every one of those symptoms is a design choice that was fine at launch and expensive at the customer's current volume, and the person who built it did not price the second year.
+
+The naive way to review a solution for scalability is to check the record counts and move on. That skips the parts that actually scale badly. Storage grows because activity and email history accrue against records, not because anyone added accounts. Sharing recalculates whenever the hierarchy changes, and a deep hierarchy over tens of millions of rows turns a five minute admin task into an overnight job. An integration that polls every minute burns the same daily API allowance the customer's own users draw on. None of these shows up as a bug, and all of them show up as the complaints above.
+
+This lesson serves the exam guide's requirement dm-2b, in the Data Management domain, which carries 18 percent of the exam. The objective asks you, given a scenario, to outline the scalability implications of a solution. By the end of this lesson you will be able to walk a sales design and name where volume changes the answer, and you will be able to pair each pressure point with the design lever that answers it.
+
+## Deep Dive
+
+### Walk the design and name the pressure and the lever
+
+When the exam hands you a scenario and asks for the scalability implications, it wants you to walk the design and name where volume changes the outcome. The recurring pressure points are consistent: query performance on large objects, sharing recalculation, storage growth, report and list view limits, integration request limits, and the fact that synchronous processing does not scale. For each one there is a design lever. Indexes and selectivity answer query performance. A simpler sharing model answers recalculation. Archiving answers storage. Scheduled and narrow reporting answers reports. Bulk and asynchronous integration answers request limits. Asynchronous Apex answers processing.
+
+A strong answer names the pressure and the lever together, because the exam is testing whether you can see the future cost of a design, not whether you can recite a limit in isolation. "Storage is licensed and activity history consumes it, so we need a retention and archiving policy" beats "storage is 10 GB." Learn the pairing and you can answer almost any version of this scenario.
+
+A worked version of the review. Take a customer who keeps seven years of opportunity and activity history, runs territory sharing on a five level role hierarchy, and syncs with an ERP every five minutes. Walk the six points. Queries on the opportunity object need indexed filters because reports read millions of rows. The sharing model will recalculate across all of them on every hierarchy change. Seven years of activity and email history will grow data storage past the edition allocation. The dashboards built on that history will time out. The five minute ERP poll will consume a large share of the daily API allowance. And any mass update to opportunities will have to run as asynchronous Apex. One pass gives you six findings, each with a lever, and that structure is what the exam scores.
+
+### Storage: the constraint that grows quietly
+
+Storage is the constraint that surprises customers because it grows without anyone deciding to add data. Salesforce storage is split into two categories. Data storage covers records, and file storage covers attachments, Files, and similar content, and both count against the licensed allocation.[^1] The allocation is set by edition with a base amount plus a per user amount: most editions start at 10 GB of data storage and add 20 MB per user, while Performance and Unlimited add 120 MB per user, and most editions include 10 GB of file storage per org.[^1]
+
+Two habits keep storage honest. Watch the Storage Usage page in Setup, which shows data and file storage separately, the record types consuming the most, the top users by usage, and the largest files, so you can name what is growing rather than guess.[^1] Then treat retention as a design input. Ask the customer how long they must keep closed opportunities, logged emails, and activity records, because the answer sets how much of the tail you can archive, and the business usually cannot name a reason for keeping seven years of email once you ask.
+
+On a sales solution the growth comes from the records nobody thinks of as growth. Opportunity history, activity records, email messages logged against records, and attachments accrue every day, and a seven year retention promise on millions of opportunities turns into a large multiple of the account and contact count. The design implication is to decide a retention and archiving policy before you run out rather than after. Archiving means moving old records to an external store and keeping the current records lean, or using a platform feature that offloads the data, and the point of it is that both storage and report performance improve when the tail leaves. When a scenario mentions years of history or a very high transaction volume, storage and archiving belong in your answer.
+
+### The sharing model as a scalability cost
+
+The sharing model is the other quiet cost, and it is the one sales orgs love to overbuild. A sharing model built on an org wide default of Private plus many ownership and criteria based sharing rules gives precise access, and it also gives the platform more to compute and recalculate. That cost scales with record volume and with the depth of the hierarchy, so a deep hierarchy with dozens of ownership based rules over tens of millions of rows is expensive on every change, not just the first.
+
+The scalability answer is to prefer a wider default with fewer, well scoped rules where the security requirement allows, to consolidate hierarchy changes into a single window because each change triggers recalculation across the affected records, and to recognize that a deep sharing model plus tens of millions of rows is a designed in performance cost rather than an accident. This connects to sales directly: territory based sharing, which sales organisations reach for constantly, is exactly the kind of rule set that gets expensive at scale unless it is scoped carefully and the hierarchy is stable. When you design territory sharing, design the hierarchy it depends on at the same time.
+
+### Reporting and forecasting show the volume problem to the business first
+
+Reporting and forecasting surface the volume problem to the business before anyone else notices, so the exam uses them as scenario material. A sales dashboard that summarizes opportunities across millions of rows, grouped by a high cardinality field and filtered on an unindexed one, will not load, and patience does not fix it. The design implications are to keep report filters selective and indexed, to schedule heavy reports rather than expecting interactive speed, to move analytical reporting to a warehouse or a dedicated reporting product when the platform reporting cannot keep up, and to keep forecasting on a scoped set of opportunities rather than on the full history.
+
+Dashboards add their own scaling decision. A dashboard renders its source reports, so a dashboard built on reports over a four million row object is several queries that all have to finish inside the budget before the dashboard draws. Where a dashboard must summarize a huge set, schedule it and deliver it, or narrow it to the current quarter, and keep the heavy historical analysis in the warehouse. Forecasting deserves the same discipline: forecast category and close date drive what rolls up, so a close date left blank or a stage mapped to the wrong category quietly corrupts the number the business plans against.
+
+That last point is a design decision people miss. Forecasting does not roll up every opportunity ever created; it rolls up the ones the business considers forecastable, which is why being deliberate about which records count matters. If you let seven years of history sit inside the forecastable set, every forecast run pays for records nobody is forecasting. Scaling a sales solution means deciding early which reporting runs in Salesforce and which runs elsewhere, and scaling forecasting means deciding which opportunities are in scope at all.
+
+### Integrations spend the same allowance as users
+
+Integrations are a scalability constraint because they consume the org's API request allowance, and they spend the same pool the customer's users draw on. Salesforce enforces a daily allocation across all calls to the org in a 24 hour period, and it separately caps concurrent long running requests, at 25 for a production org, with a REQUEST_LIMIT_EXCEEDED error when the count is exceeded.[^4] A design that polls Salesforce every minute for changes burns requests continuously, and at scale a handful of such integrations can exhaust an allowance the business depends on for its own users.
+
+One more request budget habit belongs here. When you scope an integration, estimate its daily call volume before you build it, multiply by the retry rate you expect, and check the total against the org's daily allocation on the API Usage page in Setup. An integration that fits today's allowance but not next year's is a scalability finding, not a finished design.
+
+The scalability answers are to push rather than poll wherever the source supports it, which is what Change Data Capture and Platform Events provide, and to use Bulk API 2.0 for large recurring volumes rather than many small synchronous calls. When a scenario describes a high frequency sync, the implication to name is request consumption, and the lever is an event driven or bulk design. It helps to quantify it in front of the customer: a poll every minute is 1,440 calls a day per integrator before you count retries, and three pollers is over 4,000 calls a day spent on watchfulness instead of work.
+
+### Processing: asynchronous Apex when the work is large
+
+Processing has to go asynchronous when the work is large, and that is a design constraint, not a preference. Synchronous work runs inside a single request with tight limits, so an operation that touches a huge number of records will hit those limits and fail. It cannot be made to work by sending a bigger request, because the limits are per transaction and not per call.
+
+The tools for scaling the processing are asynchronous Apex. Batch Apex processes large record sets in chunks and is the choice for long running jobs with large data volumes that need to run in batches, such as database maintenance and mass recalculation.[^2][^3] Queueable Apex runs asynchronously, returns a job ID, accepts complex types, and can chain jobs, which makes it the better choice when one step must follow another.[^2] Scheduled Apex runs a class on a schedule, which is how the nightly job gets triggered.[^2] One limit is worth carrying into a design conversation: an org can run five active Batch Apex jobs at a time, with additional jobs waiting in the Flex Queue, so an org with heavy background processing can see jobs queue up and delay critical work.[^3]
+
+The implication to state in a scenario is direct. Any bulk update, mass recalculation, or callout heavy process should be asynchronous, sized in batches, and monitored, because a synchronous design that works on a thousand records fails on a million. Name async Apex as the lever whenever the scenario describes a large or long running operation.
+
+Monitoring is part of the design, not an extra. Batch and Queueable jobs run in the background where nobody is watching, so the org needs the Apex Jobs page and an alert on failures, or a job that fails nightly will be discovered the day someone reads a report and finds last week missing. Size the batch scope so each chunk finishes inside its limits, and design the job to be re-runnable, because the honest assumption is that at least one chunk will fail and need to be retried.
+
+### Pull the levers together for a sales scenario
+
+Pull the levers together for a sales scenario and a pattern emerges. Design the sharing model to be as simple as the security requirement allows, because recalculation cost is proportional to the hierarchy and the rule set. Index the fields that filters and reports depend on, and use external IDs so both integrations and lookups are fast. Keep the hot path of a large object narrow with a skinny table where reads dominate.[^5] Decide retention and archive the tail so storage and report performance both improve. Push rather than poll so the API allowance is spent on work rather than on watchfulness. And make every large operation asynchronous.[^6]
+
+A solution that applies these levers is scalable by design. One that ignores any of them passes its demo and fails in year two, which is the failure the exam is asking you to prevent. When you review a sales solution, walk the six pressure points in order and ask what the design looks like at ten times today's volume. The answer to that question is your scalability review.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is treating a sharing model as free. A deep hierarchy plus many sharing rules costs recalculation time on every change and the cost grows with record volume, so an answer about scale that ignores the sharing model is incomplete. The exam writes scenarios with tens of millions of rows and dozens of ownership based rules precisely to see whether you flinch.
+
+The second trap is trying to scale processing with bigger synchronous calls. Synchronous work has fixed per transaction limits, so it will fail on large volumes no matter how the call is shaped. The answer for a large or long running operation is asynchronous Apex, chunked with Batch and chained with Queueable, not a larger request.
+
+The third trap is forgetting that integrations spend the same allowance as users. Polling integrations consume the org's daily API requests, and the concurrent long running cap is a shared ceiling too, so at scale they can starve the business. An answer that ignores request consumption misses a constraint the scenario almost certainly set up.
+
+## What a consultant should walk away with
+
+Name the pressure and the lever together, every time. Large volume shows up as slow queries, expensive sharing recalculation, storage growth, report and forecast limits, request consumption, and processing that cannot finish synchronously, and each one has a design response. Decide a retention and archiving policy before storage forces the conversation, because activity and email history accrue against the edition's licensed allocation whether anyone plans for it or not. Keep the sharing model as simple as the security requirement allows and batch hierarchy changes into a maintenance window, because recalculation scales with depth and rows. Keep reporting selective and move the analytics that outgrow the platform to a warehouse. Push rather than poll so the API allowance goes to work, not to watchfulness. And run every large operation asynchronously, sized in batches and monitored, because a synchronous design that passes on a thousand records fails on a million. Apply those six and the solution that survives year two is the one you designed on purpose.
+
+## What's next
+
+Lesson 34 - Sales Data Quality: The Six Dimensions, Why Agentforce Inherits It, and How to Measure It (dm-3a)
+
+[^1]: Salesforce Help, "Data and File Storage Allocations," (https://help.salesforce.com/s/articleView?id=sf.overview_storage.htm&language=en_US&type=5)
+[^2]: Salesforce, "Asynchronous Apex," Apex Developer Guide, (https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-async-overview.html)
+[^3]: Salesforce, "Use Batch Apex," Apex Developer Guide, (https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-batch-interface.html)
+[^4]: Salesforce, "API Request Limits and Allocations," (https://developer.salesforce.com/docs/platform/salesforce-app-limits-cheatsheet/guide/salesforce-app-limits-platform-api.html)
+[^5]: Salesforce, "Skinny Tables," Best Practices for Deployments with Large Data Volumes, (https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-skinny-tables.html)
+[^6]: Salesforce, "Best Practices," Best Practices for Deployments with Large Data Volumes, (https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-best-practices.html)

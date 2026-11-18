@@ -1,0 +1,89 @@
+---
+title: "Lesson 20: Opportunity to Quote to Close: Products, Price Books, Quotes, and Approval"
+slug: day-20-pa-1b-opportunity-to-quote-to-close-products-price-books
+series: sf-agentforce-sales-consultant
+lesson: 20
+excerpt: "How to build the back half of a Salesforce sales process: the product catalog, price books, opportunity products, the quote sync, quote approvals, and the close gates. It serves requirement pa-1b from the practical application domain."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Products and Price Books, Quotes, Approval Processes, Salesforce Sales Cloud]
+---
+
+# Lesson 20: Opportunity to Quote to Close: Products, Price Books, Quotes, and Approval
+
+A rep comes to you on a Wednesday afternoon with a problem that sounds impossible. She has a five-line opportunity, the deal is nearly closed, and she cannot budge the amount. She has also been asked to send a formal quote with a fifteen percent discount, and her manager wants to approve it before it goes out. The build was supposed to support all of this, and it half does: there is a custom price book, there are products, and there is a Quote tab. What is missing is the connective tissue, and the tears in it are exactly the ones the exam tests.
+
+The back half of a Salesforce sales process rests on a small set of objects that fit together in a fixed order, and the order is the part most people skip. A product has to exist in the catalog before it can be priced, a price has to exist in the Standard Price Book before it can be placed in a custom price book, and a quote has to be synced before it touches the opportunity. Skip a step and the failure surfaces far from its cause: a rep cannot add a product to a price book, or the amount will not move, or the opportunity products show nothing for a quote the client already approved.
+
+This lesson serves the exam guide's requirement pa-1b, in the Practical Application of Agentforce Sales Expertise domain, which carries 24 percent of the exam. The objective asks you to construct an end-to-end sales process from Lead to Opportunity to Quote to Close, and this lesson takes the Opportunity-to-Close segment. By the end of this lesson you will be able to build the catalog in the right order, explain how the quote sync actually behaves, route discounts through an approval process, and wire the close gate so a rep cannot close a deal the business has not approved.
+
+## Deep Dive
+
+### The catalog rests on four objects in a fixed order
+
+The four objects are Product2 for the catalog, Pricebook2 for a price list, PricebookEntry as the join between a product and a price book, and OpportunityLineItem as the product placed on a specific opportunity. The catalog itself lives in Product2 records, one per product, and Pricebook2 holds the price lists.[^1] A PricebookEntry is what binds a product to a price book at a price and a currency, and an OpportunityLineItem is what a rep actually adds to a deal. Read that list as an order of operations, because everything downstream depends on it and every step has a prerequisite.
+
+Every product must first appear on the Standard Price Book with an active PricebookEntry before it can be added to any custom price book. That ordering rule is the single most common build failure in this domain. When a rep cannot add a product to a custom price book, the cause is almost always that the product has no active Standard Price Book entry, and the fix is in the catalog rather than on the opportunity. The PricebookEntry object reference states the rule plainly: you must load the standard price for a product before you are permitted to load its custom prices.[^2] Build the catalog, then the price books, then the product placements, and reverse that order at your peril.
+
+### Custom price books and the entry flags
+
+A custom price book is how you sell the same product at different prices to different segments, currencies, or regions. You create the price book, then add products to it, which creates a PricebookEntry with the price you set for that book. The product is the same Product2 record in every case; what differs is the entry, which carries the price and the currency context. A PricebookEntry also has its own Active flag, so deactivating an entry hides it from selection without touching the product itself, which is the clean way to retire a price without deleting the catalog item. You cannot delete a PricebookEntry that is referenced by existing line items, because the line items point at it; the entry gets archived instead, and archived entries cannot be recovered.
+
+Custom price books are also where multi-currency gets concrete. An OpportunityLineItem carries a CurrencyIsoCode in a multi-currency org, and a product with no active entry in the price book the rep is using simply will not appear in the Add Products list. That invisibility is not a permissions bug; it is the catalog telling you the product is not priced for the currency or the segment in play. When a rep reports a missing product, check the price book the opportunity is using and the currency on the opportunity before you look anywhere else.
+
+### Opportunity products, line items, and revenue
+
+Line items drive revenue, and they carry the numbers the deal is built on. An OpportunityLineItem stores Quantity, Unit Price, and the resulting line TotalPrice, and the opportunity amount rolls up from those lines.[^4] When you add a product to an opportunity through the Products related list and the Add Products action, you are creating an OpportunityLineItem from a PricebookEntry in the price book the rep selected. The object reference notes a small Lightning behavior worth knowing: the ListPrice, Name, and ProductCode fields are not populated before insert, because their values are computed after the Product2Id is saved, so a trigger that needs those values reads them after insert.
+
+A line item can also carry a Revenue Schedule that spreads the amount across months for revenue recognition. If the business needs scheduled revenue, the schedule must be generated or imported rather than assumed, because Salesforce does not invent a schedule for you. A deal that recognizes a hundred thousand dollars of revenue across twelve months needs that schedule built deliberately, and a report that reads scheduled revenue returns nothing until it exists. Ask about revenue recognition in discovery, because retrofitting schedules onto closed opportunities is painful.
+
+### The quote and the synced quote
+
+Quote is the object that formalizes an offer, and its relationship to the opportunity is what the exam probes. A Quote carries its own Status, Expiration Date, and Quote Line Items, and a QuoteLineItem links a quote to a PricebookEntry, so the quote prices come from the price book in the same way the opportunity products do.[^3] Quotes exist as children of an opportunity.
+
+The fact that decides everything here is the sync. An opportunity can have many quotes but only one synced quote at a time.[^5] When you sync a quote, Salesforce pushes its data onto the opportunity, setting the opportunity's fields from the quote and replacing the opportunity products with the quote's line items. The opportunity identifies the synced quote in the Synced Quote field on the detail page and in the Syncing checkbox on the Quotes related list. Syncing a different quote makes it the synced quote and demotes the previous one, and when that happens the existing opportunity line items are replaced by the newly synced quote's records. A rep who edits the synced quote's line items updates the opportunity products and the opportunity amount through that sync, so the synced quote is the source of truth for that opportunity. Editing a quote that is not synced does nothing to the opportunity, which is why the amount would not move in the scene that opens this lesson until the quote is synced.
+
+### Quote status, versions, and field mapping
+
+Quote status deserves its own attention because it gates the sync and the close. A quote can be synced only when it is in an editable state such as Draft that is not yet marked as fully processed, so a quote locked by an approval process cannot become the synced quote. When a quote is synced, it shows a Synced indicator and the opportunity reflects it. Custom quote fields can be mapped to opportunity fields through the quote sync configuration, which is how a client's Quote Number or Terms reaches the opportunity without code. The Sync Quotes and Opportunities reference lists the standard field matches that happen on sync, including SyncedQuote to IsSyncing, Pricebook2 to Pricebook2, and Amount to TotalPrice, so the amount alignment is a documented behavior rather than a guess.[^6]
+
+When a rep increments a quote's version after a change, Salesforce creates a new quote record linked to the original, so the negotiation history stays intact and you can see what the client was offered at each step. Use the version rather than overwriting the previous quote, because the paper trail through a negotiation is often the thing that protects an approval decision. The exam rewards knowing that editing the quote alone is not enough: the opportunity changes only through the sync.
+
+### Approval processes handle the governance
+
+An approval process is what the funnel needs before a deal closes, because a discount that a rep can apply alone is a discount the business never approved. An approval process runs on Quote or on Opportunity and consists of entry criteria, one or more approval steps with assigned approvers, and actions that run on approval or rejection. You build it from Setup under Process Automation, opening Approval Processes and choosing the object to manage.[^7]
+
+A typical build runs the process on Quote, sets entry criteria such as a discount greater than fifteen percent, assigns the approver as the sales manager, and adds a final approval action that updates the quote Status to Approved and an unlocked field on the opportunity. Approval steps can be assigned to a specific user, a role, or a queue, and a step can be configured with an approver hierarchy field so routing follows the management structure instead of a hard-coded name, which keeps the process working when the manager changes. The Approval History related list records every submission, comment, and decision, so the audit trail of who approved what discount is in the system rather than in someone's inbox. Define the entry criteria narrowly, because an approval process that catches every quote trains reps to treat approval as a formality.
+
+### Close, forecasting, and the silos that wreck builds
+
+Close is the last stage and it carries the forecasting consequences. Each Opportunity stage maps to a Forecast Category, and the stage, probability, and forecast trio is what collaborative forecasts roll up, so a stage that looks cosmetic to a rep can move a number the finance team reports. Closed Won and Closed Lost each have their own implied category. Understanding which field feeds the forecast versus which field the rep edits prevents a whole class of reporting defects later.
+
+A common and useful pattern is to require the quote to be approved before a rep can set the opportunity to Closed Won. You implement it as a validation rule that fires when Stage equals Closed Won and the quote is not approved, and that rule is the clean bridge between the Quote object and the Opportunity's close, because it stops a rep from short-circuiting the approval the business paid for. Coaching lives in Path and validation rules enforce, exactly as in the front half of the funnel.
+
+Two silo mistakes wreck otherwise sound builds. The first is treating Quote Line Items and Opportunity Products as the same list. They are different objects, and the quote line items become the opportunity products only when the quote is synced, so a report on opportunity products shows nothing for an unsynced quote. The second is forgetting the currency and price book context, because opportunity products and quote line items carry a CurrencyIsoCode in multi-currency orgs and a product with no active entry in the price book the rep is using simply will not appear. Build the catalog, price books, and product availability first, then the quote mechanics, then the approval and close gates. Reversing that order means reworking the catalog after the funnel is live.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing several quotes can be synced to one opportunity at once. Only one quote can be the synced quote on an opportunity at a time, and syncing a second quote replaces the first and demotes it. There is no arrangement of price books or currencies that lets two quotes sync simultaneously.
+
+The second trap is believing a product can be added to a custom price book on its own. The product must have an active Standard Price Book entry first, so a product that is missing from a custom price book points at the catalog rather than at the opportunity. When a scenario describes a rep who cannot add a product to a price book, the missing standard entry is the answer.
+
+The third trap is believing editing a quote automatically updates the opportunity. The opportunity changes only when the quote is synced, so an edited but unsynced quote leaves the opportunity products and amount untouched. When a rep edits the line items on the synced quote, the synced quote pushes the change to the opportunity, updating the opportunity products and the amount; but if the quote is not the synced one, nothing moves. The exam tip is worth repeating: the opportunity does not change when the quote changes; it changes when the quote syncs.
+
+## What a consultant should walk away with
+
+Build in order: the Product2 catalog, then the Standard Price Book entries, then the custom price books and their entries, then the opportunity products, then the quotes, then the approvals and the close gate. Remember that a product needs active Standard Price Book pricing before it can be priced anywhere else, and that a PricebookEntry can be deactivated to hide a price without touching the product. Treat the synced quote as the source of truth for the opportunity: only one quote syncs at a time, syncing another replaces it, and an edited but unsynced quote changes nothing on the opportunity. Keep version history through quote versions rather than overwriting, and map the custom quote fields you need onto the opportunity through the sync configuration. Route discounts through an approval process with entry criteria, role-based or queue-based approvers, and a final action that flips the quote status and an opportunity field. Then wire the close gate: a validation rule that requires an approved quote before the stage can reach Closed Won, so the approval the business paid for cannot be bypassed. Get that sequence right and the whole back half of the funnel holds together, from the first product in the catalog to the last stage change on the opportunity.
+
+## What's next
+
+Lesson 21 - Declarative First: Flow, Validation Rules, and Dynamic Lightning Pages (pa-2a)
+
+[^1]: Salesforce, "Product2 | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-product2.html)
+[^2]: Salesforce, "PricebookEntry | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-pricebookentry.html)
+[^3]: Salesforce, "Quote | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-quote.html)
+[^4]: Salesforce, "OpportunityLineItem | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-opportunitylineitem.html)
+[^5]: Salesforce Help, "How Quote Syncing Works," (https://help.salesforce.com/s/articleView?id=sales.quotes_synch_overview.htm&type=5)
+[^6]: Salesforce Help, "Sync Quotes and Opportunities," (https://help.salesforce.com/s/articleView?id=sf.quotes_synch.htm&type=5)
+[^7]: Salesforce Help, "Create an Approval Process," (https://help.salesforce.com/s/articleView?id=platform.ls_create_approval_process.htm&type=5)
