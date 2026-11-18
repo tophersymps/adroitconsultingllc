@@ -4,6 +4,6 @@
 
 **Why** - `npm audit` reported 24 vulnerabilities (1 Critical, 12 High, 7 Moderate, 4 Low) and `npm outdated` reported 20 outdated packages. The overrides and framework patch eliminate the `better-auth` Critical (`GHSA-965c-763c-88jm`), High (`GHSA-r4xp-prcw-77qf`), and Low (`GHSA-44jh-23m7-hpcf`) advisories plus propagated `@neondatabase/*` and `@better-auth/drizzle-adapter` entries, both `next` Moderate advisories (`GHSA-mfr8-8qww-v76h`, `GHSA-vc7v-qv4w-wrv8`), and the `minimatch` Moderate advisory (`GHSA-g3hv-75wg-m249`).
 
-**Verified** - `npm audit --json` reports `0 critical, 0 moderate, 0 low` vulnerabilities (0 production vulnerabilities); `npm run lint` exits 0; `npx tsc --noEmit` exits 0; `npm run test` passes all 194 test files (1,865 tests); `npm run build` exits 0 after compiling and generating all 1,251 static pages.
+**Verified** - `npm ci --dry-run` exits 0; `npm audit --json` reports `0 critical, 0 moderate, 0 low` vulnerabilities (0 production vulnerabilities); `npm run lint` exits 0; `npx tsc --noEmit` exits 0; `npm run test` passes all 194 test files (1,865 tests); `npm run build` exits 0 after compiling and generating all 1,251 static pages.
 
 **Known Issues** - `npm audit` still reports 17 High dev/build-tooling entries rooted in `picomatch <=4.0.7` (`GHSA-fc5q-39xc-vjpf`), which has no patched version (`>4.0.7`) published upstream yet (`picomatch` `latest` is `4.0.7`). Deferred major upgrades (`framer-motion` 14, `vitest` 5, `eslint` 10, `typescript` 7, `@types/node` 24/26, `jsdom` 31) are left for separate PRs.
