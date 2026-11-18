@@ -1,0 +1,81 @@
+---
+title: "One Timeout Cannot Tell Slow Work From a Hang"
+slug: timeout-deadline-budget-agent-pipeline-2026
+excerpt: "Your stack will wait ten minutes on an answer the user abandoned at ten seconds. Five local timeouts cannot fix that. One inherited deadline can."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 12, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [AI Infrastructure, Agentic AI, Distributed Systems, Reliability, Timeouts, Observability]
+bannerImage: "/banners/timeout-deadline-budget-agent-pipeline-2026.webp"
+ogImage: "/banners/timeout-deadline-budget-agent-pipeline-2026-og.jpg"
+---
+
+A request arrives. The orchestrator calls a sub-agent, the sub-agent calls a tool, the tool calls a vendor API. Every layer has a timeout, and each one was chosen by someone who could not see the others. The person who asked gave up at around ten seconds and reloaded the page. Your chain keeps working on that abandoned question for another two minutes, streaming tokens into a socket nobody is reading.[^3]
+
+The number is rarely wrong. What is missing is a clock anyone owns. A timeout is a local guess about how long one call should take; a deadline is a shared fact about when the work stops mattering, declared once at the edge and carried through every handoff. Agents need the second one more than plain services do, because an agent loop decides for itself when it is done.
+
+## A timeout is a local guess, a deadline is a shared fact
+
+A per-call timeout gets chosen from the downstream service's own latency. Amazon's guidance is to accept a small false-timeout rate, read the matching latency percentile, and add padding for the network, and it flags a trap that catches agent stacks: a timer started before a new secure connection is established includes that handshake, while a reused connection never pays it.[^4] That is a sound way to choose one number, and it says nothing about a chain of five.
+
+Chained timeouts add up. Four hops that each wait thirty seconds can spend two minutes before the first one gives up, and nobody chose that total. The alternative puts one deadline at the edge and lets each stage inherit the remainder: a thirty second budget that spends seven seconds at the first hop hands twenty three seconds to the next call, which hands nineteen to the one after that if it spends four.[^3] The numbers shrink as the chain deepens, which is the point. Concretely: hold back a few hundred milliseconds for the trip home, hand 9.6 seconds to the orchestrator, 6.4 to the sub-agent once it has spent 3.2 seconds of real work, and 2.8 to the tool call. gRPC sets no deadline by default, so a client that never sets one waits while holding every resource that request needs.[^1][^2]
+
+Without that discipline the failure is quiet. A hop that invents its own longer clock for the call downstream is not being generous, it is spending time the caller already stopped counting on, and no log line says so.[^3]
+
+gRPC has encoded the pattern for years, and its vocabulary is worth borrowing even if you never run it. A deadline is a point in time, a timeout is a duration, and the difference matters across machines, because one host cannot trust another's clock, so the deadline travels as the remaining duration with elapsed time already deducted.[^1] Whether you call gRPC or fetch with an abort signal, the shape holds: the caller sets an instant, and the instant travels.
+
+![Two ways a four hop chain sets its clocks: each hop holding its own thirty second timeout, so the chain can run two minutes on an abandoned request, against one caller budget inherited at each handoff, from 9.6 seconds down to 2.8](</diagrams/timeout-deadline-budget-agent-pipeline-2026/1-clock-ownership.png>)
+
+## Slow and stuck are different failures, so you need two clocks
+
+Ten minutes is a reasonable deadline for a research agent and a catastrophic one for a chat reply, and the defaults around your code are larger than the patience they serve. The OpenAI SDK waits ten minutes per request before raising a connection timeout, and retries twice on the way there.[^5] A Vercel function gets three hundred seconds by default, and Pro and Enterprise can raise one to eight hundred.[^6] Cloudflare answers the client with a 524 after a hundred and twenty five seconds of silence from the origin, then leaves the origin working.[^7] A person waiting on a chat reply is gone long before any of those numbers.
+
+One timer cannot tell thinking from dead, so add a second clock that measures silence. An agent emitting a token every couple hundred milliseconds for four minutes is healthy and should finish. An agent that emitted two events and then nothing for thirty seconds is stuck, and every second after that is a held worker slot and a live token meter.
+
+Vercel's documentation is explicit that HTTP/2 handlers receive connection level ping frames while the response is idle, that HTTP/1.1 has no equivalent, and that handlers running long should stream progress or heartbeat data while the work happens.[^6] Same instruction for an agent loop: emit a step event when a tool call starts and another when it returns. Those events are the signal that separates a slow answer from a dead one. Keep a timeout distinct from a user cancellation when you abort, since one of them means the person already left.[^8]
+
+![Two clocks inside one ten minute deadline: work that keeps emitting events resets the idle clock and finishes, while a stream silent for thirty seconds is killed as stuck, beside the defaults each layer imposes: ten minutes per request, three hundred per function, and 524 at a hundred and twenty five](</diagrams/timeout-deadline-budget-agent-pipeline-2026/2-two-clocks.png>)
+
+## When the clock expires, stop the work
+
+Returning an error stops nothing. If the deadline ends the request handler while the model call is still streaming and the tool call is still in flight, you kept the worse half of the problem: the status code says 504, the tokens keep flowing, the vendor keeps billing, and a write may still land after the person who asked has moved on.
+
+Cancellation has to travel the path the deadline did. The gRPC rule is blunt: once a call is cancelled or its deadline passes, the server application is responsible for stopping any activity it has spawned.[^1] An agent is a machine for spawning activity. The sub-agent needs a checkpoint where it reads its own clock, the tool client needs to accept the same abort signal as its caller, and the loop has to stop between steps rather than in the middle of a write.
+
+SRE adds the staging rule: a handler that parses, then fetches, then processes should check the deadline before each stage instead of discovering the budget was spent after spending it.[^3] The arithmetic is unkind. With a hundred second deadline and five percent of requests never completing, the requests nobody wants consume five thousand threads on a frontend that has a thousand, and the service ends up serving under a fifth of its traffic.[^3]
+
+Long work belongs behind a status endpoint the client polls, which is Cloudflare's own recommendation for anything that outruns its proxy read timeout,[^7] and every mutating step has to be safe to repeat, since a cancel can arrive after the write committed. That second requirement is why [durable execution](/field-notes/agent-durable-execution-state-machines-2026) exists. The deadline tells you when to quit. Idempotency keys make quitting safe.
+
+![What keeps running after a deadline: the error only path returning a 504 while the generation, the in flight tool call and the worker slot stay live and billed, against a cancel path where one abort signal stops the call and frees the slot](</diagrams/timeout-deadline-budget-agent-pipeline-2026/3-cancel-path.png>)
+
+## Budget the clock the way you budget steps
+
+An agent already has a budget for steps and a budget for dollars, both of which [deserve hard ceilings](/field-notes/agent-loop-spend-guardrails-2026). The clock is the third, and it is the one the user measures.
+
+Start from what the caller will really wait, not from the slowest dependency. If the answer has to arrive inside ten seconds, that is the budget, and every hop's number gets derived from it. Hold back a few hundred milliseconds per hop for network transit and post-processing before the answer is handed back, because the deadline that matters belongs to the caller, not to the middle of the chain.[^3] Then check the clock before any stage that costs real time or money: the retrieval, the model call, the write. Retries live inside the same budget with backoff and jitter, because a retry storm against a dependency that is already failing makes it worse.[^4] SRE's version is a retry ceiling per process, something like sixty retries a minute.[^3] A remaining-budget field on every span turns this into an observable number, and gRPC's advice is to tune the value with a flag rather than a release.[^2]
+
+One rule from the unattended side of our own pipeline generalizes: the layer that owns the budget should be the layer with the authority to stop the work. Scheduled agents and overnight jobs run under a wall clock limit, and when one hangs it is the supervisor's timer that ends it, not the worker's own error handling.
+
+Open the slowest agent request you still have traces for and write down how long the person waiting would have tolerated. If that number is smaller than every timeout in the path, you do not need a smaller timeout. You need a deadline.
+
+![Five rules that turn a timeout into a deadline: start from what the caller will wait, hold back a few hundred milliseconds per hop, hand down the remainder, check the clock before each expensive stage, and retry inside the budget with jitter](</diagrams/timeout-deadline-budget-agent-pipeline-2026/4-five-rules.png>)
+
+[^1]: gRPC, "Deadlines", gRPC documentation, last modified 7 July 2025. Deadline propagation as a remaining duration so clock skew cannot mislead a server, the DEADLINE_EXCEEDED and CANCELLED statuses, and the server's responsibility to stop activity it spawned. [grpc.io](https://grpc.io/docs/guides/deadlines/)
+
+[^2]: Gráinne Sheerin, "gRPC and Deadlines", gRPC blog, 26 February 2018. The resource cost of unset deadlines, and tuning the value with a flag instead of a release. [grpc.io](https://grpc.io/blog/deadlines/)
+
+[^3]: Mike Ulrich, "Addressing Cascading Failures", Site Reliability Engineering, Google. Deadline propagation with the 30 to 23 to 19 second example, checking the remaining deadline before each stage, the 5 percent stuck request arithmetic, and the retry budget. [sre.google](https://sre.google/sre-book/addressing-cascading-failures/)
+
+[^4]: Marc Brooker, "Timeouts, retries, and backoff with jitter", Amazon Builders' Library. Choosing a timeout from downstream latency at an acceptable false-timeout rate, connection setup counting against the timer, and jitter. [aws.amazon.com](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/)
+
+[^5]: OpenAI, "OpenAI Node API library" README. A default request timeout of ten minutes and a default of two retries. [github.com](https://github.com/openai/openai-node)
+
+[^6]: Vercel, "Configuring Maximum Duration for Vercel Functions", documentation, last updated 24 August 2026. Duration defaults and maximums per plan, termination past the maximum, and streaming progress while a handler idles. [vercel.com](https://vercel.com/docs/functions/configuring-functions/duration)
+
+[^7]: Cloudflare, "Error 524", Cloudflare support documentation, last updated 23 July 2026. The 125 second proxy read timeout, the 30 second write timeout, and polling a long process rather than holding a connection. [developers.cloudflare.com](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-5xx-errors/error-524/)
+
+[^8]: MDN Web Docs, "AbortSignal: any() static method". Combining a timeout signal with a cancellation signal so the first reason wins, and keeping a timeout distinct from a cancel. [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/any_static)

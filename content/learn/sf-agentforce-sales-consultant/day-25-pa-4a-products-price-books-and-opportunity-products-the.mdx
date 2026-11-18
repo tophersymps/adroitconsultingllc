@@ -1,0 +1,93 @@
+---
+title: "Lesson 25: Products, Price Books, and Opportunity Products: The Selling Model"
+slug: day-25-pa-4a-products-price-books-and-opportunity-products-the
+series: sf-agentforce-sales-consultant
+lesson: 25
+excerpt: "The standard selling data model: Product2 as the catalog, price books and price book entries as the price list, opportunity line items and their arithmetic, and product schedules for revenue over time. It teaches the objects and rules that make the model work, serving requirement pa-4a."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Products, Price Books, Opportunity Products, Product Schedules]
+---
+
+# Lesson 25: Products, Price Books, and Opportunity Products: The Selling Model
+
+A consultant is asked to add a price field to the Product object. The client's admin is certain it belongs there: every product has a price, so the price should live on the product, and the team has been keeping list prices in a spreadsheet precisely because they could not find the field. The consultant opens Object Manager, looks at Product2, and finds no price field, because there is not one. Price lives one object away, on the price book entry, which joins a product to a price book. Adding a price field to the product would have been the wrong fix for a real problem, and it would have collided with the whole design the selling model is built on.
+
+That separation is the concept this lesson turns on. Products and prices are deliberately different objects: one product can have many prices, one per price book and, in a multi-currency org, one per currency. Teams that treat the product as the price carry a mental model that produces wrong answers on the exam and, worse, wrong data models in production. Once you hold the two objects apart, the rest of the selling model follows logically: price books organize the price list, price book entries carry the numbers, opportunity products carry the deal's quantities and discounts, and product schedules carry the timing.
+
+This lesson serves requirement pa-4a, in the Practical Application of Agentforce Sales Expertise, which carries 24 percent of the exam. The objective asks you to outline the capabilities, use cases, and design considerations of Products, Price Books, and Opportunity Products. By the end you will be able to place each concept on the right object, explain why a product must have a standard price book entry before it can be sold from any other book, compute an opportunity line's total price from quantity, sales price, and discount, explain the Amount rollup and the data-load failure it causes, and model a subscription's revenue with product schedules.
+
+## Deep Dive
+
+### The catalog and the price list are separate objects
+
+Selling on Salesforce starts from a catalog object called Product2, not from a price. Product2 holds the product name, a product code you use as the SKU, a product family used for grouping and reporting, an active flag, and free description text.[^1] The catalog and the pricing are deliberately separate objects, and seeing that separation is the first step to using the model correctly.
+
+Separating them is not arbitrary. The same product is sold at different prices through different channels, in different regions, and under different negotiated contracts, and sometimes in different currencies. If the price lived on the product, every one of those variations would demand a separate product record, and the catalog would explode into near-duplicates. By keeping the catalog stable and pushing prices out to a join object, the platform lets one product carry as many prices as the business needs while staying one product for reporting and bundling. Hold that reasoning and the rest of the model stops being arbitrary rules to memorize and becomes the obvious structure.
+
+### Product2 is the catalog record, not the price
+
+Product2 holds the identity of what you sell. The product code field is your SKU, and it is worth treating it as the durable business key: integrations and reports key off it, so you define a convention before the first product is loaded rather than after. The product family field is a picklist used for grouping and reporting, and it is the field that makes a catalog report useful. Set those family values deliberately, because a catalog report is only as good as the taxonomy behind it, and a family picklist that accumulated four variations of "Services" will not group anything.
+
+The active flag is how you retire a product without losing history. Activating and deactivating a product retires it from new selling while an opportunity product that references a deactivated product still resolves its name and price on old records. That is the reason you deactivate rather than delete: a product that has been sold carries line items in closed deals, and those line items must keep resolving for as long as the history matters. When a product is referenced by an opportunity, a delete fails, and the interface offers to archive the product instead. Deactivating is the standard move; deleting is what you do when a product was created by mistake and never sold.
+
+### Price books, and the standard book that is not optional
+
+A price book is a Pricebook2 record.[^2] Every org gets a standard price book that Salesforce creates automatically, and the platform does not let you delete it. The standard price book holds your master list prices. Custom price books are the ones you build for a channel, a segment, a region, or a negotiated set of rates, and there can be as many as the business needs.
+
+The rule the exam leans on is that a product must have an entry in the standard price book before it can be added to any other price book or to an opportunity. The order is fixed: create or activate the product, add it to the standard price book with a list price, then add it to a custom price book if that is the book the sales team works from. You must load the standard price for a product before you are permitted to load its custom prices, which makes the standard entry the anchor for every other price. When a data load of custom price book entries fails, the missing standard entry is the first thing to check.
+
+### The PricebookEntry is where a price actually lives
+
+The PricebookEntry is the join record, and it carries the price.[^3] It points at one Product2 and one Pricebook2, holds the UnitPrice, and carries a currency code fixed to the price book's currency when the org runs multiple currencies. A product therefore has one standard entry and as many custom entries as there are price books, and this is why you cannot find a price field on the product: the price is not on the product, it is on each entry. One product, many prices, one per price book and per currency.
+
+Two flags matter on the entry. The standard price book entry is flagged as standard, and creating a custom entry without a matching standard entry fails, which enforces the rule mechanically. An entry can also be active or inactive independently of the product, so a product can be sellable in one channel and hidden in another without touching the product record. That independence is a design tool: when a channel should stop offering a product but other channels should keep selling it, you deactivate the entry, not the product. And note the deletion behavior: if you delete a price book entry that a line item references, the line item is unaffected, but the entry is archived and unavailable from the API, and deleted entries cannot be recovered, so handle them the way you handle products, by deactivating.
+
+### Product schedules model revenue over time
+
+Product schedules handle deals whose revenue lands over time.[^6] When you enable product schedules, you can attach a revenue schedule or a quantity schedule to an opportunity product and split its amount or its quantity across a series of dated installments. A quantity schedule determines when a product is delivered. A revenue schedule determines when a product is paid for, defining the dates, revenue amounts, and number of installments for payments or for recognizing revenue. When a deal needs both, a revenue and quantity schedule covers the case where the customer receives orders on an ongoing basis and also pays over time.
+
+The distinction between a schedule template and an instance is worth holding. Product schedules are templates you attach to a product so a repeat-revenue product arrives with its shape already defined, and opportunity product schedules are the instances that belong to one deal, living on the OpportunityLineItemSchedule object.[^5] This is what a subscription or a services retainer looks like in the standard data model, and it is the right answer when a scenario says the client wants revenue recognized monthly across a term rather than as a single amount on the close date. A revenue schedule suits a customer who pays in installments but receives the product once, such as a customized product charged over time; a quantity schedule suits delivery spread over time.
+
+Enabling is a deliberate act with prerequisites. In Setup under Feature Settings, Sales, Product Schedules Settings, you select enable quantity scheduling, enable revenue scheduling, or both, and there is an option to enable a scheduling type for every product in your price books.[^7] That option acts as a one-time switch for preexisting products, and new products must have scheduling enabled again, which is the detail that catches teams loading products after go-live. You must also add the scheduling fields to the product page layout and grant field access to the profiles and permission sets that need to set schedules, because an enabled feature with hidden fields still blocks the user. The schedule instance then feeds the line item: inserting a schedule of type Revenue increments the line item's Total Price by the schedule's revenue, and creating a schedule affects the parent opportunity by incrementing its Amount by the schedule revenue and its Expected Revenue by the schedule amount times the opportunity's probability.
+
+### The opportunity line item, and its arithmetic
+
+An opportunity product is an OpportunityLineItem, and the arithmetic on it is examinable. It carries Quantity, Sales Price, a Discount percentage, and a Total Price.[^4] Total Price is Quantity times Sales Price times one minus the discount, so ten units at two hundred dollars with a ten percent discount totals one thousand eight hundred dollars. That figure is what rolls into the opportunity Amount, and knowing the formula by heart turns a whole class of questions into arithmetic.
+
+Sales Price is the unit price, not the list price. It defaults from the price book entry but the rep can override it, and that override is how a deal prices below list. This is an important distinction for pricing governance: the list price lives on the price book entry, while the price actually offered on a deal lives on the line item's Sales Price, and the gap between them is where discounting happens. Discount is stored as a percentage, and Total Price is the discounted result. Quantity can hold decimals when you set the quantity scale on the field, which matters for products sold in fractional units such as hours, days, or partial licenses.
+
+One behavioral quirk resolves a common custom-development question. Before an opportunity line item is inserted, its List Price, Name, and Product Code fields are not populated, because their values are computed after the Product2Id is saved; to read them you use an after-insert trigger. That is a specific, examinable behavior, and it explains why a trigger that tries to read the product name off a brand-new line item gets nothing.
+
+### The Amount rollup and the price book the opportunity carries
+
+The relationship between the opportunity and its lines is the piece that trips people up. While an opportunity has at least one opportunity product, its Amount is a rollup that equals the sum of the Total Price of every line, and you cannot edit Amount directly; a manual edit is overwritten the next time a line changes. Remove every line and Amount becomes editable again. This is why an integration or a data load that writes Amount onto an opportunity that already carries products quietly fails to stick, and it is why a scenario about a broken data load almost always points back here.
+
+Concretely, if a data load writes Amount onto product-bearing opportunities, the write appears to succeed and then reverts the moment any line recalculates, so the values quietly disagree with the line items and nobody can explain why. The fix is to load the line items and let the rollup compute Amount, never to write Amount directly. When the requirement is a fixed amount that should not track the lines, the requirement is to remove products from that opportunity or to place the amount in a custom field, not to fight the rollup.
+
+The product's price book also governs the opportunity. An opportunity has one price book, and the products you can add are limited to that book's entries. A custom-priced deal needs the custom price book set on the opportunity before anyone adds a line, because the line item derives its price from the price book entry that matches the opportunity's book. When an opportunity carries no price book, the platform can infer one from the entry's currency in some cases, but the reliable practice is to set the price book explicitly and to design the opportunity page layout so the price book is chosen before products are added. Setting it late, after lines exist, is the kind of correction that ripples through pricing and reporting.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a product carries its own price. Price lives on the PricebookEntry, not on Product2, so an answer that edits a price on the product record is wrong. When a scenario says a product has a price, the correct read is that a price book entry holds it, one per book and per currency.
+
+The second trap is believing you can set Amount on an opportunity that has products. While products exist, the Amount is a rollup of the line Total Prices and a manual value is overwritten, so a load that writes Amount onto a product-bearing opportunity does not stick. An answer that treats Amount as directly editable alongside products is wrong, and the diagnosis for a silently failing amount load is the rollup.
+
+The third trap is believing a custom price book entry can stand on its own. A product must have a standard price book entry before it can be added to any custom price book, so the standard entry is not optional. An answer that skips the standard book, or that creates a custom entry first, contradicts the platform's enforced order and will fail on load.
+
+## What a consultant should walk away with
+
+Place every selling concept on the right object before you configure anything. The catalog is Product2, the price list is the price book and its entries, the deal's quantities and prices are the opportunity line items, and the timing is the product schedule. Give every product a product code convention and a deliberate product family taxonomy, and retire products by deactivating rather than deleting so history keeps resolving. Set up the standard price book entry first, always, and treat custom price books as variations for a channel, region, or segment. Put prices on the price book entry, keep list price on the entry and the offered price on the line item's Sales Price, and compute Total Price as Quantity times Sales Price times one minus the discount. Model subscriptions and retainers with product schedules, remembering that enabling schedules is a two-part job that also needs the fields on the layout and field access granted, and that the enable-for-all-products switch applies only to existing products. Never write Amount onto an opportunity that carries products; let the rollup compute it, and set the opportunity's price book before anyone adds a line. Hold the catalog and the price list apart, and the whole selling model stays coherent.
+
+## What's next
+
+Lesson 26 - Quotes, Syncing, and Multi-Currency Pricing (pa-4b)
+
+[^1]: Salesforce Developers, "Product2," Object Reference for the Salesforce Platform, (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-product2.html)
+[^2]: Salesforce Developers, "Pricebook2," Object Reference for the Salesforce Platform, (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-pricebook2.html)
+[^3]: Salesforce Developers, "PricebookEntry," Object Reference for the Salesforce Platform, (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-pricebookentry.html)
+[^4]: Salesforce Developers, "OpportunityLineItem," Object Reference for the Salesforce Platform, (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-opportunitylineitem.html)
+[^5]: Salesforce Developers, "OpportunityLineItemSchedule," Object Reference for the Salesforce Platform, (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-opportunitylineitemschedule.html)
+[^6]: Salesforce Help, "Product Schedules," (https://help.salesforce.com/s/articleView?id=sf.products_schedules_def.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Enable Product Schedules in Salesforce Classic," (https://help.salesforce.com/s/articleView?id=sales.enabling_schedules.htm&language=en_US&type=5)

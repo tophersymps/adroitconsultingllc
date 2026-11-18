@@ -28,7 +28,7 @@ export interface AssignableCourse {
  * **This map is the PUBLISHED projection, not the editorial registry.** It
  * ships in a client chunk (`/atlas/[series]` and `/profile` both draw charts in
  * the browser), so it may only name series the site already names publicly —
- * exactly the four in `PUBLICLY_LAUNCHED_SERIES`. The full twelve-course
+ * exactly the four in `PUBLICLY_LAUNCHED_SERIES`. The full fourteen-course
  * registry lives in `figure-pins.server.ts` (`FIGURE_PINS_ALL`, behind
  * `import "server-only"`); `chart.test.ts` asserts this map deep-equals
  * `publicPins()`, so a stealth pin cannot be added here and a launch cannot

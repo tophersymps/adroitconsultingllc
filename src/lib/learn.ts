@@ -274,6 +274,7 @@ const SERIES_SHORT_LABELS: Record<string, string> = {
   "salesforce-data-architect": "Data Architect",
   "sf-omni-consultant": "OmniStudio Consultant",
   "sf-data360-consultant": "Data 360 Consultant",
+  "sf-agentforce-sales-consultant": "Agentforce Sales Consultant",
 };
 
 /** Short display label for a series (band tag pill), humanized when unmapped. */

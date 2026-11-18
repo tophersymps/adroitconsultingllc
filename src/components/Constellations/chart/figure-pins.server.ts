@@ -3,7 +3,7 @@
  *
  * WHY THIS IS A SEPARATE MODULE (t_af115dd1 / t_5fdeb918)
  * ------------------------------------------------------
- * The editorial registry pins all thirteen authored courses to a constellation.
+ * The editorial registry pins all fourteen authored courses to a constellation.
  * That registry used to live in `figure-assignment.ts`, which is a *client*
  * module: `/atlas/[series]` (SeriesStarChart) and `/profile` (FullSkySection)
  * both render the chart in the browser. So every stealth series slug — and the
@@ -61,6 +61,7 @@ export const FIGURE_PINS_ALL: Readonly<Record<string, string>> = {
   "salesforce-data-architect": "Ophiuchus",
   "sf-omni-consultant": "Gemini",
   "sf-data360-consultant": "Orion",
+  "sf-agentforce-sales-consultant": "Leo",
 };
 
 /**

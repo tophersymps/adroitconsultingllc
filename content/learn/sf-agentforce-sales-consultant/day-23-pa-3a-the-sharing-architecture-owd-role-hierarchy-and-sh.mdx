@@ -1,0 +1,94 @@
+---
+title: "Lesson 23: The Sharing Architecture: OWD, Role Hierarchy, and Sharing Rules"
+slug: day-23-pa-3a-the-sharing-architecture-owd-role-hierarchy-and-sh
+series: sf-agentforce-sales-consultant
+lesson: 23
+excerpt: "The three layers of Salesforce record access and how to name the one that is blocking: organization-wide defaults, the role hierarchy, sharing rules, and the mechanisms that cover the rest. It teaches the decision tree for choosing a sharing model and serves requirement pa-3a."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Organization-Wide Defaults, Role Hierarchy, Sharing Rules, Record Access]
+---
+
+# Lesson 23: The Sharing Architecture: OWD, Role Hierarchy, and Sharing Rules
+
+A regional sales director escalates a ticket that has already been bounced twice: "My reps in the West cannot see the accounts the East team is working, and the East manager tells me the records are visible to everyone." Both people are describing the same org truthfully, and both are wrong about what it means. The East manager sees the accounts because her role sits above her reps in the role hierarchy, so a Private default still shows her their records. The West reps see nothing because the hierarchy runs upward, not sideways, and two peers in different branches share no access by default. Nobody configured anything broken. Someone just failed to notice that the hierarchy is directional.
+
+That confusion is the whole subject of this objective, and it is the one consultants get wrong most often because the sharing model is a set of layers, not a single switch. Consultants who treat it as one switch misdiagnose every access problem they meet: they add a sharing rule to fix a visibility issue that the hierarchy already handles, or they try to subtract access with a rule that only ever adds. Getting the layers straight is what turns "I cannot see the record" from a mystery into a lookup.
+
+This lesson serves requirement pa-3a, in the Practical Application of Agentforce Sales Expertise, which carries 24 percent of the exam. The objective asks you to identify the appropriate security model for a set of business requirements, choosing among sharing rules, the role hierarchy, Account Teams, Opportunity Teams, permission sets, and permission set groups. This lesson covers the record-access half of that objective, and the next lesson covers teams and the permission model. By the end you will be able to name the layer that blocks access, set organization-wide defaults as a deliberate floor, use the role hierarchy and its one precise custom-object checkbox, write sharing rules that extend access the way they actually work, choose among the mechanisms that cover the remaining cases, and explain why the most permissive mechanism always wins.
+
+## Deep Dive
+
+### Record access is three layers, and you must name the blocking one
+
+Salesforce record access has three layers, and every layer must permit an action before a user can take it. Object-level permission comes from profiles and permission sets and answers whether the user can create, read, edit, or delete records of that object at all. Field-level security answers whether the user can see or edit a given field. Record-level access answers which specific records the user can touch, and that is where the sharing model lives. When an exam scenario describes a user who cannot see a record, decide first which layer is blocking, then choose the mechanism that fixes that layer.
+
+The distinction is not academic. A user who has Read on Opportunity at the object level still sees nothing if no sharing mechanism grants access to a particular record, because object permission is the ability to read the object and record access is permission to read the row. A user who can see a record but not a field has a field-level security problem, and no sharing rule changes it. A user who cannot open the object at all has an object-permission problem that no amount of record sharing solves. Naming the layer is the first move in every access diagnosis, and it is the move a weak answer skips.
+
+### Organization-wide defaults set the floor
+
+Organization-wide defaults (OWD) are the baseline of the record-level layer. Every object has an OWD that sets the starting access for internal users and, separately, for external users such as partner and community users. The internal values are Private, Public Read Only, and Public Read/Write, with Public Read/Write/Transfer on some objects and Controlled by Parent on objects that should inherit their parent's access.[^1] Private means only the owner and users above them in the role hierarchy see the records. Public Read Only means everyone sees all records but only owners edit. Public Read/Write means everyone sees and edits them. The OWD is a floor, not a ceiling.
+
+That floor metaphor is the sentence to memorize. Every other sharing mechanism can only open access further; nothing in the sharing model can restrict below the OWD. So a requirement to hide records from a group is an OWD and hierarchy question, not a sharing rule question, because a sharing rule cannot subtract. And a requirement to give a specific group access is answered by a mechanism that opens the floor further, which is where the hierarchy and the rules come in.
+
+Internal and external access are separate dials, and the external one is usually the more restrictive. Salesforce lets you set a different default for external authenticated users, and the external level must be more restrictive or equal to the internal level.[^2] A common and defensible pattern is Public Read Only internally and Private externally, with sharing rules opening the external access back up for the specific partner records that need it. Setting the internal default generously and the external default tightly is often cheaper than building a pile of rules, and it improves recalculation performance because fewer records need sharing rows.[^6]
+
+### The role hierarchy opens access upward
+
+The role hierarchy is the first mechanism that extends the OWD, and it does so along management lines. A user in a role above another user in the hierarchy sees the records owned by users below them.[^3] The hierarchy grants access upward: managers see their reports' records. It grants nothing sideways, so two peers in different branches do not see each other's records unless a sharing rule or a team does it. That directional behavior is exactly what the opening scene turns on, and it is the fact most often misremembered under exam pressure.
+
+Two precise details are examinable. First, roles govern record visibility only. They have no effect on report or dashboard folder access, which is controlled by folder sharing; a role shared on a folder is visible to users in that role and not automatically to superiors in the hierarchy. Second, the hierarchy applies to standard objects automatically, and for custom objects the object's sharing settings carry a Grant Access Using Hierarchies checkbox that you can clear when the hierarchy should not see those records. Clearing it stops hierarchy-based access while leaving owner access and sharing-rule access intact, and the setting cannot be modified for standard objects. That checkbox is a precise exam target, and it is the one lever that removes hierarchy access on a custom object without touching the OWD.
+
+There is a third setting that gets tested because it confuses people new to the model. When you create a role, you specify that role's access to the child contacts, opportunities, and cases associated with accounts that users in the role own.[^4] This setting controls how far down a role's record access travels to child records that ride on the account, and it interacts with the OWD in a way worth stating plainly: if a child object's OWD is Public Read/Write, you cannot narrow the role's child access, because you cannot use the role hierarchy to restrict access further than the organization-wide default. The floor still rules. The role setting can open access to children more generously; it can never take access below the OWD. When a scenario describes a rep who sees the account but not its opportunities, check that child-access setting before you suspect a sharing rule.
+
+### Sharing rules only ever add access
+
+Sharing rules are the mechanism that extends the OWD beyond the hierarchy, and the fact the exam hammers is their direction.[^5] A sharing rule can only grant more access; it can never reduce access. You write a rule to say that a group of users gets Read or Read/Write on records owned by a set of users, or on records matching field criteria, and the platform makes those records visible. Because the rule is additive, an answer that uses a sharing rule to remove access is wrong by construction.
+
+There are two flavors. Owner-based rules share records owned by a role, a group, or a territory, which is right when the relevant set is defined by who owns the record. Criteria-based rules share records that match field criteria regardless of owner, which is right when the relevant set is defined by what the record contains. Both target public groups, roles, roles and subordinates, or territories. A public group is an admin-defined grouping of users that can contain individual users, roles, roles and subordinates, territories, or other public groups, and it exists specifically to make rules easier to create and easier to read later. Both access levels are available: Read Only and Read/Write.
+
+Sharing rules recalculate asynchronously, so a large rule change kicks off a background job and access is not instantly consistent. That delay is an operational fact you plan around at go-live, not a defect. Sharing rules also do not extend access to records owned by users who are already above the target user in the hierarchy, because the hierarchy has already handled those. And sharing rules work best for a group you can predict in advance rather than one that changes with every deal, which is the trade the next mechanisms exist to cover.
+
+### The mechanisms that cover what rules cannot
+
+Some requirements neither the OWD, the hierarchy, nor sharing rules express cleanly, and the exam expects you to know the fallbacks. Manual sharing lets an owner or an admin share a single record with a user or group through the Sharing button on the record, which is right for a one-off and wrong as a pattern. Queues grant access to their members for the objects they own, which fits work that is picked up rather than assigned. Programmatic sharing through Apex managed sharing creates Share records for access that must be computed at run time, which is the answer when the access rule itself is dynamic logic.
+
+Contact visibility has a special place in the standard model. Set the Contact OWD to Controlled by Parent and contacts follow their account's sharing, so no separate contact sharing model is needed. This is the standard and recommended configuration for most orgs, because a contact's access mirroring its account's access is almost always what the business means. The option appears in the OWD dropdown on the Contact object, and an answer that reaches for a criteria-based Contact sharing rule when Controlled by Parent is available is choosing a heavier mechanism for a solved problem.
+
+Account Teams and Opportunity Teams also live in this space, and they get their own treatment in the next lesson, but the one sentence to carry here is scope. An Account Team gives a defined set of collaborators access to the account and, through the team member's access level, to its children. An Opportunity Team gives a deal-specific group access to one opportunity and nothing else. Reach for them when the collaborating group is named and stable rather than inferred from ownership.
+
+### The decision tree, matched to the shape of the requirement
+
+Choosing the right mechanism is the objective, so learn the tree and run it every time. If the requirement is that nobody should see the records by default, the answer is a more restrictive OWD. If the requirement is that managers see their reports' work, the answer is the role hierarchy working with the OWD. If the requirement is that a cross-functional group outside the hierarchy see a defined set of records, the answer is a sharing rule. If the requirement is that a specific collaborator see one record, the answer is manual sharing or a team. If the requirement is that a stable group see an account and its children, the answer is an Account Team. If the requirement is that a deal-specific group see one opportunity, the answer is an Opportunity Team. Match the mechanism to the shape of the requirement, and name the layer it operates on when you explain the choice.
+
+Run the tree with a worked example. A client says: "Our enterprise sales team needs to see every opportunity owned by anyone, but only for accounts tagged as strategic, and the rest of the org should see nothing they do not own." The blocking layer is record access. The base requirement, "nothing they do not own," is the OWD set to Private. The exception, "see every opportunity for strategic accounts," is a criteria-based sharing rule that shares records where the account's strategic flag matches, with the enterprise sales public group. You do not need a role change and you do not need manual sharing. The shape of the requirement, a defined set of records to a defined group outside the hierarchy, selects the criteria-based rule, and naming the two layers, OWD for the floor plus a rule for the exception, is the complete answer.
+
+### Recalculation and the union rule
+
+Two operational details decide real implementations. The first is recalculation. Changing an OWD, adding a sharing rule, or moving a user in the role hierarchy triggers a sharing recalculation that can take real time on large data volumes. A go-live cutover has to account for that delay rather than assume instant consistency, because a user who cannot see a record in the first hour after a sharing change may simply be waiting on the background job. When the recalculation finishes, you verify with the record's Who Has Access page rather than by asking users to retry.
+
+The second detail is the union rule: access is the union of the OWD, the hierarchy, sharing rules, manual sharing, and teams. The most permissive mechanism wins. Adding a rule that looks restrictive never subtracts from what another mechanism already granted, which is the same additive principle stated from the other direction. The trap that catches exam takers is believing a sharing rule or a hierarchy change can take access away. It cannot. When a requirement is to remove access, the only levers are the OWD, object-level permissions, and field-level security, because those set the parameters rather than extend them. That is why "how do I stop a group from seeing these records" resolves to an OWD or a permission change, never to a new sharing rule.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a sharing rule can restrict access. Sharing rules only extend the access the OWD and role hierarchy already provide, so an answer that uses a sharing rule to remove access is wrong. Removing access requires a change to the OWD, to object permissions, or to field-level security.
+
+The second trap is believing the role hierarchy controls report and dashboard folder access. It does not. Folder access is controlled by folder sharing, not by roles, which govern record visibility only. A role that appears high in the hierarchy gets no automatic access to a folder shared with a role below it, because folder sharing and record sharing are separate systems.
+
+The third trap is believing the hierarchy adds access when the OWD is already Public Read/Write. With Public Read/Write everyone already has write access, so the hierarchy adds nothing for those records. This is the mirror image of the first trap: the hierarchy is an extension that matters only where the floor is Private or Public Read Only. Recognizing that the mechanism has nothing left to grant is as important as knowing that it grants upward.
+
+## What a consultant should walk away with
+
+Diagnose access by layer before you touch a setting: object permission, field-level security, or record access. The blocking layer tells you which family of mechanisms to consider, and it stops you from fixing a field-level problem with a sharing rule. Treat organization-wide defaults as a deliberate floor set separately for internal and external users, remembering that nothing can restrict below the floor except object and field permissions. Use the role hierarchy for the upward, management-line access it does, and clear Grant Access Using Hierarchies on a custom object when the hierarchy should not see its records. Reach for sharing rules only to open access further, choosing owner-based or criteria-based by whether the relevant set is defined by ownership or by record contents. Fill the remaining cases with manual sharing for one-offs, queues for pickup work, Account and Opportunity Teams for named collaborators, and Controlled by Parent for contacts. Trust the union rule: the most permissive mechanism wins, sharing changes recalculate in the background, and the way to remove access is to change the floor, not to write a rule.
+
+## What's next
+
+Lesson 24 - Teams and the Permission Model: Account Teams, Opportunity Teams, Permission Set Groups (pa-3b)
+
+[^1]: Salesforce Help, "Organization-Wide Sharing Defaults," (https://help.salesforce.com/s/articleView?id=platform.security_sharing_owd_about.htm&language=en_US&type=5)
+[^2]: Salesforce Help, "External Organization-Wide Defaults Overview," (https://help.salesforce.com/s/articleView?id=platform.security_owd_external.htm&language=en_US&type=5)
+[^3]: Salesforce Help, "Controlling Access Using the Role Hierarchy," (https://help.salesforce.com/s/articleView?id=platform.security_controlling_access_using_hierarchies.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Create a User Role," (https://help.salesforce.com/s/articleView?id=platform.admin_roles.htm&language=en_US&type=5)
+[^5]: Salesforce Trailhead, "Define Sharing Rules," (https://trailhead.salesforce.com/content/learn/modules/data_security/data_security_sharing_rules)
+[^6]: Salesforce Help, "Set Your Internal Organization-Wide Sharing Defaults," (https://help.salesforce.com/s/articleView?id=admin_sharing.htm&type=5)

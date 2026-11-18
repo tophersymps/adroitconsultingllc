@@ -1,0 +1,99 @@
+---
+title: "One Loading Flag Cannot Describe Four Kinds of Waiting"
+slug: component-state-contract-2026
+excerpt: "A loading boolean cannot tell an initial load from a refresh, a pending save, or an optimistic update. The state contract that can, and what each state owes."
+category: "UI/UX"
+categoryColor: ux
+categoryGradient: "from-violet to-violet-dark"
+date: "November 9, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [UI/UX, Design Systems, Interface Patterns, Design Engineering, Accessibility, React]
+bannerImage: "/banners/component-state-contract-2026.webp"
+ogImage: "/banners/component-state-contract-2026-og.jpg"
+---
+
+Every design system ships a button, a table, and a card. Almost none ship the states those components spend most of their working life in.
+
+The version that gets designed and reviewed is the one with data in it: rows in the table, numbers on the dashboard. Everything else, the spinner, the empty panel, the error banner, is whatever a developer typed the afternoon before release. Hence three bugs that keep surfacing in well-built products: a request that hangs and spins for two minutes, a table that says "No records" and then fills with records, and a save button that looks idle while the save is in flight.
+
+None of those are visual bugs, and component polish does not fix them, because the missing piece is in the API. A component typed `loading: boolean` with an optional `error: string` describes four different situations with the same two values, so somebody has to guess which one is on screen. The vocabulary that replaces the guessing follows.
+
+## The flag is the bug
+
+Start with the type, because every downstream decision reads it. A union names the situations a data component can actually be in, and it makes impossible combinations unrepresentable:
+
+```ts
+type Status =
+  | 'idle' | 'loading' | 'refreshing'
+  | 'empty' | 'partial' | 'error' | 'ready';
+```
+
+Two booleans cannot do that. `isLoading` and `hasError` can both be true, so every render re-decides what that means. On a forty-row list, one developer hides the rows behind the error banner and another keeps the rows and adds a toast.
+
+The flag also discards what is still on screen. A refresh with good data displayed should not blank the table. That is a property of the state, not the request, so it belongs in the same variable. React's `useOptimistic` makes the point from the other end: the hook returns the optimistic value only while an Action is pending, then falls back to the real value, and its documentation suggests a per-item pending flag in the reducer so each row shows its own state[^1]. A row with one `isLoading` prop cannot render that.
+
+Once state is one value, the gaps become visible. Most systems ship three of the seven; `refreshing` and `partial` almost never exist, and they produce the worst production bugs.
+
+![State contract for a data component: one status value covers idle, loading, refreshing, empty, partial, error, and ready, and a second row shows what stays on screen in each state, since a refresh keeps previous data while a load has none](</diagrams/component-state-contract-2026/1-state-union.png>)
+
+## Four ways to wait, and only one is called loading
+
+Loading is one word for at least four different waits, and each owes the user something different.
+
+An initial load has nothing on screen yet. The timing guidance is settled: 0.1 seconds feels instantaneous, 1.0 second is the edge of an uninterrupted flow of thought, and 10 seconds is the limit of keeping attention[^2]. Spinners suit waits of 2 to 10 seconds[^4]; longer waits want a percent-done indicator, because the user needs to know whether to keep waiting[^3]. Skeleton screens are recommended for full-page loads, except the frame-display variant, which leaves a mostly blank page and makes the user assume the page is broken on a long wait[^4].
+
+A refresh with data on screen is the wait teams get wrong most often, because their component knows one way to show loading. Blanking a table the user is reading and swapping in a skeleton moves attention to a lie for a second. Keep the data, mark the region busy, and put the indicator somewhere that does not displace content.
+
+A pending action is the click the user just made. The button holds its focus and its width, blocks repeat activation, and says what it is doing; a button that unmounts during its own request is how double submissions get created. An optimistic update commits the interface before the server does, so the reversal must be visible: if the save fails, the row that appeared disappears with an explanation rather than quietly differing from what is stored[^1].
+
+Whether skeletons earn their keep is a separate question. A 2017 Viget study by Kathryn Faulkner and Katherine Olvera gave 136 people a skeleton, a spinner, or a blank screen of identical duration. The skeleton did worst on every measure: a perceived wait of 2.82 seconds against 2.41 for the spinner, and 59 percent agreeing the content loaded quickly against 74 percent[^5]. The authors concluded skeletons are not a reliable way to make an app feel faster; Nielsen Norman Group still recommends them for full-page loads under 10 seconds[^4]. The findings reconcile once a skeleton stops being a speed trick. Use it when the layout is known and the wait is real, and prefer a plain indicator when the result could be anything. Interaction to Next Paint sets the bar underneath all of it: good responsiveness means 200 milliseconds or less at the 75th percentile of page loads[^6], so an interface that needs a spinner for an ordinary click has a problem upstream of the animation.
+
+![Four kinds of waiting compared: an initial load with an empty screen that shows a skeleton or spinner once the wait passes one second, a refresh that keeps previous data visible with an inline indicator, a pending action that holds the button focus and width, and an optimistic update that must be visibly reversible](</diagrams/component-state-contract-2026/2-four-waits.png>)
+
+## Empty is not one state either
+
+An empty container has at least five causes, and one "No data" panel cannot serve them, because the next action differs in each case.
+
+First use, when nothing exists yet, is the one moment the interface can teach: state what will appear here and offer the action that creates the first item[^7]. A search that matched nothing is not empty space but an answer, so the copy names the conditions that excluded everything. A space the user emptied on purpose is completion feedback, not failure. A permissions gap needs an access request rather than a retry. Configuration or a broken dependency needs the failure named.
+
+IBM's Carbon design system splits these into three families, no data, user action, and error management, and names permissions, system issues, and configuration as cases needing more than a generic panel[^8]. The empty state replaces the element that would ordinarily show, including a table's column headers, so the panel never sits above stale rows.
+
+The worst failure is the one Nielsen Norman Group documented: a container that declares "No records" while the request is still running, then replaces the message with content seconds later[^7]. The interface told the user something false, and the cost is that they re-run the query to find out whether it was lying. That bug is nearly impossible to write when empty and loading are one variable.
+
+![Decision tree for an empty container: first use explains what will appear and offers a create action, a search that matched nothing names the excluded conditions, a deliberately emptied space shows completion feedback, a permissions gap names the access needed and who grants it, and a configuration failure states the failure and offers a retry](</diagrams/component-state-contract-2026/3-empty-causes.png>)
+
+## What each state owes assistive technology
+
+A state that exists only in pixels does not exist for a screen reader user.
+
+While a region updates, `aria-busy="true"` tells assistive technology the element is being modified and that changes may arrive as one atomic update when it returns to false, which is what a list reloading under a reading cursor needs[^9]. Skeleton placeholder shapes are hidden from the accessibility tree, since announcing nine empty boxes helps nobody.
+
+Status messages have their own criterion. WCAG 2.2 requires that messages about an action's success, an application's waiting state, or the existence of errors be programmatically determinable without moving focus; `role="status"` is the standard technique[^10]. "Saved" belongs there, not in a toast that only users watching the corner catch.
+
+Errors split in two. A field error attaches to its input with `aria-invalid` plus a described-by reference, and a failed submit moves focus to the first invalid field or an error summary. A page-level failure gets `role="alert"`, which interrupts, so it is reserved for failures the user has to act on. Empty states are mostly plain text in the panel, which makes them reachable as long as the copy is real content and not an image. Carbon's guidance is that the illustration is decorative and should carry an empty alt attribute, so the instruction lives in the text[^8].
+
+Keeping this from rotting is a tooling question. Each state gets a story and a visual regression baseline in every theme, and the union gets a test that renders the impossible combination and asserts it will not compile. Focus and keyboard handling are worth checking by hand rather than by scanner, the argument in [Keyboard Navigation Is the Interface Pattern Nobody Tests](/field-notes/keyboard-navigation-focus-management-2026); no scan will tell you whether "No records" appeared before the records did.
+
+Generated components tend to arrive with a happy path and one spinner, since that is the shape most examples carry. The gate that holds is a required `status` prop on every data component, so nothing compiles until someone decides what each state looks like. That fails cheaper than a design review.
+
+[^1]: React, "useOptimistic" (React documentation). The optimistic value applies only while an Action is pending, then falls back; the docs suggest per-item pending flags in the reducer. [react.dev/reference/react/useOptimistic](https://react.dev/reference/react/useOptimistic)
+
+[^2]: Jakob Nielsen, "Response Times: The 3 Important Limits" (Nielsen Norman Group, 1993). The 0.1, 1.0, and 10 second limits. [nngroup.com/articles/response-times-3-important-limits](https://www.nngroup.com/articles/response-times-3-important-limits/)
+
+[^3]: Katie Sherwin, "Progress Indicators Make a Slow System Less Insufferable" (Nielsen Norman Group, 2014). Spinners and percent-done indicators. [nngroup.com/articles/progress-indicators](https://www.nngroup.com/articles/progress-indicators/)
+
+[^4]: Samhita Tankala, "Skeleton Screens 101" (Nielsen Norman Group, last reviewed September 2, 2026). Three skeleton types and why frame-display skeletons are not recommended. [nngroup.com/articles/skeleton-screens](https://www.nngroup.com/articles/skeleton-screens/)
+
+[^5]: Kathryn Faulkner and Katherine Olvera, "A Bone to Pick with Skeleton Screens" (Viget, October 19, 2017). 136 participants; the skeleton produced the longest perceived wait at 2.82 seconds against 2.41 for a spinner. [viget.com/articles/a-bone-to-pick-with-skeleton-screens](https://www.viget.com/articles/a-bone-to-pick-with-skeleton-screens)
+
+[^6]: Jeremy Wagner and Barry Pollard, "Interaction to Next Paint (INP)" (web.dev). Good responsiveness is 200 milliseconds or less at the 75th percentile. [web.dev/articles/inp](https://web.dev/articles/inp)
+
+[^7]: Kate Kaplan, "Designing Empty States in Complex Applications: 3 Guidelines" (Nielsen Norman Group, September 19, 2021). System status, learning cues, and direct pathways; documents the misleading "No records" message shown while content loads. [nngroup.com/articles/empty-state-interface-design](https://www.nngroup.com/articles/empty-state-interface-design/)
+
+[^8]: IBM, "Empty states" (Carbon Design System). The three empty-state families, replacing the element that would show, and the decorative-image rule. [carbondesignsystem.com/building-blocks/core/patterns/empty-states](https://www.carbondesignsystem.com/building-blocks/core/patterns/empty-states)
+
+[^9]: W3C, "Accessible Rich Internet Applications (WAI-ARIA) 1.2," aria-busy state. Changes may be presented as a single atomic update when busy returns to false. [w3.org/TR/wai-aria-1.2](https://www.w3.org/TR/wai-aria-1.2/)
+
+[^10]: W3C, "Understanding Success Criterion 4.1.3: Status Messages" (WCAG 2.2) and Technique ARIA22. Status messages must be determinable without receiving focus. [w3.org/WAI/WCAG22/Understanding/status-messages.html](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html)

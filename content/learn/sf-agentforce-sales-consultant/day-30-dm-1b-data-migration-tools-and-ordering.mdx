@@ -1,0 +1,96 @@
+---
+title: "Lesson 30: Data Migration Tools and Ordering"
+slug: day-30-dm-1b-data-migration-tools-and-ordering
+series: sf-agentforce-sales-consultant
+lesson: 30
+excerpt: "How the two built-in tools divide the work: the Data Import Wizard's fifty thousand record ceiling against Data Loader's five million, when to reach for Bulk API 2.0 or an ETL tool, the parent-to-child load order, and how external IDs and upsert make a failed load safe to rerun. It serves dm-1b."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Data Loader, Data Import Wizard, Bulk API, Salesforce Data Management]
+---
+
+# Lesson 30: Data Migration Tools and Ordering
+
+A migration team is ready to load a hundred and twenty thousand contacts, and the admin has already tried once. She used the Data Import Wizard, because it is the tool in Setup and it feels safer, and it told her the file was over the limit. So she split it into three files, ran them in sequence, and now the third file failed halfway and she cannot tell which contacts landed without cross-referencing three error logs. The tool was not broken. It was the wrong tool for the volume, and the fix is not more patience with the same tool but a different one plus a match key that makes a rerun harmless.
+
+That pattern is what this objective covers. Two built-in tools cover most migrations, and the exam expects you to know exactly where each one stops and what each one enforces by default. Beyond them sits a tier of tools for the genuinely heavy or genuinely complex job. Underneath all of it sits a rule that is unforgiving: a record cannot point at a parent that does not exist yet, so load order is driven by dependencies, and a load that ignores them fails. The last piece is a match key that survives a failure, which is what external IDs and the upsert operation give you.
+
+This lesson serves requirement dm-1b, in the Data Management domain, which carries 18 percent of the exam. The objective asks you to explain the use cases and considerations for data migrations and integrations. By the end you can pick the right tool for a volume and an object, name the operations and options Data Loader gives you, know when the job outgrows both built-ins, sequence a load by dependency, and design an upsert so a failed run is safe to repeat.
+
+## Deep Dive
+
+### Two built-in tools and the ceilings that separate them
+
+The Data Import Wizard runs in the browser and handles up to 50,000 records per import.[^1] The help page is explicit about the cap and about the objects it covers: accounts, contacts, leads, solutions, campaign members, person accounts, and custom objects, in CSV format only. It also enforces the object's validation rules and duplicate rules as it runs, so it behaves like a careful user clicking save. That last property is the reason to reach for it: when the client wants quality enforcement and the volume is modest, the wizard is doing the governance work for you.
+
+Data Loader is a desktop and command line application that handles up to 5 million records, works against any object that supports the API, and does not run duplicate rules unless that option is explicitly enabled on the operation.[^2] The help page frames it as a client application for bulk import or export that supports large files up to that ceiling and can be run interactively or from the command line for automation. The clean rule of thumb for a scenario: small volume with quality enforcement wanted points at the Data Import Wizard, large volume or an object the wizard does not support points at Data Loader, and the fact that Data Loader skips duplicate rules by default is a trap the questions lean on. An answer that says Data Loader will block duplicates is wrong; an answer that says the wizard will is right.
+
+### Data Loader operations, bulk mode, and the bypass options
+
+Data Loader is more than insert and update, and the operations matter. It supports insert, update, upsert, delete, and hard delete, plus export and export all, which differ because export all retrieves records that are in the recycle bin.[^3] The upsert operation is the one to know for real work, because it matches incoming rows against an existing key rather than assuming every row is new. On the operation settings you can turn on bulk mode for speed, set a batch size, cap how many batches process in a run, and choose whether to bypass validation rules or duplicate rules, both of which require the Modify All Data permission. That bypass is exactly why a governed org has to think about who holds Modify All Data: the permission that lets someone skip the guardrails is the permission that can let a load write records the business rules were built to stop.
+
+Data Loader log files are the other operational detail worth knowing. The wizard generates success and error files for each run, and you work the error file rather than ignoring it, because a partial success is the normal outcome of a messy file. Review the errors, fix the cause, and rerun only what failed. That rerun is safe or dangerous depending entirely on the next two topics.
+
+### When the volume or the transformation outgrows the built-ins
+
+When the volume runs into the millions, or the transformation is genuinely complex, the answer moves beyond the built-in tools to an ETL tool or a middleware layer such as MuleSoft, Informatica, or Jitterbit, or to Bulk API 2.0 directly. ETL earns its place when you need to reshape the data between source and target, join several source systems, or schedule recurring loads with real error handling and restartability. Bulk API 2.0 is asynchronous, so you submit a job and it processes server side rather than holding an open request, which is how you move very large volumes without hitting synchronous request timeouts. The developer guide frames the same boundary from the API side: any data operation over 2,000 records is a good candidate for Bulk API 2.0, while smaller jobs should use the bulkified synchronous REST or SOAP calls instead.[^6] Because both bulk APIs are asynchronous, Salesforce does not guarantee a service level agreement, which is another reason a load of that size belongs on a plan rather than an improvisation.
+
+Choosing the lighter tool for a heavy job is a common wrong answer, and choosing an ETL for a two field update is the opposite mistake. Match the tool to the job: a few thousand records into a supported object is a wizard job, a few hundred thousand is a Data Loader job, and a multi-million row nightly feed with joins and retries is an ETL or Bulk API job. Over-tooling costs money and time; under-tooling costs correctness.
+
+### Load order is driven by object dependencies
+
+A record cannot reference a parent that does not exist yet, so the parent always loads first. Accounts before Contacts, because a Contact's Account is a lookup. Accounts and Contacts before Opportunities, and the Opportunity's Account must already exist. Products before Price Book Entries, because a Price Book Entry points at a Product, and Price Books before Price Book Entries as well, since an entry also points at a Price Book. Price Book Entries before Opportunity Line Items, because a line item references a specific entry. Campaigns before Campaign Members. Users, or at least record owners, must exist before you can assign ownership, and the platform's own migration guidance lists a recommended import order for core objects that puts accounts first, then campaigns, then contacts, then opportunities, and price books and products after them.[^7]
+
+Think parent to child, and count the levels of dependency before you start. The failure mode is not subtle: load contacts before accounts and every contact with a populated account lookup fails or lands orphaned, and the error file is longer than the success file. Sequence the objects in one pass on paper first, and the actual load becomes a checklist rather than a discovery process. When a scenario lists several objects and asks for the correct order, the answer is always the one where every parent precedes its children.
+
+A worked example makes the chain concrete. A quote line item points at a PricebookEntry, which points at a Product2 and a Pricebook2, and the quote itself points at an Opportunity, which points at an Account. So the safe order for that deal is Accounts, then Opportunities, then Pricebooks, then Products, then PricebookEntries, then Quotes, then QuoteLineItems. Notice that Products and Pricebooks can load in either order relative to each other, because neither is the parent of the other, but both must precede the entries, and the entries must precede the line items. Count the dependency levels, group the siblings that do not depend on each other, and you have a load plan.
+
+### External IDs and upsert make a load re-runnable
+
+Salesforce record IDs are generated in each org, so you cannot carry them from a source system or between sandboxes, which is why you store the source's primary key in a custom external ID field on the target. An external ID field is searchable, is indexed automatically by the platform, and the platform allows up to 25 external ID fields per object.[^5] Upsert then matches incoming rows on that external ID: if a record exists it updates, if not it inserts. That single behavior makes a load re-runnable.
+
+The value shows up the moment something fails. If a load dies at sixty percent, you fix the file and run the same job again without creating duplicates, because every row that already landed matches its external ID and updates in place, and only the rows that never arrived insert. This is the answer whenever a scenario mentions retries, partial failures, or an incremental load. The alternative that candidates sometimes propose, deleting everything and starting over, is slower and riskier, and switching back to plain insert is how duplicates get created in the first place.
+
+### Upsert mechanics that decide whether the load works
+
+Choose the external ID field carefully, and keep duplicates off that external ID if the source can have more than one row per key, because Salesforce requires the external ID to be unique to match cleanly. The platform's guidance on external ID and unique settings is worth internalizing: an external ID field makes records searchable and usable as a match key, while the unique setting is the constraint that stops duplicate values, and the two are complementary, which is why marking the field both external ID and unique is the recommended combination.[^4] Without the unique setting, a parallel async load can insert duplicate rows for the same key and produce a duplicate external ID error under load.
+
+For a parent and child in the same file, you can reference the parent by its external ID using the relationship notation on the lookup field, so contacts can carry the account's external ID and resolve the relationship during the load instead of needing a second pass with the real Salesforce IDs. Watch the external ID's size and type against the source keys, because a truncated key silently stops matching. And remember the ceilings interact: the 5 million record limit for Data Loader, the batch sizes, and the API limits all bound a single run, so a very large upsert belongs on Bulk API 2.0 or an ETL rather than on an interactive Data Loader session.
+
+### Execution order for the cutover itself
+
+Execution order is as important as dependency order. Disable or defer the automations that would fire on every loaded row, because flows, process builders, and Apex triggers multiply the work and can send notifications the business did not expect. Load in dependency order, parents first. Validate the insert, update, and error counts against the source, and review the error files rather than ignoring them. Rerun the failed rows after correcting the cause, relying on the external ID so the retry does not duplicate. Then re-enable the automations and confirm the records look right in the UI. Turn the automations back on last, not first, so the load runs on the smallest possible surface.
+
+The sequence below is the build, from tool choice to a clean load.
+
+1. In Setup, review the objects in scope and confirm Data Loader supports each one, since the Data Import Wizard does not cover every object and stops at 50,000 records.
+2. Create a custom external ID field on each target object to hold the source system's primary key, and mark it unique where the source guarantees one row per key.
+3. In Data Loader, log in with OAuth, choose the operation (insert, update, or upsert), and select the external ID field when the operation is upsert.
+4. Build the CSV so parents and children are ordered correctly, and for a combined file reference the parent by its external ID on the lookup field.
+5. Set the operation options: bulk mode for speed, batch size, whether to bypass validation or duplicate rules, and cap the batches on a first test run.
+6. Work the dependency order object by object, Accounts then Contacts then Opportunities, and Price Books then Price Book Entries then Opportunity Line Items, checking the error files between loads.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is assuming Data Loader enforces duplicate rules. It does not run them unless the option is enabled, so an answer that says Data Loader will block duplicates is wrong, while the Data Import Wizard does enforce them. When a scenario wants a load to respect duplicate rules without extra configuration, the wizard is the tool that does it by default.
+
+The second trap is loading children before parents. A Contact or an Opportunity Line Item cannot reference a parent that does not exist yet, so an answer that loads Contacts before Accounts, or Line Items before Price Book Entries, has the dependency backwards. The only order that resolves is the one where every parent exists before its child is loaded.
+
+The third trap is believing record IDs survive a migration. Salesforce IDs are org specific, which is why the external ID field exists, so an answer that carries the source IDs across as the match key is wrong. The correct design stores the source key in an external ID field and lets upsert match on it, which is also what makes the load safe to rerun after a failure.
+
+## What a consultant should walk away with
+
+Pick the tool by the volume and the object. Under fifty thousand records into a supported object, with duplicate rules you want enforced, the Data Import Wizard is the right call. Beyond that, or into an object the wizard does not cover, Data Loader is, and remember that it skips duplicate rules by default. When the volume climbs into the millions or the transformation gets complex, move up to Bulk API 2.0 or an ETL tool rather than forcing the built-ins. Store the source primary key in an external ID field, mark it unique when the source guarantees one row per key, and use upsert so a failed run is safe to repeat instead of duplicating records. Sequence every load parent to child: accounts, then contacts, then opportunities, and price books, then price book entries, then line items. Then run the cutover cleanly: defer the automations, load in dependency order, read the error files, rerun the failures on the external ID, and turn the automations back on last. Get the tool, the key, and the order right and a migration becomes a checklist rather than a rescue.
+
+## What's next
+
+Lesson 31 - Salesforce Integration Patterns and Their Considerations (dm-1c)
+
+[^1]: Salesforce Help, "Data Import Wizard," (https://help.salesforce.com/s/articleView?id=sf.data_import_wizard.htm&type=5)
+[^2]: Salesforce Help, "Data Loader," (https://help.salesforce.com/s/articleView?id=sf.data_loader.htm&type=5)
+[^3]: Salesforce Help, "Insert, Update, or Delete Data Using Data Loader," (https://help.salesforce.com/s/articleView?id=sf.inserting_updating_or_deleting_data.htm&type=5)
+[^4]: Salesforce Help, "Differences between the 'External ID' field and the 'Unique ID' field setting," (https://help.salesforce.com/s/articleView?id=000385174&type=1)
+[^5]: Salesforce Help, "Custom Field Attributes," (https://help.salesforce.com/s/articleView?id=platform.custom_field_attributes.htm&type=5)
+[^6]: Salesforce Developer, "Introduction to Bulk API 2.0 and Bulk API," (https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-intro.html)
+[^7]: Salesforce Help, "Migrate data from one organization to another," (https://help.salesforce.com/s/articleView?id=000384648&type=1)

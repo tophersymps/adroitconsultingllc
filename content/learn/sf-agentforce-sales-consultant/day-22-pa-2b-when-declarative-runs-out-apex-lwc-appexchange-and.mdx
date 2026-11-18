@@ -1,0 +1,93 @@
+---
+title: "Lesson 22: When Declarative Runs Out: Apex, LWC, AppExchange, and Productivity Tools"
+slug: day-22-pa-2b-when-declarative-runs-out-apex-lwc-appexchange-and
+series: sf-agentforce-sales-consultant
+lesson: 22
+excerpt: "How to extend the platform once configuration is exhausted: when Apex and Lightning Web Components are justified, how to weigh an AppExchange package against a custom build, what a managed package really costs you, and how email, Slack, and Salesforce Mobile connect people to the data model. It serves requirement pa-2b."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Apex, Lightning Web Components, AppExchange, Einstein Activity Capture]
+---
+
+# Lesson 22: When Declarative Runs Out: Apex, LWC, AppExchange, and Productivity Tools
+
+A sales operations lead forwards a ticket that reads like a challenge: "The nightly commission recalculation takes nine hours and times out. We already tried a Flow." The consultant opens the Flow first, because that is where the instinct says the answer lives, and finds a record-triggered Flow with four hundred elements and nested loops over opportunity products. Then they open the requirement, which says five hundred thousand opportunity records, complex amount recalculation, and a hard governor-limit budget. The Flow was never going to finish. The correct tool is a batch Apex class scheduled nightly, because batch Apex operates over small batches and gives explicit control over the transaction. The team reached for the wrong rung of the ladder, and no amount of Flow tuning fixes a requirement built for code.
+
+That ladder is the subject of this lesson. Once declarative configuration is genuinely exhausted, the extension options fall into four buckets: custom code on the platform, a third-party application from AppExchange, a Salesforce product you license, and productivity tools that connect the platform to where users already work. Each bucket buys something and costs something, and the exam frames all of this as a scenario question about appropriateness. The skill being tested is choosing the lightest option that satisfies the requirement with a stated reason, not the most powerful option on the menu.
+
+This lesson serves requirement pa-2b, in the Practical Application of Agentforce Sales Expertise, which carries 24 percent of the exam. It continues directly from the declarative-first lesson and answers the question that one leaves open: once you have named the ceiling, what do you build on the other side of it. By the end you will be able to state the trade each extension option makes, recognize the Apex boundaries that justify code, tell interface work from data work when choosing a Lightning Web Component, run a buy-versus-build decision against concrete criteria, explain what a managed package does and does not protect you from, and choose among the productivity tools by the job each one does.
+
+## Deep Dive
+
+### Four ways to extend, and the trade each one makes
+
+Every extension option is a trade, and naming the trade is what the exam rewards. Code buys control and costs maintenance. A package buys speed and costs license and lock-in. A native Salesforce product buys integration and costs licensing across all users. A productivity tool buys adoption and costs governance, because the work now happens partly outside the org where you cannot fully see it. Say which trade you are making and why, and the scenario answers itself.
+
+The sequencing matters as much as the menu. You do not arrive at this lesson's options until the previous lesson's options are exhausted. Only when the requirement cannot be met by Flow, validation rules, approval processes, roll-up summaries, formula fields, and App Builder do you consider code. Only when code is genuinely warranted, or genuinely wasteful, do you consider a package. Only when neither a package nor code fits do you consider a native product you have not yet licensed. Only when the requirement is about where people work rather than what the org computes do you reach for the productivity tools. When a scenario describes a requirement and asks what to use, mentally walk that order before you look at the answer choices.
+
+### Apex is worth its cost only at named boundaries
+
+Apex is the right call at a short list of boundaries. Use it when the logic is too complex or too CPU-heavy for Flow; when you must process very large volumes while controlling governor limits; when you need true transaction control through savepoints and rollback; when you expose or consume a web service; or when the logic must live at the data layer for every entry point regardless of how the record arrived. Each of those is a requirement Flow cannot express cleanly, not a stylistic preference.
+
+A trigger should be thin. The trigger delegates to a handler class with bulkified logic, because a trigger that queries or updates inside a loop hits limits the moment a data load touches more than a few hundred records. That is the single most common performance defect in custom Salesforce code, and it is examinable as a design principle: one trigger per object, logic in a handler, no SOQL or DML inside a loop, all collections operated on in bulk.
+
+The limits that make this boundary concrete are per-transaction and they are tight. A synchronous transaction allows 100 SOQL queries and 150 DML statements, can retrieve at most 50,000 records, has a 10 megabyte heap, and gets 10,000 milliseconds of server CPU time.[^2] Asynchronous contexts are more generous in places: 200 SOQL queries, a 25 megabyte heap, and 60,000 milliseconds of CPU, and a batch job resets the per-transaction limits for each execution of a batch of records. That reset is exactly why a recalculation across a large record set survives in batch Apex and dies in a trigger. Read those numbers against a trigger that queries inside a loop over two hundred opportunities, and the arithmetic is fatal: at one query per record, the hundredth record exhausts the transaction's query budget, and no amount of later tuning rescues a structure that was wrong from the first line. Bulkify by collecting ids, issuing one query, and doing one DML call, and the same work fits comfortably.
+
+Asynchronous Apex handles the workloads that cannot run inline. Batch Apex is the interface for building complex, long-running processes over thousands of records, operating over small batches and breaking the work into manageable chunks, which is why a nightly recalculation across a large record set belongs there.[^1] Note the operational ceiling: you can have only five queued or active batch jobs at one time, which you can check on the Scheduled Jobs page or by querying the `AsyncApexJob` object. Schedulable Apex runs a job on a schedule, and Queueable Apex handles asynchronous work with more state than a future method allows. Custom REST and SOAP services built with Apex expose the org to integrations that need something the standard API does not provide.
+
+### Lightning Web Components are an interface decision, not a data one
+
+Lightning Web Components are the right call for interface work that App Builder cannot express. Use them for a reactive component that recomputes as the user types, for a complex input grid that no standard component matches, or for an offline-capable experience on Salesforce Mobile. Aura components still exist for legacy and some console integration, but new development targets LWC, so a proposal that opens a new Aura component is a smell.
+
+The boundary here is interface shape, not data shape. If the requirement can be met with a Lightning record page, a Dynamic Form, and a Flow behind an action, you do not need a component. Reaching for LWC to display data that a standard related list already shows is a common over-build, and the exam will not reward it. The clarifying question is always the same: is the requirement about what the org computes, or about how a person interacts with it. Data and process go to Flow and its relatives. Interaction goes to App Builder first, and to a component only when App Builder runs out.
+
+### AppExchange is a buy-versus-build call with concrete criteria
+
+The package decision is a buy-versus-build decision, and the criteria are concrete rather than a matter of taste. Buy when the requirement is common and non-differentiating, when time to value matters, when the vendor maintains the code through releases, and when the package has passed the AppExchange security review and has a clear upgrade path. Build when the requirement is your competitive edge, when no package fits your data model, or when the license cost scales badly with user count.
+
+A worked decision makes the criteria usable. Suppose two clients both ask for contract e-signature inside Salesforce. The first client sells a standard product to a large market and the differentiator is nothing more than a clean signing flow. That is common and non-differentiating, so you buy a package that has passed the security review, has a clear upgrade path, and lets the vendor maintain the integration through each release. The second client ships a regulated process where the signing order, the audit trail, and the data model are the thing they compete on, and no package matches the shape of their object. That is their competitive edge and their data model, so you build, because the requirement is not common and the package would fight the model. Same words on the requirement line, opposite answer, because the buy-versus-build criteria are about differentiation and fit, not about which option sounds more advanced.
+
+Evaluate before you install. A Test Drive is a fully functional Developer Edition environment containing the managed package, which lets you try a solution before committing.[^4] Every package lists its own requirements, and you check those against your org's edition and limits. A managed package obtained from AppExchange does not consume your edition's allocation of custom objects, fields, tabs, and apps, but those components do count against your org's total limit; a package that is not publicly listed on AppExchange counts against the edition allocation instead. Install in a sandbox first and hold a clear upgrade plan, because a package upgrade can overwrite customizations you made to its components.[^5]
+
+### A managed package does not escape your governor limits
+
+This is the operational fact that catches teams in production. Apex inside a managed package runs in your org and counts against your org's governor limits and CPU time. A package does not give you a limits-free sandbox. When a client reports that a package is consuming their CPU budget, the true statement is that the packaged Apex executes inside the org against the org's limits, and the correct response is a case with the vendor, not a rewrite.
+
+You cannot fix it yourself, because managed package components are namespaced and locked. You cannot edit its Apex, and you cannot subscribe to its classes the way you can your own. You can clone a permission set the package ships, but you cannot edit the one it ships, and your clones are not affected by package upgrades. The lock-in is real in three directions: upgrades can overwrite your customizations, you cannot uninstall the package while its components are still referenced, and a defect in the package is fixed by opening a case or waiting for a patch rather than by changing the code. None of that makes packages wrong. It makes them a trade you should state out loud before you recommend one.
+
+### Email integration, and what happens to the data
+
+Email integration is the productivity domain that gets tested hardest, and the distinction that decides the answer is what happens to the data. Einstein Activity Capture syncs a user's email and calendar events from Gmail or Microsoft accounts into Salesforce, but it stores them in a separate activity store rather than as standard `EmailMessage` records.[^3] Those activities are visible on records and timelines, and they can be set to expire, but they are not fully reportable the way `EmailMessage` records are. The classic email integration, and Email-to-Case for service, store messages as records you can report on and automate against.
+
+The decision follows from the requirement. If the requirement is simply that reps stop re-keying their inbox into Salesforce, Einstein Activity Capture is the lighter answer and it automates that data entry. If the requirement is to report on email volume, to automate against message content, or to route cases from inbound mail, then the capture mechanism matters, because Einstein Activity Capture's separate store cannot produce the `EmailMessage`-based report you need. Inbox and the older Outlook integration were the earlier sync tools, and the direction of travel is toward Einstein Activity Capture integrated with Sales Engagement. When you choose a capture mechanism, you are choosing what reports are possible later, so state the reporting requirement before you state the tool.
+
+### Slack and Salesforce Mobile extend reach, not the model
+
+Slack and Salesforce Mobile round out the productivity surface, and both extend reach to the data model rather than replacing it. Slack for Salesforce connects Slack channels to Salesforce records. Each Salesforce channel is connected to a specific record, such as an account or an opportunity, and you make it available on record pages using the Slack panel or the Slack Lightning web component, with no Marketplace app to install.[^6] Once connected, a deal channel carries the opportunity context, conversation syncs between Salesforce and Slack, and users can act on records and receive Flow-driven notifications without leaving Slack.[^7] You configure it by connecting the org to Slack and choosing which objects can use Slack channels in Salesforce.
+
+Salesforce Mobile extends the platform to the field with the standard mobile app, offline access through the mobile briefcase for the record sets a rep needs without connectivity, and Mobile Publisher when a company wants its own branded app built on the Salesforce mobile framework. The exam angle is fit. Reach for Slack when the requirement is collaboration in the tool people already use. Reach for Salesforce Mobile when the requirement is access away from a desk, or offline in the field. Neither one replaces the data model. Both extend how many places a person can meet it.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing that a managed package's Apex runs outside your org's limits. It does not. Apex in a managed package runs in your org and counts against your governor limits and CPU time, so a package does not free you from them. When a scenario says a package is consuming CPU limits, the true statement is that packaged Apex executes inside the org, and because package components are locked you cannot edit the code to reduce its consumption.
+
+The second trap is believing that Einstein Activity Capture stores email as reportable `EmailMessage` records. It does not. It syncs email and events into a separate activity store, which is why those activities are visible on timelines but are not fully reportable like `EmailMessage` records. The capture mechanism decides whether an email-volume report is even possible, so an answer that assumes Einstein Activity Capture produces standard reportable email records is wrong.
+
+The third trap is believing you can edit a managed package's Apex to fix a defect. You cannot. Managed package components are namespaced and locked, so the correct response to a package defect is to open a case with the vendor or wait for a patch. An answer that has you editing the package's code, or subscribing to its classes, contradicts the lock the platform enforces.
+
+## What a consultant should walk away with
+
+Extend with the lightest option that satisfies the requirement, and say the trade out loud. Reach for Apex only at a named boundary: complex or CPU-heavy logic, very large volumes, transaction control, web services, or data-layer logic that Flow cannot express. Keep triggers thin and bulkified, and route nightly volume through batch Apex, remembering the five-job ceiling. Treat Lightning Web Components as an interface decision: use them when App Builder cannot express the interaction, never to show data a related list already shows. Run the package decision as a real buy-versus-build call, check the listing requirements, try a Test Drive, install in a sandbox, and remember that packaged Apex runs inside your org against your limits and its code is locked. Choose email capture by whether you need reportable records or just automatic data entry, because Einstein Activity Capture and Email-to-Case answer different reporting questions. Reach for Slack for collaboration in place and Salesforce Mobile for access away from a desk or offline. State the layer, state the trade, and the scenario resolves.
+
+## What's next
+
+Lesson 23 - The Sharing Architecture: OWD, Role Hierarchy, and Sharing Rules (pa-3a)
+
+[^1]: Salesforce Developers, "Batch Apex," Apex Developer Guide, (https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-batch.html)
+[^2]: Salesforce Developers, "Execution Governors and Limits," Apex Developer Guide, (https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-gov-limits.html)
+[^3]: Salesforce Help, "Einstein Activity Capture," (https://help.salesforce.com/s/articleView?id=sales.einstein_sales_aac.htm&language=en_US)
+[^4]: Salesforce Help, "Before You Install an AppExchange Package," (https://help.salesforce.com/s/articleView?id=xcloud.pkg_subscriber_before_install.htm&type=5&language=en_US)
+[^5]: Salesforce Help, "Install a Managed Package," (https://help.salesforce.com/s/articleView?language=en_US&id=sf.distribution_installing_packages.htm)
+[^6]: Salesforce Help, "Salesforce Channels," (https://help.salesforce.com/s/articleView?id=slack.slack_salesforce_channels_use.htm&language=en_US&type=5)
+[^7]: Salesforce Help, "Manage Salesforce Records in Slack," (https://help.salesforce.com/s/articleView?id=sf.slack_apps_sales_manage_salesforce_records_in_slack.htm&language=en_US&type=5)

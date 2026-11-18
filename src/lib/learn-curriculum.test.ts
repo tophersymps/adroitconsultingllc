@@ -72,11 +72,12 @@ const SCHEDULER_FINAL_COUNTS: Record<string, number> = {
   "salesforce-data-architect": 42,
   "sf-omni-consultant": 62,
   "sf-data360-consultant": 52,
+  "sf-agentforce-sales-consultant": 41,
 };
 
 describe("series.json curriculumLessons declarations", () => {
   const dirs = seriesDirs();
-  expect(dirs.length, "expected the thirteen learning tracks").toBe(13);
+  expect(dirs.length, "expected the fourteen learning tracks").toBe(14);
 
   for (const dir of dirs) {
     const cfg = readSeriesJson(dir);

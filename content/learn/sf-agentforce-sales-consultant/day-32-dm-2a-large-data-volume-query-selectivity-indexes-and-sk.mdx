@@ -1,0 +1,95 @@
+---
+title: "Lesson 32: Large Data Volume: Query Selectivity, Indexes, and Skinny Tables"
+slug: day-32-dm-2a-large-data-volume-query-selectivity-indexes-and-sk
+series: sf-agentforce-sales-consultant
+lesson: 32
+excerpt: "How large data volume changes Salesforce behavior and how to respond: query selectivity thresholds, automatic and custom indexes, Support built skinny tables, report and list view tuning, and the sharing recalculation cost you must schedule. Serves requirement dm-2a."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Large Data Volume, Query Selectivity, Indexes, Skinny Tables]
+---
+
+# Lesson 32: Large Data Volume: Query Selectivity, Indexes, and Skinny Tables
+
+An operations director shows you a report that used to open in two seconds and now sits on a spinner until it errors. Nothing changed in the report. What changed is that the object grew from eighty thousand rows to four million, and the filter the report always used is on a field nobody ever indexed. The report is not broken; the design that worked at eighty thousand rows stopped working somewhere along the way, and nobody noticed because it degraded slowly.
+
+The naive response is to blame the platform or ask the vendor for more throughput. That misses the mechanism. At volume, the cost drivers change: the query optimizer refuses to use an index when a filter is not selective enough, reports and list views exceed their time budget, and sharing recalculation that was instant on a small table now runs for hours. Adding hardware is not on the menu, so the fix is design: filter on indexed fields, keep the result set small, and reduce the columns a read-heavy path has to touch.
+
+This lesson serves the exam guide's requirement dm-2a, in the Data Management domain, which carries 18 percent of the exam. The objective asks you, given a scenario, to outline the scalability implications of a solution, and this lesson takes the large data volume half. By the end of this lesson you will be able to define when an object counts as large, explain the selectivity threshold that decides whether an index is used, tell automatic indexes from custom indexes from skinny tables, and name the design moves that keep reports and sharing working at millions of rows.
+
+## Deep Dive
+
+### What large data volume actually changes
+
+Large data volume in Salesforce does not have a single published cutoff, but the working definition consultants use is this: an object with well over 100,000 records, and often several million, starts to behave differently. The design that passed its demo in a sandbox with a few thousand records no longer holds, and the symptoms show up in four places. Queries without a selective filter do a full table scan and time out. Reports and list views that used to open instantly cannot finish inside their limit. Sharing recalculation, which the platform runs when the role hierarchy or sharing rules change, becomes expensive because it has to reconsider more records. And storage fills faster because the same shape of data consumes more of the licensed allocation.
+
+The exam gives you a scenario and asks what about the design will hurt at scale, so the skill being tested is naming the effect, not the label. "The object has four million rows" is not an answer. "The report filters on an unindexed custom field, so the optimizer will not use the index and the report will scan the table, so we need a custom index and a narrower date range" is an answer. Learn to translate the row count into the specific thing that slows down.[^3][^5]
+
+One more distinction helps in a sizing conversation. Large data volume is not only about storage. An object at four million rows changes query cost, report cost, sharing cost, and the cost of every integration that reads it, because a Bulk API extraction from a four million row object takes longer than the same job against forty thousand rows. When you size a design, name all four: how fast reads need to be, how much history the customer wants to keep, how often the sharing model changes, and how much data leaves the org on a schedule. Those four answers decide most of the large volume recommendations you will make.
+
+### Query selectivity: the threshold that decides whether the index is used
+
+Query selectivity is the first thing to understand because it explains most of the symptoms. A query is selective when it filters on an indexed field and returns a small enough fraction of the object that the index is worth using. Salesforce measures that fraction against a threshold, and the threshold differs by index type. For a standard index, the filter is selective if it matches less than 30 percent of the first million targeted records and less than 15 percent of records after the first million, and the standard index threshold tops out around one million targeted records.[^2][^4]
+
+A custom index has a tighter threshold: less than 10 percent of the first million targeted records and less than 5 percent of the records after that first million, and the custom index threshold maxes out at 333,333 targeted records.[^4] The practical consequence is that a custom index is harder to satisfy than a standard one, because it tolerates a smaller slice of the table. It also means you cannot apply one percentage to both index types.
+
+If a query is not selective, the platform will not use the index and may refuse to run the query at all. That refusal is exactly the failure a large org hits on an unindexed filter, and it is why the exam tip repeats: on a large object, filter on an indexed field and keep the result small. The percentages are the part most people misremember, so anchor them: standard is 30 and 15, custom is 10 and 5, and the custom ceiling is the smaller one.
+
+### Indexes: what is already indexed and how to get one built
+
+Indexes are your main lever, and there are several kinds. Salesforce automatically indexes a set of fields for most objects. That list includes the record Id, Name, OwnerId, CreatedDate, SystemModstamp (which is what LastModifiedDate reads from), RecordTypeId, and Division, plus foreign key relationships such as lookups and master-detail fields, and Email on contacts and leads.[^2] Any field marked as an external ID or as unique also gets an index created for it, which is one more reason to use external IDs as your integration and lookup keys.
+
+For a field that is not automatically indexed and is used heavily in filters, you request a custom index. You can ask Salesforce Customer Support to create a single column or two column custom index, or deploy a custom index through the Metadata API, and Support will create it if the index is valid and effective.[^2] You should, because a query on a well chosen custom index can move from a timeout to milliseconds. Two limits are worth knowing. Custom indexes cannot be created on every field type: multi-select picklists, currency fields in a multi-currency org, long text areas, rich text areas, some formula fields, and encrypted text fields are excluded.[^2] And an index only helps if the filter is selective, so a custom index on a field where almost every filter matches half the table buys you nothing.
+
+Confirm an index exists before you rely on it. Ask Support for confirmation, and check the query plan so you can see whether the optimizer chose the index or fell back to a table scan. A query plan is the honest answer to "will this report be fast," and it is worth running before you promise a customer a report.
+
+Keep two ideas separate when you talk about indexes. Having an index on a field and having the optimizer use that index are different things. The optimizer evaluates each index against record distribution thresholds before it decides whether using the index will actually make the query faster, which is why an index on a field where filters match most of the table does nothing.[^2] The platform also maintains an index table that places upper limits on how many records an indexed search can effectively return, so selectivity is the gate, not a suggestion. Build the index because the field is filtered, then confirm the plan because the plan is what runs.
+
+### Skinny tables: a Support-built copy of the hot fields
+
+Skinny tables are the other large volume tool, and they are the most misunderstood. A skinny table is a copy of the most used fields from a large object, held at the database level, that gives faster reads because it holds fewer columns and, importantly, omits soft-deleted records. A read-only operation that references only fields in the skinny table avoids an extra join, which is why reports and list views on that object speed up.[^1]
+
+The specifics matter for the exam. Skinny tables can be created on custom objects and on Account, Contact, Opportunity, Lead, and Case, and they help reports, list views, and SOQL.[^1] They can hold a maximum of 200 columns, and they cannot contain fields from other objects.[^1] They must be created and maintained by Salesforce Customer Support, and you cannot create, access, or modify them yourself. The one that bites projects: they do not reflect newly added fields until Support refreshes the definition, so if a report you optimized changes to include a new field, you have to go back to Support to update the skinny table, and until you do the report may not use it.[^1] Plan for that maintenance, because a skinny table is a dependency, not a one time fix.
+
+Skinny tables are not a magic wand. The platform maintains a separate copy of live data, and there is overhead in that. Used on the wrong object, or where the field set is not actually the set the hot reports read, a skinny table can degrade performance instead of improving it.[^1] Use them where reads dominate and the field list is stable.
+
+### Reports and list views: where volume becomes a user complaint
+
+Reports and list views are where large data volume turns into a user complaint, and the fix is design rather than patience. A list view that sorts on a non indexed field, or filters on a non indexed field, on a multi million row object will time out. A report that joins a large object to several others, or that is grouped on a high cardinality field such as a free-text description or an email address, will exceed its time budget and may return partially loaded data.
+
+The practical moves are consistent. Make the filters selective and indexed, and request a custom index on a field that reports depend on but that is not automatically indexed. Avoid grouping by a free text field; group by a picklist or a low cardinality field instead. Narrow the date range so the platform can use the indexed CreatedDate or CloseDate, because a bounded date range is far more selective than "everything." When a report genuinely has to run against the full volume, schedule it and let it deliver by email rather than asking someone to open it interactively and wait. And when the analytics outgrow the platform's reporting, move the heavy summarization to a data warehouse or a reporting product, keeping Salesforce for the operational reporting a rep needs on the phone.
+
+### Sharing recalculation: the hidden cost
+
+Sharing recalculation is the hidden cost the scenarios test. When an admin changes the role hierarchy, edits a sharing rule, or moves a user's role, Salesforce recalculates sharing for every affected record. On a small object that is invisible; on a large object it can run for hours and occupy the background processing that everyone else needs. The implication for a design is real: an org wide default of Private with deep ownership based sharing rules over tens of millions of rows pays the recalculation tax on every change to the hierarchy, and a flatter, wider sharing model with fewer, well scoped rules is cheaper at scale.
+
+The design guidance that follows is to prefer a flatter sharing model or sharing sets where the security requirement allows, to group hierarchy changes into a single maintenance window rather than making them one at a time during the business day, and to tell the customer that at this volume a sharing change has a maintenance consequence, not just an access one. That sentence is often the difference between an answer the exam accepts and one it marks down.
+
+### Duplicates and growth: size for the record count you will have
+
+Duplicates and data quality multiply at volume too, and they are a scalability issue as much as a cleanliness one. Duplicate Accounts split the opportunity history, so every report that summarizes the account is wrong, and a de-duplication project on millions of rows costs far more than preventing the duplicates at entry. Blank and inconsistent values make indexes less useful, because a filter that matches half the table does not narrow the set and the optimizer will not use the index even when one exists.
+
+The last point is the one consultants skip in a sizing conversation: account for the records you will collect over the life of the solution, not just today's count. An object at 400,000 rows today can be at several million in three years, and the design decision you make at 400,000 rows is what determines whether that growth is a problem or a footnote. Size for growth and name the consequence of ignoring it, because the exam rewards the answer that thinks past the current deadline.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is filtering a large object on a non indexed field. The platform will not use an index such a filter cannot leverage, so the query scans the table and times out. An answer that says the filter is fine because it returns few rows is wrong if the field is not indexed, because selectivity is measured on an indexed field and the row count alone does not create one.
+
+The second trap is confusing a skinny table with a custom index. A skinny table is a Support created copy of the most used fields, built to speed reads by removing joins and soft-deleted rows. A custom index speeds filtering on a specific field so the optimizer can find rows without scanning. An answer that swaps their purposes has the two tools reversed, and the exam uses exactly that swap.
+
+The third trap is assuming the standard and custom index selectivity thresholds are the same. They are not. The custom index threshold is stricter, under 10 percent of the first million and under 5 percent of the rest, against 30 and 15 for a standard index, and the custom ceiling is the smaller one at 333,333 targeted records. Applying one set of percentages to both index types gets the answer wrong even when the rest of the reasoning is right.
+
+## What a consultant should walk away with
+
+On a large object, filter on an indexed field and keep the result small: the selectivity threshold is what decides whether the index is used at all, so start there before you look at anything else. Lean on the fields the platform already indexes, Id, Name, OwnerId, CreatedDate, SystemModstamp, and any external ID, and request a custom index through Support for a heavily filtered field that has none. Reach for a skinny table when reads dominate and the hot field list is stable, and remember it is a Support built copy that you must have refreshed when the field list changes. Make report filters selective and indexed, group on low cardinality fields, narrow the date range, and schedule the reports that must run against full volume. Treat sharing recalculation as a maintenance cost: flatten the sharing model where the security requirement allows and batch hierarchy changes into a window. Keep those moves in your head and the object's growth stops being a surprise.
+
+## What's next
+
+Lesson 33 - Scalability Implications of a Sales Solution (dm-2b)
+
+[^1]: Salesforce, "Skinny Tables," Best Practices for Deployments with Large Data Volumes, (https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-skinny-tables.html)
+[^2]: Salesforce, "Indexes," Best Practices for Deployments with Large Data Volumes, (https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-infrastructure-indexes.html)
+[^3]: Salesforce, "Best Practices," Best Practices for Deployments with Large Data Volumes, (https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-best-practices.html)
+[^4]: Salesforce Help, "Make Salesforce Platform SOQL Query Selective," (https://help.salesforce.com/s/articleView?id=000385218&language=en_US&type=1)
+[^5]: Salesforce, "Summary," Best Practices for Deployments with Large Data Volumes, (https://developer.salesforce.com/docs/platform/salesforce-large-data-volumes-bp/guide/ldv-deployments-summary.html)

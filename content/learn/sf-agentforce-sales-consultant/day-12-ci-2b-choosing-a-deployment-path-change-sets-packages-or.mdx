@@ -1,0 +1,87 @@
+---
+title: "Lesson 12: Choosing a deployment path: change sets, packages, or source-driven releases"
+slug: day-12-ci-2b-choosing-a-deployment-path-change-sets-packages-or
+series: sf-agentforce-sales-consultant
+lesson: 12
+excerpt: "Three deployment paths serve different situations, and the exam asks which one fits. This lesson covers change sets, unlocked and managed packages, source-driven releases, the separate project that is your data load, and how to sequence a cutover you can defend."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Deployment Paths, Packages, Source Driven, Data Load]
+---
+
+# Lesson 12: Choosing a deployment path: change sets, packages, or source-driven releases
+
+A client asks you to ship the same Agentforce console to twelve business units, each its own org, and to keep shipping improvements to all twelve for the next two years. The team before you built it in one org and copied it across with change sets, and by unit seven nobody could say which version of a flow any org was running. The problem was never the tool. It was that change sets have no version and no history, and the team chose a path that could not answer the question the client was actually asking.
+
+The naive move is to reach for the tool you know best and let the situation bend to it. That is backwards, and the exam tests the correction directly. There are three deployment paths, and they are not ranked. Each one is right for a shape of problem, and picking the path is the skill under test. A team that answers "which tool" when the question is "how many orgs and how much history" has already missed the point.
+
+This lesson serves requirement ci-2b in the Consulting and Implementation Strategies domain, which carries 25 percent of the exam. Where Lesson 11 gave you the mechanics of deployment, this lesson is the choosing. It teaches the three paths, the data side that runs alongside them, and the go-live sequence that turns a deployment into a release, so you can read a scenario and name the path it demands.
+
+## Deep Dive
+
+### Three answers, and the question that separates them
+
+There are three deployment paths and the exam asks them as a scenario: given this team, this change, and this number of orgs, which path. Change sets are the fast, manual, point-and-click path for a small team and a small change. Unlocked or managed packages are the versioned path when the same thing must reach many orgs or upgrade repeatedly. Source-driven deployment through the Salesforce CLI and Lifecycle Center, formerly DevOps Center, is the governed path when a change backlog needs a reviewable history.
+
+The two variables that separate them are how many orgs and how much history. One org pair and one change points at a change set. Many orgs and repeat installs point at a package. A backlog, more than a handful of builders, and an audit requirement point at source-driven. The skill being tested is picking the path for the situation rather than reciting the tool, and the distractor answers are usually the right tool for a different situation.
+
+### Change sets: when the change is small and the org pair is known
+
+Pick change sets when the change is small, the team is one or two admins, and the org pair is known and connected. The real limits decide the rest. A change set contains only metadata, so it can never carry records. It reaches only components available through the Setup menu, so it cannot move anything outside the metadata model. It cannot delete a component in the target, so removal is a manual step or a Metadata API job. It has no version control, so the only history is whatever you write down, and it cannot express order, so a dependency mistake shows as a failed deploy at the end of the window.
+
+Where change sets break in practice is a hundred-component release with four admins on it. Nobody can state what shipped, and the second deploy of the same set behaves differently from the first because the target moved underneath it. The honest reading of the exam is that a change set is the correct answer to a small, one-pair, non-repeatable change, and the wrong answer the moment the word "version" or the word "many orgs" appears in the scenario.
+
+### Unlocked packages and the versioned path
+
+Pick unlocked packages when the goal is repeatable distribution of an internal asset, whether that asset is a console, a set of flows, or an Agentforce configuration. You create the package in a Dev Hub, version it from source control, and install each version into the target orgs, which gives you a real upgrade path rather than a stack of change sets.[^2] The Salesforce documentation states the case plainly: unless you plan to install on AppExchange, an unlocked package is the right package type for most use cases, because you organize the metadata, apply it to multiple orgs, and upgrade more easily and faster.
+
+Unlocked packages are metadata only, and they are org-dependent or org-independent, which matters when your configuration expects companion settings to already exist in the target. Be clear on the trade-off the exam probes: an unlocked package gives no intellectual property protection, because the subscriber can read everything in it. It also carries no records, so a package never ships the data a demo needs; if you need seed data, you do it with a post-install script or a load after the install.
+
+If the deliverable is a commercial app on AppExchange, the answer is a managed second-generation package. It hides the source, versions and upgrades, and can run post-install Apex to seed data. The distinction from the unlocked package is entirely about the audience and the protection. Unlocked packages are for internal assets that anyone who installs them may read. Managed packages are for apps that go to customers you do not control, where the source must stay hidden.
+
+The exam will put both in front of you with a scenario and expect the boundary call. Twelve internal orgs, an internal console, a clean upgrade path: unlocked. A commercial product distributed to strangers on AppExchange: managed. The word that decides it is who installs it and whether you can let them read it.
+
+### Source-driven deployment and the governed path
+
+Pick source-driven deployment when the org has a backlog and more than a handful of builders. The Salesforce CLI drives the Metadata API from a repository, so every change is retrieved, reviewed, and deployed from git, and Lifecycle Center adds work items, branches, and pipelines that promote a change through dev, UAT, and production stages.[^6] Each pipeline stage is an environment and a branch, and promoting a work item merges the branch and deploys to the next stage.[^3] Its value is the audit trail and the ability to re-create any past state, which is exactly what a change set cannot give you.
+
+Its cost is discipline. The repo and the org now hold the same configuration, and the org drifts the moment someone edits a flow in production directly. If you adopt this path, you must also adopt a rule that production changes go through the pipeline, and you must plan sandbox preview regression testing as a standing task rather than a scramble. For a one-off hotfix, a change set is still faster. For a program with a change backlog, source-driven wins.
+
+### Deployment moves metadata, so data is a separate project
+
+Deployment moves metadata.[^1] Data is a separate project with its own tool choice, and the choice is mostly volume. The Data Import Wizard handles up to 50,000 records, supports matching by name or by external ID, and is friendly for simple loads on common objects.[^7] Data Loader handles larger volumes, defaults to a batch size of 200, supports upsert against an external ID, and offers a serial mode for when parallel processing trips sharing rules.[^4] The Salesforce documentation sets the batch ceiling at a maximum of 200 records for the SOAP API and 10,000 for Bulk API, and serial mode processes batches one at a time so database contention does not fail the load.[^5] Bulk API through Data Loader or the CLI pushes into the millions.
+
+Whatever the tool, the sequence is fixed: map fields, load parents before children, then verify the row count. Accounts before Contacts, Contacts before Opportunities, Opportunities before line items. Loading a child before its parent fails on the lookup, and upsert against an external ID is what makes a reload idempotent instead of duplicate-generating. That last point is the exam's favorite. A load that may be rerun should use an external ID upsert so that running it twice produces the same state, not two copies of every record.
+
+### Go-live sequencing and cutover
+
+Go-live sequencing and cutover are deployment considerations the exam will frame as a plan. The elements are a code freeze, a validate run against production, a data load inside the cutover window, a smoke test by a real user holding the real permission set, a communication at the moment of switch, and a hypercare period with a named owner. Decide three things explicitly: whether you migrate history or only open records, whether the launch is big bang or parallel run, and what the rollback actually is.
+
+The rollback question matters because a metadata deployment has no undo. There is no button that reverses a deployment. Your rollback is a redeploy of the last known good version from source control, which is another reason the versioned paths beat a folder of change sets you cannot reconstruct. Verification after deployment is where a plan becomes credible. Run the smoke test as a lower-privilege user, because a system administrator sees a working org that a sales rep cannot. Confirm picklists, record types, and page assignments landed. Confirm the agents are activated rather than sitting inactive, and confirm the Einstein Trust Layer settings and the agent user's permission sets exist in the target, because those do not travel with metadata. Then hold the deployment record: what shipped, who validated it, what the test users saw. When someone reports a regression three weeks later, that record is the difference between a two-hour fix and a two-day investigation.
+
+### A worked scenario: reading the question the way the exam writes it
+
+Take a composite scenario and walk it. A team has forty builders, a change backlog that spans two quarters, and an audit requirement that any production change must be traceable to a request and a reviewer. The naive answer is a change set, because it is the tool the admins already know. The right answer is source-driven deployment, because the audit requirement cannot be met by a container with no version and no history, and forty builders will collide in a system with no branch model. Now change one variable: the same team, but the change is a single validation rule and the release is tomorrow. The answer flips to a change set, because standing up a pipeline for one rule costs more than the rule is worth, and the audit requirement applies to the backlog rather than to a one-line fix you documented and reviewed by hand.
+
+Change a different variable. Twelve orgs, one internal console, no audit requirement. The answer is an unlocked package, because the distribution pattern decides it and source protection is irrelevant for an internal asset. Keep the twelve orgs and make the console a commercial product, and the answer becomes a managed package, because now the source must be hidden. The tool never changed. What changed was how many orgs, how much history, and who installs it. Train yourself to pull those three facts out of the scenario before you read the options, and most of these questions become mechanical.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a metadata deployment also moves data. Neither a change set nor a package carries records, so data must be loaded separately, and it must be loaded parent to child in the right order or the lookup fails. The second is believing an unlocked package protects intellectual property. Unlocked packages are readable by the subscriber, so only a managed package hides the source and supports AppExchange distribution, and the two are not interchangeable. The third is believing a deployment can be rolled back with one click. A metadata deployment has no rollback, so the recovery plan is redeploying the last known good version from source control, which is the reason to insist on a versioned path in the first place.
+
+## What a consultant should walk away with
+
+Choose the deployment path by how many orgs and how much history, not by which tool you know best. Small change, one connected pair, one or two admins: a change set is fine. Many orgs, repeat installs, an internal asset: unlocked packages, versioned from source control. A commercial app that must hide its source: a managed package. A backlog with an audit requirement: source-driven through the CLI and Lifecycle Center, with a rule that production changes go through the pipeline. Treat data as its own project, load parents before children, and use an external ID upsert so a rerun is safe. Write the cutover as a sequence with a code freeze, a validate, a smoke test by a real user, and a named rollback that is a redeploy, not a button. Then keep the deployment record, because the regression you cannot trace is the one that costs you the client.
+
+## What's next
+
+Lesson 13 - Post-implementation adoption diagnostics: finding why users stopped (ci-3a)
+
+[^1]: Salesforce, "Deploy Your Changes," (https://help.salesforce.com/s/articleView?id=sf.deploy_overview.htm&language=en_US&type=5)
+[^2]: Salesforce, "Unlocked Packages," (https://developer.salesforce.com/docs/platform/sfdx-dev/guide/sfdx-dev-unlocked-pkg-intro.html)
+[^3]: Salesforce, "Promote Work Items Through Your Pipeline," (https://help.salesforce.com/s/articleView?id=platform.devops_center_work_items_promote.htm&language=en_US&type=5)
+[^4]: Salesforce, "Configure Data Loader," (https://developer.salesforce.com/docs/platform/data-loader-impl/guide/configuring-the-data-loader.html)
+[^5]: Salesforce, "Data Loader Process Configuration Parameters," (https://developer.salesforce.com/docs/platform/data-loader-impl/guide/loader-params.html)
+[^6]: Salesforce, "Understanding Metadata API," (https://developer.salesforce.com/docs/platform/api-metadata/guide/meta-intro.html)
+[^7]: Salesforce, "Data Import Wizard," (https://help.salesforce.com/s/articleView?id=sf.data_import_wizard.htm&language=en_US&type=5)

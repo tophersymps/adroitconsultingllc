@@ -1,0 +1,92 @@
+---
+title: "Lesson 29: Data Migration Use Cases and Considerations"
+slug: day-29-dm-1a-data-migration-use-cases-and-considerations
+series: sf-agentforce-sales-consultant
+lesson: 29
+excerpt: "How to tell a migration from an integration, the scenarios that shape a migration, the five moving parts of planning one, why cleansing in the source beats cleaning up after the load, how a full sandbox test proves the numbers, and the cutover and rollback plan a migration needs. Serves dm-1a."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Data Migration, Data Quality, Sandboxes, Salesforce Data Management]
+---
+
+# Lesson 29: Data Migration Use Cases and Considerations
+
+A client's IT director opens the kickoff by saying they want to "integrate their old CRM with Salesforce." You ask one question before you touch a project plan: after go live, is the old CRM still the system of record for anything? He says no, the plan is to switch it off. That answer changes everything. The work is a one time migration with a cutover date, not an integration that runs forever, and every design decision downstream depends on getting that distinction right on day one. Teams that miss it build point-to-point connections to a system they were supposed to retire, and then maintain them for years.
+
+The naive approach to a migration is to treat it as a big import. Someone exports the old system, someone else maps the columns, and a couple of weekend loads later the data is in Salesforce and the project is declared done. What that approach ignores is that a migration is a project with a scope, a quality gate, a test, a cutover, and a rollback plan, and that the cheapest place to fix a data problem is in the source system where it already lives. Load first and clean later is the expensive path, and it is the path most teams take by default.
+
+This lesson serves requirement dm-1a, in the Data Management domain, which carries 18 percent of the exam. The objective asks you to explain the use cases and considerations for data migrations and integrations. By the end you can decide whether a project is a migration or an integration and defend the answer, name the scenarios that change the considerations, lay out the five moving parts of a migration plan, argue for cleansing before the load, prove a run time in a full sandbox, and write a cutover and rollback plan the business can live with.
+
+## Deep Dive
+
+### Migration or integration: the question that decides the project
+
+The first question on any data project is whether it is a migration or an integration, and the exam tests that discrimination before it tests any tool. A migration is a one time move: you take records out of a source, put them into Salesforce, and the source is retired or reduced to read only. An integration is an ongoing connection: two systems both stay live and both keep changing the data, so something has to keep them consistent. The decisive test is whether the source system remains a system of record after go live.
+
+Apply the test to real cases. If the old CRM is being switched off, that is a migration and once is enough. If the ERP still owns orders while Salesforce owns pipeline, that is an integration and it never finishes, it runs every day, and a one time load would drift out of sync within days. The cost models differ too: a migration has a build cost and an end date, while an integration has a build cost and a permanent run cost in monitoring, error handling, and change management every time either side changes a field. When a stakeholder uses the word "sync" casually, ask whether both systems will keep changing the same records after cutover, and the answer tells you which project you are actually scoping.
+
+### The scenarios that shape a migration
+
+Migration shows up in a handful of recognizable shapes, and each one changes the considerations. The common case is legacy CRM retirement at go live, where every account, contact, opportunity, and their history must land in Salesforce before the business switches over, and the cutover window is the constraint that drives the whole plan. A merger or acquisition adds a second consideration, because you are merging two datasets that each already contain duplicates of the same customers, so deduplication happens before the load rather than as a cleanup afterward.
+
+A spreadsheet to Salesforce move is usually a small volume with terrible quality, so cleansing dominates the effort and the volume is trivial. A divestiture or carve out is a migration of a subset, which forces you to define exactly which records leave and how you will separate shared history, a question that is as much legal as technical. A purchased list is the easiest to load and the easiest to ruin a database with, so matching rules and consent rules matter more than the loader. Naming the scenario early tells you where the risk sits: cutover timing for a retirement, deduplication for a merger, cleansing for a spreadsheet, scoping for a carve out, and consent for a purchased list.
+
+### Migration planning has five moving parts
+
+Scope says which objects and which records, and critically whether history and closed activity come across. It is the part everyone underspecifies, and it is the part that decides effort: pulling three years of closed opportunities and their activities is a different project from pulling open deals only, and the decision belongs to the business, not to the person holding the export tool. Source analysis profiles the source: how many records, how many duplicate accounts and contacts by name and email, how many orphaned children with a missing parent, and how many values that simply do not exist in the target picklist.
+
+Field mapping converts source fields to target fields, including the transformations and the picklist value mapping that quietly drop records when it is wrong. The mapping is a document, not a private understanding, and it gets signed off before anyone loads anything. Two mapping failures do most of the damage. A target picklist that does not contain the source value rejects the row or blanks the field, and a lookup whose parent has not loaded yet leaves an orphaned child. Both are visible in the profile step if you look for them, which is why source analysis comes before mapping rather than after. Data cleansing happens before the load, not after. Test loads happen in a sandbox before anyone touches production. Read those as five separate workstreams, because the failure mode is to collapse them into one and discover that scope was never agreed while the load is already running against production.
+
+### Cleansing before the load is the decision that pays most
+
+If you load forty thousand duplicate accounts and merge them later, you pay for the deduplication twice, once in the load and once in the merge, and you leave merged records and orphaned children as debris in the target. It is far cheaper to resolve duplicates and fix invalid picklist values in the source, where they already live and where a business user who knows the customers can adjudicate the surviving record. The Salesforce best practices article makes the same point from the other end: review your source data carefully before loading it, and load one record first, verify the result, then load the rest.[^2]
+
+Validation rules and required fields in the target will reject bad rows anyway, and when they do the load fails halfway and you have a partial migration to reason about. That is worse than a clean failure, because a partial load means some records updated and some did not, and reconciling which is which costs more time than the cleansing would have. Plan the cleansing, decide the dedupe rule, fix the country and state values, map the picklist values, and then load once with confidence. The exam rewards the answer that cleans in the source and validates in a sandbox, and it punishes the answer that loads first and repairs in Salesforce.
+
+### Test loads in a full sandbox prove the numbers
+
+A full sandbox is the only sandbox that proves the numbers. The help page on sandbox types is specific: a Full sandbox is a replica of production including all data and metadata, and only Full sandboxes support performance testing, load testing, and staging.[^3] A developer sandbox with a few hundred rows will not tell you whether a four million row load finishes inside a four hour maintenance window, because the timing only becomes real at scale and the window is finite. Request the full sandbox early, because refreshes are infrequent and you do not want to be waiting on one the week before cutover.
+
+During the test load, measure how long the load runs, watch for governor limits and API limits, and count the records that inserted, updated, and failed.[^5] Validate the counts against the source totals before you declare success. Reconcile at the object level and not just the total: if four thousand contacts loaded but only three thousand relate to the accounts you expected, a parent mismatch is hiding inside a healthy-looking number. The Data Loader help page also flags a real timing hazard: with the Bulk API enabled there is a limit on how long a batch takes, and a file that exceeds it is requeued and reprocessed up to a limited number of times before the operation is marked failed, with the warning that some records may have completed even in a failed run.[^4] That is why you check the results rather than trusting the status, and why a test load on representative volume is the only way to know the window holds. If the load creates records that trigger flows, process builders, or Apex triggers, those automations run too and can slow the load or send unwanted email, so test with the automations on and then decide what to disable for the real run.
+
+### Cutover, rollback, and the considerations people leave out
+
+Cutover is the moment the business feels, so it comes with a rollback plan. Freeze the source, run a final delta load for anything that changed since the test, validate the counts and spot check high value records, then switch the users over. Keep the legacy system read only for an agreed period rather than deleting it, because discovery during the first weeks is normal and a read only source is the cheapest insurance you can buy. Define the rollback trigger in advance: if the validation counts do not reconcile, you revert to the legacy system and fix rather than push forward on bad data. A migration with no rollback plan is a bet that nothing goes wrong, and the exam rewards the answer that acknowledges the risk.
+
+The considerations that trip people up are consistent across migrations. Record ownership and sharing must be remapped, because the source owner usually does not exist in the target. Salesforce IDs change between orgs and sandboxes, so you cannot carry them across, which is exactly why you preserve the source primary key in an external ID field for reconciliation.[^7] An external ID field is searchable, is indexed automatically by the platform, and can be marked Unique so the source key cannot duplicate, and the platform allows up to 25 external ID fields per object.[^6] The recommended pattern when you need related records to stay connected is to populate a custom external ID field with the source primary key and then reference the parent by that key during the load, which is also how the platform's own guidance on migrating between orgs tells you to re-establish relationships.[^1] Attachments, files, notes, and rich text land through different paths and their own size limits. Record types and page layouts affect what the load can write. Audit fields like Created Date can be preserved with special permissions, but only if you plan for it in advance. When someone says just import the data, these considerations are the work they left out.
+
+### The migration plan end to end, in order
+
+The plan runs from scoping to cutover, and each step depends on the one before it.
+
+1. List the objects in scope and their record counts from the source, then confirm with the business whether history, closed activities, and inactive records are included.
+2. Profile the source data: count records, count duplicate accounts and contacts by name and email, count children with a missing parent, and list values that do not exist in the target picklists.
+3. Build the field mapping document from source field to target field, recording each transformation and each picklist value mapping, and get it signed off before loading anything.
+4. In Setup, confirm the target objects, record types, required fields, validation rules, and duplicate rules, so you know what will reject a row on load.
+5. Request a full copy sandbox, load a representative volume with the target automations enabled, and measure timing, insert counts, update counts, and failures.
+6. Write the cutover and rollback plan: freeze window, delta load, validation counts, go live step, and the read only period for the legacy system.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is choosing a migration when the source stays live. If both systems keep changing the data, it is an integration, and a one time load will drift out of sync within days, so an answer that says migrate is wrong no matter how well it is written. The tell in a scenario is the phrase that both systems remain systems of record, which is the definition of the ongoing case.
+
+The second trap is skipping cleansing because the loader is fast. Loading duplicates and bad picklist values just moves the mess into Salesforce, where fixing it costs more, because you are now paying for the merge as well as the load and you are cleaning up records that other people can already see. An answer that says load first and clean later is the expensive one, and the exam knows it.
+
+The third trap is forgetting that Salesforce IDs change between orgs. You cannot carry record IDs across, so preserving the source key in an external ID field is the reconciliation mechanism, and an answer that assumes the IDs survive as the match key is wrong. When a scenario describes related records that must stay connected after the load, the answer that mentions an external ID field and a dependency-ordered import is the one that works.
+
+## What a consultant should walk away with
+
+Answer the migration-or-integration question first, because it decides whether you are planning a project with a cutover or building a permanent connection. Then name the scenario, because legacy retirement, a merger, a spreadsheet, a carve out, and a purchased list each move the risk to a different place. Keep the five moving parts separate: scope, source analysis, field mapping, cleansing, and test loads. Clean in the source, where the cost is lowest and the business context is richest, and never plan to repair duplicates after they land. Prove the run time in a full sandbox with representative volume and automations on, because only that environment mirrors production closely enough to trust the number. Then write the cutover plan with a freeze window, a delta load, count validation, and a defined rollback trigger, and keep the legacy system read only for an agreed period instead of deleting it. Honor the small print too: remap ownership, preserve the source key in an external ID field because Salesforce IDs do not travel, and plan the attachments, audit fields, and record types before the load, not after. That is the difference between a migration the business barely notices and one it remembers for years.
+
+## What's next
+
+Lesson 30 - Data Migration Tools and Ordering (dm-1b)
+
+[^1]: Salesforce Help, "Migrate data from one organization to another," (https://help.salesforce.com/s/articleView?id=000384648&type=1)
+[^2]: Salesforce Help, "Salesforce Data Migration Best Practices: How to Plan, Execute, and Validate a Data Import or Update," (https://help.salesforce.com/s/articleView?id=000385417&type=1)
+[^3]: Salesforce Help, "Sandbox Types and Templates," (https://help.salesforce.com/s/articleView?id=sf.create_test_instance.htm&type=5)
+[^4]: Salesforce Help, "Data Loader," (https://help.salesforce.com/s/articleView?id=sf.data_loader.htm&type=5)
+[^5]: Salesforce Help, "Insert, Update, or Delete Data Using Data Loader," (https://help.salesforce.com/s/articleView?id=sf.inserting_updating_or_deleting_data.htm&type=5)
+[^6]: Salesforce Help, "Differences between the 'External ID' field and the 'Unique ID' field setting," (https://help.salesforce.com/s/articleView?id=000385174&type=1)
+[^7]: Salesforce Help, "Custom Field Attributes," (https://help.salesforce.com/s/articleView?id=platform.custom_field_attributes.htm&type=5)

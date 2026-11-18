@@ -1,0 +1,97 @@
+---
+title: "The SQL Was Valid. The Number Was Wrong."
+slug: text-to-sql-semantic-layer-2026
+excerpt: "An analytics agent can run a valid query and return a wrong number. The schema cannot define your metrics, so the definition needs a home the agent can read."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 17, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [AI Infrastructure, Text to SQL, Semantic Layer, Data Engineering, AI Agents, Analytics]
+bannerImage: "/banners/text-to-sql-semantic-layer-2026.webp"
+ogImage: "/banners/text-to-sql-semantic-layer-2026-og.jpg"
+---
+
+Someone asks the assistant for revenue by region last quarter. Two seconds later there is a number on screen and a chart under it. Nobody in the room writes SQL, so nobody reads the query, and by Thursday the number is in a deck.
+
+The query was valid. It ran, it returned rows, and it answered a slightly different question than the one that was asked. That gap between a query that executes and an answer that is right is where analytics agents fail quietly, and a larger model does not close it.
+
+## The query ran, which is the weakest test available
+
+Text-to-SQL has looked solved twice, and both times the number was measuring something else. Spider 2.0 was built from real enterprise workflows: warehouses with more than a thousand columns, answers that often run past a hundred lines of SQL. Its own code agent, on o1-preview, solved 21.3% of 632 tasks against 91.2% on the older Spider 1.0 and 73.0% on BIRD.[^1] Two years on, a Snowflake agent sits at 96.70 on the 547-task Snow split, with more than a dozen entries above 80.[^2]
+
+Then a January 2026 audit went the other way and read the answer keys. Of the 121 Spider 2.0-Snow tasks with released gold SQL, 76 carried annotation errors, a rate of 62.8%. BIRD's smaller Mini-Dev split came in at 52.8%, and when the authors corrected a subset of BIRD and re-ran the 16 open-source agents from the leaderboard, relative scores moved between 7% down and 31% up, with ranks moving by as many as nine places.[^3] The people who wrote those gold queries had the schema and the data in front of them, and they still disagreed about the right answer more often than not.
+
+BIRD hands each question the external knowledge note a real analyst would need. On its test set, data engineers and database students scored 92.96; the best agent reached 83.40 as of October 2026.[^4] The humans win on knowing what the words mean.
+
+![Four numbers that all get called accuracy: a 96.70 agent score on the Spider 2.0 Snow leaderboard, annotation errors in 62.8 percent of its released gold queries, a 92.96 human score against 83.40 for the best agent on BIRD, and 51 percent for GPT-4o on Snowflake's internal set](</diagrams/text-to-sql-semantic-layer-2026/1-four-accuracies.png>)
+
+## A schema lists fields. It does not define anything
+
+Four decisions live outside the schema, and each one changes the number.
+
+Which date column. An order table carries a creation timestamp, a ship date, a payment date and a recognition date. Revenue by quarter means something different under every one of them, and all four columns are named plausibly.
+
+The grain. An order has many line items. Summing line-item amounts and then joining the order header for the region double counts any order with two lines, and the total still looks like money.
+
+The join path. Two tables often have two routes between them, one of which fans out. The query runs either way.
+
+The filters. Internal test accounts, canceled orders, refunds, a currency that is not the reporting currency. Each is a condition that nobody wrote down anywhere.
+
+None of that appears in a column name. Snowflake's own explanation is blunt: schemas "lack critical knowledge like business process definitions and metrics handling," which is what these systems lose outside benchmark conditions.[^5] In one evaluation GPT-4o scored 51% on 150 real business questions, against the 90%+ it posts on public benchmarks, and the top cause they name is that SQL has to be measured against a specific organization's definitions. Two companies define daily active users differently, so both queries are correct and only one is right for this company.
+
+Size makes it worse without changing the reason. In the Lite split of Spider 2.0 the average database carries more than 755 columns against about 54 in BIRD, and linking errors alone accounted for 16.6% of categorized failures. Dialect does it too: identical tasks scored 12.78% on BigQuery and 6.6% on Snowflake.[^1]
+
+![One question, four defensible queries: which date column counts, whether refunds are netted out, whether the sum is taken at the line or the order, and whether the region comes from billing or shipping, each giving a different valid total](</diagrams/text-to-sql-semantic-layer-2026/2-four-queries.png>)
+
+## Define the metric once, then let the agent select it
+
+The fix is a layer that holds the definitions, so the agent chooses among labeled things instead of inventing them.
+
+Snowflake's semantic views describe five kinds of object over a warehouse: logical tables for business entities, dimensions for categorical context, facts for row-level numbers, metrics for aggregation formulas, and relationships for join paths. Add descriptions, synonyms and verified example questions with their SQL, and the model stops guessing at a name.[^5]
+
+The detail worth copying is the named filter. A filter called North America, defined once as region in the United States, Canada and Mexico, turns internal jargon into a condition the platform applies every time, so "revenue in North America" resolves identically for every user instead of each query inventing its own region list.[^6] Databricks builds the same shape with metric views: define a metric once, group by any available field, and let the engine generate the computation, with agent metadata such as synonyms, display names and declared relationships that tell an assistant which join path to take.[^7] dbt's MetricFlow does it from YAML inside the project, where the engine works out the path between tables from the semantic graph.[^8]
+
+Three vendors, one argument: the definition moves out of the query and into an artifact somebody owns. That shrinks the agent's job from writing SQL to selecting a metric, a few dimensions and a filter, a far smaller space to be wrong in. It is the same discipline that makes [a large tool catalog usable](/field-notes/agent-tool-catalog-selection-2026), where fewer named and described options beat a wide-open surface, and it holds even when the tool is a metric. Scoping matters for the same reason: a semantic model built for one subject area scores far better than one stretched across a whole warehouse, which is Snowflake's own deployment guidance.
+
+Vendor claims deserve a label. The 90%+ figure comes from Snowflake's internal evaluation of its own product, roughly double single-prompt generation on the same set.[^6]
+
+![Two paths from a question to a number: reading raw column names leaves the agent to invent joins, grain and filters, while a semantic layer supplies the metric formula, dimensions, join paths and verified examples the SQL is generated from](</diagrams/text-to-sql-semantic-layer-2026/3-definition-lives.png>)
+
+## Check the answer, not the syntax
+
+Three controls, in the order they matter.
+
+Enforce in the database, because a prompt is not a permission model. Give the agent's credential a read-only role; Snowflake applies its role model to the SQL the analyst generates. Then turn on the two session limits that ship off by default: PostgreSQL's statement_timeout is zero, meaning no limit, and default_transaction_read_only is off.[^9] A read timeout, a row cap and a role that cannot write turn a whole class of incident into an error message.
+
+Return the definition with the number. "Revenue, net of refunds, by ship date" next to the figure costs one line of interface and lets a reader catch a wrong definition in a second, which is work no automated check does well. Show the SQL too when the audience can read it.
+
+Keep a golden set, and expect it to decay. Emergence AI analyzed every mismatch it produced against Spider2-Snow and found 28 of 32 were the benchmark's fault, not the model's: 20 live data drift, 5 BigQuery to Snowflake differences, 3 datasets whose publishers revoked access, and only 4 genuine query logic errors.[^10] Their point outlives the benchmark. An answer key is a snapshot of a table that keeps moving, so a golden question set needs a captured result and a date on it, and it has to run again whenever a metric definition changes.
+
+When the question is ambiguous, ask. BIRD's interactive split was built from deliberately vague requests with follow-ups, and the best model tested, GPT-5, resolved 17.00% of tasks in agent mode and 8.67% in conversational mode, the honest measure of how hard a vague business term is.[^4] A question that admits four readings is a routing decision, not a generation task. The instinct behind [separating what a model knows from what it retrieves](/field-notes/fine-tune-rag-prompt-decision-2026) applies: pull the number from a defined source and make the system choose that source rather than interpolating a plausible one.
+
+A number from an agent is a draft until the definition behind it is visible. If you cannot say which metric produced it, which rows it counted and which date it used, you have a query that ran, not an answer.
+
+![Four checks before the number leaves the building: a read-only database role, a statement timeout and row cap, the metric definition returned with the figure, and a golden question set re-run when a definition changes, plus a rule to ask on an ambiguous question](</diagrams/text-to-sql-semantic-layer-2026/4-four-checks.png>)
+
+[^1]: Fangyu Lei and 15 others, "Spider 2.0: Evaluating Language Models on Real-World Enterprise Text-to-SQL Workflows", arXiv:2411.07763, ICLR 2025. Source of the task counts, the three accuracy scores, the column counts and the linking and dialect figures. [arxiv.org](https://arxiv.org/abs/2411.07763)
+
+[^2]: Spider 2.0, project leaderboard, read 17 November 2026. 547 tasks in the Snow split and a top entry at 96.70. [spider2-sql.github.io](https://spider2-sql.github.io/)
+
+[^3]: Tengjun Jin, Yoojin Choi, Yuxuan Zhu and Daniel Kang, "Pervasive Annotation Errors Break Text-to-SQL Benchmarks and Leaderboards", arXiv:2601.08778, January 2026. Source of the 52.8% and 62.8% annotation error rates and the rank movement. [arxiv.org](https://arxiv.org/abs/2601.08778)
+
+[^4]: BIRD, official benchmark site, read 17 November 2026. Source of the dataset size, the 92.96 and 83.40 scores, and the 17.00% interactive result. [bird-bench.github.io](https://bird-bench.github.io/)
+
+[^5]: Snowflake, "Cortex Analyst", product documentation, read 17 November 2026. Source of the semantic view components, the example questions and the quoted explanation. [docs.snowflake.com](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst)
+
+[^6]: Renee Huang, "Snowflake Cortex Analyst: Evaluating Text-to-SQL Accuracy for Real-World Business Intelligence Scenarios", Snowflake engineering blog, 29 August 2024. Source of the 90%+ internal figure, GPT-4o at 51%, and the named North America filter. [snowflake.com](https://www.snowflake.com/en/blog/engineering/cortex-analyst-text-to-sql-accuracy-bi/)
+
+[^7]: Databricks, "Unity Catalog metric views", documentation, last updated 29 October 2026. Source of the define-once metric pattern and the agent metadata for synonyms, display names and join paths. [docs.databricks.com](https://docs.databricks.com/aws/en/uc-semantics/metric-views)
+
+[^8]: dbt Labs, "About MetricFlow", documentation, updated 18 August 2026. Source of the YAML semantic graph and the engine choosing the path between tables. [docs.getdbt.com](https://docs.getdbt.com/docs/build/about-metricflow)
+
+[^9]: PostgreSQL, "Client Connection Defaults", documentation, PostgreSQL 18. Source of statement_timeout and default_transaction_read_only both defaulting to off. [postgresql.org](https://www.postgresql.org/docs/current/runtime-config-client.html)
+
+[^10]: Pralhad Deshpande, Ayan Bhowmick, Jeremy Hartman and Paul Haley, "Spider2 Under the Microscope: Data Drift, Engine Gaps, and the Case for Spider2-E", Emergence AI, 15 May 2026. Source of the 32-mismatch analysis: 20 drift, 5 engine, 3 revoked, 4 logic. [emergence.ai](https://www.emergence.ai/blog/spider2-under-the-microscope-data-drift-engine-gaps-and-the-case-for-spider2-e)

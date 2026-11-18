@@ -8,6 +8,714 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "sf-agentforce-sales-consultant",
+    "name": "Salesforce Agentforce Sales Consultant",
+    "description": "Prep course for the Salesforce Certified Agentforce Sales Consultant certification. Covers the sales lifecycle, consulting and implementation strategies, practical Agentforce Sales expertise across the Lead to Opportunity to Quote to Close process, data management for sales solutions, and the predictive and generative AI features available in Agentforce Sales.",
+    "gradient": "from-orange-500 to-rose-600",
+    "examKind": "certification-prep",
+    "lessons": [
+      {
+        "slug": "day-01-sl-1a-mapping-business-requirements-and-kpis-to-agentfor",
+        "title": "Lesson 1: Mapping Business Requirements and KPIs to Agentforce Sales Capabilities",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 1,
+        "excerpt": "Learn how to take a business requirement or KPI and route it to the right part of Agentforce Sales: the core CRM objects, predictive Einstein scoring, productivity apps like Sales Engagement and Inbox, or an agent that reasons and acts. Covers requirement sl-1a in the Sales Lifecycle domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Agentforce Sales",
+          "Requirements Mapping",
+          "Einstein AI",
+          "KPIs"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-sl-1b-scenario-trade-offs-for-agentforce-sales-solution",
+        "title": "Lesson 2: Scenario Trade-offs for Agentforce Sales Solution Design",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 2,
+        "excerpt": "Once you can name the right feature, the exam wants you to choose between two workable answers. Learn the trade-offs that decide design: agent versus deterministic Flow, consumption cost, data quality, the Einstein Trust Layer, reuse over custom build, and when Agentforce is the wrong answer.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Agentforce Sales",
+          "Solution Design",
+          "Einstein Trust Layer",
+          "Scenarios"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-sl-2a-sales-and-marketing-processes-end-to-end",
+        "title": "Lesson 3: Sales and Marketing Processes End to End",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 3,
+        "excerpt": "Follow the standard selling motion end to end, from Lead to Opportunity to Quote to Close, and connect it to campaigns, campaign influence, sales processes, forecast categories, territory models, and the marketing systems that feed it. Covers requirement sl-2a in the Sales Lifecycle domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Sales Cloud",
+          "Lead Conversion",
+          "Campaign Influence",
+          "Forecasting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-sl-2b-implementation-considerations-across-sales-and-mar",
+        "title": "Lesson 4: Implementation Considerations Across Sales and Marketing",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 4,
+        "excerpt": "Every process you configure raises a data, sharing, or rollout question. Learn the implementation considerations behind lead routing, campaign setup, forecast prerequisites, territory activation, activity capture, external access, and phased rollout. Covers requirement sl-2b in the Sales Lifecycle domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Sales Cloud",
+          "Implementation",
+          "Data Quality",
+          "Rollout"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-sl-3a-choosing-agentforce-sales-features-cadences-inbox",
+        "title": "Lesson 5: Choosing Agentforce Sales features: cadences, inbox, territories, forecasting, and Einstein",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 5,
+        "excerpt": "Agentforce Sales covers several distinct products, and each fits a different part of the selling day. Learn to route a requirement to Sales Engagement, Salesforce Inbox, Enterprise Territory Management, Opportunity Forecasting, or Einstein, and to tell predictive from generative by the verb.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Agentforce Sales",
+          "Sales Engagement",
+          "Forecasting",
+          "Einstein"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-sl-3b-agentforce-sales-feature-trade-offs-generative-ver",
+        "title": "Lesson 6: Agentforce Sales feature trade-offs: generative versus predictive AI and wrong-fit failures",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 6,
+        "excerpt": "Choose between generative and predictive AI, cadences and Inbox, territories and roles, and role-based and territory forecasting. This lesson serves objective sl-3b in the Sales Lifecycle domain and teaches the output-first test that decides each exam scenario.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Generative AI",
+          "Predictive Scoring",
+          "Sales Engagement",
+          "Territory Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-sl-4a-turning-sales-kpis-into-reports-report-types-filte",
+        "title": "Lesson 7: Turning sales KPIs into reports: report types, filters, and the Lightning report builder",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 7,
+        "excerpt": "Turn a sales KPI into a report and a dashboard tile: pick the report type that exposes the numbers, choose the right format, build ratios as summary formulas, and set the running user. Serves objective sl-4a in the Sales Lifecycle domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Report Types",
+          "Summary Formulas",
+          "Dashboards",
+          "Running User"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-sl-4b-reports-and-dashboards-in-production-joined-report",
+        "title": "Lesson 8: Reports and dashboards in production: joined reports, dynamic dashboards, subscriptions, and row-level security",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 8,
+        "excerpt": "Diagnose the production failures of reports and dashboards: missing fields, numbers that differ by viewer, subscriptions that arrive empty, and joined reports that cannot feed a tile. Serves objective sl-4b in the Sales Lifecycle domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Joined Reports",
+          "Dynamic Dashboards",
+          "Row-Level Security",
+          "Reporting Snapshots"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-ci-1a-pre-implementation-readiness-user-experience-metri",
+        "title": "Lesson 9: Pre-implementation readiness: user experience, metrics, and the discovery that prevents rework",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 9,
+        "excerpt": "Assess user experience, set success metrics before go-live, plan communication and training by role, and build change management that holds. Serves objective ci-1a in the Consulting and Implementation Strategies domain, worth 25% of the exam.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Readiness Assessment",
+          "Success Metrics",
+          "In-App Guidance",
+          "Change Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-ci-1b-communication-training-and-change-management-runni",
+        "title": "Lesson 10: Communication, training, and change management: running the plan under pressure",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 10,
+        "excerpt": "Run readiness under real pressure: pick the right sandbox for training, blend formal and in-app training, fix the change management failure modes, and defend the project with outcome metrics. Serves objective ci-1b in the Consulting and Implementation Strategies domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Sandbox Strategy",
+          "Training Design",
+          "Change Management",
+          "Adoption Metrics"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-ci-2a-deployment-considerations-sandbox-strategy-release",
+        "title": "Lesson 11: Deployment considerations: sandbox strategy, release management, and deployment tools",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 11,
+        "excerpt": "Deployment is how configuration, code, and data move from where you built them to where they must run. This lesson covers the sandbox strategy behind release management, what change sets and packages can and cannot carry, and the production gates that decide whether a release lands.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Deployment",
+          "Sandboxes",
+          "Change Sets",
+          "Release Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-ci-2b-choosing-a-deployment-path-change-sets-packages-or",
+        "title": "Lesson 12: Choosing a deployment path: change sets, packages, or source-driven releases",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 12,
+        "excerpt": "Three deployment paths serve different situations, and the exam asks which one fits. This lesson covers change sets, unlocked and managed packages, source-driven releases, the separate project that is your data load, and how to sequence a cutover you can defend.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Deployment Paths",
+          "Packages",
+          "Source Driven",
+          "Data Load"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-ci-3a-post-implementation-adoption-diagnostics-finding-w",
+        "title": "Lesson 13: Post-implementation adoption diagnostics: finding why users stopped",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 13,
+        "excerpt": "When users stop using what you shipped, the job is diagnosis before persuasion. This lesson covers the adoption funnel, the access checks that come first, the tools that measure real usage and agent escalations, and the sequence for responding once you know the cause.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Adoption",
+          "Diagnostics",
+          "Agent Analytics",
+          "Continuous Improvement"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-ci-3b-access-review-changing-requirements-and-planning-c",
+        "title": "Lesson 14: Access review, changing requirements, and planning continuous improvement after go-live",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 14,
+        "excerpt": "After go-live the work is stewardship: reviewing access, absorbing new requirements without breaking scope, and leaving an improvement plan that outlives the project team. This lesson covers the access model that trips people up, the agent as a user, and the four parts a real plan needs.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Access Review",
+          "Requirements",
+          "Continuous Improvement",
+          "Least Privilege"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-ci-4a-salesforce-project-management-lifecycle-phases-art",
+        "title": "Lesson 15: Salesforce Project Management Lifecycle: Phases, Artifacts, and Gates",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 15,
+        "excerpt": "Deliveries rise and fall on the artifacts and gates, not the phase names. This lesson covers the lifecycle skeleton, the documents that fix scope and prove requirements, how to choose a methodology, and the sign-off that turns a happy meeting into an acceptance.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Project Lifecycle",
+          "Artifacts",
+          "Methodology",
+          "UAT"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-ci-4b-scope-risk-and-sign-off-controlling-a-salesforce-d",
+        "title": "Lesson 16: Scope, Risk, and Sign-off: Controlling a Salesforce Delivery",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 16,
+        "excerpt": "How a Salesforce consultant holds scope, risk, and sign-off together on a live delivery. It covers the statement of work, change control, the RAID log, methodology choice, escalation tiers, and the UAT to cutover to sign-off sequence that serves requirement ci-4b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Salesforce Delivery",
+          "Scope Control",
+          "Risk Management",
+          "Project Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-17-ci-5a-discovery-workshops-stakeholder-mapping-and-requir",
+        "title": "Lesson 17: Discovery Workshops: Stakeholder Mapping and Requirements Capture",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 17,
+        "excerpt": "How a Salesforce consultant runs discovery as a bounded phase: mapping stakeholders on a power and interest grid, facilitating workshops, choosing elicitation techniques, and capturing requirements with acceptance criteria that a sponsor can sign. It serves requirement ci-5a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Discovery Workshops",
+          "Stakeholder Mapping",
+          "Requirements",
+          "Salesforce Consulting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-ci-5b-turning-discovery-into-a-solution-prioritized-use",
+        "title": "Lesson 18: Turning Discovery into a Solution: Prioritized Use-Case Backlog",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 18,
+        "excerpt": "How a Salesforce consultant converts discovery into a prioritized backlog a sponsor can sign: choosing a prioritization framework, estimating value before effort, sequencing on data readiness, and slicing work into a walking skeleton. It serves requirement ci-5b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Use Case Prioritization",
+          "Backlog Planning",
+          "Solution Design",
+          "Salesforce Consulting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-pa-1a-lead-to-opportunity-conversion-mechanics-sales-pro",
+        "title": "Lesson 19: Lead to Opportunity: Conversion Mechanics, Sales Processes, and Path",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 19,
+        "excerpt": "How to build the front half of a Salesforce sales process: the Lead lifecycle, what conversion actually creates and copies, record types, sales processes, lead processes, and Path. It serves requirement pa-1a from the practical application domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Lead Conversion",
+          "Sales Processes",
+          "Opportunity Stages",
+          "Salesforce Sales Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-pa-1b-opportunity-to-quote-to-close-products-price-books",
+        "title": "Lesson 20: Opportunity to Quote to Close: Products, Price Books, Quotes, and Approval",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 20,
+        "excerpt": "How to build the back half of a Salesforce sales process: the product catalog, price books, opportunity products, the quote sync, quote approvals, and the close gates. It serves requirement pa-1b from the practical application domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Products and Price Books",
+          "Quotes",
+          "Approval Processes",
+          "Salesforce Sales Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-pa-2a-declarative-first-flow-validation-rules-and-dynami",
+        "title": "Lesson 21: Declarative First: Flow, Validation Rules, and Dynamic Lightning Pages",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 21,
+        "excerpt": "How to decide, and defend, where declarative configuration genuinely ends: the five Flow types, the save order of execution, what validation rules really enforce, and how Dynamic Forms and Dynamic Actions shape a Lightning record page. It serves requirement pa-2a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Declarative First",
+          "Flow",
+          "Validation Rules",
+          "Dynamic Forms"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-pa-2b-when-declarative-runs-out-apex-lwc-appexchange-and",
+        "title": "Lesson 22: When Declarative Runs Out: Apex, LWC, AppExchange, and Productivity Tools",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 22,
+        "excerpt": "How to extend the platform once configuration is exhausted: when Apex and Lightning Web Components are justified, how to weigh an AppExchange package against a custom build, what a managed package really costs you, and how email, Slack, and Salesforce Mobile connect people to the data model. It serves requirement pa-2b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Apex",
+          "Lightning Web Components",
+          "AppExchange",
+          "Einstein Activity Capture"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-pa-3a-the-sharing-architecture-owd-role-hierarchy-and-sh",
+        "title": "Lesson 23: The Sharing Architecture: OWD, Role Hierarchy, and Sharing Rules",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 23,
+        "excerpt": "The three layers of Salesforce record access and how to name the one that is blocking: organization-wide defaults, the role hierarchy, sharing rules, and the mechanisms that cover the rest. It teaches the decision tree for choosing a sharing model and serves requirement pa-3a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Organization-Wide Defaults",
+          "Role Hierarchy",
+          "Sharing Rules",
+          "Record Access"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-pa-3b-teams-and-the-permission-model-account-teams-oppor",
+        "title": "Lesson 24: Teams and the Permission Model: Account Teams, Opportunity Teams, Permission Set Groups",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 24,
+        "excerpt": "Account Teams and Opportunity Teams for named collaborators, Opportunity Splits for revenue credit, and the three tiers of the permission model with permission set groups and muting. It teaches how to pick the security model by the shape of the requirement and serves requirement pa-3b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Account Teams",
+          "Opportunity Teams",
+          "Permission Set Groups",
+          "Muting"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-pa-4a-products-price-books-and-opportunity-products-the",
+        "title": "Lesson 25: Products, Price Books, and Opportunity Products: The Selling Model",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 25,
+        "excerpt": "The standard selling data model: Product2 as the catalog, price books and price book entries as the price list, opportunity line items and their arithmetic, and product schedules for revenue over time. It teaches the objects and rules that make the model work, serving requirement pa-4a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Products",
+          "Price Books",
+          "Opportunity Products",
+          "Product Schedules"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-pa-4b-quotes-syncing-and-multi-currency-pricing",
+        "title": "Lesson 26: Quotes, Syncing, and Multi-Currency Pricing",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 26,
+        "excerpt": "How to turn an opportunity into a document a buyer signs: enabling quotes, building quote line items from a price book, quote templates that control the customer PDF, the one-way quote sync, and the corporate currency and dated exchange rates that keep multi-currency orgs honest. It serves requirement pa-4b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Quotes",
+          "Multi-Currency",
+          "Price Books",
+          "Salesforce Sales Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-pa-5a-campaigns-and-leads-scenarios-the-objects-support",
+        "title": "Lesson 27: Campaigns and Leads: Scenarios the Objects Support",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 27,
+        "excerpt": "How Salesforce plans and measures a marketing effort with campaigns and CampaignMember, attributes revenue with campaign influence models, runs the lead lifecycle through lead processes, routes new interest with assignment rules and web-to-lead, and converts a lead without losing its source history. Serves pa-5a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Campaigns",
+          "Leads",
+          "Campaign Influence",
+          "Salesforce Sales Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-pa-5b-opportunities-splits-and-teams-choosing-the-right",
+        "title": "Lesson 28: Opportunities, Splits, and Teams: Choosing the Right Construct",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 28,
+        "excerpt": "How one Opportunity object serves several sales motions: record types bound to sales processes, the stage-to-forecast-category mapping under every forecast, contact roles for the customer side, opportunity teams for your side, and splits that put forecast credit on more than one rep. Serves pa-5b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Opportunity",
+          "Forecasts",
+          "Opportunity Splits",
+          "Salesforce Sales Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-dm-1a-data-migration-use-cases-and-considerations",
+        "title": "Lesson 29: Data Migration Use Cases and Considerations",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 29,
+        "excerpt": "How to tell a migration from an integration, the scenarios that shape a migration, the five moving parts of planning one, why cleansing in the source beats cleaning up after the load, how a full sandbox test proves the numbers, and the cutover and rollback plan a migration needs. Serves dm-1a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Data Migration",
+          "Data Quality",
+          "Sandboxes",
+          "Salesforce Data Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-dm-1b-data-migration-tools-and-ordering",
+        "title": "Lesson 30: Data Migration Tools and Ordering",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 30,
+        "excerpt": "How the two built-in tools divide the work: the Data Import Wizard's fifty thousand record ceiling against Data Loader's five million, when to reach for Bulk API 2.0 or an ETL tool, the parent-to-child load order, and how external IDs and upsert make a failed load safe to rerun. It serves dm-1b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Data Loader",
+          "Data Import Wizard",
+          "Bulk API",
+          "Salesforce Data Management"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-dm-1c-salesforce-integration-patterns-and-their-consider",
+        "title": "Lesson 31: Salesforce Integration Patterns and Their Considerations",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 31,
+        "excerpt": "How to choose an integration pattern, API, and sync shape for Salesforce: point to point, middleware, event driven, batch, and file, plus the limits, idempotency, and monitoring that separate a demo from production. Serves requirement dm-1c in the Data Management domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Integration Patterns",
+          "Bulk API 2.0",
+          "Change Data Capture",
+          "Platform Events"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-dm-2a-large-data-volume-query-selectivity-indexes-and-sk",
+        "title": "Lesson 32: Large Data Volume: Query Selectivity, Indexes, and Skinny Tables",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 32,
+        "excerpt": "How large data volume changes Salesforce behavior and how to respond: query selectivity thresholds, automatic and custom indexes, Support built skinny tables, report and list view tuning, and the sharing recalculation cost you must schedule. Serves requirement dm-2a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Large Data Volume",
+          "Query Selectivity",
+          "Indexes",
+          "Skinny Tables"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-33-dm-2b-scalability-implications-of-a-sales-solution",
+        "title": "Lesson 33: Scalability Implications of a Sales Solution",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 33,
+        "excerpt": "How to read a sales solution for the costs that grow with volume: storage against the edition allocation, sharing recalculation, reporting and forecasting limits, API request consumption, and why large work must go asynchronous. Serves requirement dm-2b in the Data Management domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Scalability",
+          "Data Storage",
+          "Sharing Recalculation",
+          "Asynchronous Apex"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-dm-3a-sales-data-quality-the-six-dimensions-why-agentfor",
+        "title": "Lesson 34: Sales Data Quality: The Six Dimensions, Why Agentforce Inherits It, and How to Measure It",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 34,
+        "excerpt": "The six dimensions of data quality, why Salesforce and Agentforce inherit whatever state the CRM is in, and how to measure quality with completeness reports, field history tracking, Field Audit Trail, and a field usage review. Serves requirement dm-3a.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Data Quality",
+          "Field History Tracking",
+          "Field Audit Trail",
+          "Agentforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-dm-3b-enforcing-sales-data-quality-duplicate-management",
+        "title": "Lesson 35: Enforcing Sales Data Quality: Duplicate Management, Validation Layers, Normalization, and Stewardship",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 35,
+        "excerpt": "How to enforce data quality in Salesforce: matching rules versus duplicate rules, the Duplicate Record Set work queue, the three layers of field enforcement, normalization with picklists and standards, and the stewardship that keeps controls alive. Serves requirement dm-3b.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Duplicate Management",
+          "Validation Rules",
+          "Normalization",
+          "Data Stewardship"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-pg-1a-agentforce-agents-in-sales-topics-actions-instruct",
+        "title": "Lesson 36: Agentforce Agents in Sales: Topics, Actions, Instructions, and Grounding",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 36,
+        "excerpt": "How an Agentforce agent is assembled in Agent Builder from a role, topics, actions and instructions, how the Atlas reasoning engine routes a request at run time, and how grounding decides whether the answer is true. It serves requirement pg-1a from the Predictive and Generative AI domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Agentforce",
+          "Agent Builder",
+          "Grounding",
+          "Salesforce Sales Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-37-pg-1b-generative-ai-tools-compared-prompt-templates-emai",
+        "title": "Lesson 37: Generative AI Tools Compared: Prompt Templates, Email Generation, the Trust Layer, and Bring Your Own Model",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 37,
+        "excerpt": "How Prompt Builder prompt templates, email generation, the Einstein Trust Layer, Model Builder bring your own model, and Data Cloud grounding fit together as one generative stack. It serves requirement pg-1b from the Predictive and Generative AI domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Prompt Builder",
+          "Einstein Trust Layer",
+          "Model Builder",
+          "Generative AI"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-38-pg-2a-predictive-ai-in-sales-cloud-opportunity-scoring-l",
+        "title": "Lesson 38: Predictive AI in Sales Cloud: Opportunity Scoring, Lead Scoring, Forecasting, and Activity Capture",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 38,
+        "excerpt": "What Sales Cloud's predictive features are, the exact data thresholds that decide whether they build a local model, how often each score refreshes, and how Einstein Activity Capture feeds them. It serves requirement pg-2a from the Predictive and Generative AI domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Einstein Opportunity Scoring",
+          "Einstein Lead Scoring",
+          "Einstein Activity Capture",
+          "Sales Cloud"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-39-pg-2b-predictive-ai-trade-offs-score-prediction-and-reco",
+        "title": "Lesson 39: Predictive AI Trade-offs: Score, Prediction, and Recommendation, Discovery, and Conversation Insights",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 39,
+        "excerpt": "How to tell a score, a prediction and a recommendation apart, when to reach for Einstein Discovery or Next Best Action, what Conversation Insights adds, and the four failure modes of predictive features. It serves requirement pg-2b from the Predictive and Generative AI domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Einstein Discovery",
+          "Next Best Action",
+          "Einstein Conversation Insights",
+          "Predictive AI"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-40-pg-3a-ethical-challenges-of-ai-in-sales-bias-explainabil",
+        "title": "Lesson 40: Ethical Challenges of AI in Sales: Bias, Explainability, Privacy, Hallucination, and Regulation",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 40,
+        "excerpt": "The five ethical challenges a sales AI deployment actually raises, how bias, explainability, privacy, hallucination, over-automation and regulation each land in a build, and the control that answers each one. It serves requirement pg-3a from the Predictive and Generative AI domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "AI Ethics",
+          "Bias",
+          "Explainability",
+          "Privacy"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-41-pg-3b-trusted-ai-principles-in-practice-the-nine-princip",
+        "title": "Lesson 41: Trusted AI Principles in Practice: The Nine Principles and the Einstein Trust Layer That Implements Them",
+        "series": "sf-agentforce-sales-consultant",
+        "lesson": 41,
+        "excerpt": "The nine Trusted AI Principles and the Einstein Trust Layer controls that implement them, applied to real sales scenarios, plus the governance operating model that keeps the principles true after go live. It serves requirement pg-3b and closes the Predictive and Generative AI domain.",
+        "date": "November 17, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "12 min read",
+        "tags": [
+          "Trusted AI Principles",
+          "Einstein Trust Layer",
+          "AI Governance",
+          "Agentforce"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 41,
+    "curriculumLessons": 41
+  },
+  {
     "slug": "sf-data360-consultant",
     "name": "Salesforce Data 360 Consultant",
     "description": "Prep course for the Salesforce Certified Data 360 Consultant certification, formerly the Data Cloud Consultant credential. Covers solution positioning, setup and administration, data source connection and ingestion, harmonization and unification, data enhancements, sharing and analysis, and data activations and utilization.",
@@ -10214,6 +10922,703 @@ export const learnSeries: LearningSeries[] = [
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "day-01-sl-1a-mapping-business-requirements-and-kpis-to-agentfor",
+    "title": "Lesson 1: Mapping Business Requirements and KPIs to Agentforce Sales Capabilities",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 1,
+    "excerpt": "Learn how to take a business requirement or KPI and route it to the right part of Agentforce Sales: the core CRM objects, predictive Einstein scoring, productivity apps like Sales Engagement and Inbox, or an agent that reasons and acts. Covers requirement sl-1a in the Sales Lifecycle domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Agentforce Sales",
+      "Requirements Mapping",
+      "Einstein AI",
+      "KPIs"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-02-sl-1b-scenario-trade-offs-for-agentforce-sales-solution",
+    "title": "Lesson 2: Scenario Trade-offs for Agentforce Sales Solution Design",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 2,
+    "excerpt": "Once you can name the right feature, the exam wants you to choose between two workable answers. Learn the trade-offs that decide design: agent versus deterministic Flow, consumption cost, data quality, the Einstein Trust Layer, reuse over custom build, and when Agentforce is the wrong answer.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Agentforce Sales",
+      "Solution Design",
+      "Einstein Trust Layer",
+      "Scenarios"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-03-sl-2a-sales-and-marketing-processes-end-to-end",
+    "title": "Lesson 3: Sales and Marketing Processes End to End",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 3,
+    "excerpt": "Follow the standard selling motion end to end, from Lead to Opportunity to Quote to Close, and connect it to campaigns, campaign influence, sales processes, forecast categories, territory models, and the marketing systems that feed it. Covers requirement sl-2a in the Sales Lifecycle domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Sales Cloud",
+      "Lead Conversion",
+      "Campaign Influence",
+      "Forecasting"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-04-sl-2b-implementation-considerations-across-sales-and-mar",
+    "title": "Lesson 4: Implementation Considerations Across Sales and Marketing",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 4,
+    "excerpt": "Every process you configure raises a data, sharing, or rollout question. Learn the implementation considerations behind lead routing, campaign setup, forecast prerequisites, territory activation, activity capture, external access, and phased rollout. Covers requirement sl-2b in the Sales Lifecycle domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Sales Cloud",
+      "Implementation",
+      "Data Quality",
+      "Rollout"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-05-sl-3a-choosing-agentforce-sales-features-cadences-inbox",
+    "title": "Lesson 5: Choosing Agentforce Sales features: cadences, inbox, territories, forecasting, and Einstein",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 5,
+    "excerpt": "Agentforce Sales covers several distinct products, and each fits a different part of the selling day. Learn to route a requirement to Sales Engagement, Salesforce Inbox, Enterprise Territory Management, Opportunity Forecasting, or Einstein, and to tell predictive from generative by the verb.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Agentforce Sales",
+      "Sales Engagement",
+      "Forecasting",
+      "Einstein"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-06-sl-3b-agentforce-sales-feature-trade-offs-generative-ver",
+    "title": "Lesson 6: Agentforce Sales feature trade-offs: generative versus predictive AI and wrong-fit failures",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 6,
+    "excerpt": "Choose between generative and predictive AI, cadences and Inbox, territories and roles, and role-based and territory forecasting. This lesson serves objective sl-3b in the Sales Lifecycle domain and teaches the output-first test that decides each exam scenario.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Generative AI",
+      "Predictive Scoring",
+      "Sales Engagement",
+      "Territory Management"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-07-sl-4a-turning-sales-kpis-into-reports-report-types-filte",
+    "title": "Lesson 7: Turning sales KPIs into reports: report types, filters, and the Lightning report builder",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 7,
+    "excerpt": "Turn a sales KPI into a report and a dashboard tile: pick the report type that exposes the numbers, choose the right format, build ratios as summary formulas, and set the running user. Serves objective sl-4a in the Sales Lifecycle domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Report Types",
+      "Summary Formulas",
+      "Dashboards",
+      "Running User"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-08-sl-4b-reports-and-dashboards-in-production-joined-report",
+    "title": "Lesson 8: Reports and dashboards in production: joined reports, dynamic dashboards, subscriptions, and row-level security",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 8,
+    "excerpt": "Diagnose the production failures of reports and dashboards: missing fields, numbers that differ by viewer, subscriptions that arrive empty, and joined reports that cannot feed a tile. Serves objective sl-4b in the Sales Lifecycle domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Joined Reports",
+      "Dynamic Dashboards",
+      "Row-Level Security",
+      "Reporting Snapshots"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-09-ci-1a-pre-implementation-readiness-user-experience-metri",
+    "title": "Lesson 9: Pre-implementation readiness: user experience, metrics, and the discovery that prevents rework",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 9,
+    "excerpt": "Assess user experience, set success metrics before go-live, plan communication and training by role, and build change management that holds. Serves objective ci-1a in the Consulting and Implementation Strategies domain, worth 25% of the exam.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Readiness Assessment",
+      "Success Metrics",
+      "In-App Guidance",
+      "Change Management"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-10-ci-1b-communication-training-and-change-management-runni",
+    "title": "Lesson 10: Communication, training, and change management: running the plan under pressure",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 10,
+    "excerpt": "Run readiness under real pressure: pick the right sandbox for training, blend formal and in-app training, fix the change management failure modes, and defend the project with outcome metrics. Serves objective ci-1b in the Consulting and Implementation Strategies domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Sandbox Strategy",
+      "Training Design",
+      "Change Management",
+      "Adoption Metrics"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-11-ci-2a-deployment-considerations-sandbox-strategy-release",
+    "title": "Lesson 11: Deployment considerations: sandbox strategy, release management, and deployment tools",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 11,
+    "excerpt": "Deployment is how configuration, code, and data move from where you built them to where they must run. This lesson covers the sandbox strategy behind release management, what change sets and packages can and cannot carry, and the production gates that decide whether a release lands.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Deployment",
+      "Sandboxes",
+      "Change Sets",
+      "Release Management"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-12-ci-2b-choosing-a-deployment-path-change-sets-packages-or",
+    "title": "Lesson 12: Choosing a deployment path: change sets, packages, or source-driven releases",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 12,
+    "excerpt": "Three deployment paths serve different situations, and the exam asks which one fits. This lesson covers change sets, unlocked and managed packages, source-driven releases, the separate project that is your data load, and how to sequence a cutover you can defend.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Deployment Paths",
+      "Packages",
+      "Source Driven",
+      "Data Load"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-13-ci-3a-post-implementation-adoption-diagnostics-finding-w",
+    "title": "Lesson 13: Post-implementation adoption diagnostics: finding why users stopped",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 13,
+    "excerpt": "When users stop using what you shipped, the job is diagnosis before persuasion. This lesson covers the adoption funnel, the access checks that come first, the tools that measure real usage and agent escalations, and the sequence for responding once you know the cause.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Adoption",
+      "Diagnostics",
+      "Agent Analytics",
+      "Continuous Improvement"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-14-ci-3b-access-review-changing-requirements-and-planning-c",
+    "title": "Lesson 14: Access review, changing requirements, and planning continuous improvement after go-live",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 14,
+    "excerpt": "After go-live the work is stewardship: reviewing access, absorbing new requirements without breaking scope, and leaving an improvement plan that outlives the project team. This lesson covers the access model that trips people up, the agent as a user, and the four parts a real plan needs.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Access Review",
+      "Requirements",
+      "Continuous Improvement",
+      "Least Privilege"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-15-ci-4a-salesforce-project-management-lifecycle-phases-art",
+    "title": "Lesson 15: Salesforce Project Management Lifecycle: Phases, Artifacts, and Gates",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 15,
+    "excerpt": "Deliveries rise and fall on the artifacts and gates, not the phase names. This lesson covers the lifecycle skeleton, the documents that fix scope and prove requirements, how to choose a methodology, and the sign-off that turns a happy meeting into an acceptance.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Project Lifecycle",
+      "Artifacts",
+      "Methodology",
+      "UAT"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-16-ci-4b-scope-risk-and-sign-off-controlling-a-salesforce-d",
+    "title": "Lesson 16: Scope, Risk, and Sign-off: Controlling a Salesforce Delivery",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 16,
+    "excerpt": "How a Salesforce consultant holds scope, risk, and sign-off together on a live delivery. It covers the statement of work, change control, the RAID log, methodology choice, escalation tiers, and the UAT to cutover to sign-off sequence that serves requirement ci-4b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Salesforce Delivery",
+      "Scope Control",
+      "Risk Management",
+      "Project Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-17-ci-5a-discovery-workshops-stakeholder-mapping-and-requir",
+    "title": "Lesson 17: Discovery Workshops: Stakeholder Mapping and Requirements Capture",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 17,
+    "excerpt": "How a Salesforce consultant runs discovery as a bounded phase: mapping stakeholders on a power and interest grid, facilitating workshops, choosing elicitation techniques, and capturing requirements with acceptance criteria that a sponsor can sign. It serves requirement ci-5a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Discovery Workshops",
+      "Stakeholder Mapping",
+      "Requirements",
+      "Salesforce Consulting"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-18-ci-5b-turning-discovery-into-a-solution-prioritized-use",
+    "title": "Lesson 18: Turning Discovery into a Solution: Prioritized Use-Case Backlog",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 18,
+    "excerpt": "How a Salesforce consultant converts discovery into a prioritized backlog a sponsor can sign: choosing a prioritization framework, estimating value before effort, sequencing on data readiness, and slicing work into a walking skeleton. It serves requirement ci-5b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Use Case Prioritization",
+      "Backlog Planning",
+      "Solution Design",
+      "Salesforce Consulting"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-19-pa-1a-lead-to-opportunity-conversion-mechanics-sales-pro",
+    "title": "Lesson 19: Lead to Opportunity: Conversion Mechanics, Sales Processes, and Path",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 19,
+    "excerpt": "How to build the front half of a Salesforce sales process: the Lead lifecycle, what conversion actually creates and copies, record types, sales processes, lead processes, and Path. It serves requirement pa-1a from the practical application domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Lead Conversion",
+      "Sales Processes",
+      "Opportunity Stages",
+      "Salesforce Sales Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-20-pa-1b-opportunity-to-quote-to-close-products-price-books",
+    "title": "Lesson 20: Opportunity to Quote to Close: Products, Price Books, Quotes, and Approval",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 20,
+    "excerpt": "How to build the back half of a Salesforce sales process: the product catalog, price books, opportunity products, the quote sync, quote approvals, and the close gates. It serves requirement pa-1b from the practical application domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Products and Price Books",
+      "Quotes",
+      "Approval Processes",
+      "Salesforce Sales Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-21-pa-2a-declarative-first-flow-validation-rules-and-dynami",
+    "title": "Lesson 21: Declarative First: Flow, Validation Rules, and Dynamic Lightning Pages",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 21,
+    "excerpt": "How to decide, and defend, where declarative configuration genuinely ends: the five Flow types, the save order of execution, what validation rules really enforce, and how Dynamic Forms and Dynamic Actions shape a Lightning record page. It serves requirement pa-2a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Declarative First",
+      "Flow",
+      "Validation Rules",
+      "Dynamic Forms"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-22-pa-2b-when-declarative-runs-out-apex-lwc-appexchange-and",
+    "title": "Lesson 22: When Declarative Runs Out: Apex, LWC, AppExchange, and Productivity Tools",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 22,
+    "excerpt": "How to extend the platform once configuration is exhausted: when Apex and Lightning Web Components are justified, how to weigh an AppExchange package against a custom build, what a managed package really costs you, and how email, Slack, and Salesforce Mobile connect people to the data model. It serves requirement pa-2b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Apex",
+      "Lightning Web Components",
+      "AppExchange",
+      "Einstein Activity Capture"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-23-pa-3a-the-sharing-architecture-owd-role-hierarchy-and-sh",
+    "title": "Lesson 23: The Sharing Architecture: OWD, Role Hierarchy, and Sharing Rules",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 23,
+    "excerpt": "The three layers of Salesforce record access and how to name the one that is blocking: organization-wide defaults, the role hierarchy, sharing rules, and the mechanisms that cover the rest. It teaches the decision tree for choosing a sharing model and serves requirement pa-3a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Organization-Wide Defaults",
+      "Role Hierarchy",
+      "Sharing Rules",
+      "Record Access"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-24-pa-3b-teams-and-the-permission-model-account-teams-oppor",
+    "title": "Lesson 24: Teams and the Permission Model: Account Teams, Opportunity Teams, Permission Set Groups",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 24,
+    "excerpt": "Account Teams and Opportunity Teams for named collaborators, Opportunity Splits for revenue credit, and the three tiers of the permission model with permission set groups and muting. It teaches how to pick the security model by the shape of the requirement and serves requirement pa-3b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Account Teams",
+      "Opportunity Teams",
+      "Permission Set Groups",
+      "Muting"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-25-pa-4a-products-price-books-and-opportunity-products-the",
+    "title": "Lesson 25: Products, Price Books, and Opportunity Products: The Selling Model",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 25,
+    "excerpt": "The standard selling data model: Product2 as the catalog, price books and price book entries as the price list, opportunity line items and their arithmetic, and product schedules for revenue over time. It teaches the objects and rules that make the model work, serving requirement pa-4a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Products",
+      "Price Books",
+      "Opportunity Products",
+      "Product Schedules"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-26-pa-4b-quotes-syncing-and-multi-currency-pricing",
+    "title": "Lesson 26: Quotes, Syncing, and Multi-Currency Pricing",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 26,
+    "excerpt": "How to turn an opportunity into a document a buyer signs: enabling quotes, building quote line items from a price book, quote templates that control the customer PDF, the one-way quote sync, and the corporate currency and dated exchange rates that keep multi-currency orgs honest. It serves requirement pa-4b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Quotes",
+      "Multi-Currency",
+      "Price Books",
+      "Salesforce Sales Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-27-pa-5a-campaigns-and-leads-scenarios-the-objects-support",
+    "title": "Lesson 27: Campaigns and Leads: Scenarios the Objects Support",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 27,
+    "excerpt": "How Salesforce plans and measures a marketing effort with campaigns and CampaignMember, attributes revenue with campaign influence models, runs the lead lifecycle through lead processes, routes new interest with assignment rules and web-to-lead, and converts a lead without losing its source history. Serves pa-5a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Campaigns",
+      "Leads",
+      "Campaign Influence",
+      "Salesforce Sales Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-28-pa-5b-opportunities-splits-and-teams-choosing-the-right",
+    "title": "Lesson 28: Opportunities, Splits, and Teams: Choosing the Right Construct",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 28,
+    "excerpt": "How one Opportunity object serves several sales motions: record types bound to sales processes, the stage-to-forecast-category mapping under every forecast, contact roles for the customer side, opportunity teams for your side, and splits that put forecast credit on more than one rep. Serves pa-5b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Opportunity",
+      "Forecasts",
+      "Opportunity Splits",
+      "Salesforce Sales Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-29-dm-1a-data-migration-use-cases-and-considerations",
+    "title": "Lesson 29: Data Migration Use Cases and Considerations",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 29,
+    "excerpt": "How to tell a migration from an integration, the scenarios that shape a migration, the five moving parts of planning one, why cleansing in the source beats cleaning up after the load, how a full sandbox test proves the numbers, and the cutover and rollback plan a migration needs. Serves dm-1a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Data Migration",
+      "Data Quality",
+      "Sandboxes",
+      "Salesforce Data Management"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-30-dm-1b-data-migration-tools-and-ordering",
+    "title": "Lesson 30: Data Migration Tools and Ordering",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 30,
+    "excerpt": "How the two built-in tools divide the work: the Data Import Wizard's fifty thousand record ceiling against Data Loader's five million, when to reach for Bulk API 2.0 or an ETL tool, the parent-to-child load order, and how external IDs and upsert make a failed load safe to rerun. It serves dm-1b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Data Loader",
+      "Data Import Wizard",
+      "Bulk API",
+      "Salesforce Data Management"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-31-dm-1c-salesforce-integration-patterns-and-their-consider",
+    "title": "Lesson 31: Salesforce Integration Patterns and Their Considerations",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 31,
+    "excerpt": "How to choose an integration pattern, API, and sync shape for Salesforce: point to point, middleware, event driven, batch, and file, plus the limits, idempotency, and monitoring that separate a demo from production. Serves requirement dm-1c in the Data Management domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Integration Patterns",
+      "Bulk API 2.0",
+      "Change Data Capture",
+      "Platform Events"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-32-dm-2a-large-data-volume-query-selectivity-indexes-and-sk",
+    "title": "Lesson 32: Large Data Volume: Query Selectivity, Indexes, and Skinny Tables",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 32,
+    "excerpt": "How large data volume changes Salesforce behavior and how to respond: query selectivity thresholds, automatic and custom indexes, Support built skinny tables, report and list view tuning, and the sharing recalculation cost you must schedule. Serves requirement dm-2a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Large Data Volume",
+      "Query Selectivity",
+      "Indexes",
+      "Skinny Tables"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-33-dm-2b-scalability-implications-of-a-sales-solution",
+    "title": "Lesson 33: Scalability Implications of a Sales Solution",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 33,
+    "excerpt": "How to read a sales solution for the costs that grow with volume: storage against the edition allocation, sharing recalculation, reporting and forecasting limits, API request consumption, and why large work must go asynchronous. Serves requirement dm-2b in the Data Management domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Scalability",
+      "Data Storage",
+      "Sharing Recalculation",
+      "Asynchronous Apex"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-34-dm-3a-sales-data-quality-the-six-dimensions-why-agentfor",
+    "title": "Lesson 34: Sales Data Quality: The Six Dimensions, Why Agentforce Inherits It, and How to Measure It",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 34,
+    "excerpt": "The six dimensions of data quality, why Salesforce and Agentforce inherit whatever state the CRM is in, and how to measure quality with completeness reports, field history tracking, Field Audit Trail, and a field usage review. Serves requirement dm-3a.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Data Quality",
+      "Field History Tracking",
+      "Field Audit Trail",
+      "Agentforce"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-35-dm-3b-enforcing-sales-data-quality-duplicate-management",
+    "title": "Lesson 35: Enforcing Sales Data Quality: Duplicate Management, Validation Layers, Normalization, and Stewardship",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 35,
+    "excerpt": "How to enforce data quality in Salesforce: matching rules versus duplicate rules, the Duplicate Record Set work queue, the three layers of field enforcement, normalization with picklists and standards, and the stewardship that keeps controls alive. Serves requirement dm-3b.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Duplicate Management",
+      "Validation Rules",
+      "Normalization",
+      "Data Stewardship"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-36-pg-1a-agentforce-agents-in-sales-topics-actions-instruct",
+    "title": "Lesson 36: Agentforce Agents in Sales: Topics, Actions, Instructions, and Grounding",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 36,
+    "excerpt": "How an Agentforce agent is assembled in Agent Builder from a role, topics, actions and instructions, how the Atlas reasoning engine routes a request at run time, and how grounding decides whether the answer is true. It serves requirement pg-1a from the Predictive and Generative AI domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Agentforce",
+      "Agent Builder",
+      "Grounding",
+      "Salesforce Sales Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-37-pg-1b-generative-ai-tools-compared-prompt-templates-emai",
+    "title": "Lesson 37: Generative AI Tools Compared: Prompt Templates, Email Generation, the Trust Layer, and Bring Your Own Model",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 37,
+    "excerpt": "How Prompt Builder prompt templates, email generation, the Einstein Trust Layer, Model Builder bring your own model, and Data Cloud grounding fit together as one generative stack. It serves requirement pg-1b from the Predictive and Generative AI domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Prompt Builder",
+      "Einstein Trust Layer",
+      "Model Builder",
+      "Generative AI"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-38-pg-2a-predictive-ai-in-sales-cloud-opportunity-scoring-l",
+    "title": "Lesson 38: Predictive AI in Sales Cloud: Opportunity Scoring, Lead Scoring, Forecasting, and Activity Capture",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 38,
+    "excerpt": "What Sales Cloud's predictive features are, the exact data thresholds that decide whether they build a local model, how often each score refreshes, and how Einstein Activity Capture feeds them. It serves requirement pg-2a from the Predictive and Generative AI domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Einstein Opportunity Scoring",
+      "Einstein Lead Scoring",
+      "Einstein Activity Capture",
+      "Sales Cloud"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-39-pg-2b-predictive-ai-trade-offs-score-prediction-and-reco",
+    "title": "Lesson 39: Predictive AI Trade-offs: Score, Prediction, and Recommendation, Discovery, and Conversation Insights",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 39,
+    "excerpt": "How to tell a score, a prediction and a recommendation apart, when to reach for Einstein Discovery or Next Best Action, what Conversation Insights adds, and the four failure modes of predictive features. It serves requirement pg-2b from the Predictive and Generative AI domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Einstein Discovery",
+      "Next Best Action",
+      "Einstein Conversation Insights",
+      "Predictive AI"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-40-pg-3a-ethical-challenges-of-ai-in-sales-bias-explainabil",
+    "title": "Lesson 40: Ethical Challenges of AI in Sales: Bias, Explainability, Privacy, Hallucination, and Regulation",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 40,
+    "excerpt": "The five ethical challenges a sales AI deployment actually raises, how bias, explainability, privacy, hallucination, over-automation and regulation each land in a build, and the control that answers each one. It serves requirement pg-3a from the Predictive and Generative AI domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "AI Ethics",
+      "Bias",
+      "Explainability",
+      "Privacy"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-41-pg-3b-trusted-ai-principles-in-practice-the-nine-princip",
+    "title": "Lesson 41: Trusted AI Principles in Practice: The Nine Principles and the Einstein Trust Layer That Implements Them",
+    "series": "sf-agentforce-sales-consultant",
+    "lesson": 41,
+    "excerpt": "The nine Trusted AI Principles and the Einstein Trust Layer controls that implement them, applied to real sales scenarios, plus the governance operating model that keeps the principles true after go live. It serves requirement pg-3b and closes the Predictive and Generative AI domain.",
+    "date": "November 17, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "12 min read",
+    "tags": [
+      "Trusted AI Principles",
+      "Einstein Trust Layer",
+      "AI Governance",
+      "Agentforce"
+    ],
+    "status": "published"
+  },
   {
     "slug": "day-01-sp-1a-data-360-terminology-data-streams-data-lake-object",
     "title": "Lesson 1: Data 360 Terminology: Data Streams, Data Lake Objects, Data Model Objects, and the Three Stages",

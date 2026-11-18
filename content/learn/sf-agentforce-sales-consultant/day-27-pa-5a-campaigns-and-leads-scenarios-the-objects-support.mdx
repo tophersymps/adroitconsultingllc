@@ -1,0 +1,101 @@
+---
+title: "Lesson 27: Campaigns and Leads: Scenarios the Objects Support"
+slug: day-27-pa-5a-campaigns-and-leads-scenarios-the-objects-support
+series: sf-agentforce-sales-consultant
+lesson: 27
+excerpt: "How Salesforce plans and measures a marketing effort with campaigns and CampaignMember, attributes revenue with campaign influence models, runs the lead lifecycle through lead processes, routes new interest with assignment rules and web-to-lead, and converts a lead without losing its source history. Serves pa-5a."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Campaigns, Leads, Campaign Influence, Salesforce Sales Cloud]
+---
+
+# Lesson 27: Campaigns and Leads: Scenarios the Objects Support
+
+A client's marketing manager walks into the weekly pipeline meeting with a slide that says her trade show generated two million dollars of pipeline. The sales leader pushes back immediately: he can see forty opportunities that mention the show, but the amounts in them add up to somewhere near nine hundred thousand, and half of them also touch a webinar and an email campaign. Nobody is lying. The marketing manager counted a revenue field that the campaign rolls up, the sales leader counted the opportunities he could attribute by hand, and the two are different measurements of the same events.
+
+That kind of argument is what this objective is really about. Campaigns, campaign members, and campaign influence are three different things that people casually call "the campaign," and leads are a separate object with a separate lifecycle that shares nothing with either until someone converts one. Most bad builds in this area come from reaching for the wrong object: a team ties a person to a marketing effort with a custom lookup because they never learned that CampaignMember already does it, or they build a custom "engaged" checkbox on the contact instead of using member status, or they route new inbound interest through a flow that assigns an owner before an assignment rule ever runs.
+
+This lesson serves requirement pa-5a, in the Practical Application of Agentforce Sales Expertise domain, which carries 24 percent of the exam. The objective asks you, given a set of requirements, to determine how to support different business and sales process scenarios for Campaigns, Leads, and Opportunities. By the end you can name the object behind each scenario, explain how a campaign measures a person and how influence attributes a deal, run the lead lifecycle from capture to conversion, and route inbound leads without leaving them in a queue nobody pulls from.
+
+## Deep Dive
+
+### A campaign measures the effort, CampaignMember carries the person
+
+A campaign is the object that plans and measures a marketing effort.[^1] CampaignMember is the object that connects a person to it, one row per lead or contact, and the object reference states plainly that the main constituent of a campaign is a CampaignMember.[^2] This matters because a campaign on its own measures nothing. A campaign with no members has no one to count and nothing to report on, so when someone says the campaign did not work, the first question is whether it ever had members.
+
+The member record is where the response lives. CampaignMember carries a Status field, which is the member status, and that is the field that records what a person did. The default set runs from Sent through Responded, and you customize the status values per campaign, so a webinar tracks Registered and Attended while a direct mail piece tracks Delivered and Replied. The reference also describes what happens when you set a status: a valid status updates the record and sets the HasResponded flag according to that status's mapping, while an invalid one falls back to the campaign's default status. Get the status values right per campaign type and the response data is clean; leave the defaults everywhere and every campaign reports the same two meaningless states.
+
+Metrics roll up on the campaign record itself. The campaign holds BudgetedCost and ActualCost, and the revenue associated with the opportunities it touched shows as the campaign's return. That combination is how a campaign report produces cost per response and return on investment without a spreadsheet, because the cost lives on the campaign and the revenue is attributed through the campaigns that influenced the deal.
+
+### Hierarchy and influence turn a list of campaigns into an attribution model
+
+A campaign can have a parent campaign, and the hierarchy rolls child metrics up so a parent's totals include its children's responses and revenue. The help page for campaign hierarchy describes it as a family tree, supports up to five levels, and notes a design constraint worth repeating: a campaign hierarchy supports only one currency in its child campaigns.[^6] If you are building a hierarchy for a global program, that one-currency rule shapes how you slice the tree.
+
+Attribution is a separate relationship. Campaign influence links one or more campaigns to an opportunity so you can credit the campaigns that touched the deal. The opportunity's Primary Campaign Source field names the one campaign that gets primary credit, and an opportunity can carry many influencing campaigns through its Campaign Influence related list. That is why the marketing manager's number and the sales leader's number disagreed: the opportunity amounts are the same, but how much of each one is credited to the show depends on which influence model is doing the crediting.
+
+When a client needs credit shared across several touches, you enable Customizable Campaign Influence and define attribution models.[^4] The help pages describe the versions: the Primary Campaign Source model, which assigns 100 percent of influence to the campaign in the Primary Campaign Source field and uses auto-association so users cannot add records manually, plus first-touch, last-touch, and even-distribution models. First-touch gives the whole credit to the first campaign a prospect touches, last-touch gives it to the last campaign before the deal closes, and even distribution splits it across every campaign the prospect touched.[^5] You set one model as the default, and a related list shows data from one model at a time, which is the detail that explains why two reports can disagree while both are correct. Enabling custom models adds the CampaignInfluence and CampaignInfluenceModel objects to the org, and a custom model can be locked so it accepts updates only through the API rather than from reps.
+
+### Leads run a separate lifecycle with their own statuses
+
+A lead is a distinct object for a person or company that marketing or an inbound channel captured and sales has not yet qualified.[^3] It is not a contact. It has its own fields, its own owner, and its own lifecycle driven by lead status: values such as New, Working, Nurturing, Qualified, and Unqualified, and the platform sets a Converted status on conversion. You build several lead processes so different channels or regions track different statuses, and a lead process is bound to a record type, so a Partner lead and a Web lead can each show their own status set. You also choose which status marks a lead as qualified, so reports and routing agree on what qualified means instead of each team defining it privately.
+
+That separation is the point of the object, and it is the point of the exam. A person you have never qualified is a lead. A person attached to an account you already work with is a contact, and if a campaign touched them they also appear as a campaign member. A lead can be a campaign member too, which is how a person who came in from a webinar sits on both the campaign and the lead until conversion turns them into a contact. The mistake candidates make is treating leads and contacts as one list and building a single lifecycle across both, which erases the qualification gate that the lead object exists to enforce.
+
+### Routing is what keeps a lead queue from rotting
+
+Lead assignment rules are how a newly created or updated lead reaches a human. The help page on assignment rules describes the mechanics: a rule consists of ordered entries, each with criteria and a target user or queue, and Salesforce evaluates the entries in order and stops at the first match.[^9] If no entry matches, the lead goes to a default owner, which is why you should always create a final catch-all entry with no criteria. You can run assignment rules on demand after a bulk load, and you should specify whether a rule is active for leads created manually and through the web.
+
+A lead queue is the holding pen for leads no single owner draws yet. You create it in Setup under Queues, add the members who should pull from it, and it holds leads until someone accepts ownership. Queues are not a staging area to forget about: an unowned queue with nobody watching it is a pile of leads going cold, so pair every queue with a team that owns the pulling and a report that shows how long leads sit.
+
+Web-to-lead is the inbound channel. You generate an HTML form from the Web-to-Lead setup page, the form posts into Salesforce and creates a lead, and you set a default lead creator, a default response template, and a challenge on the form.[^8] The help page notes the permission shape: to act as the default lead creator, the user needs Modify All Data, Send Email, and Access Activities, and you should not mix a permission set with a profile to grant them. The classic scenario is a web form that posts a lead, an active assignment rule that routes it by product interest or region, and a queue for the team that owns the leftovers. If the rule is inactive, every web lead goes to the default owner.
+
+### Conversion is one way, and it leaves the lead standing
+
+Lead conversion is a one-way operation with field-level consequences you must describe accurately. Converting a lead creates an account, a contact, and optionally an opportunity. Standard fields map automatically, and the mapping table is documented: company becomes the account name and the opportunity name, email and phone land on the contact, address fields split between account billing and contact mailing, and the lead's campaign lands in the opportunity's Primary Campaign Source.[^10] You map custom fields in Setup under Lead Fields, in the Map Lead Fields section, choosing the target on account, contact, or opportunity for each custom lead field.[^7] A custom lead field can map to all three targets at once, each target field takes only one source, and the target must be of equal or greater length, so the mapping is a design decision rather than a click.
+
+If a matching account and contact already exist, conversion either merges into them or creates new ones based on the choice you make in the convert dialog. That choice is worth training, because merging into the wrong account scatters history across two customer records. The original lead is not deleted: it becomes read-only, its status is set to Converted, and it keeps the converted account, contact, and opportunity ids so you can still report on the lead source that produced the customer. There is no unconvert, which is why the mapping and the match decision are worth getting right the first time. When a scenario asks how source attribution survives after the deal closes, the answer is the read-only converted lead holding those ids.
+
+### How the org gets built, end to end
+
+The build runs in one direction, from measurement to conversion, and the order matters because conversion consumes the fields you set earlier.
+
+1. In Setup, under Feature Settings, open Marketing and then Campaign Influence to enable campaign influence and, if credit must be split, Customizable Campaign Influence.
+2. In Setup, under Feature Settings, open Sales and then Lead Processes to create a lead process per record type, choosing its statuses and its qualified status.
+3. In Setup, under Feature Settings, open Sales and then Lead Assignment Rules to add ordered, criteria-based rules that route leads to users and queues, and activate one rule at a time.
+4. In Setup, under Process Automation, open Queues and create a lead queue with the members who should draw from it.
+5. In Setup, under Feature Settings, open Marketing and then Web-to-Lead to generate the form, set the default creator and response template, and turn on the challenge.
+6. In Setup under Object Manager, open Lead Fields and the Map Lead Fields section to map every custom lead field onto its account, contact, or opportunity target before anyone converts.
+
+### Choosing the construct is the scenario skill
+
+The objective's phrasing about a given set of requirements is where this lands. Requirements that describe measuring a marketing effort's return point at a campaign with members and influence. Requirements that describe crediting several touches to one deal point at Customizable Campaign Influence and an attribution model, with one set as the default. Requirements about inbound interest and routing point at leads, assignment rules, and queues. Requirements about a person you have not qualified point at the lead object, and requirements about a person already attached to an account you work with point at the contact. Requirements about a line of potential business with an amount and a stage point at an opportunity, with any influencing campaign credited through campaign influence and its stage mapped to a forecast category.
+
+Read the requirement and name the object it is really about before you name any setting. The common wrong answer in this domain is to reach for one object for a job another owns: routing new inbound interest is a lead and assignment rule job, measuring a marketing effort is a campaign with members and influence job, and forecasting a deal is an opportunity with a stage mapped to a forecast category job. Name the object first, then the setting, and the scenario sorts itself out.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a campaign tracks people and revenue by itself. The link is CampaignMember, one row per lead or contact, and campaign influence is a separate relationship to the opportunity, so a campaign with no members measures nothing and a campaign with members but no influence records attributes nothing to a deal. When a scenario describes a campaign whose return is zero despite plenty of activity, look for the missing members and the missing influence records, not a broken rollup.
+
+The second trap is believing lead conversion deletes the lead. The lead survives as a read-only, Converted-status record that keeps the ids of the account, contact, and opportunity it created, which is how source history and campaign attribution survive after the deal is live. An answer that says the lead is removed, or becomes the opportunity, or merges into the campaign, is wrong on the same point: the source record is preserved.
+
+The third trap is believing conversion can be reversed. There is no unconvert, so a wrong custom field mapping, or a bad decision about merging into an existing account, becomes a data cleanup rather than a click. That is why the mapping is configured before conversion begins and why the match decision is taught. The disciplined consultant sets the lead process, the mapping, the assignment rules, and the queues before a single inbound form goes live, because conversion consumes all of them whether they are ready or not.
+
+## What a consultant should walk away with
+
+Name the object before you name the setting. A person to qualify is a lead, and leads track their own status lifecycle through a lead process bound to a record type. A response to measure is a CampaignMember, and the member status on that row is the response field, so customize statuses per campaign and a campaign with no members reports nothing. Revenue attribution is campaign influence, not the campaign's own fields: the Primary Campaign Source names the one campaign with primary credit, and Customizable Campaign Influence with first-touch, last-touch, or even-distribution models is how you split credit across touches, with one model as the default. Route inbound leads with an active assignment rule that ends in a catch-all entry, plus a queue that a real team pulls from, and feed that pipeline with a web-to-lead form whose default creator holds the right permissions. Then map every custom lead field before anyone converts, because conversion creates the account, contact, and opportunity in one pass, keeps the lead read-only with the ids it created, and cannot be undone.
+
+## What's next
+
+Lesson 28 - Opportunities, Splits, and Teams: Choosing the Right Construct (pa-5b)
+
+[^1]: Salesforce, "Campaign | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-campaign.html)
+[^2]: Salesforce, "CampaignMember | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-campaignmember.html)
+[^3]: Salesforce, "Lead | Standard Objects | Object Reference," (https://developer.salesforce.com/docs/platform/object-reference/references/standard-objects/object-lead.html)
+[^4]: Salesforce Help, "Customizable Campaign Influence," (https://help.salesforce.com/s/articleView?id=sf.campaigns_influence_customizable.htm&type=5)
+[^5]: Salesforce Help, "How Customizable Campaign Influence Works," (https://help.salesforce.com/s/articleView?id=sales.campaigns_influence_customizable_understanding.htm&type=5)
+[^6]: Salesforce Help, "Understand Campaign Hierarchy," (https://help.salesforce.com/s/articleView?id=sf.campaigns_hierarchy.htm&type=5)
+[^7]: Salesforce Help, "Map Custom Lead Fields for Lead Conversion," (https://help.salesforce.com/s/articleView?id=sf.customize_mapleads.htm&type=5)
+[^8]: Salesforce Help, "Generate Leads from Your Website with Web-to-Lead," (https://help.salesforce.com/s/articleView?id=sf.setting_up_web-to-lead.htm&type=5)
+[^9]: Salesforce Help, "Set Up Assignment Rules," (https://help.salesforce.com/s/articleView?id=service.creating_assignment_rules.htm&type=5)
+[^10]: Salesforce Help, "Lead Conversion Field Mapping," (https://help.salesforce.com/s/articleView?id=sales.lead_conversion_mapping.htm&type=5)

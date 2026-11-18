@@ -1,0 +1,98 @@
+---
+title: "Lesson 21: Declarative First: Flow, Validation Rules, and Dynamic Lightning Pages"
+slug: day-21-pa-2a-declarative-first-flow-validation-rules-and-dynami
+series: sf-agentforce-sales-consultant
+lesson: 21
+excerpt: "How to decide, and defend, where declarative configuration genuinely ends: the five Flow types, the save order of execution, what validation rules really enforce, and how Dynamic Forms and Dynamic Actions shape a Lightning record page. It serves requirement pa-2a."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Declarative First, Flow, Validation Rules, Dynamic Forms]
+---
+
+# Lesson 21: Declarative First: Flow, Validation Rules, and Dynamic Lightning Pages
+
+A consultant ships a record-triggered Flow on Opportunity that stamps a "Next Step Date" field whenever a rep changes the stage. Two weeks later, reps report they cannot save opportunities at all. The error message is one they have never seen: "Close date must be in the future for closed stages." Nobody typed a close date. The Flow wrote one, from a helper record. The team missed the order in which the platform runs automation: the before-save Flow fired first, set the date, and then the validation rule the org has carried for three years evaluated that freshly written value and blocked the save. The Flow and the rule were both correct. They simply disagreed about sequence.
+
+The instinct that produces this class of defect is the instinct that reaches for code, or for a second Flow, before understanding what the platform already does. A junior team hears "the field must be populated before validation runs" and proposes an Apex trigger with `addError` logic. A senior team reads the order of execution, sees that before-save Flows run ahead of validation rules, and fixes the value the Flow was writing. The difference is not talent. It is knowing the declarative map well enough to say exactly where configuration ends.
+
+This lesson serves requirement pa-2a, in the Practical Application of Agentforce Sales Expertise domain, which carries 24 percent of the exam. The objective asks you to determine when it is appropriate to extend declarative development with custom development, third-party tools, or Salesforce products, and the exam variants of that question almost always force the reverse read: which declarative tool fits this requirement, and what specific ceiling forces something heavier. By the end you will be able to name the Flow types and select the right one, trace the save order of execution and predict where your Flow collides with your validation rule, use Dynamic Forms and Dynamic Actions to reshape a record page without touching a page layout, and state the short, defensible list of boundaries where declarative genuinely runs out.
+
+## Deep Dive
+
+### Declarative first is a rule with a named ceiling
+
+Salesforce's documented position, and the exam's, is that configuration is the starting assumption for any requirement. Record-triggered and screen Flows, approval processes, validation rules, formula fields, roll-up summary fields, Lightning App Builder with Dynamic Forms and Dynamic Actions, and even Flow's own HTTP callout action all sit on the declarative side. When a scenario lands on your desk, the first question is not "what would I write" but "which of these covers it." The exam does not reward the consultant who reaches for Apex early. It rewards the one who can name the specific declarative tool that fits, and then name the specific ceiling that would force code. Treat code as the exception you justify, not the default you reach for.
+
+The reason this is tested so heavily is that the failure it prevents is expensive. Every line of custom code in an org carries maintenance through three releases a year, needs test coverage at a documented percentage, and usually needs a developer who understands it to be present when it breaks. Configuration carries a fraction of that cost and survives upgrades without a deploy. A consultant who puts a field update in an Apex trigger when a before-save Flow is faster, simpler, and upgrade-safe has not just chosen wrong on the exam. They have chosen wrong on the client's budget for the next five years.
+
+So the discipline is to name the tool and the ceiling in the same breath. "This is a field update on the triggering record, so it belongs in a before-save Flow, which runs up to ten times faster than the older record-change process and needs no separate save." That sentence is the shape of a strong answer. It names the mechanism, states why it fits, and quietly rules out the heavier option.
+
+### Flow has five shapes and each one has a job
+
+Flow earns its reputation as the workhorse of declarative automation, and the exam expects precision about its types because the choice between them is a design decision. A record-triggered Flow fires when a record is created, updated, or deleted, and it has two flavors that behave very differently.[^2] A before-save Flow performs fast field updates on the triggering record without a second save to the database, which is why Salesforce documents it as updating records up to ten times faster than a record-change process. An after-save Flow acts on related records, sends actions, and can reach records other than the one that triggered it, because by the time it runs the triggering record is already committed.
+
+The other three types round out the set. An autolaunched Flow runs with no user interface and is the standard target for Apex, processes, buttons, and other automation that needs to call a flow. A screen Flow collects user input through a guided interview and is exposed through a Lightning action, a component, or a home page, which is the right answer when the requirement is user interaction rather than background logic. A schedule-triggered Flow runs on a schedule to process a batch of records that meet filter criteria, giving each flow interview access to its record's field values through the `$Record` global variable.
+
+The ceiling that matters on the exam is not the type but the limit. Every Flow runs against the same governor limits as other platform logic, and a Flow is constrained by element counts and by the transaction's CPU budget. A before-save Flow touching two hundred records in a single transaction still shares that transaction's resources with everything else running in it. When a requirement is a one-record-triggered field update, that limit is irrelevant. When a requirement is recalculating half a million records with branching logic, the limit is the whole story, and it is the point at which the declarative answer stops.
+
+### Order of execution decides whether Flow and validation agree
+
+The save order of execution is examinable and it is the single most useful thing to internalize in this objective, because it explains almost every "why did my automation do that" bug in production. When you save a record, Salesforce loads the original record from the database, loads the new field values from the request, and runs system validation such as required fields and field formats. Then it runs record-triggered Flows configured to run before the record is saved, then `before` Apex triggers, then most system validation again alongside any custom validation rules, then duplicate rules, then it saves the record.[^1] The record is not yet committed. After the save come `after` triggers, assignment rules, auto-response rules, workflow rules, escalation rules, then record-triggered Flows configured to run after the save, and finally roll-up summary recalculations on parent records.
+
+The consequence that decides designs: a before-save Flow runs before custom validation rules. Any field the Flow sets is therefore still evaluated by any validation rule that references it. A consultant who assumes a before-save Flow can bypass a validation rule ships a bug, and that bug is the scene that opens this lesson. The practical move is the reverse of the naive one. If a validation rule fires unexpectedly on a field nobody typed, look for the before-save Flow that populated it, and either change what the Flow writes so it satisfies the rule or change the rule to exempt the case the Flow represents. Do not add an `after` trigger that un-does the block. That is fighting the platform with more moving parts.
+
+The order also tells you where an after-save Flow sits. It runs after the record is committed and after `after` triggers, so it can safely update related records and expects the triggering record to exist in the database. If you need a value written to the triggering record itself, before-save is the correct and cheaper choice. Choosing after-save for a same-record field update is a common inefficiency: it works, but it costs an extra save and it runs later than necessary.
+
+### Validation rules read every field, including ones a user cannot see
+
+A validation rule evaluates a formula on save and blocks the save with an error message when the formula returns true.[^3] Its reach is what the exam tests. The rule fires for every entry point that writes the record: the Lightning interface, the API, Data Loader, and every integration. It cannot be skipped by hiding a field on a page layout, and it applies to new and updated records even when the fields it references are not on any layout or in the API payload. That reach is the point of a validation rule: it is the enforcement layer that lives at the data, not at the screen.
+
+Field-level security governs what a user sees and edits. It does not govern what a formula or Apex reads. This is the trap the exam leans on hardest. A validation formula can reference a field the running user cannot see, and the rule still evaluates on that field's value. The user gets a block they cannot reason about from any field visible to them, which is confusing in production but entirely correct as a platform behavior. The design lesson is to reference restricted fields deliberately, for cross-field integrity checks, and to write the error message so it explains the condition in business terms rather than pointing at a hidden field.
+
+Two practical edges complete the picture. Validation rules do not simply cascade through dependent picklists on the client side; the browser only limits dependent picklist values, and all real validation happens server-side. And a validation rule does not run on every imaginable path: some batch and workflow-driven updates have documented exemptions, which is why a data fix that bypasses an expected block is not always a bug.[^4] Know that the rule is the enforcement layer for interactive and integration writes, and treat any path that skips it as an exception you have to justify by name.
+
+### Lightning App Builder, Dynamic Forms, and Dynamic Actions
+
+Lightning App Builder is the declarative interface layer, and two features make it worth reaching for over a static page layout.[^5] Dynamic Forms let you place individual fields as Field Section components instead of showing the whole layout, and then apply visibility rules per section or per field.[^6] A section appears only when a picklist equals a value or a checkbox is true, so a rep filling out a renewal sees renewal fields and nothing else. Dynamic Actions let you filter the actions in the highlights panel by record state, so the right button appears at the right stage and a rep is not offered a "Close Won" action on a deal that has not been approved.
+
+Both features require a Lightning record page. That requirement is the second trap in this objective: you cannot add field-level visibility to a classic page layout, and an answer that proposes Dynamic Forms on a classic layout is wrong. In the App Builder, you enable Dynamic Forms by adding Field Section components, and you set a section's component visibility so it shows only when a record field meets your condition. The visibility condition can test record data, user details, or device type, and hidden field values remain intact even though the user cannot see them.
+
+Page assignment matters as much as the page itself. A Lightning record page can be set as the org default and then overridden by app, by record type, and by profile. The most specific override wins, so an app-plus-record-type assignment takes precedence over a bare org default. Get the assignment wrong and you can build a beautiful page that no user ever loads, which is a quiet failure because nothing errors. When you activate a page, name the assignment explicitly in your build notes: what is the org default, and which app, record type, or profile overrides it.
+
+### Where declarative genuinely ends
+
+The boundary list is short and every item on it is defensible. You need Apex when the logic is too complex or too CPU-heavy for Flow; when you must process very large volumes while controlling governor limits and transaction behavior; when you need true transaction control such as savepoints and rollback; when you are exposing or consuming a web service; or when the logic must run at the data layer for every entry point regardless of how the record arrived. That last item is subtle and worth stating plainly: a validation rule and an Apex trigger both run at the data layer, so a requirement that says "no record of this object may be saved in this state, no matter how it arrives" can be satisfied declaratively by a validation rule and does not by itself justify code.
+
+You need a Lightning Web Component when the requirement is pixel-level control over the interface, a reactive component that recomputes as the user types, or an offline-capable surface on mobile. Everything else, including a large share of automation that teams instinctively code, belongs in Flow. Naming this boundary clearly is worth more on the exam than knowing Apex syntax, because the scenario will describe a requirement and ask what to use, and the credited answer is the lightest tool that satisfies it with a stated reason.
+
+A worked example ties the boundary to a number. Suppose a client asks you to recalculate an opportunity's amount from its line items every night across two hundred thousand records, with branching rules that depend on product family and region. That is a large-volume, complex-logic, limits-sensitive batch job. A record-triggered Flow would run inside a transaction and hit CPU and element ceilings long before it finished. The right answer is a batch Apex class scheduled nightly, because batch Apex operates over small batches of records and gives you explicit control over the transaction. That one requirement is a genuine boundary. Most of the requirements sitting next to it in the same backlog are not.
+
+### Sequencing the extension decision
+
+The discipline that separates a strong answer from a weak one is sequencing. Ask whether the requirement is data-shaped, process-shaped, or interface-shaped. Data and process requirements almost always resolve to Flow, validation rules, approval processes, and roll-up summaries. Interface requirements resolve to App Builder first, and to a custom component only when App Builder cannot express the interaction. Only after those two are exhausted does the question of code arise, and only after code arises does the question of a third-party package or a native product arise.
+
+Run the sequence even when you are confident, because the sequence is what produces the stated reason the exam wants. A requirement to stamp a field on create is data-shaped, so Flow. A requirement to hide a section on a renewal deal is interface-shaped, so Dynamic Forms on a Lightning record page. A requirement to block a save when a limited-edit field is blank is data-shaped and enforcement-oriented, so a validation rule, and it will fire for API writes too. A requirement to push two hundred thousand records through branching recalculation nightly is a named boundary, so batch Apex. Say the shape, name the layer, and the scenario resolves without heroics.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing that field-level security hides a field from a validation rule's formula. It does not. Field-level security governs what a user sees and edits, not what a formula or Apex reads, so a validation rule can and often should evaluate a field the running user cannot see. When a question offers "the rule is skipped for that user" or "the field becomes visible," the correct read is that the rule evaluates normally on the restricted field's value.
+
+The second trap is believing a before-save Flow can bypass a validation rule. It cannot, and the reason is the order of execution: before-save record-triggered Flows run before custom validation rules, so a field the Flow sets is still checked by any rule that references it. An answer that has a before-save Flow sneaking a record past a rule is wrong. The fix lives in the value the Flow writes or in the rule's condition, not in routing around the rule.
+
+The third trap is believing Dynamic Forms work on a classic page layout. They do not. Dynamic Forms require a Lightning record page with Field Section components, so field-level and section-level visibility cannot be added to a classic layout. When a requirement is dynamic visibility and the answer choices include a classic layout with field-level visibility, that answer is wrong by construction. The correct choice is a Lightning record page built in App Builder.
+
+## What a consultant should walk away with
+
+Start every requirement on the declarative side and make yourself name the mechanism before you name the boundary. Choose the Flow type by what has to happen: before-save for fast field updates on the triggering record, after-save for related records and actions, screen Flow for guided input, schedule-triggered for batch processing. Keep the save order of execution in your head, because it explains why a before-save Flow and a validation rule disagree, and it tells you that the fix belongs in the value or the condition, never in a workaround trigger. Treat validation rules as the data-layer enforcement that fires for every write path and reads fields regardless of field-level security. Reach for App Builder, Dynamic Forms, and Dynamic Actions for interface work, remembering they require a Lightning record page and a deliberate page assignment. Then, and only then, add Apex for genuine boundaries: complex or CPU-heavy logic, very large volumes, transaction control, web services, or data-layer logic that Flow cannot express. State the trade every time. The tool and the reason are the answer.
+
+## What's next
+
+Lesson 22 - When Declarative Runs Out: Apex, LWC, AppExchange, and Productivity Tools (pa-2b)
+
+[^1]: Salesforce Developers, "Triggers and Order of Execution," Apex Developer Guide, (https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-triggers-order-of-execution.html)
+[^2]: Salesforce Help, "Triggered Flows," (https://help.salesforce.com/s/articleView?id=platform.flow_concepts_trigger.htm&type=5)
+[^3]: Salesforce Help, "Validation Rules," (https://help.salesforce.com/s/articleView?id=sf.fields_about_field_validation.htm&language=en_US&type=5)
+[^4]: Salesforce Help, "Validation Rule Considerations," (https://help.salesforce.com/s/articleView?id=sf.fields_validation_considerations.htm&language=en_US&type=5)
+[^5]: Salesforce Trailhead, "Lightning App Builder," (https://trailhead.salesforce.com/content/learn/modules/lightning_app_builder)
+[^6]: Salesforce Help, "Break Up Your Record Details with Dynamic Forms," (https://help.salesforce.com/s/articleView?id=sf.dynamic_forms_overview.htm&language=en_US)

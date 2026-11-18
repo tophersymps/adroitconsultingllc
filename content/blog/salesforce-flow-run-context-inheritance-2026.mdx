@@ -1,0 +1,69 @@
+---
+title: "The Flow Said User Context. The Caller Said Otherwise."
+slug: salesforce-flow-run-context-inheritance-2026
+excerpt: "A Flow's run context is a setting on the flow, but the caller can override it. Winter '27 adds the option that makes user context an actual boundary."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "November 16, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [Salesforce, Flow, Security, Architecture, "Winter '27"]
+bannerImage: "/banners/salesforce-flow-run-context-inheritance-2026.webp"
+ogImage: "/banners/salesforce-flow-run-context-inheritance-2026-og.jpg"
+---
+
+A flow's run context looks like a decision you make once. Open the flow, click Show Advanced, read the dropdown, and you know what the flow is allowed to touch: user context enforces the running user's object permissions and field access, system context without sharing can reach everything. Then something calls the flow from somewhere else, and the dropdown you read stops describing what runs.
+
+Salesforce documents the gap in one sentence. By default, a flow in user context can inherit elevated permissions from a system-context caller, such as another flow or Apex. If a caller running in system context invokes your user-context flow, your flow also runs in system context.[^1]
+
+## The setting describes the flow, not the path
+
+One flow can therefore behave two ways. Launched from a Lightning page, it enforces the running user's object permissions and field-level access, and org-wide defaults, role hierarchies, sharing rules, manual sharing, teams, and territories decide which records it can reach.[^1] Called as a subflow from a record-triggered automation, it runs in system context without sharing, where it can read and write everything.
+
+Which of the two you get is decided, by default, by the launch method rather than by the flow. Salesforce publishes the table: a record-triggered, schedule-triggered, platform event, or Process Builder launch runs in system context without sharing, while a Lightning page, an Experience Cloud site, a flow action, a custom button, a custom link, a direct link, a REST API call, or a web tab runs in user context. A flow invoked from Apex follows whatever the code does, and the limitations list carries the blunt version of that case: a flow called by Apex always ignores object and field-level access permissions.[^1]
+
+None of that is new, and it stays invisible because the common paths are honest. A screen flow on a Lightning page runs as the person in front of it, which is what the flow properties page promises. Inheritance bites when the caller is not the person. An input screen invoked from a system-context parent. An autolaunched flow in user context called from a scheduled job. A public Experience Cloud page where the flow runs in system context for every visitor, including users with the Guest User profile.[^1] That last one is the expensive version, because a guest holds the narrowest permissions in the org while the flow runs with the widest.
+
+![How a user-context flow inherits its caller's elevation: the same unchanged flow enforces the running user's objects, fields, and sharing when launched from a Lightning page, and ignores all three when a record-triggered flow or system-context Apex calls it, until the new option cuts the inheritance at the flow boundary](</diagrams/salesforce-flow-run-context-inheritance-2026/1-inherited-elevation.png>)
+
+## An option that declares the boundary
+
+Winter '27 adds a fourth choice to the How to Run the Flow dropdown: User Context, Enforces User Permissions. Salesforce describes it as a guarantee that the flow always runs with the running user's access level regardless of what runs it, intended for flows that handle sensitive operations or must never inherit elevated permissions from a caller. It is available for screen flows and autolaunched flows, on API version 68.0 and later, and it is the first option on that list that means what a security reviewer will assume it means.[^2][^3]
+
+Two constraints decide whether it applies to your org. The first is the flow type: the dropdown is unavailable for flow types whose context cannot be changed, and the option is documented for screen and autolaunched flows rather than for every flow.[^2] Confirm what your org offers in Flow Builder itself instead of assuming. The second constraint is the version. The behavior applies only to flows running on API version 68.0 or later, and the run-time API version is a per-flow setting in the flow version properties, not an org-wide switch. Salesforce frames that as a feature: you adopt run-time behavior changes for individual flows at your convenience, test one, then move the next.[^4]
+
+It is also deployable, which matters more than it sounds. The Metadata API exposes the option as a new `UserMode` value on the existing `runInMode` field of the Flow metadata type, defined as the flow running with the user's security context explicitly enforced, without inheriting sharing settings from the calling context.[^6][^7] That turns a security posture into something your pipeline can carry: a reviewer sees the setting in a pull request, a test asserts it, and a diff shows when somebody flips it back.
+
+![The four run contexts and what each one enforces: user or system context follows the launch method, user context that enforces user permissions always applies the running user's access regardless of the caller, system context with sharing respects record access but not object or field permissions, and system context without sharing can access all data](</diagrams/salesforce-flow-run-context-inheritance-2026/2-four-contexts.png>)
+
+## Adopting it without breaking a working flow
+
+The risk is easy to state. A flow that has never run under the running user's permissions can fail the moment it does, and it fails with an access error on the element that touches the record, not at the toggle. The flows most likely to break are the ones designed around inherited elevation: reading a parent record the user cannot see, updating a field the user cannot edit, or assigning a permission set the user has no right to grant.
+
+Salesforce's guidance for that shape is to keep the privilege narrow instead of spreading it. Rather than running a whole screen flow in system context, use a Subflow element to launch a separate flow that performs only the action requiring more access. The documented example is a screen flow in user context that assigns a permission set the running user cannot assign by calling an autolaunched flow with no trigger that runs in system context and does exactly that one thing.[^5] The pattern predates the new option and still applies, because the option makes the flow it replaces honest rather than redundant.
+
+Three more documented rules belong in the same review. When a Get Records element in a system-context flow passes records into a screen component, an action, or another flow, choose the fields explicitly instead of storing every field the user can access.[^5] On Experience Cloud sites, limit Create, Update, and Delete elements to the fields you intend the user to change, and use a Transform element to strip the rest.[^5] And keep secrets out of public custom metadata types and custom settings, because on API version 64.0 and later a screen can display fields from records those retrieve even when the running user has no access to them.[^5]
+
+One trap sits near the same code path. An autolaunched flow launched by a screen action can run in a different context from the screen flow that triggered it, so it needs its own context check rather than inheriting the parent's review.[^5]
+
+![Where the privilege should live: a screen flow running in user context calls a Subflow element that launches a narrow system-context autolaunched flow for the single privileged step, which is the pattern Salesforce documents, and the width of that system-context block is the blast radius](</diagrams/salesforce-flow-run-context-inheritance-2026/3-narrow-privilege.png>)
+
+## Read run context as a property of the path
+
+The audit that follows is short and unpleasant. List every flow whose dropdown reads User or System Context, because those are the flows whose behavior depends on their callers. For each one, find the callers: subflow elements, screen actions, Apex invocations, record-triggered and schedule-triggered automations, agent actions, REST entry points. Then read the caller's context, and repeat, since the caller may itself be inheriting.
+
+Two documented facts keep the audit concrete. Everything in the system-context default list, which covers record-triggered, schedule-triggered, platform event, and Process Builder launches, runs in system context without sharing, so anything it invokes inherits that posture.[^1] And when a record-triggered flow, a schedule-triggered flow, or a process calls an Apex invocable method from a class with inherited sharing, the method runs in system context with sharing while the flow still runs in system context without sharing, so two halves of one automation do not enforce the same thing.[^1] That is the seam where the Apex defaults we covered in [Apex security at API 67.0](/field-notes/apex-summer-26-security-v67-migration) meet the declarative side, and it is the same principle this stack applies everywhere else: [every automation resolves to one running user](/field-notes/salesforce-agent-access-scoping-2026), and the question is which one.
+
+Testing has one trap worth naming. Running the flow as an administrator cannot distinguish the two behaviors, because an administrator holds the object and field permissions that user context would otherwise enforce. The test only proves a boundary when the running user is a restricted one, so build that test before you flip the option, not after.
+
+The dropdown is not going to disappear, and most flows should keep running as their launch method decides. What changes is the question in review. Not "what context is this flow set to," but "who can call this flow, and what context will it be running in when they do."
+
+[^1]: Salesforce, "Flow Run Context," the default run context for each launch method, the inheritance of elevated permissions from a system-context caller, the guest user case, and the limitation that a flow called by Apex ignores object and field-level access permissions. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.flow_distribute_context.htm&language=en_US&type=5)
+[^2]: Salesforce, "Set Flow Run Context," the four options in the How to Run the Flow dropdown, including User Context, Enforces User Permissions for screen and autolaunched flows on API version 68.0 and later, and the note that an unavailable dropdown means the context cannot be changed. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.flow_distribute_system_mode.htm&language=en_US&type=5)
+[^3]: Salesforce, "Enforce User Permissions No Matter How a Flow Runs," Winter '27 Release Notes, the option's guarantee of running user access regardless of what runs the flow, the editions it applies to, and the previous inheritance behavior. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_automate_flow_builder_user_context_264.htm&language=en_US&release=264&type=5)
+[^4]: Salesforce, "Flow and Process Run-Time Changes in API Version 68.0," Winter '27 Release Notes, updates affecting only flows and processes configured to run on API version 68.0 or later, with the run-time version edited per flow version. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_automate_flow_versioned_updates.htm&language=en_US&release=264&type=5)
+[^5]: Salesforce, "Data Safety When Running Screen and Autolaunched Flows in System Context," running screen flows in user context, the Subflow element pattern for a privileged step, choosing fields in Get Records elements, limiting fields on record elements on sites, the custom metadata warning, and screen action context checks. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=platform.flow_distribute_context_data_safety_system_context.htm&language=en_US&type=5)
+[^6]: Salesforce, Flow metadata type reference, the runInMode field and its values including UserMode, which runs the flow with the user's security context explicitly enforced without inheriting sharing settings from the calling context, available in API version 68.0 and later. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/api-metadata/references/meta-types/metadata-flow.html)
+[^7]: Salesforce, "Metadata API," Winter '27 Release Notes, "Run a flow explicitly in user context," using the new `UserMode` value on the existing `runInMode` field of the Flow metadata type. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=release-notes.rn_api_meta.htm&language=en_US&type=5)

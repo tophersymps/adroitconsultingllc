@@ -1,0 +1,95 @@
+---
+title: "Lesson 2: Scenario Trade-offs for Agentforce Sales Solution Design"
+slug: day-02-sl-1b-scenario-trade-offs-for-agentforce-sales-solution
+series: sf-agentforce-sales-consultant
+lesson: 2
+excerpt: "Once you can name the right feature, the exam wants you to choose between two workable answers. Learn the trade-offs that decide design: agent versus deterministic Flow, consumption cost, data quality, the Einstein Trust Layer, reuse over custom build, and when Agentforce is the wrong answer."
+date: "November 17, 2026"
+author: "Adroit Consulting"
+readTime: "12 min read"
+tags: [Agentforce Sales, Solution Design, Einstein Trust Layer, Scenarios]
+---
+
+# Lesson 2: Scenario Trade-offs for Agentforce Sales Solution Design
+
+A 300-rep org has clean CRM data, a discount approval that legal insists must be replayed exactly in an audit, and no natural-language input anywhere in the process. The architect on the account builds an agent with five custom topics to run that approval, because agents are the story the customer wants to hear. Six weeks later the approval is non-deterministic, an auditor cannot reconstruct why a discount was granted, and the token bill has a line item nobody budgeted. The feature was modern. The fit was wrong.
+
+Naming the right capability is only half the job this objective tests. The harder skill is choosing between two answers that would both work and picking the one that survives budget, legal, and data reality. That means reading the scenario for the constrained resource, which is usually not the technology. It is the consumption meter, the dirty records, the audit requirement, or the trust boundary. The exam rewards the candidate who names that constraint out loud and designs around it, because that is what separates an architect from a builder.
+
+This lesson continues requirement sl-1b in the Sales Lifecycle domain, at 20 percent of the exam. You will learn the trade-offs that decide Agentforce Sales design: when to use an agent and when to use a deterministic path, how cost and licensing shape the answer, why data quality comes before agent quality, how the Einstein Trust Layer constrains what you send to a model, and how to know when Agentforce is the wrong answer entirely.
+
+## Deep Dive
+
+### Autonomous agent against deterministic automation
+
+The most common trade-off in scenario items is an autonomous agent against deterministic automation. Use an Agentforce agent when the input is unstructured or conversational and the right next step varies with context, such as reading an inbound email and deciding whether to answer, escalate, or book a meeting. Use a Flow or an Approval Process when the process is fixed, repeatable, and audit-heavy, such as a discount that must clear a threshold. The distinction is reproducibility. A Flow produces the same outcome for the same inputs every time, which is what an auditor needs. An agent reasons over a prompt, and reasoning is not the same as replay.
+
+Pushing a deterministic approval into an agent buys you nondeterminism, latency, and consumption cost you did not need. That is the exact failure mode a scenario item rewards you for avoiding, and it usually shows up as a stem that describes a fixed process and then asks whether an agent is the right tool. The strongest design in those cases is an agent for the conversational edges and a Flow for the spine. Let the agent read the request, gather context, and prepare the work, then route the commitment itself through the deterministic path a human approves.
+
+Work it through on a concrete case. A team wants faster handling of inbound pricing questions. The inbound messages are unstructured, which favors an agent, but the approved discount bands are fixed and audited, which favors a Flow. The right design splits the work: the agent classifies the message, retrieves the account's history, and drafts a response inside the approved band, and any request that would breach the band is handed to a Flow-based approval with a human approver. The agent handles the language; the deterministic path handles the commitment. If you instead let the agent decide pricing on its own, you have traded a reproducible control for a model's judgment, and no amount of instruction text restores the audit trail the business required.
+
+![A decision diagram: unstructured or conversational input whose next step varies with context goes to an Agentforce agent, while a fixed, repeatable, audit-heavy process such as a discount that must clear a threshold goes to a Flow or Approval Process, because a Flow produces the same outcome for the same inputs every time. When both are true the work splits: the agent classifies the message, retrieves the account history, and drafts a reply inside the approved band, and any request that would breach the band goes to a Flow-based approval with a human approver. The agent handles the language, and the deterministic path handles the commitment.](</diagrams/day-02-sl-1b-scenario-trade-offs-for-agentforce-sales-solution/1-agent-or-deterministic.png>)
+
+
+### Cost and licensing decide the answer
+
+Agentforce consumption is metered and priced differently from per-user features, so an agent that fires on every inbound email can cost far more than one that fires on qualified leads. Einstein predictive features and Sales Engagement are per-user add-ons, while agents draw on consumption. When a scenario gives you a budget or a volume, the defensible answer is usually the one that scopes the agent to the high-value path and leaves the high-volume, low-judgment steps to a cadence or a Flow. The exam rewards the answer that names the constrained resource, and in a volume-heavy scenario that resource is the meter.
+
+This is where a lot of candidates over-correct. They read "control cost" and decide the answer must be to skip Agentforce entirely. The better answer usually keeps the agent, but bounds it: narrow the topics, gate the trigger so the agent runs on qualified leads rather than all of them, and let a cadence handle the routine touches. Naming the meter and bounding the agent beats dropping the capability the business asked for.
+
+### Agent quality is data quality
+
+If Leads are duplicated, Accounts are unmerged, and Opportunity fields are blank, an agent grounded on that data will reason confidently and wrongly. The model does not know a record is stale; it treats whatever it retrieves as truth. Before you build the agent, remediate: activate matching and duplicate rules, fill the fields the agent reads, and unify sources through Data Cloud if the customer data lives in several systems. Where the customer's gap is activity history rather than core records, Einstein Activity Capture can fill it, but it stores captured email and events on the Activity Platform rather than as standard Task rows, so plan the reports around that [^3]. A scenario that mentions dirty data and a fast build usually wants the data fix first in the answer.
+
+The trap hiding here is the belief that a better prompt fixes a data problem. It does not. If the agent cannot retrieve the record through an action or a Data Cloud source, no prompt wording will ground it, because the data never enters the reasoning loop. The fix is the retrieval path: a Flow that queries the right object, or a grounding source that exposes the fields the agent needs. When a scenario says the agent gives thin or wrong answers about a record, reach for the retrieval design before you reach for the instruction text.
+
+![A two-lane comparison. What fails: dirty core records such as duplicate Leads, unmerged Accounts and blank Opportunity fields, plus no usable retrieval, so the agent cannot reach the record through an action or a Data Cloud source, and it reasons confidently and wrongly because it is grounded on whatever it finds. What fixes it: remediating before the build by activating matching and duplicate rules, filling the fields the agent reads, and unifying sources through Data Cloud, plus designing the retrieval path as a Flow that queries the right object or a grounding source that exposes the fields the agent needs. The fix is the retrieval path, not the prompt; where the gap is activity history, Einstein Activity Capture can fill it, but it stores captured email and events on the Activity Platform rather than as standard Task rows.](</diagrams/day-02-sl-1b-scenario-trade-offs-for-agentforce-sales-solution/2-data-quality-retrieval-path.png>)
+
+
+### Security and trust are design constraints
+
+The Einstein Trust Layer sits inline between the agent and the model and handles data masking, zero data retention, and toxicity scoring, and the agent's actions still run under the running user's field-level security and sharing. That last point is the one people forget. An agent cannot surface a field its running user cannot see, and it cannot bypass sharing to read a record, because secure data retrieval preserves the platform's role-based controls when it merges grounding data into a prompt [^1].
+
+A scenario that asks how to send customer data to an LLM safely wants the Trust Layer with masking and zero retention kept on. The Trust Layer is a set of policies and processes that protect data on the prompt journey: masking detects sensitive values and replaces them with placeholders, and zero data retention means the external model provider does not keep the prompt or the response [^2]. Disabling the Trust Layer to make an agent more accurate is never the correct answer, and a stem that offers it is the trap. Neither is turning off masking to give the agent more fields, because that weakens the protection without changing what the agent can reason about.
+
+![A flow diagram: the agent, whose actions run under the running user's field-level security and sharing, sends the prompt through the Einstein Trust Layer, which sits inline between the agent and the model and handles data masking, replacing sensitive values with placeholders, zero data retention, meaning the external model provider keeps neither the prompt nor the response, and toxicity scoring. The layer passes the prompt to the external model. An agent cannot surface a field its running user cannot see and cannot bypass sharing to read a record, because secure data retrieval preserves the platform's role-based controls when it merges grounding data into a prompt, so disabling the layer or its masking is never the fix.](</diagrams/day-02-sl-1b-scenario-trade-offs-for-agentforce-sales-solution/3-trust-layer-inline.png>)
+
+
+### Reuse beats custom build
+
+Agentforce ships standard topics and actions for sales, and Agent Builder lets you attach an existing Flow or Apex action rather than writing new code. Every action is backed by a reference action, which is an invocable or REST Apex class, an autolaunched flow, a prompt template, an external service, or a MuleSoft API [^4]. The reasoning engine that sequences those actions is Atlas, and it decides step by step whether to run another action, ask the user a question, or return a final response [^5]. The answers that scale are the ones that reuse standard topics, keep topic instructions narrow, and add custom actions only where the process is genuinely unique.
+
+A topic with a sprawling instruction and twenty actions is hard to test and easy to misuse, because the agent has more ways to choose the wrong path and you have more surface to validate. Keep each topic scoped to one job, give the agent a small set of well-described actions, and prefer the object model the reps already use so its actions write to the same records your reports read. Reuse is not just cheaper; it is more testable, and testability is what lets you ship an agent you trust.
+
+### Rollout and the baseline number
+
+Rollout is part of the design, not a step after it. Pilot in a sandbox with seeded data and real transcripts, put pilot users on dedicated permission sets, log every agent action, and review the transcript for wrong or unsafe replies before you widen access. The transcript review is where you catch the agent inventing a policy or answering from the wrong topic, and it is the cheapest place to fix it.
+
+Establish the baseline KPI before launch: lead conversion, time to first touch, or forecast accuracy. Without a baseline number, a success claim is an opinion, and the exam favors answers that measure against a defined metric. Change management matters too, because a well-built agent that reps do not trust gets ignored, and adoption is a stated business outcome as often as conversion is. When a scenario asks how to prove the pilot worked, the answer names the KPI measured before and after, not the feature count.
+
+Phasing matters as much as the pilot itself. Clean the data, configure the process, pilot with a small group on their own permission sets, measure the baseline KPI, then widen access. Each phase answers a question the next one depends on: you cannot trust transcript review over dirty records, and you cannot prove a rollout that never had a number to beat. A scenario that offers to launch to all 300 reps at once is testing whether you will name the sequencing instead of the speed.
+
+### When Agentforce is the wrong answer
+
+Know when to say no. High-stakes commitments such as legal terms, final pricing outside an approved band, or anything an auditor must replay exactly should route through a deterministic path or a human approval action, with the agent preparing the work and the human committing it. Latency-sensitive, high-volume, fully structured steps belong in Flow. If the org has no usable historical data and no time to clean it, the honest recommendation is to fix data and process first, because a predictive or generative feature built on garbage will produce confident garbage. Einstein scoring is a good example of the constraint: it needs a meaningful volume of historical leads and conversions before it builds a model that beats a default, and it refreshes on a schedule rather than on demand [^6].
+
+Naming the constraint and picking the bounded agent with a human in the loop is the answer that scores. The exam is not testing whether you love Agentforce; it is testing whether you can recognize a scenario where the boring mechanism is correct and say so. An architect who recommends Flow for a fixed approval, or a data cleanup before an agent build, is demonstrating exactly the judgment the certification exists to certify.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a better prompt fixes a data problem. If the agent cannot retrieve the record through an action or a Data Cloud source, no prompt wording will ground it, so the fix is the retrieval path, not longer instructions. The second is assuming the Einstein Trust Layer must be disabled for the agent to work or to be more accurate. The Trust Layer runs inline and masks or zero-retains data, so disabling it is never the fix and offering it is a trap. The third is choosing an autonomous agent for a deterministic, auditable approval. Fixed, repeatable, audit-heavy processes belong in Flow or an Approval Process, where behavior is reproducible and an auditor can reconstruct the path.
+
+## What a consultant should walk away with
+
+Match the mechanism to the input. Unstructured or conversational input with a next step that varies belongs to an agent; a fixed, auditable process belongs to a Flow or an Approval Process. Name the constrained resource in every scenario: if it is the consumption meter, bound the agent to the high-value path; if it is dirty data, remediate before you build; if it is legal, keep the Trust Layer on and route the risky path to a human. Reuse standard topics and existing actions before you write new code, keep instructions narrow, and pilot on dedicated permission sets with a baseline KPI you can prove against. And when the scenario describes a process an auditor must replay, say plainly that the deterministic path is the right one and let the agent prepare the work.
+
+## What's next
+
+Lesson 3 - Sales and Marketing Processes End to End (sl-2a)
+
+[^1]: Salesforce, "Einstein Trust Layer: Designed for Trust" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_arch.htm&type=5)
+[^2]: Salesforce Developers, "Trust Layer" (https://developer.salesforce.com/docs/ai/agentforce/guide/trust.html)
+[^3]: Salesforce, "How Einstein Activity Capture Works" (https://help.salesforce.com/s/articleView?id=sales.aac_how_it_works.htm&type=5)
+[^4]: Salesforce, "Design the Subagents and Actions" (https://help.salesforce.com/s/articleView?id=ai.agent_plan_action_design.htm&type=5)
+[^5]: Salesforce, "How Agents Created in the Legacy Builder Work" (https://help.salesforce.com/s/articleView?id=ai.agent_reasoning_engine.htm&type=5)
+[^6]: Salesforce, "Einstein Lead Scoring" (https://help.salesforce.com/s/articleView?id=ai.einstein_sales_lead_insights.htm&type=5)
