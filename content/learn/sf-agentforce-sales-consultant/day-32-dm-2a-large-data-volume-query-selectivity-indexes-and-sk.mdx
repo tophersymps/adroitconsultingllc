@@ -36,6 +36,8 @@ A custom index has a tighter threshold: less than 10 percent of the first millio
 
 If a query is not selective, the platform will not use the index and may refuse to run the query at all. That refusal is exactly the failure a large org hits on an unindexed filter, and it is why the exam tip repeats: on a large object, filter on an indexed field and keep the result small. The percentages are the part most people misremember, so anchor them: standard is 30 and 15, custom is 10 and 5, and the custom ceiling is the smaller one.
 
+![Query selectivity thresholds: a standard index is selective when a filter matches under 30 percent of the first million targeted records and under 15 percent after, with a ceiling near one million, while a custom index is tighter at under 10 percent and under 5 percent, with a ceiling of 333,333, and a filter that is not selective means the platform will not use the index.](</diagrams/day-32-dm-2a-large-data-volume-query-selectivity-indexes-and-sk/1-selectivity-thresholds.png>)
+
 ### Indexes: what is already indexed and how to get one built
 
 Indexes are your main lever, and there are several kinds. Salesforce automatically indexes a set of fields for most objects. That list includes the record Id, Name, OwnerId, CreatedDate, SystemModstamp (which is what LastModifiedDate reads from), RecordTypeId, and Division, plus foreign key relationships such as lookups and master-detail fields, and Email on contacts and leads.[^2] Any field marked as an external ID or as unique also gets an index created for it, which is one more reason to use external IDs as your integration and lookup keys.
@@ -54,11 +56,15 @@ The specifics matter for the exam. Skinny tables can be created on custom object
 
 Skinny tables are not a magic wand. The platform maintains a separate copy of live data, and there is overhead in that. Used on the wrong object, or where the field set is not actually the set the hot reports read, a skinny table can degrade performance instead of improving it.[^1] Use them where reads dominate and the field list is stable.
 
+![A comparison of three ways to speed reads on a large object: an automatic index that Salesforce builds on a fixed set of fields including Id, Name, OwnerId, CreatedDate, SystemModstamp, and external IDs; a custom index that Support or the Metadata API builds on one heavily filtered field; and a Support built skinny table of the most used fields, capped at 200 columns and needing a refresh when fields change.](</diagrams/day-32-dm-2a-large-data-volume-query-selectivity-indexes-and-sk/2-three-read-tools.png>)
+
 ### Reports and list views: where volume becomes a user complaint
 
 Reports and list views are where large data volume turns into a user complaint, and the fix is design rather than patience. A list view that sorts on a non indexed field, or filters on a non indexed field, on a multi million row object will time out. A report that joins a large object to several others, or that is grouped on a high cardinality field such as a free-text description or an email address, will exceed its time budget and may return partially loaded data.
 
 The practical moves are consistent. Make the filters selective and indexed, and request a custom index on a field that reports depend on but that is not automatically indexed. Avoid grouping by a free text field; group by a picklist or a low cardinality field instead. Narrow the date range so the platform can use the indexed CreatedDate or CloseDate, because a bounded date range is far more selective than "everything." When a report genuinely has to run against the full volume, schedule it and let it deliver by email rather than asking someone to open it interactively and wait. And when the analytics outgrow the platform's reporting, move the heavy summarization to a data warehouse or a reporting product, keeping Salesforce for the operational reporting a rep needs on the phone.
+
+![A three gate path for diagnosing a slow query at volume: first, whether the filter is on an indexed field, and if not the query scans the table and needs an auto-indexed field or a custom index; second, whether the filter is selective against the standard 30 and 15 or custom 10 and 5 thresholds, and if not the optimizer skips the index and the filter must be narrowed; third, whether a read heavy report touches many columns, in which case a skinny table can remove the join; when all three gates pass the index is used, so confirm the query plan.](</diagrams/day-32-dm-2a-large-data-volume-query-selectivity-indexes-and-sk/3-slow-query-gates.png>)
 
 ### Sharing recalculation: the hidden cost
 
