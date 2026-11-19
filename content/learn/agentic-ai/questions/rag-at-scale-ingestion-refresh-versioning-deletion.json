@@ -4,37 +4,37 @@
   "description": "The write side of RAG: an ingestion pipeline that parses and chunks on the way in, a refresh strategy that re-embeds only what changed, versioning for documents and embedding models, and deletion that actually removes content.",
   "questions": [
     {
-      "question": "Per the lesson \"RAG at Scale: Ingestion Pipelines, Refresh, Versioning, and Deletion\", what framing makes the write side of RAG click?",
+      "question": "Why derive each chunk's ID deterministically from its source instead of using a random UUID?",
       "options": [
-        "Treat your embeddings as a materialized view over your source data: derived, expensive to compute, written once, queried often, and assumed correct downstream",
-        "Treat the index as a nightly backup of the source system",
-        "Treat documents as immutable once they have been embedded",
-        "Treat retrieval as a pure cache with no freshness requirement"
+        "So a change or delete event can locate its vectors without a full scan",
+        "So the vector store can compress the index far more efficiently over time",
+        "So the embedding model returns more accurate vectors for each chunk",
+        "So duplicate documents are removed automatically during retrieval"
       ],
       "correct_answer_index": 0,
-      "explanation": "The lesson borrows the materialized-view framing from data warehousing and says that once you see embeddings that way, the questions about source of truth, freshness, backfill, and deletes become obvious."
+      "explanation": "A random ID has no link back to its source, so a delete or change cannot find the affected vectors; a deterministic ID turns every later operation from a scan into a lookup."
     },
     {
-      "question": "The lesson names a failure mode where the vectors stay frozen while the world keeps moving. What is it called?",
+      "question": "An update arrives and the pipeline embeds it and adds it to the index. Why is that a bug?",
       "options": [
-        "Hallucination drift",
-        "The index is a photograph: vectors are frozen from the moment of embedding, so the assistant answers confidently from a policy that has since changed",
-        "Vector collapse",
-        "Embedding decay"
+        "The new chunk will be embedded with the wrong model version entirely",
+        "The index will re-embed every unchanged chunk as well",
+        "The update is lost because its ID collides on insert",
+        "The old stale chunk stays retrievable, so the model sees both"
+      ],
+      "correct_answer_index": 3,
+      "explanation": "Adding a new vector for the same item leaves the old chunk retrievable, so the retriever returns both and the model sees contradictions; the fix is to upsert on a stable ID."
+    },
+    {
+      "question": "Why must changing the embedding model trigger a re-embed of the corpus?",
+      "options": [
+        "A new model always produces vectors with a different number of dimensions than before",
+        "Vectors from different models live in incompatible spaces and cannot be mixed",
+        "The old vectors become unreadable once the model is retired",
+        "Re-embedding is required to refresh each document's content hash"
       ],
       "correct_answer_index": 1,
-      "explanation": "The lesson uses the photograph framing to explain that staleness degrades retrieval quality silently and confidently, because a stale chunk looks identical to a current one."
-    },
-    {
-      "question": "What does the lesson say about deletion in a RAG system?",
-      "options": [
-        "Deleting content in the source system automatically removes the vectors",
-        "Deletion is unnecessary as long as refresh runs often enough",
-        "A vector database is separate from the source system, so a deletion does not propagate on its own and must be treated as a first-class operation in the pipeline",
-        "Deletion only matters for text documents, never for structured records"
-      ],
-      "correct_answer_index": 2,
-      "explanation": "The lesson defines deletion as removing content from retrieval when the source removes it or access is revoked, and says the separation between vector store and source means the pipeline must handle it explicitly."
+      "explanation": "Different embedding models place vectors in incompatible spaces, so queries and documents must be embedded by the same model; any model change forces a re-embed even when dimensions match."
     }
   ]
 }
