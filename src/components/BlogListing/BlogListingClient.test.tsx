@@ -9,15 +9,17 @@
  * (progress/auth) are mocked so the test exercises pure listing logic.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { BlogPost } from "@/data/types";
 import BlogListingClient from "./BlogListingClient";
 
 type SearchParams = { [key: string]: string | string[] | undefined };
 
+const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: replaceMock }),
 }));
 
 vi.mock("@/lib/hooks/useProgressSummary", () => ({
@@ -94,7 +96,10 @@ function cardLinks() {
 
 describe("BlogListingClient (t_f7e84aca)", () => {
   beforeEach(() => {
-    // No persistent state needed between tests; each render passes its own props.
+    // Each render passes its own props; the URL is reset so the mount-time
+    // deep-link read (t_dc2f7d85) starts from a bare /field-notes.
+    replaceMock.mockClear();
+    window.history.replaceState({}, "", "/field-notes");
   });
 
   it("renders the first page of cards at 8/page", () => {
@@ -181,5 +186,82 @@ describe("BlogListingClient (t_f7e84aca)", () => {
       "aria-pressed",
       "true",
     );
+  });
+});
+
+/**
+ * t_dc2f7d85: /field-notes is prerendered, so the query string is adopted from
+ * the live URL after mount instead of being threaded from the server. These
+ * tests cover the URL as the source of truth for a shared/deep-linked view.
+ */
+describe("BlogListingClient — URL-driven filters (t_dc2f7d85)", () => {
+  beforeEach(() => {
+    replaceMock.mockClear();
+    window.history.replaceState({}, "", "/field-notes");
+  });
+
+  it("keeps the unfiltered first page when the URL carries no params", () => {
+    renderListing();
+    expect(cardLinks()).toHaveLength(8);
+    expect(screen.getByRole("button", { name: /All Posts/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("link", { name: /Featured headline post/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("adopts a deep-linked ?category= after mount", async () => {
+    window.history.replaceState({}, "", "/field-notes?category=react");
+    renderListing();
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /React & Web Dev/i }),
+      ).toHaveAttribute("aria-pressed", "true"),
+    );
+    // Featured post is ai-category, so the react view must not show it.
+    expect(
+      screen.queryByRole("link", { name: /Featured headline post/i }),
+    ).toBeNull();
+  });
+
+  it("adopts ?sort=oldest and ?read=unread from the URL after mount", async () => {
+    window.history.replaceState({}, "", "/field-notes?sort=oldest&read=unread");
+    renderListing();
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Oldest" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+    expect(screen.getByRole("button", { name: /Unread/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("writes filters into one accumulating query string", async () => {
+    const user = userEvent.setup();
+    renderListing();
+
+    await user.click(screen.getByRole("button", { name: /Salesforce/i }));
+    expect(replaceMock).toHaveBeenLastCalledWith("/field-notes?category=sf", {
+      scroll: false,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Oldest" }));
+    expect(replaceMock).toHaveBeenLastCalledWith(
+      "/field-notes?category=sf&sort=oldest",
+      { scroll: false },
+    );
+
+    // Clearing the category keeps the sort choice (shareable URL stays honest).
+    await user.click(screen.getByRole("button", { name: /All Posts/i }));
+    expect(replaceMock).toHaveBeenLastCalledWith("/field-notes?sort=oldest", {
+      scroll: false,
+    });
   });
 });
