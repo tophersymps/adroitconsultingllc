@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "reflow-zoom-text-resize-2026",
+    "title": "You Tested Every Breakpoint. WCAG Tests 320 and 200.",
+    "excerpt": "Breakpoints guess the device. WCAG 2.2 measures a 320 CSS pixel viewport and 200 percent text, two numbers design systems rarely test. What breaks, and the fix.",
+    "category": "UI/UX",
+    "categoryColor": "ux",
+    "categoryGradient": "from-violet to-violet-dark",
+    "date": "November 19, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "UI/UX",
+      "Accessibility",
+      "Design Systems",
+      "Design Engineering",
+      "WCAG",
+      "Responsive Design",
+      "Interface Patterns"
+    ],
+    "bannerImage": "/banners/reflow-zoom-text-resize-2026.webp",
+    "ogImage": "/banners/reflow-zoom-text-resize-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "kubernetes-qos-class-requests-limits-2026",
     "title": "Kubernetes Resizes Pods. The QoS Class Is Still Frozen.",
     "excerpt": "In-place pod resize is stable. The QoS class your requests-to-limits ratio picked at creation is not, and it decides who gets evicted when the node runs out.",

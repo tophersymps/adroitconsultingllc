@@ -1,0 +1,92 @@
+---
+title: "You Tested Every Breakpoint. WCAG Tests 320 and 200."
+slug: reflow-zoom-text-resize-2026
+excerpt: "Breakpoints guess the device. WCAG 2.2 measures a 320 CSS pixel viewport and 200 percent text, two numbers design systems rarely test. What breaks, and the fix."
+category: "UI/UX"
+categoryColor: ux
+categoryGradient: "from-violet to-violet-dark"
+date: "November 19, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [UI/UX, Accessibility, Design Systems, Design Engineering, WCAG, Responsive Design, Interface Patterns]
+bannerImage: "/banners/reflow-zoom-text-resize-2026.webp"
+ogImage: "/banners/reflow-zoom-text-resize-2026-og.jpg"
+---
+
+Every design system carries a breakpoint scale. Yours probably reads 375, 768, 1024, 1440. The accessibility standard your clients are increasingly bound by measures a width that is on none of those frames, plus a text size that never comes up in a design review.
+
+Both sit at Level AA in WCAG 2.2. Success Criterion 1.4.10 Reflow requires content to survive a viewport equivalent to 320 CSS pixels wide. SC 1.4.4 Resize Text requires text to reach 200 percent without loss of content or functionality [^1][^2]. Neither is new. Resize Text predates WCAG 2.1, which is where Reflow arrived, so both have been checkable for years and are still, in most audits, the two criteria teams meet last.
+
+That is not laziness. A responsive layout is a set of assumptions about devices. A resilient layout is a set of promises about content. The difference only shows up when the user, not the device, changes the size.
+
+## Zoom is a second viewport, not a bigger font
+
+Two separate controls change how large your page looks, and they fail differently.
+
+The first is full-page zoom, the Ctrl or Cmd plus key. It scales everything: text, images, spacing, borders. The layout itself does not change, so the browser hands your page a narrower CSS viewport. Start at 1280 CSS pixels, zoom to 400 percent, and the viewport is now 320 CSS pixels, which is exactly the width Reflow measures [^1]. The reflow test and a small-phone test are the same geometry, reached from opposite directions.
+
+The second control is the browser's own default font size, which ships at 16 pixels and which a user changes once and forgets. It moves only text authored in relative units. GitHub's Primer says the quiet part in its responsive foundation: its design tokens support rem units, which are relative to the browser's default font size, because users with low vision raise that setting and expect the interface to follow [^8].
+
+Put the two together and the blind spot appears. Page zoom always works, because the browser does the scaling, but it drops your breakpoint layout into a 320 pixel viewport where a device-oriented design may have nothing left to show. The font-size setting moves only what is relative, so a component that hard-codes `font-size: 14px` never grows, and its container is never forced to cope. One control tests your layout. The other tests your units.
+
+![Two browser controls change text size and fail differently: full-page zoom scales everything and narrows the CSS viewport to 320 pixels at 400 percent, while the browser default font size moves only text authored in relative units](</diagrams/reflow-zoom-text-resize-2026/1-two-controls.png>)
+
+## Four criteria, and the numbers they measure
+
+Read the criteria as a contract with four clauses. Three name a number, and the fourth names a layer.
+
+- **Resize Text, 1.4.4, AA.** Text reaches 200 percent. The guidance is explicit that every responsive variation is in scope, and that 200 percent must be achievable in some way compared with default zoom, even when the variation active at that point is a different breakpoint. Absolute units inside a fixed container are the classic failure [^2].
+- **Reflow, 1.4.10, AA.** Vertically scrolled content reflows at a width equivalent to 320 CSS pixels, horizontally scrolled content at a height equivalent to 256 CSS pixels, with no scrolling in two dimensions. The exceptions are narrow: maps, diagrams, video, games, presentations, whole data tables, and interfaces where a toolbar must stay in view [^1].
+- **Text Spacing, 1.4.12, AA.** When a user overrides spacing to line height 1.5 times the font size, paragraph spacing 2 times, letter spacing 0.12 times and word spacing 0.16 times, nothing is lost [^3]. You are not required to ship those values. You are required not to break when somebody applies them.
+- **Focus Not Obscured, Minimum, 2.4.11, AA.** New in WCAG 2.2. A component that receives keyboard focus must not be entirely hidden by author-created content, and the guidance names the usual culprits: sticky headers, sticky footers, and non-modal dialogs [^5].
+
+One cheap sibling rule is worth clearing on the way past. The W3C's ACT rule fails any page whose viewport meta tag sets `user-scalable=no` or a `maximum-scale` below 2. Desktop browsers ignore that tag, so it is older-mobile hygiene rather than the main test, and it costs one line to remove [^6].
+
+![The WCAG 2.2 contract in four clauses: Resize Text at 200 percent, Reflow at 320 by 256 CSS pixels, Text Spacing at four override ratios, and Focus Not Obscured for sticky layers](</diagrams/reflow-zoom-text-resize-2026/2-criteria-contract.png>)
+
+## What actually breaks, and where
+
+Content that disappears at 320 pixels is a formal failure, not a judgment call, filed as F102. The technique lists the shapes: a side column of links that vanishes after reflow and is not available further down the single-column view, input labels replaced by placeholders with no label on focus, and a search field that is simply gone with no path to an equivalent [^4]. Relocating content is allowed. Deleting it is not.
+
+Spacing overrides break on the same root cause as text resize: a box that cannot grow. The Text Spacing guidance illustrates it with three failures, a heading whose bottom half is cut off, three side-by-side headings truncated to fragments, and a heading whose last words overlap the paragraph beneath it. Each one is a fixed height meeting text that got taller [^3]. Truncation with an ellipsis is acceptable only where a mechanism reveals the full text on focus or activation.
+
+Pixel type gives you the inverse problem. If the scale is in `px`, the font-size setting cannot move it, so a user with low vision is left with one working control, full-page zoom, and that control is the same one that has to reflow your layout. The two criteria hold each other up.
+
+Then there is the one that arrived with WCAG 2.2. A sticky header that feels comfortable at 100 percent text can swallow the viewport at 200 percent, and if it hides the element that just received focus, that is failure F110. The fix is CSS `scroll-padding`, which offsets the scroll target so the browser scrolls the focused control clear of the fixed layer [^5].
+
+![Five failure modes at enlarged text: content that disappears at 320 pixels, fixed heights that clip or overlap text, a pixel type scale that never scales, a sticky header that hides the focused control, and a viewport tag that disables zoom](</diagrams/reflow-zoom-text-resize-2026/3-failure-modes.png>)
+
+## Fix the unit, then the layout
+
+Repair order matters, because both layers of the problem look like CSS bugs and only one of them is.
+
+Start at the token layer, where the unit decision is made once instead of per component. If your type scale is `px`, you have already failed Resize Text before a single component is written. The relative-unit techniques in the guidance all point at the same move: express text, and the boxes that hold text, in units that follow the user's setting [^2]. Primer's token set is the clearest public example, and copying its shape is cheaper than inventing one [^8].
+
+Then remove the fixed heights. A `height` on a box containing text is a promise that the text will never get taller, and the spacing failures are that promise being broken. `min-height` plus padding replaces it.
+
+Make the layout intrinsic where it can be. Grid `auto-fit` with `minmax()` and a wrapping flex row reflow because of the content they hold, not because a media query told them to. Keep breakpoints for the structural change and let the container decide within each one ([the container query case](/field-notes/container-queries-design-system-2026)). The two mechanisms compose; the mistake is having only the breakpoint.
+
+Bound fluid type rather than letting it float. `clamp()` is fine for font size, but MDN's accessibility note is specific about the ceiling: the maximum should be a relative unit no less than twice the minimum, as in `clamp(1rem, 2.5vw, 2rem)`, so text can still scale to 200 percent when zoomed. A clamp with a 1.05rem ceiling is a bug wearing a responsive outfit [^9].
+
+Then run the loop that catches all of it, in every breakpoint you support. Set the viewport to 1280 CSS pixels and zoom to 400 percent, which is your 320 pixel test [^4]. Raise the browser's default font size until text is at 200 percent. Apply a spacing override with a stylesheet or [Steve Faulkner's Text Adaptation Bookmarklet](https://stevefaulkner.github.io/Articles/Short%20note%20on%20getting%20spaced%20out%20with%20SC%201.4.12%20Text%20Spacing.html), and re-check each layout, because the W3C technique is explicit that a fix at one layout does not carry to the next [^7]. Then tab through with the sticky header in place and watch whether the focus ring stays visible before the fold. Four checks, and they fit in the pass the keyboard review already runs ([what a focus audit covers](/field-notes/keyboard-navigation-focus-management-2026)).
+
+![The repair path in order: move the type scale to relative units, replace fixed heights with minimums, let the layout decide by content, bound fluid type at twice its minimum, then run the two-number test plus a spacing override and a focus pass](</diagrams/reflow-zoom-text-resize-2026/4-repair-path.png>)
+
+[^1]: W3C WAI, "Understanding SC 1.4.10: Reflow." The 320 by 256 CSS pixel requirements, 320 CSS pixels as a 1280 pixel viewport at 400 percent zoom, and the exceptions for maps, diagrams, video, games and whole data tables. [w3.org](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html)
+
+[^2]: W3C WAI, "Understanding SC 1.4.4: Resize Text." The 200 percent requirement, the note that every responsive variation is in scope, and the relative-unit techniques C28, C12, C14 and G146. [w3.org](https://www.w3.org/WAI/WCAG22/Understanding/resize-text.html)
+
+[^3]: W3C WAI, "Understanding SC 1.4.12: Text Spacing." The four override metrics, the illustrated failures of cut-off and overlapping text, and the ellipsis exception. [w3.org](https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html)
+
+[^4]: W3C WAI, "F102: Failure of SC 1.4.10 due to content disappearing when content has reflowed." The vanished side-column links, replaced input labels and missing search field, and the 1280 pixel to 400 percent test procedure. [w3.org](https://www.w3.org/WAI/WCAG22/Techniques/failures/F102)
+
+[^5]: W3C WAI, "Understanding SC 2.4.11: Focus Not Obscured (Minimum)." Sticky headers and footers as the typical causes, technique C43 for scroll-padding, failure F110, and the criterion's arrival in WCAG 2.2. [w3.org](https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html)
+
+[^6]: W3C WAI, "Meta viewport allows for zoom," an ACT rule. A viewport meta element fails on user-scalable no or a maximum-scale below 2; desktop browsers ignore the tag, so it mainly concerns older mobile browsers. [w3.org](https://www.w3.org/WAI/standards-guidelines/act/rules/b4f0c3/)
+
+[^7]: W3C WCAG Working Group, "Allowing for Spacing Override." The four-step spacing test procedure, the reference to Steve Faulkner's Text Adaptation Bookmarklet, and the note to test spacing in every layout. [w3.org](https://www.w3.org/WAI/GL/wiki/Allowing_for_Spacing_Override)
+
+[^8]: GitHub, "Responsive," Primer foundations. Primer design tokens support rem units relative to the browser's default font size, and a 320 pixel minimum viewport enables browser zoom to 400 percent. [primer.github.io](https://primer.github.io/design/foundations/responsive/)
+
+[^9]: MDN Web Docs, "clamp()." The accessibility note that a clamp() ceiling should be a relative unit at least twice the minimum, so text can scale to 200 percent when zoomed. [developer.mozilla.org](https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Values/clamp)
