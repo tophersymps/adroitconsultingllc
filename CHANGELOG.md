@@ -2,6 +2,378 @@
 
 All notable changes to the Adroit Consulting Blog project will be documented in this file.
 
+### Admin dashboard UX refinement and user lifecycle management (admin-dashboard-ux-lifecycle)
+
+**What** - Added full User Lifecycle Management to `/admin/users` (manual user invite/creation via `POST /api/admin/users`, password reset email trigger via `POST /api/admin/users/[id]/reset-password`, account freeze/unfreeze with active session revocation via `PATCH /api/admin/users/[id]/status`, 30-day soft-delete tombstone and permanent hard-delete via `DELETE /api/admin/users/[id]?mode=soft|hard`, and tombstone account restoration via `POST /api/admin/users/[id]/restore`). Added `supabase/migrations/neon/008_user_lifecycle.sql` (`frozen_at` and `frozen_reason` on `public."user"`), enforced freeze/tombstone checks in `src/lib/session.ts` and `src/app/api/auth/login/route.ts`, fixed `"one-time"` entitlement revokes in `/api/admin/entitlements`, wired live `refresh()` after mutations on `/admin/users` and `/admin/access/courses`, added `AdminToast` with distinct error vs success styling, unified course administration across `/admin/courses` and `/admin/access/courses` (unprovisioned disk series provisioning banner, `CatalogOrgDialog` for Sections & Groups, editable course title/price in `CourseProfileDialog`, and inline Access Model selector in `RosterPanel`), and resolved raw UUIDs to human-readable emails and course titles in `/admin` and `/admin/audit`.
+
+**Why** - Admins previously had no way to reset a user's password, freeze/suspend an account, soft/hard delete or restore users, or invite new users directly from `/admin/users`. In addition, course management was split across pages with missing controls (no UI for Sections/Groups, unprovisioned series, or inline access model changes on the roster), revoking `"one-time"` entitlements failed with 404, and UI state remained stale after mutations until a browser reload.
+
+**Verified** - `npx vitest run` on the 19 affected admin/auth/db test files (all pass), `npx tsc --noEmit` (0 errors), and `npm run lint` (0 errors). `npm run build` has not been run on this branch yet. Docs: `docs/admin-user-lifecycle.md`.
+
+**Known Issues** - None.
+
+### Admin dialogs legible, dev CSP allows React eval (admin-dialog-and-dev-csp)
+
+**What** - `DeleteUserDialog` and `CreateUserDialog` now use the site's `--surface-card`, `--ink-*` and `--admin-table-border` variables instead of undefined Tailwind colour classes (`bg-background`, `text-foreground`, `border-card-border`). `next.config.ts` adds `'unsafe-eval'` to the CSP `script-src` only when `NODE_ENV` is `development`.
+
+**Why** - the undefined classes rendered the modals with no background, so page content showed through and the text was unreadable. React's dev build uses `eval()` to rebuild call stacks, and the CSP blocked it, which raised the Next dev overlay "1 Issue" on every page. Production builds never use `eval`, and the production CSP is unchanged.
+
+**Verified** - modal confirmed by the owner on `http://localhost:3000/admin/users`; served dev CSP header includes `'unsafe-eval'`; `src/config/next.config.test.ts` passes; eslint clean on both dialogs.
+
+**Known Issues** - None.
+
+### Admin modals follow design system and add course settings controls (admin-modal-styling-and-legibility)
+
+**What** - Fixed `CatalogOrgDialog`, `CourseProfileDialog`, `BulkUserActionDialogs`, `AccessGrid` popover, `RosterPanel`, and `/admin/courses` page containers where `bg-[var(--surface-card, #FFFFFF)]` broke Tailwind's class parser (due to the space after comma), producing no background and causing modals to render see-through. Added Access Model (`free`, `subscription`, `one-time`, `sub-or-one-time`, `granted`) and Lifecycle Status (`pending`, `live`, `archived`) editing controls to `CourseProfileDialog` and directly to each course card in `/admin/courses` Card View.
+
+**Why** - In Tailwind CSS, arbitrary class brackets containing spaces fail to generate CSS rules because HTML class attributes split on whitespace, leaving dialogs transparent. In addition, admins had no way to change course access models (such as Free, Sub or One-time, or One-time) from the default Card View or within the course edit dialog.
+
+**Verified** - Ran full test suite (`npm test`, 193 test files, 1843 tests passed); ran linter (`npm run lint`, clean with 0 warnings/errors); added tests in `src/app/admin/courses/page.test.tsx` verifying card view access-model switcher and `CourseProfileDialog` access model/status/price controls.
+
+**Known Issues** - None.
+
+### Unified Course Administration Hub and Bulk User Operations (t_admin_courses_bulk)
+
+**What** - Unified the redundant "Courses" (`/admin/access/courses`) and "Catalog" (`/admin/courses`) admin routes into a single Course Administration Hub hosted at `/admin/courses` with four focused sub-tabs: 1) Catalog & Pricing (with Cards view vs Data Table layout toggle, clean status chips, and disk series discovery), 2) Student Rosters & Access (integrated single-course learner roster with bulk grant/revoke and inline access model selector), 3) Sections & Libraries (visual organization of curriculum tracks and groups), and 4) Access Matrix (dedicated full-width cross-product grid). Added redirect from `/admin/access/courses` to `/admin/courses?tab=roster` for full backward compatibility. Simplified the sidebar navigation in `AdminShell` to 6 items. Added comprehensive bulk user management at `POST /api/admin/users/bulk` supporting batch account freezing, unfreezing, password reset email dispatch, 30-day soft deletion, permanent deletion, role updates, and batch course access grants/revocations with self-lockout and last-admin protections and structured audit logging. Overhauled `AccessPanel` with row selection checkboxes, a floating bulk action bar, tabbed detail views (Course Entitlements, Account & Identity, Subscriptions), and responsive mobile/tablet master-detail switcher.
+
+**Why** - Courses and Catalog previously duplicated course management across separate surfaces, causing navigation confusion and UI clutter. The admin interface was dense, lacking pagination or tabbed organization, making it difficult to inspect learner details on smaller viewports. Administrators also lacked the ability to perform actions on multiple users simultaneously.
+
+**Verified** - Ran full vitest suite (`npx vitest run src/app/api/admin/users/bulk src/app/admin/users src/app/admin/courses src/app/admin/access/courses src/components/Admin` - 41 tests passing), TypeScript type check (`npx tsc --noEmit` - 0 errors), ESLint check (`npm run lint` - 0 errors, 0 warnings), and production build (`npm run build` - 1,180 pages compiled successfully).
+
+**Known Issues** - None.
+
+### CI: unblock main, content-growth assertions were frozen (ci-green-fix-2026-11-02)
+
+**What** - Two tests asserted frozen values that content growth invalidated, leaving `main` red and the required `lint-test-build` check failing on every push (no code PR could merge). Fixed both at the cause:
+
+- `src/lib/lesson-checks.test.ts` asserted `toHaveLength(90)` for the knowledge-check files. There are now 93 across the 12 series (legitimate growth as lessons published). Replaced the frozen total with the invariants that actually matter: every series in `CHECK_SERIES` carries at least one check file, and no series repeats a check index.
+- `src/app/api/search/route.test.ts` asserts the ADR-220 raw payload budget of 200 KB. The index is now 436 documents (176 posts, 4 series, 256 lessons) and measured 208,602 bytes raw. Kept the ADR budget intact and reduced the payload instead: `SNIPPET_LIMIT` 120 to 96 in `src/lib/search-docs.ts`, and `terms` is now deduped (tags repeat across documents).
+
+**Why** - `main` has been red since 2026-10-29 18:13. Content publishes land on `main` through the content-bot bypass, which does not gate on CI, so the failures accumulated silently while every code PR sat blocked on the required check. A frozen document count and a raw-size budget on a monotonically growing index are both guaranteed to break: the assertion, not the content, was the defect.
+
+**Verified** - Full `npx vitest run` passes (184 files, 1805 tests), including the two previously-red files. `npx eslint` on both changed files and `npx tsc --noEmit` are clean. Payload re-measured at 197,183 bytes raw (inside the 200 KB ADR budget, from 208,602 before). `npm run build` runs in CI on this PR; it cannot run in the local worktree because turbopack rejects a symlinked `node_modules`.
+
+**Known Issues** - The raw-size budget remains fragile as the index grows: each content cycle shrinks the headroom. Recommend an ADR-220 follow-up to assert the gzipped wire size (the actual cost) or to cap the index, rather than repeatedly trimming snippets. Not done here because it changes a documented contract.
+
+### CI: stealth guards scoped to identity fields, check-range fixtures derived
+
+**What** - Two test-only fixes that were reddening `main` on every content push.
+
+- `src/lib/lesson-checks.test.ts` - the two assertions that froze the last knowledge check's lesson range (`[73, 81]` for `agentic-ai`, `[31, 35]` for `ai-adoption`) now derive instead of pinning: the first range is pinned to the cadence 8 window, every range except the last must be a full 8-lesson window, ranges must be contiguous and cover `1..seriesLessonCount(series)`, and the short tail must end at the published total and be at least 3 lessons.
+- `src/app/api/search/route.test.ts` and `src/lib/learn-public.test.ts` - the two stealth-disclosure guards now scan identity-bearing fields only. Slugs are asserted over `href`, `terms` (route) and `slug` / `series` (learn-public); display names over `title`, `group`, `meta` and the series `name`. Authored prose (`snippet`, `excerpt`) and free-text vocabulary (`terms` tags, `tags`) are excluded from the name scan. Each test additionally asserts its projection is non-empty so it cannot pass vacuously.
+
+**Why** - `main` was red for two consecutive lesson adds, 4 tests in 3 files, with 1801 passing.
+
+The range failures were stale fixtures, not stale data: the check files correctly said `Lessons 73-82` and `Lessons 31-36` after lessons 82 and 36 shipped, while the assertions still carried the previous totals. That is the same hand-patch PR #438 needed one lesson-add earlier, so the numbers were removed rather than updated again.
+
+The stealth failures were a false positive by string collision. Both guards serialized the whole payload and asserted `not.toContain(<stealth series name>)`. Lesson 82 of `agentic-ai` carries the tag `AI Adoption`, which is also a stealth series' display name, so the raw scan tripped on a topical tag on a launched lesson. Measured before changing anything: the 165,904-character learn-public payload contained exactly one occurrence of `AI Adoption`, inside that lesson's `tags`; the `/api/search` payload had exactly one, inside its `terms` array. No stealth series slug, name, route or lesson appeared anywhere else, and no stealth content reached either payload.
+
+**Verified** - `npm run prebuild` regenerates 162 posts and 12 series / 521 lessons cleanly; `npx vitest run` passes the full suite; `npm run lint` reports 0 errors (6 pre-existing warnings) in the worktree. The narrowed guards were mutation-tested rather than assumed non-vacuous: (1) unfiltering `getPublicLearnLessons` fails the disclosure test on `ai-adoption`; (2) injecting a stealth lesson document into `buildSearchDocs` fails the route guard; (3) a check file whose title says `73-81` fails the derived tail assertion (`expected 81 to be 82`); (4) one check file drifting to a 5-lesson window fails the cadence assertion (`expected [8, 5, 8, ...] to deeply equal [8, 8, 8, ...]`).
+
+**Known Issues** - The display-name half of the guards still scans lesson `title` fields, so a future launched lesson whose title contains a stealth series' display name would fail the guard. That case is a naming collision worth a human look, unlike a free-text tag, so it is left strict on purpose. Nothing else outstanding.
+
+### Dead citations repaired across six published pieces
+
+**What** - Six citations that no longer resolved were repaired. Five were one-line repoints to the
+source's current home, one was a replacement source. Two footnotes were also re-scoped so they stop
+attaching to sentences their new source does not support.
+
+- `content/blog/salesforce-data-cloud-strategy-guide.mdx` - Trailhead module and product overview
+  repointed. Salesforce renamed Data Cloud to Data 360, so the module is now "Data 360 Basics for
+  Marketers" (`customer-360-audiences-basics`) and the product page is `/data/`.
+- `content/blog/token-first-design-systems-2026.mdx` - Style Dictionary moved off Amazon's GitHub
+  org; the inline link now points at `styledictionary.com`.
+- `content/blog/daily-standup-coordination-ai-2026.mdx` - the Atlassian "AI efficiency paradox" post
+  was re-slugged; repointed to `the-ai-efficiency-paradox-what-to-do-when-ai-boosts-productivity-but-not-results`.
+- `content/blog/visual-regression-testing-design-systems-2026.mdx` - the cited vendor (getautonoma.com)
+  is gone; the domain root 404s. Footnote 4 becomes Playwright's "Visual comparisons" doc for the
+  baseline and pixel-diff mechanics, a new footnote 7 carries the tool-landscape claims from
+  BrowserStack's 2026 tool guide, and footnote 4 is removed from four sentences asserting that
+  AI-generated code is structurally correct but visually wrong, which neither replacement asserts.
+- `content/blog/salesforce-stack-cost-modeling-2026.mdx` - techfastforward.com is gone; the domain
+  root 404s. Footnote 1 becomes The Register's report of Gartner's AELA renewal warning, with two new
+  primary citations: Salesforce's own flexible buying models page defining the AELA, and The Register
+  on the three-year VA agreement. The AELA launch date is corrected from "early 2026" to October
+  2025, the Gartner paragraph is reworded to what Decker and the research note actually say, and the
+  $550 Agentforce 1 figure is attributed to the source that carries it.
+- `content/learn/ai-at-work/low-risk-ways-to-start-automating-and-when-to-stop.mdx` - the cited
+  koira.ai post was deleted (410, and the host has pivoted to trades marketing). Replaced with
+  Novelis's three-variable automation framework plus arXiv:2505.18422, and footnote 3 is removed from
+  three sentences about checkability and checking cost that the new sources do not cover.
+
+**Why** - A sitemap-wide crawl found seven citations returning 404 or 410. Forensics mattered here:
+none of the seven were fabricated. Five had Wayback captures with matching titles (the sources were
+real and the hosts later died or moved), and two were ordinary vendor restructures. The shared root
+cause is sourcing quality, not hallucination: the pipeline cited secondary SEO-oriented blogs, two of
+whose domains are now dark, instead of primary documentation. Those citations rotted; vendor docs and
+standards bodies do not.
+
+**Verified** - Every replacement URL fetched live and read before use: Trailhead module 200,
+`salesforce.com/data/` 200, `styledictionary.com` 200, Atlassian post 200 with the quoted State of
+Teams 2026 figures present, Playwright docs 200, BrowserStack guide 200, The Register 200 for both
+articles, Salesforce flexible buying models 200, Novelis 200, arXiv 200. `npm run prebuild` generates
+159 posts and 515 lessons cleanly, `npm test` 184 files / 1804 tests pass, `npm run build` succeeds.
+A repo-wide grep for all seven old URLs returns nothing.
+
+Audio impact, measured with the repo's own `mdxToNarration` rather than assumed: five of the six files
+produce byte-identical narration before and after, because footnote definitions and link hrefs are
+never spoken (the renderer substitutes one sentence for the sources block). Only
+`salesforce-stack-cost-modeling-2026` changes narration, from the AELA launch date and the reworded
+Gartner paragraph, so only that article needs its MP3 regenerated.
+
+**Known Issues** - The stack-cost article still says AELA terms run "two to three years". Public
+reporting supports multi-year commitments and a confirmed three-year VA deal, but no live source states
+the "two to three" range exactly, and the range is also baked into the `5-aela-renewal.png` diagram, so
+narrowing the prose would require rebuilding that diagram. Left as is and flagged rather than silently
+changed. Separately, `token-first-design-systems-2026` still describes Style Dictionary v5 as "currently
+in progress"; v5.7.1 is now the published version. That is a staleness fix outside this change's scope.
+
+### Update contact form to use Neon and email notifications (contact-form-neon)
+
+**What** - Retired the Salesforce Web-to-Lead integration on `/api/contact` in favor of direct persistence in Neon (`public.contact_inquiries`) via `@neondatabase/serverless`. Added email notifications dispatching to `contact@adroit.io` via Resend with customizable from/to environment variables and pre-wired Discord webhook support.
+
+**Why** - Access to the previous Salesforce instance was lost, preventing contact submissions from funneling through. Neon provides a reliable, self-hosted relational store with zero-policy default-deny RLS protection and instant notification dispatch to `contact@adroit.io`.
+
+**Verified** - Applied migration `009_contact_inquiries.sql` to Neon branch `dev-admin-ux`, executed parameterized insert/cleanup tests on the table, verified RLS initplan checks (`src/lib/rls-policy-initplan.test.ts`), ran full vitest suite for the contact route and notifications (`src/app/api/contact/route.test.ts`, `src/lib/contact-notifications.test.ts`), and verified lint (`npm run lint`).
+
+**Known Issues** - None.
+
+### Site copy refresh: trim AI-slop and evidence the delivery chain (copy-refresh-2026-11-01)
+
+**What** - 13 string-level edits across the marketing copy, from the Daily Planet site-copy register of 2026-11-01. Home: meta description drops "built"; the Digital Experience pillar drops the unmeasurable "earn trust" and names operational systems; the intro closer no longer repeats its own heading. Home WHY_ITEMS[2] and the footer tagline now evidence the audited delivery chain (security, accessibility, performance) instead of a generic "juggling vendors" line. Operational Intelligence opening paragraph swaps "runs reliably and observably" for plain English. Digital Experience page: meta description drops "earn trust" and "performance"; hero title, hero subtitle, opening paragraph, the "premium visual language" bullet, the last outcome, and the CTA headline are reworded. No structure, href, route, or logic changes.
+
+**Why** - The register flagged 13 rows of AI-slop tells on the live marketing copy: unmeasurable claims ("earn trust", "communicate authority", "serious, dependable"), a stacked-adjective opener ("fast, maintainable, and aligned with security and governance"), a triple-verb stack ("adapt, personalize, and perform"), a redundant heading echo, and one hype adjective ("premium"). It also found the strongest differentiator (an audited, multi-stage delivery chain) absent from client copy, and added it reader-outwardly in two places.
+
+**Verified** - Asserted before edit: all 13 current strings present in the source (whitespace-flexible match, exactly one occurrence each). Lint, test, and build run in CI on the pull request (required check `lint-test-build`).
+
+**Known Issues** - None. The register's own summary tallied 18 change rows; the concrete proposals are 13, which are the 13 applied here.
+
+### Course progress & reward system redesign — Adroit Tron progression (t_tron_progression)
+
+**What** - Replaced the static, non-interactive 17th-century constellation SVG engravings on `/atlas/[series]` with the interactive Tron-Matrix Roadmap (`SeriesTronRoadmap.tsx`). Upgraded `/profile` with the Grand Cyber-Constellation Network (`ProfileCyberConstellation.tsx`) linking all user courses as luminous nexus hubs. Upgraded `ConstellationCelebration.tsx` with the high-dopamine milestone card (streak multiplier, domain progress, next lesson CTA). Upgraded `CertificateCelebration.tsx` with the official Adroit Verified Credential pass and 1-click LinkedIn profile integration. Color-matched all surfaces strictly to Adroit brand tokens (`#060F1F`, `#0B1D3A`, `#4FC3F7`, `#C8102E`, `#F59E0B`).
+
+**Why** - The legacy constellation system mapped enterprise tech courses to Greek/Latin mythical figures with fixed star counts, producing fractional sub-dots, non-clickable posters, and an unrewarding progress feel that had no professional value or connection to enterprise architecture.
+
+**Verified** - `npx vitest run` passed (1,824 tests passed across 188 files, including new tests `SeriesTronRoadmap.test.tsx` and `ProfileCyberConstellation.test.tsx`). `npm run build` compiled 1,180 pages with 0 type errors.
+
+**Known Issues** - None.
+
+### Upgrade dev and test infrastructure: @types/node 24, vitest 5, jsdom 31 (t_b1355786)
+
+**What** - Upgraded dev and test dependencies in `package.json` and `package-lock.json`: `@types/node` from `^20` (`20.19.43`) to `^24` (`24.19.2`), `vitest` from `^4.1.12` (`4.1.12`) to `^5.1.0` (`5.1.1`), and `jsdom` from `^30.0.1` (`30.1.3`) to `^31.0.1` (`31.0.1`). Updated `src/lib/db/client.test.ts` to capture the singleton `createClient` config passed to `createClientMock` in a test-module variable (`capturedConfig` via `ensureClientConfig`) instead of reading `mock.calls[0]` across tests, keeping tests compatible with Vitest 5's `clearMocks: true` default without modifying production code.
+
+**Why** - Align `@types/node` with the Node `24.x` runtime used in CI (`.github/workflows/ci.yml`) and satisfy `vitest@5.1.x` peer dependencies while keeping `devDependencies` isolated from the production Next.js bundle for a zero-downtime rollout ahead of Wave 2 (`framer-motion` v14).
+
+**Verified** - `npm ci --dry-run` exits 0; `npm run lint` exits 0; `npx tsc --noEmit` exits 0; `npm run test -- --maxWorkers=4` passes all 194 test files (1,880 tests) under Vitest `5.1.1` and jsdom `31.0.1`; `npm run build` exits 0 after compiling and generating all 1,324 static pages.
+
+**Known Issues** - `jsdom@31.0.1` declares `engines.node` `^22.22.2 || ^24.15.0 || >=26.0.0`, so local Node `v22.20.0` logs an `EBADENGINE` warning during `npm install` (CI runs Node `24.x`). The 17 upstream-unpatched `picomatch <=4.0.7` (`GHSA-fc5q-39xc-vjpf`) High dev-tooling audit entries remain tracked in Wave 3.
+
+### Upgrade framer-motion from v13 to v14 (t_b1355786)
+
+**What** - Upgraded `framer-motion` in `package.json` and `package-lock.json` from `^13.5.1` (`13.5.1`) to `^14.14.0` (`14.14.0`), covering `ParticleNetwork.tsx`, `ScrollReveal.tsx`, `StaggerChildren.tsx`, and the test stub in `src/app/contact/page.test.tsx`.
+
+**Why** - Execute Wave 2 of the zero-downtime dependency upgrade plan in isolation with an opt-in `[preview]` Vercel deployment before merging to `main`, keeping React 19 compatibility current across marketing animation components.
+
+**Verified** - `npm ci --dry-run` exits 0; `npm run lint` exits 0; `npx tsc --noEmit` exits 0; `npm run test -- --maxWorkers=4` passes all 194 test files (1,880 tests); `npm run build` exits 0 after compiling and generating all 1,324 static pages; local browser check on `http://localhost:3000/` and `/contact` rendered `ParticleNetwork`, `ScrollReveal`, and `StaggerChildren` with HTTP 200 and zero console or hydration errors.
+
+**Known Issues** - Remaining Wave 3 items (`eslint` 10, `typescript` 7, and upstream security watches for `picomatch >4.0.7` and `@neondatabase/auth >0.7.0-beta`) stay held pending upstream peer support.
+
+### Dependency security overrides and minor/patch upgrades (t_b1355786)
+
+**What** - Updated pinned framework dependencies in `package.json` (`next` and `eslint-config-next` from `16.4.4` to `16.4.6`; `react` and `react-dom` from `19.2.4` to `19.3.1`), added `overrides` for `better-auth` (`^1.7.7`, resolved to `1.7.25`) and `minimatch` (`^11.0.1`, resolved to `11.0.9`), and ran `npm update` to refresh in-range minor/patch packages in `package-lock.json` (`@aws-sdk/client-s3@3.1171.0`, `@neondatabase/serverless@1.2.1`, `@tsparticles/react@4.6.0`, `@tsparticles/slim@4.6.0`, `@tailwindcss/postcss@4.3.5`, `tailwindcss@4.3.5`, `@testing-library/user-event@14.6.12`, `@types/react@19.3.0`, `@types/react-dom@19.3.0`, `@vitejs/plugin-react@6.3.0`, and `jsdom@30.1.3`).
+
+**Why** - `npm audit` reported 24 vulnerabilities (1 Critical, 12 High, 7 Moderate, 4 Low) and `npm outdated` reported 20 outdated packages. The overrides and framework patch eliminate the `better-auth` Critical (`GHSA-965c-763c-88jm`), High (`GHSA-r4xp-prcw-77qf`), and Low (`GHSA-44jh-23m7-hpcf`) advisories plus propagated `@neondatabase/*` and `@better-auth/drizzle-adapter` entries, both `next` Moderate advisories (`GHSA-mfr8-8qww-v76h`, `GHSA-vc7v-qv4w-wrv8`), and the `minimatch` Moderate advisory (`GHSA-g3hv-75wg-m249`).
+
+**Verified** - `npm ci --dry-run` exits 0; `npm audit --json` reports `0 critical, 0 moderate, 0 low` vulnerabilities (0 production vulnerabilities); `npm run lint` exits 0; `npx tsc --noEmit` exits 0; `npm run test` passes all 194 test files (1,865 tests); `npm run build` exits 0 after compiling and generating all 1,251 static pages.
+
+**Known Issues** - `npm audit` still reports 17 High dev/build-tooling entries rooted in `picomatch <=4.0.7` (`GHSA-fc5q-39xc-vjpf`), which has no patched version (`>4.0.7`) published upstream yet (`picomatch` `latest` is `4.0.7`). Deferred major upgrades (`framer-motion` 14, `vitest` 5, `eslint` 10, `typescript` 7, `@types/node` 24/26, `jsdom` 31) are left for separate PRs.
+
+### Documentation Update: Admin User Lifecycle and Unified Courses Hub (t_docs_admin_lifecycle)
+
+**What** - Updated `docs/admin-user-lifecycle.md` to comprehensively document the unified Course Administration Hub (4 sub-tabs, view switchers, backward-compatible redirect), bulk user operations (`POST /api/admin/users/bulk` actions, safety guards, and audit logging), People UI de-cluttering (tabbed detail views and mobile master-detail switcher), and simplified 6-item sidebar navigation.
+
+**Why** - Documentation needed to reflect the shipped architecture and operational capabilities introduced in PR #445 and PR #447.
+
+**Verified** - Markdown syntax verified; links and endpoint contracts match current implementation.
+
+**Known Issues** - None.
+
+### Footer social links corrected and a stray handle removed
+
+**What** - `src/lib/nav.ts` now lists one footer social profile instead of two. The LinkedIn
+entry points at `https://www.linkedin.com/company/adroit-io/` and the `X / Twitter` entry is
+gone, because the company has no X account. `src/lib/seo.ts` no longer defines
+`social.twitter: "@adroitconsult"`, a value that was never read by any metadata builder but would
+have shipped a wrong-brand handle the moment someone wired `twitter:site`. `src/components/Footer.tsx`
+now resolves the pill glyph through a `SOCIAL_GLYPH` map rather than a chained ternary, so adding
+or removing a network does not leave a dead branch behind.
+
+**Why** - Both footer links were wrong and both rendered on every page of the site. A crawl of all
+261 sitemap pages found them on 497 rendered pages each. `linkedin.com/company/adroitconsulting`
+returns 404: the company page does not exist. `twitter.com/adroitconsult` resolves to X user
+`@AdroitConsult`, an unrelated web development and SEO agency, so the site was sending visitors to
+another business. Neither link was ever configured by the company; the URLs were assumed during the
+site merger.
+
+**Verified** - `npx tsc -p tsconfig.json --noEmit` clean; `npm run lint` 0 errors (6 pre-existing
+warnings in `src/lib/auth/server.test.ts`); `npm test` 183 files / 1779 tests pass; `npm run build`
+succeeds. Live check of the replacement URL returns HTTP 200 and the old URL returns 404.
+
+**Known Issues** - None in this change. A separate sweep found 7 dead citation links inside
+published articles (6 x 404, 1 x 410) which are unrelated to this change and are tracked
+separately.
+
+### Local dev sign-in no longer degrades every user to a guest (local-dev-session-cookie)
+
+**What** - `src/lib/db/server.ts` adds `localDevSessionCookie()`. Under `NODE_ENV=development` only, the caller's own `neon-auth.session_token` cookie is re-labelled `__Secure-neon-auth.session_token` for the server-side `GET /token` mint.
+
+**Why** - over plain `http://localhost` the auth SDK sets the cookie without the `__Secure-` prefix, but Managed Better Auth only accepts the prefixed name. `/token` answered 401, so `isAdmin` resolved false and `/admin` returned 403 for admins in local dev (reproduced: same credentials, prefixed name 200, plain name 401). Production uses HTTPS and the prefixed name already, so it is unchanged.
+
+**Verified** - on the `dev-admin-ux` branch, the QA admin's `/api/auth/session` went from `isAdmin:false` to `true`, and `GET /api/admin/users` and `/admin` went from 403 to 200. New unit test `src/lib/db/server.local-cookie.test.ts`.
+
+**Known Issues** - None.
+
+### GET /api/auth/session: a failed session read is not "signed out" (t_8101e74f)
+
+**What** - `GET /api/auth/session` now separates "the caller is signed out"
+from "we could not check". The route decides from the session cookie's
+presence (`hasSessionCredential()` in `src/lib/session.ts`, no network call),
+then runs a strict read (`readSessionUser()`):
+
+- no cookie: `200 {user:null}`, no upstream request at all (unchanged);
+- cookie and upstream ok: `200 {user:{id,email,isAdmin}}` (unchanged);
+- cookie and upstream answered "no session" (401/403 or a null session):
+  `200 {user:null}` — a genuine, expired/revoked signed-out answer;
+- cookie and anything else (network, timeout, 429, 5xx): `503`
+  `{error:"We can't check your session right now. Please try again in a moment.",
+  code:"SESSION_UNAVAILABLE"}` with `Cache-Control: private, no-store` and
+  `Retry-After` when the upstream advertised a wait.
+
+Each failure emits exactly one structured, secret-free `console.error` line
+(`{event:"session_read_failed", errorClass, status?}`) and never a cookie,
+token, host, upstream message or email. The route itself logs nothing.
+
+`getSessionUser()` keeps its forgiving contract for server-rendered gates
+(guests and outages both resolve `null`, so access stays closed), while the
+route uses the strict reader. The client (`useAuth`) now exposes an
+`unavailable` flag and no longer blanks a known user to `null` on a `503` or a
+failed fetch; the header suppresses the signed-out "Sign in" link while a read
+is unavailable, so a signed-in learner is never shown as signed out during an
+auth-backend hiccup.
+
+**Why** - the route collapsed "session read failed" and "signed out" into the
+same `200 {user:null}`, because `getSessionUser()` caught every error and
+returned `null`. A signed-in user whose `/get-session` 429s or times out was
+told by the avatar menu to "Sign in", and `proxy.ts` gates treated them as
+anonymous. No credential is issued by this endpoint and every consumer fails
+closed on `null`, so this was an availability/UX and misleading-signal defect,
+not a bypass. It is the same fail-open class as the `/api/db/token` contract
+(t_967f0f8e), which explicitly carved this endpoint out as a follow-up.
+Regression class: CWE-636 fail-open, CWE-778 missing failure logging.
+
+**Verified** - `npx vitest run` 183 files / 1795 tests green, including the new
+`readSessionUser` / `hasSessionCredential` suites in
+`src/lib/session.test.ts` (success, guest, 401/403, 429 with retry hint, 5xx,
+network, retry clamp, one-line log hygiene, no log on success) and the retargeted
+`src/app/api/auth/session/route.test.ts` (guest fast path, signed-in, expired,
+roles-read fail-closed, 429 with `Retry-After`, 5xx without one, network,
+unexpected throw, cookie-jar replay, cache headers). `npm run lint` is clean for
+the changed files and `npm run build` succeeds. The client-side hook suite
+(`useAuth.identity.test.tsx`) still passes unchanged.
+
+**Known Issues** - The upstream SDK's `getSession()` collapses the raw response
+and does not retain `x-retry-after`; `retryAfterOf()` honours the hint when an
+adapter or a future SDK surfaces it and otherwise omits `Retry-After` rather
+than inventing one. The client-side `unavailable` flag is best-effort: it
+prevents a known user from being blanked, but a cold mount during an outage
+still renders the neutral header until the next successful read. This branch is
+based on `adroit-site/w4-db-token-fail-closed` (commit 36501980, t_142d2334)
+because a clean checkout of `main` would have overwritten the shared
+`src/lib/session.ts` working-tree edits; the diff therefore also carries that
+card's fail-closed `/api/db/token` change.
+
+### Tests: lock the client "session unavailable" contract (t_9ea611b0)
+
+**What** - Adds `src/lib/hooks/useAuth.unavailable.test.tsx`, mounted against the
+real `useAuth` hook and a mocked `GET /api/auth/session`. Six tests:
+
+- P1: a cached signed-in user survives a `503 SESSION_UNAVAILABLE` refresh
+  (`notifyAuthChanged()`) with the email unchanged and `unavailable === true`;
+- P2: the same for a thrown `fetch` (`TypeError("fetch failed")`);
+- P3: a cold mount during an outage resolves to `user === null` and
+  `unavailable === true` (unknown, not signed out);
+- P4: the next successful read clears `unavailable` and renders the real
+  `{user:null}` guest;
+- Header renders no "Sign in" link while unavailable, on both the desktop auth
+  control and the mobile drawer branch;
+- a control test proving the "Sign in" link does appear for a genuine guest, so
+  the outage assertions cannot pass vacuously.
+
+No production code changes.
+
+**Why** - The client half of t_8101e74f (the `unavailable` flag in `useAuth` and
+the Header's suppression of the signed-out CTA) had zero repo coverage: deleting
+both `if (sessionUnavailable) { ... return; }` guards in
+`src/lib/hooks/useAuth.ts` left the 26 tests in `useAuth.identity.test.tsx`,
+`Header.identity.test.tsx`, `Header.test.tsx` and `AvatarMenu.test.tsx` green,
+so the original bug (a transient auth-backend failure blanking a signed-in
+learner to "signed out") could be re-introduced silently.
+
+**Verified** - Mutation check: with both guards removed, the four pre-existing
+suites stay green (26/26, reproducing the QA finding) and the new file fails
+5 of 6 (P1, P2, P3, P4 and the Header outage case; the guest control still
+passes by design). With the guards restored: `npx vitest run` is 184 files /
+1801 tests green and `npx tsc -p tsconfig.json --noEmit` is clean.
+
+**Known Issues** - Test-only change stacked on
+`adroit-site/w4-db-token-fail-closed` (PR #432). It needs the same rebase onto
+`main` as t_8101e74f once #432 merges; that rebase conflicts in
+`src/lib/session.ts`.
+
+### Dependency updates, security hardening, and WCAG 2.1 AA accessibility remediations (t_c4cea4ae)
+
+**What** - Updated direct and transitive dependencies in `package.json` and `package-lock.json` (`next@16.4.4`, `eslint-config-next@16.4.4`, `vitest@^4.1.12`, `@aws-sdk/client-s3@^3.1161.0`, `framer-motion@^13.5.1`, `tailwindcss@^4.3.4`, `@tailwindcss/postcss@^4.3.4`, `@testing-library/*`, `eslint@^9.39.5`), resolving two Moderate `@vitest/mocker` advisories and six ESLint warnings in `src/lib/auth/server.test.ts`. Hardened preview route auth order and MDX slug validation (`SEC-03`), unlaunched series metadata disclosure on exam/check routes (`SEC-04`), `psql` argv DSN splitting in QA/verification scripts (`SEC-05`), `Permissions-Policy` and HSTS `includeSubDomains` headers (`SEC-06`), removed unused fallback email `perry@adroit.io` (`SEC-07`), moved contact rate-limiting ahead of reCAPTCHA verification with input length bounds (`SEC-08`), bounded in-memory rate-limit buckets and added `Cache-Control: private, no-store` on authenticated GET endpoints (`SEC-09`), and escaped XML/CDATA in RSS feeds and `<` in JSON-LD script blocks (`SEC-10`). Remediated WCAG 2.1 AA accessibility gaps across dark-mode surfaces (`A11Y-01`), non-color status text in quizzes/exams/certificates (`A11Y-02`), reduced-motion guards (`A11Y-03`), modal focus trap and Escape handling (`A11Y-05`), `AvatarMenu` menuitem semantics (`A11Y-06`), visible focus outlines (`A11Y-07`), share bar screen-reader labels and live regions (`A11Y-08`), form error associations and `autoComplete` attributes (`A11Y-09`), badge/CTA contrast (`A11Y-10`), and semantic landmark/heading polish.
+
+**Why** - Full site audit identified outdated packages, two Moderate dev-dependency advisories, defense-in-depth security hardening opportunities across headers/routes/scripts, and WCAG 2.1 AA contrast, keyboard navigation, and screen-reader gaps.
+
+**Verified** - `npm audit` reports 0 vulnerabilities; `npx tsc --noEmit` exits 0; `npm run lint` exits 0 with 0 warnings; `npx vitest run` passes all 184 test files (1,806 tests); `python -m unittest scripts/test_psql_dsn_argv.py -v` passes all 11 tests.
+
+**Known Issues** - None.
+
+### Unified Tron Syllabus and Brand Progress Timeline (t_f4b8291a)
+
+**What** - Unified the course syllabus and progress visualisations into a single non-duplicated timeline matching Adroit brand design tokens:
+- Replaced the redundant course constellation roadmap above the syllabus with a unified circuit timeline where the syllabus itself is the course progress map.
+- Added sticky `SyllabusProgressRail` on desktop (collapsing to a compact card on tablet/mobile) featuring a course mastery circular progress ring, interactive checkpoint jump buttons with live completion status, and exam readiness tracking.
+- Upgraded `LessonCard` with lesson brief/excerpt typography and responsive two-line layout.
+- Added `LessonQuestionStatus` pill component displaying in-lesson practice question progress (`✓ 3/3 questions answered`, `▶ 1/3 questions answered`, or `○ 4 practice questions`) driven by client storage and hydration-safe post-mount loading.
+- Refined timeline nodes with precise brand styling (Adroit Crimson `#C8102E`, Deep Navy `#0B1D3A`, Emerald `#047857`, and Dark Mode tokens `#0A0E1A` / `#121A2E` / `#26324A`), eliminating saturated cyan neon in favor of an executive engineering schematic aesthetic.
+- Fixed lesson completion UI divergence between course summary and individual lesson toggle controls by synchronizing `MarkComplete` and `useLessonProgress` directly with the authoritative batch summary (`useProgressSummary`), eliminating 30-50 redundant client network calls and preventing race conditions or stale unmark states.
+
+**Why** - Learners reported that having both a Tron roadmap card and a syllabus list below it duplicated the course outline on mobile and desktop, while knowledge check milestones and in-lesson quiz progress were disconnected from the lesson cards. In addition, individual lesson cards on courses like `/atlas/ai-at-work` could fail to show the checked-off state even though the course header reflected 13 of 30 complete, due to individual per-lesson network query races.
+
+**Verified** - 
+- `vitest run src/components/Learn` (10 files, 46 tests passed).
+- `vitest run src/components/Progress/MarkComplete.test.tsx src/components/Progress/MarkCompleteCompact.test.tsx src/components/Progress/tierProgressInvalidation.test.tsx` (4 files, 31 tests passed).
+- `vitest run src/lib/hooks/useProgressSummary.test.tsx src/lib/hooks/useProgressSummary.identity.test.tsx` (2 files, 17 tests passed).
+- `vitest run src/app/atlas/[series]` (13 files, 67 tests passed).
+- `vitest run src/lib/no-hardcoded-exam-labels.test.ts` (1 file, 4 tests passed).
+- `npm run build` compiled 1,182 static and dynamic routes cleanly with zero TypeScript errors.
+
+**Known Issues** - None.
+
+### Configure Vitest maxWorkers and sync package.json caret floors (t_b1355786)
+
+**What** - Set `maxWorkers: 4` (retaining Vitest's default forks pool) in `vitest.config.mts`, and updated caret minimum version floors in `package.json` and the root entry of `package-lock.json` to match the already-installed lockfile versions (`@aws-sdk/client-s3@^3.1171.0`, `@neondatabase/serverless@^1.2.1`, `@tsparticles/react@^4.6.0`, `@tsparticles/slim@^4.6.0`, `@tailwindcss/postcss@^4.3.5`, `tailwindcss@^4.3.5`, `@testing-library/user-event@^14.6.12`, `@vitejs/plugin-react@^6.3.0`, and `vitest@^5.1.1`).
+
+**Why** - Benchmarking `pool: "vmThreads"` cut test duration to 19s but caused 3 route test files (17 tests, including `src/app/api/audio/[slug]/route.test.ts`) to fail due to `node:vm` context differences. Capping the default pool at `maxWorkers: 4` makes plain `npm run test` pass deterministically without 5000ms Windows worker-contention timeouts (`audio-injection.test.ts`, `AudioPlayerScroll.test.tsx`, `LearnHub.requests.test.tsx`), while syncing caret floors prevents future lockfile regenerations from resolving older patch/minor versions.
+
+**Verified** - `npm ci --dry-run` exits 0; `npm run lint` exits 0; `npx tsc --noEmit` exits 0; plain `npm run test` passes all 194 test files (1,880 tests in 99.83s); `npm run build` exits 0 after compiling and generating all 1,324 static pages.
+
+**Known Issues** - None.
+
+
+
 ### Deleting a user now deletes the user's data (delete-sync-neon)
 
 **What** - `supabase/migrations/neon/006_delete_sync.sql` adds `public.sync_auth_user_delete()` and an
