@@ -8,7 +8,7 @@
  * session token and then the anonymous one, a signed-in render paid it twice.
  *
  * The contract pinned here:
- *   - one shared per-request mint deadline (~800 ms), applied as
+ *   - one shared per-request mint deadline (`MINT_BUDGET_MS`), applied as
  *     `AbortSignal.timeout`;
  *   - a session mint that burned the budget is NOT retried against the sibling
  *     anonymous endpoint inside the same request;
@@ -29,6 +29,7 @@ import {
   __resetMintCooldown,
   getNeonSessionUser,
   getSupabaseServerClient,
+  MINT_BUDGET_MS,
 } from "./server";
 import { resetAnonymousTokenCacheForTests } from "./anonymous-token";
 import { isDbTokenUnavailable } from "./degraded-client";
@@ -118,8 +119,11 @@ describe("mint budget (t_81b09ba8)", () => {
     const elapsed = Date.now() - started;
 
     // Bounded: one budget for the whole request, not one per endpoint.
-    expect(elapsed).toBeGreaterThanOrEqual(700);
-    expect(elapsed).toBeLessThan(2_000);
+    // t_f8099d24: derive the bounds from the budget instead of hard-coding the
+    // pre-raise 800 ms, so the assertion stays about ONE shared budget and not
+    // about a particular value.
+    expect(elapsed).toBeGreaterThanOrEqual(MINT_BUDGET_MS - 200);
+    expect(elapsed).toBeLessThan(MINT_BUDGET_MS + 1_500);
 
     // The mint carried an abort signal…
     expect(wire).toHaveLength(1);
@@ -138,7 +142,8 @@ describe("mint budget (t_81b09ba8)", () => {
       .eq("user_id", "u1");
     expect(isDbTokenUnavailable(error)).toBe(true);
     expect(wire.some((w) => w.url.startsWith(DATA_BASE))).toBe(false);
-  });
+    // The wall-clock assertions above now wait out the whole mint budget.
+  }, 20_000);
 
   it("bounds a hung /get-session too — identity resolution cannot outlive the render", async () => {
     cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
@@ -165,11 +170,11 @@ describe("mint budget (t_81b09ba8)", () => {
     // Guests/outage resolve to null instead of hanging, and the lookup carried
     // an abort signal (origin/main had none).
     expect(user).toBeNull();
-    expect(elapsed).toBeLessThan(2_000);
+    expect(elapsed).toBeLessThan(MINT_BUDGET_MS + 1_500);
     expect(wire).toHaveLength(1);
     expect(wire[0].url).toBe(`${AUTH_BASE}/get-session`);
     expect(wire[0].signal).not.toBeNull();
-  });
+  }, 20_000);
 
   it("does not re-pay the budget against a mint path that just hung (negative cache)", async () => {
     cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
@@ -183,7 +188,7 @@ describe("mint budget (t_81b09ba8)", () => {
     expect(Date.now() - t1).toBeLessThan(200);
     // `/token` is on the negative cache: the second render asks nothing.
     expect(wire.length).toBe(afterFirst);
-  });
+  }, 20_000);
 
   it("never caches a 401/403 as an outage", async () => {
     cookiesMock.mockResolvedValue(cookieStore([SESSION_COOKIE]));
@@ -249,3 +254,32 @@ describe("mint budget (t_81b09ba8)", () => {
     expect(tokenCalls).toHaveLength(2);
   });
 });
+
+/**
+ * t_f8099d24 — PIN the budget, so it cannot be silently lowered back under the
+ * cold-mint cost.
+ *
+ * The regression this guards: 800 ms was chosen from a WARM local measurement
+ * and read as "any healthy mint", but the FIRST mint of a Vercel build/ISR
+ * process is a COLD connection that does not answer inside it. The abort then
+ * fired, the mint was classified as a network failure, and `/atlas`
+ * (force-static + ISR 3600) baked its graceful empty hub — and re-baked it
+ * empty every hour, because each revalidation runs in a fresh lambda whose
+ * first mint is cold again. Lowering this constant below the cold-mint cost
+ * re-opens that hole in a one-line diff that no other test would notice.
+ *
+ * The floor is the cold-mint cost: > 800 ms measured in production, so the
+ * budget must keep real margin above it. The ceiling asserts the budget is
+ * still a BOUND — a mint budget is not an unbounded wait, and a render that
+ * waits much longer than this should degrade instead.
+ */
+describe("mint budget floor (t_f8099d24)", () => {
+  it("keeps the budget above the cold-mint cost", () => {
+    expect(MINT_BUDGET_MS).toBeGreaterThanOrEqual(2_500);
+  });
+
+  it("keeps the budget a bound — a hung mint still degrades", () => {
+    expect(MINT_BUDGET_MS).toBeLessThanOrEqual(5_000);
+  });
+});
+
