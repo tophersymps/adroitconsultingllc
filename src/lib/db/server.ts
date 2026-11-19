@@ -38,6 +38,7 @@ import { cookies } from "next/headers";
 import { NeonPostgrestClient } from "@neondatabase/postgrest-js";
 import { getAnonymousJwtResult, type AnonTokenResult } from "./anonymous-token";
 import { createTokenUnavailableClient } from "./degraded-client";
+import { isNextDynamicUsageError, mintFetch } from "./mint-transport";
 import { hasSessionCredential } from "@/lib/session";
 
 /** The minimal user projection the app reads off the session. */
@@ -213,9 +214,17 @@ const requestMintDeadline = cache((): number => Date.now() + MINT_BUDGET_MS);
  *
  * NEVER rejects for an HTTP/network/malformed outcome — those are returned as
  * `ok: false` so a guest read degrades instead of throwing (the old
- * unguarded `fetch` here was one of the two 500 mechanisms). A MISSING
- * `NEON_AUTH_BASE_URL` still throws: a misconfigured runtime must fail closed,
- * never silently degrade.
+ * unguarded `fetch` here was one of the two 500 mechanisms). TWO exceptions:
+ *
+ *   - a MISSING `NEON_AUTH_BASE_URL` still throws: a misconfigured runtime must
+ *     fail closed, never silently degrade;
+ *   - Next's static-render bail-out signal (`DynamicServerError`,
+ *     `digest === "DYNAMIC_SERVER_USAGE"`) is RETHROWN instead of being read as
+ *     an endpoint failure (t_72f9d850). It is control flow for the route, and
+ *     misclassifying it armed the process-wide cooldown and made the rest of
+ *     the build degrade. `mintFetch` keeps this fetch out of Next's tracking so
+ *     the signal is not raised here in the first place — this is the guard for
+ *     the case where it is raised anyway.
  *
  * BOUNDED (t_81b09ba8): the fetch carries `AbortSignal.timeout(remaining)` for
  * the request's shared mint deadline, and an endpoint that burned the budget is
@@ -265,12 +274,20 @@ async function fetchTokenResult(
 
   let res: Response;
   try {
-    res = await fetch(`${base}${path}`, {
+    // `mintFetch`, not `fetch`: the auth handshake must stay OUT of Next's
+    // static-render fetch tracking, or a `no-store` mint bails the prerender out
+    // of static generation (t_72f9d850 — see ./mint-transport).
+    res = await mintFetch(`${base}${path}`, {
       headers,
       cache: "no-store",
       signal: AbortSignal.timeout(remaining),
     });
-  } catch {
+  } catch (err) {
+    // Next's static-render bail-out is NOT a mint failure: the endpoint was
+    // never asked. Rethrow so Next can mark the route dynamic instead of baking
+    // a degraded page, and do NOT arm the cooldown (that is what silent-poisoned
+    // the rest of the build).
+    if (isNextDynamicUsageError(err)) throw err;
     // Network error / abort — same degrade as a refusal, plus a cooldown: the
     // endpoint is either unreachable or too slow to be worth re-asking.
     markMintUnavailable(path);
@@ -397,7 +414,10 @@ export const getNeonSessionUser = cache(
     const remaining = requestMintDeadline() - Date.now();
     if (remaining <= 0) return null;
     try {
-      const res = await fetch(`${authBaseUrl()}/get-session`, {
+      // Same untracked transport as the mints (t_72f9d850): the session lookup
+      // is an auth handshake, not page data, and a `no-store` fetch here would
+      // bail this route out of static generation exactly like the mint did.
+      const res = await mintFetch(`${authBaseUrl()}/get-session`, {
         headers: { Cookie: cookie, Accept: "application/json" },
         cache: "no-store",
         signal: AbortSignal.timeout(remaining),
@@ -409,7 +429,10 @@ export const getNeonSessionUser = cache(
       const user = body?.user;
       if (!user?.id) return null;
       return { id: user.id, email: user.email ?? "" };
-    } catch {
+    } catch (err) {
+      // A Next static-render bail-out must propagate (it says nothing about who
+      // the caller is); everything else degrades a READ to the guest state.
+      if (isNextDynamicUsageError(err)) throw err;
       return null;
     }
   },
