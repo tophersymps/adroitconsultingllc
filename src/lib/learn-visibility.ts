@@ -21,17 +21,15 @@
  *     service-role key (least privilege) and not the cookie-bound client: that
  *     one calls `cookies()`, which would opt all 155 prerendered post pages
  *     into dynamic rendering because the funnel reads this seam.
- *  3. Two authorities, on EVERY path (t_a774c0d2, doctrine from t_0194c233 /
- *     t_466b3b10). A series is published IFF
- *         slug ∈ PUBLICLY_LAUNCHED_SERIES
- *         AND (DB unreadable OR row is live + non-stealth).
- *     The DB (`courses.status` / `courses.access_model`) is the authority for
- *     ACCESS; the ratified static launch mirror (`PUBLICLY_LAUNCHED_SERIES` /
- *     `isPubliclyLaunchedSeries`) is the authority for DISCLOSURE. The healthy
- *     path therefore intersects the DB-derived set with the mirror — it does
- *     NOT return the raw DB set, which is how a runtime-flipped `courses` row
- *     (`/admin`, no seed migration) got advertised from the sitemap, search
- *     index and funnel labels while its own metadata said `noindex`.
+ *  3. DISCLOSURE authority = the DB via `isGuestVisibleCourse`, on every
+ *     readable path (t_47183b5b). A series is published IFF the DB says a
+ *     guest can resolve it (row `live` + non-stealth). The static launch
+ *     mirror (`PUBLICLY_LAUNCHED_SERIES`) is the FAIL-CLOSED fallback used
+ *     only when the read fails — it is NOT intersected on the healthy path.
+ *     Keeping a hand-maintained allowlist in the disclosure path is how every
+ *     `/admin` launch since t_b4c0da5f silently became undiscoverable: the
+ *     intersection could only ever drop NON-stealth rows, because
+ *     `isGuestVisibleCourse` already excludes every stealth one.
  *  4. FAIL CLOSED on failure. A DB/token failure degrades to the already
  *     ratified static launch mirror (`PUBLICLY_LAUNCHED_SERIES` /
  *     `isPubliclyLaunchedSeries`) — never to "every content series", which is
@@ -48,10 +46,7 @@
 import { cache } from "react";
 import { getSupabaseAnonymousClient } from "@/lib/db/server";
 import { isGuestVisibleCourse } from "@/lib/access";
-import {
-  PUBLICLY_LAUNCHED_SERIES,
-  mayDiscloseSeries,
-} from "@/lib/atlas-launch";
+import { PUBLICLY_LAUNCHED_SERIES } from "@/lib/atlas-launch";
 import { getAllSeries, toLearnCardSeries } from "@/lib/learn";
 import { buildSearchDocs } from "@/lib/search-docs";
 import type { LearnCardSeries, LearningSeries } from "@/data/types";
@@ -93,31 +88,19 @@ export function guestVisibleSlugsFromRows(
 }
 
 /**
- * Pure core, healthy path: publish only what BOTH authorities allow.
+ * Pure core, healthy path: the DB is the sole DISCLOSURE authority
+ * (t_47183b5b).
  *
- * `guestVisibleSlugsFromRows` answers the ACCESS question from the DB. This
- * second step answers the DISCLOSURE question from the static launch mirror
- * (`mayDiscloseSeries(slug, true)` — the DB read succeeded, so the row is
- * known live; the mirror decides whether the slug may be named publicly).
- *
- * Slugs dropped here are *drift*: a `courses` row flipped live at runtime
- * (`/admin`, no seed migration) while the static mirror was never updated.
- * They are reported once per process so the missing migration is visible,
- * but the returned set never contains them — a series absent from the mirror
- * must not be advertised from a crawler-visible surface.
+ * `guestVisibleSlugsFromRows` already applies the ACCESS predicate
+ * (`isGuestVisibleCourse`: live && non-granted), which is what excludes every
+ * stealth series. Intersecting that with the static launch mirror could only
+ * drop NON-stealth rows — series a guest can resolve — which is exactly how
+ * every `/admin` launch since t_b4c0da5f silently became undiscoverable.
  */
 export function publishedSlugsFromRows(
   rows: readonly GuestVisibilityRow[],
 ): Set<string> {
-  const dbSlugs = guestVisibleSlugsFromRows(rows);
-  const published = new Set<string>();
-  const drift: string[] = [];
-  for (const slug of dbSlugs) {
-    if (mayDiscloseSeries(slug, true)) published.add(slug);
-    else drift.push(slug);
-  }
-  if (drift.length > 0) warnMirrorDrift(drift);
-  return published;
+  return guestVisibleSlugsFromRows(rows);
 }
 
 /* ------------------------------------------------------------------ */
@@ -138,25 +121,13 @@ function warnDegraded(err: unknown): void {
   );
 }
 
-// Drift (a DB-live series missing from the launch mirror) is a migration
-// mistake, not a per-request event: warn once per process, same as above.
-let warnedAboutMirrorDrift = false;
+// Drift is gone (t_47183b5b): the DB is the disclosure authority on the
+// healthy path, so a DB-live non-stealth row missing from the static mirror is
+// no longer dropped and no longer worth warning about.
 
-function warnMirrorDrift(slugs: readonly string[]): void {
-  if (warnedAboutMirrorDrift) return;
-  warnedAboutMirrorDrift = true;
-  console.warn(
-    `[learn-visibility] courses row(s) live but absent from the static launch mirror — not published: ${slugs
-      .slice()
-      .sort()
-      .join(", ")}. Add them to PUBLICLY_LAUNCHED_SERIES in src/lib/atlas-launch.ts in the same PR as the seeded row.`,
-  );
-}
-
-/** Test hook only — the warn-once latches are process-wide by design. */
+/** Test hook only — the warn-once latch is process-wide by design. */
 export function __resetLearnVisibilityWarningForTests(): void {
   warnedAboutDegradation = false;
-  warnedAboutMirrorDrift = false;
 }
 
 /**
@@ -173,17 +144,18 @@ const loadSeam = cache(async (): Promise<GuestVisibilityResult> => {
       .from("courses")
       .select("series_slug, status, access_model");
     if (error) throw error;
-    // TWO AUTHORITIES: the DB proves access, the static launch mirror proves
-    // disclosure. Never return the raw DB set.
+    // DB is the sole DISCLOSURE authority on the healthy path (t_47183b5b).
+    // `isGuestVisibleCourse` inside `guestVisibleSlugsFromRows` is what
+    // excludes every stealth series — there is no mirror intersection.
     return {
       slugs: publishedSlugsFromRows((data ?? []) as GuestVisibilityRow[]),
       degraded: false,
     };
   } catch (err) {
     warnDegraded(err);
-    // FAIL CLOSED: the static launch mirror is an allowlist of the four
-    // publicly launched series — the same degraded contract every /atlas route
-    // and the sitemap already use (t_0194c233 F-2). Never `learnSeries`.
+    // FAIL CLOSED: the static launch snapshot of the publicly launched
+    // series — the same degraded contract every /atlas route and the sitemap
+    // already use (t_0194c233 F-2). Never `learnSeries`.
     return { slugs: new Set<string>(PUBLICLY_LAUNCHED_SERIES), degraded: true };
   }
 });

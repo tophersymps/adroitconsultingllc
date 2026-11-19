@@ -33,7 +33,9 @@ const { mocks } = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
 
 vi.mock("@/data/learn", () => ({
-  learnSeries: [{ slug: "omni-studio-cert" }, { slug: "ai-adoption" }],
+  // `hermes-consultant` is the STEALTH control: in the static catalogue, never
+  // in the launch snapshot (the 7 `/admin`-launched courses are disclosed now).
+  learnSeries: [{ slug: "omni-studio-cert" }, { slug: "hermes-consultant" }],
 }));
 
 vi.mock("@/lib/learn", () => ({
@@ -154,13 +156,13 @@ describe("/atlas/[series]/check/[n] degraded existence gate (F-2)", () => {
 
   it("404s a stealth series when the seam cannot decide", async () => {
     mocks.getSeriesBySlug.mockReturnValue(
-      seriesInfo("ai-adoption", "AI Adoption for Teams"),
+      seriesInfo("hermes-consultant", "Hermes Consultant Track"),
     );
     mocks.decideCourseAccess.mockRejectedValue(
       new DbTokenUnavailableError("/token/anonymous"),
     );
 
-    await expect(render("ai-adoption")).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(render("hermes-consultant")).rejects.toThrow("NEXT_NOT_FOUND");
     // Fail-closed before any DB read.
     expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
   });

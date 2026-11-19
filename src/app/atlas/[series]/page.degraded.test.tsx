@@ -37,9 +37,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/data/learn", () => ({
-  // `ai-adoption` is a STEALTH series: present in the static catalogue, no live
-  // `courses` row. It is here for the F-2 existence test below.
-  learnSeries: [{ slug: "omni-studio-cert" }, { slug: "ai-adoption" }],
+  // `hermes-consultant` is a STEALTH series: present in the static catalogue,
+  // no live `courses` row, and never in the static launch snapshot. It is here
+  // for the F-2 existence test below. (The 7 `/admin`-launched courses are
+  // disclosed now — t_47183b5b — so they can no longer serve as the control.)
+  learnSeries: [{ slug: "omni-studio-cert" }, { slug: "hermes-consultant" }],
 }));
 
 const LESSONS = [
@@ -58,10 +60,10 @@ vi.mock("@/lib/learn", () => ({
           totalLessons: LESSONS.length,
           lessons: LESSONS,
         }
-      : slug === "ai-adoption"
+      : slug === "hermes-consultant"
         ? {
             slug,
-            name: "AI Adoption for Teams",
+            name: "Hermes Consultant Track",
             description: "Unpublished stealth syllabus.",
             gradient: "from-a to-b",
             totalLessons: LESSONS.length,
@@ -237,7 +239,7 @@ describe("/atlas/[series] under a token-route failure (R2-5 pinned regression)",
       new DbTokenUnavailableError("/token/anonymous"),
     );
 
-    await expect(renderSeriesPage("ai-adoption")).rejects.toThrow(
+    await expect(renderSeriesPage("hermes-consultant")).rejects.toThrow(
       "NEXT_NOT_FOUND",
     );
     // The fail-closed decision happens before any DB read or render.

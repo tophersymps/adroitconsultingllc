@@ -199,7 +199,7 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
   // outage the stealth series' certificate route answered 200 and named the
   // unpublished course in the locked-content view.
   it("F-2: 404s a stealth series' certificate route during a token outage", async () => {
-    mocks.getSeriesBySlug.mockReturnValue(series({ slug: "ai-adoption", name: "AI Adoption for Teams" }));
+    mocks.getSeriesBySlug.mockReturnValue(series({ slug: "hermes-consultant", name: "Hermes Consultant Track" }));
     mocks.getCertExam.mockReturnValue(null);
     mocks.getSeriesLessonSlugs.mockReturnValue([]);
     mocks.getAccessUserId.mockResolvedValue(null);
@@ -208,7 +208,7 @@ describe("/atlas/[series]/certificate — exam-less series (B-07 / D2)", () => {
     );
 
     await expect(
-      Page({ params: Promise.resolve({ series: "ai-adoption" }) }),
+      Page({ params: Promise.resolve({ series: "hermes-consultant" }) }),
     ).rejects.toThrow("NEXT_NOT_FOUND");
   });
 });

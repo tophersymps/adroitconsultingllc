@@ -20,9 +20,15 @@ const { mocks } = vi.hoisted(() => ({
   mocks: { getCourseRowBySlug: vi.fn() },
 }));
 
-vi.mock("@/lib/access", () => ({
-  getCourseRowBySlug: mocks.getCourseRowBySlug,
-}));
+vi.mock("@/lib/access", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/access")>();
+  return {
+    getCourseRowBySlug: mocks.getCourseRowBySlug,
+    // t_47183b5b: the disclosure predicate consumes the REAL stealth rule
+    // (`isGuestVisibleCourse`), so the mock must supply it.
+    isGuestVisibleCourse: actual.isGuestVisibleCourse,
+  };
+});
 
 vi.mock("@/lib/learn", () => ({
   getSeriesBySlug: (slug: string) =>
@@ -86,10 +92,22 @@ describe("/atlas/[series] generateMetadata — disclosure gate", () => {
     expect(m.robots).toEqual({ index: true, follow: true });
   });
 
-  it("never names a stealth series, and never even reads the DB for it", async () => {
+  it("never names a stealth series: the DB verdict hides it (t_47183b5b)", async () => {
+    // `live` + `granted` is the stealth model. The DB is now the disclosure
+    // authority, so the head is generic because of the row, not the mirror.
+    mocks.getCourseRowBySlug.mockResolvedValue({
+      status: "live",
+      access_model: "granted",
+    });
     const m = await meta("hermes-consultant");
     expect(m.title).toBe("Atlas | Adroit Learn");
     expect(JSON.stringify(m)).not.toContain("Hermes");
-    expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
+  });
+
+  it("never names a series with no courses row at all", async () => {
+    mocks.getCourseRowBySlug.mockResolvedValue(null);
+    const m = await meta("hermes-consultant");
+    expect(m.title).toBe("Atlas | Adroit Learn");
+    expect(JSON.stringify(m)).not.toContain("Hermes");
   });
 });
