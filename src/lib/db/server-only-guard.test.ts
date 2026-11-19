@@ -36,6 +36,11 @@ const PRIVILEGED = [
   "src/lib/db/anonymous-token.ts",
   // R2-5: the classified token-unavailable client (Data API seam).
   "src/lib/db/degraded-client.ts",
+  // t_72f9d850: the mint transport — it exists precisely to keep the auth
+  // handshake out of Next's fetch instrumentation, and it is only meaningful in
+  // the server graph (a client import must fail the build, not silently opt a
+  // browser request out of caching).
+  "src/lib/db/mint-transport.ts",
   // t_a6b7630b (F-2/CWE-200): imports the FULL learn dataset (12 series, 8
   // stealth). Server-only so a client import fails the build instead of
   // shipping the unpublished catalogue to the browser.

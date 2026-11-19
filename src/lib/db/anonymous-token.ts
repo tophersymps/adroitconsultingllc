@@ -30,7 +30,11 @@
  */
 import "server-only";
 
-/** A mint attempt's outcome. Never a rejection — see server.ts fetchTokenResult. */
+/**
+ * A mint attempt's outcome. Every data-layer outcome is a RESULT, never a
+ * rejection (see server.ts fetchTokenResult) — the one exception is Next's
+ * static-render bail-out signal, which is deliberately propagated.
+ */
 export type AnonTokenResult =
   | { ok: true; token: string; expiresAtMs: number }
   | {
@@ -114,8 +118,11 @@ function clamp(value: number, min: number, max: number): number {
  * Return the process-wide anonymous-role token, minting through `fetchAnon`
  * only when the cache is empty/expired and the circuit breaker is closed.
  *
- * `fetchAnon` MUST resolve (never reject) — server.ts's fetchTokenResult
- * converts every network/HTTP/malformed failure into an `ok: false` result.
+ * `fetchAnon` MUST resolve for every data-layer outcome (never reject) —
+ * server.ts's fetchTokenResult converts every network/HTTP/malformed failure
+ * into an `ok: false` result. The ONE rejection it may produce is Next's
+ * static-render bail-out signal (t_72f9d850), which must reach the render
+ * unchanged; nothing is cached, counted or suppressed on that path.
  */
 export async function getAnonymousJwtResult(
   fetchAnon: () => Promise<AnonTokenResult>,
