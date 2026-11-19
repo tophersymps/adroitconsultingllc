@@ -26,6 +26,9 @@ The Data Import Wizard runs in the browser and handles up to 50,000 records per 
 
 Data Loader is a desktop and command line application that handles up to 5 million records, works against any object that supports the API, and does not run duplicate rules unless that option is explicitly enabled on the operation.[^2] The help page frames it as a client application for bulk import or export that supports large files up to that ceiling and can be run interactively or from the command line for automation. The clean rule of thumb for a scenario: small volume with quality enforcement wanted points at the Data Import Wizard, large volume or an object the wizard does not support points at Data Loader, and the fact that Data Loader skips duplicate rules by default is a trap the questions lean on. An answer that says Data Loader will block duplicates is wrong; an answer that says the wizard will is right.
 
+![Choosing a migration tool by volume: the Data Import Wizard handles up to 50,000 records and enforces validation and duplicate rules, Data Loader handles up to 5 million records and skips duplicate rules by default, and Bulk API 2.0 or an ETL tool covers millions of records with joins and scheduling.](</diagrams/day-30-dm-1b-data-migration-tools-and-ordering/1-tool-tiers.png>)
+
+
 ### Data Loader operations, bulk mode, and the bypass options
 
 Data Loader is more than insert and update, and the operations matter. It supports insert, update, upsert, delete, and hard delete, plus export and export all, which differ because export all retrieves records that are in the recycle bin.[^3] The upsert operation is the one to know for real work, because it matches incoming rows against an existing key rather than assuming every row is new. On the operation settings you can turn on bulk mode for speed, set a batch size, cap how many batches process in a run, and choose whether to bypass validation rules or duplicate rules, both of which require the Modify All Data permission. That bypass is exactly why a governed org has to think about who holds Modify All Data: the permission that lets someone skip the guardrails is the permission that can let a load write records the business rules were built to stop.
@@ -46,11 +49,17 @@ Think parent to child, and count the levels of dependency before you start. The 
 
 A worked example makes the chain concrete. A quote line item points at a PricebookEntry, which points at a Product2 and a Pricebook2, and the quote itself points at an Opportunity, which points at an Account. So the safe order for that deal is Accounts, then Opportunities, then Pricebooks, then Products, then PricebookEntries, then Quotes, then QuoteLineItems. Notice that Products and Pricebooks can load in either order relative to each other, because neither is the parent of the other, but both must precede the entries, and the entries must precede the line items. Count the dependency levels, group the siblings that do not depend on each other, and you have a load plan.
 
+![Load order follows the dependency chain for a deal: Accounts, then Opportunities, then Pricebooks and Products as siblings in either order, then PricebookEntries, then Quotes, then QuoteLineItems, with every parent preceding its child.](</diagrams/day-30-dm-1b-data-migration-tools-and-ordering/2-load-order.png>)
+
+
 ### External IDs and upsert make a load re-runnable
 
 Salesforce record IDs are generated in each org, so you cannot carry them from a source system or between sandboxes, which is why you store the source's primary key in a custom external ID field on the target. An external ID field is searchable, is indexed automatically by the platform, and the platform allows up to 25 external ID fields per object.[^5] Upsert then matches incoming rows on that external ID: if a record exists it updates, if not it inserts. That single behavior makes a load re-runnable.
 
 The value shows up the moment something fails. If a load dies at sixty percent, you fix the file and run the same job again without creating duplicates, because every row that already landed matches its external ID and updates in place, and only the rows that never arrived insert. This is the answer whenever a scenario mentions retries, partial failures, or an incremental load. The alternative that candidates sometimes propose, deleting everything and starting over, is slower and riskier, and switching back to plain insert is how duplicates get created in the first place.
+
+![How external ID and upsert make a load re-runnable: each incoming row carries the source key, upsert matches it on the external ID, matching rows update in place and missing rows insert, so a load that dies at 60 percent can rerun the same job without creating duplicates.](</diagrams/day-30-dm-1b-data-migration-tools-and-ordering/3-upsert-mechanism.png>)
+
 
 ### Upsert mechanics that decide whether the load works
 
