@@ -4,37 +4,37 @@
   "description": "The fixed sequence a record save walks from load to commit, what lives in the database versus in memory at each phase, and the four trigger contexts one transaction can run.",
   "questions": [
     {
-      "question": "Per the lesson “Transaction Lifecycle: State, Save Order, and the 4 Trigger Contexts in One Transaction”, an after update trigger updates a field on the same record it was fired for. What does that cost and trigger?",
+      "question": "Where should a trigger set or normalize a field on the record being saved, and why?",
       "options": [
-        "Nothing extra, because after context writes to Trigger.new without spending a DML statement.",
-        "One DML statement, but the save order is not re-entered because the record is already in the database.",
-        "A DML statement against the transaction budget plus a full re-entry into the save order from step 1, which fires the record’s update triggers again.",
-        "An automatic rollback of the transaction, because an after trigger may not modify the record it was fired for."
-      ],
-      "correct_answer_index": 2,
-      "explanation": "After context exists to touch records that need the saved Id or were not part of the original DML, and a write back to the same record restarts the sequence."
-    },
-    {
-      "question": "Which statement best reflects the lesson’s guidance?",
-      "options": [
-        "Roll-up summary fields recalculate near the end of the save order, after after triggers have run, so an after trigger that reads a parent’s roll-up is reading the pre-recalculation value.",
-        "Before triggers run after custom validation rules, so a validation rule can never see a value a before trigger set.",
-        "Values written to Trigger.new in a before trigger each cost a DML statement against the budget.",
-        "A workflow field update re-fires update triggers without limit, which is why the platform has to cap it at one extra pass."
+        "In before context, where the change persists with no extra DML.",
+        "In after context, because the record already has an Id at that point.",
+        "In a separate DML update issued after the trigger finishes running.",
+        "In a validation rule, which modifies field values before the record writes."
       ],
       "correct_answer_index": 0,
-      "explanation": "Roll-up recalculation happens well after after triggers, which is why sequencing bugs rather than logic bugs are the usual cause of a stale number."
+      "explanation": "Values set on the in-memory record in before context are persisted by the same save with no separate DML statement, which keeps the transaction small."
     },
     {
-      "question": "Which conclusion does the lesson support?",
+      "question": "An after-update trigger reads a parent's roll-up summary field to make a decision. What is wrong?",
       "options": [
-        "A record save that touches only one operation runs all four save contexts.",
-        "A batch that upserts 5,000 leads runs before insert, before update, after insert, and after update inside the single transaction, so insert-only logic misreads the updates as if they were new records.",
-        "Dispatching on System.TriggerOperation is discouraged in favor of chaining Trigger.isBefore and Trigger.isInsert checks.",
-        "An unhandled exception rolls back only the Apex work in the current phase, leaving the later phases to complete."
+        "Nothing; roll-up summaries are recalculated before after triggers run.",
+        "Roll-ups recalculate after after triggers, so the value is stale.",
+        "Roll-up summary fields cannot be read from Apex trigger code at all.",
+        "The trigger should read Trigger.old instead of the parent roll-up."
       ],
       "correct_answer_index": 1,
-      "explanation": "A transaction is not limited to one DML statement or one operation, so a mixed upsert exercises all four contexts and a trigger has to dispatch on the operation type rather than assume it."
+      "explanation": "Roll-up recalculation happens near the end of the save, well after after triggers, so an after trigger reading the roll-up sees the pre-recalculation value."
+    },
+    {
+      "question": "A batch upserts 5,000 records, some new and some existing, in one transaction. Which save contexts run?",
+      "options": [
+        "Only before insert and after insert, because upsert is treated as an insert.",
+        "Only before update and after update, because existing records dominate the set.",
+        "All four contexts, so the trigger must dispatch on the operation it faces.",
+        "No contexts run, because batch operations bypass record triggers."
+      ],
+      "correct_answer_index": 2,
+      "explanation": "A transaction is not limited to one operation, so a mixed upsert runs before insert, before update, after insert, and after update, and the trigger must dispatch on the operation rather than assume one."
     }
   ]
 }
