@@ -156,8 +156,34 @@ function retryAfterFromMs(ms: number): number {
  * the session token and then the anonymous one, the cost was paid twice. A
  * healthy mint is tens of milliseconds, so one shared deadline costs the
  * healthy path nothing and caps the degraded path once.
+ *
+ * COLD-START RAISE, 800 → 3000 (t_f8099d24). 800 ms was derived from a WARM
+ * local connection (108 ms, 20/20 under budget) and assumed — wrongly — to hold
+ * for a process's FIRST mint. It does not: in Vercel's build environment the
+ * first anonymous-JWT mint of a build/render process is a COLD connection and
+ * does not answer inside 800 ms. Production build dpl_ChFZJ95 shows the first
+ * `[db] token unavailable` landing ~800 ms after the static-render phase began
+ * — the budget firing, not an instant endpoint error — with
+ * `/atlas build warning: … Publishing the graceful empty hub` in the same log
+ * and 0 courses in the served HTML. Because ISR (revalidate=3600) re-renders
+ * /atlas in a FRESH lambda whose first mint is cold again, the hub re-baked
+ * itself empty every hour and never healed; the budget, not the endpoint, was
+ * the defect.
+ *
+ * The budget only bounds a cache-MISS mint: `anonymous-token.ts` caches the
+ * anonymous JWT process-wide and the session/`get-session` results are
+ * per-request `cache()`d, so a warm mint still returns in ~110 ms and pays
+ * none of this. 3000 ms is the top of the range proposed in t_f8099d24 — the
+ * cold-mint cost was only bounded as "> 800 ms", never measured exactly, so it
+ * carries margin. The worst case it adds is 2.2 s on the FIRST mint of an
+ * instance that then hangs; a mint that fails outright still fails once and is
+ * then negative-cached for `MINT_COOLDOWN_MS`, and a degraded page costs far
+ * more than 3 s. Cooldown, single-flight and stale-while-error are unchanged.
+ *
+ * Do NOT lower this back under the cold-mint cost — `server.budget.test.ts`
+ * pins the floor (`t_f8099d24`).
  */
-const MINT_BUDGET_MS = 800;
+export const MINT_BUDGET_MS = 3000;
 
 /**
  * How long a mint path stays on the negative cache after it failed in a way
