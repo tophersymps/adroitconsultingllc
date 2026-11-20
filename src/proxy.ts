@@ -83,9 +83,44 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  /*
+   * Allow-list, NOT a catch-all (t_3f9353a0).
+   *
+   * Proxy runs on a route if and only if that route's RENDER path reads
+   * auth/access state. Public pages (marketing, field notes, tags, the
+   * standalone lab page, the auth-entry forms) are served straight from
+   * Vercel's edge cache with no Middleware leg — which is the whole point:
+   * Vercel counts Fast Origin Transfer between the CDN and Functions/Middleware
+   * in both directions (and twice for one Middleware request), and adroit.io is
+   * on a Hobby plan that hard-pauses at 10 GB/month. The old catch-all matcher
+   * ran Proxy on every non-asset page, including the 28-of-32 sampled requests
+   * whose HTML came from `cache: PRERENDER`.
+   *
+   * Clauses kept here (verified 2026-11-19 by grepping the render path for
+   * `lib/auth` / `lib/access` / the SSR session client):
+   *   /admin/**     — src/app/admin/layout.tsx calls requireAdminPage() (404s non-admins)
+   *   /atlas/**     — hub + [series]/** (lesson, check, exam, certificate, preview):
+   *                   all import @/lib/access and render per-user CardGateState
+   *   /preview/**   — request-time draft previews gated by isPreviewEmailAllowed()
+   *   /profile      — SSR session read; guests get the locked-sky teaser
+   *   /settings     — SSR session read; guests redirect to /login?next=/settings
+   *
+   * Excluded on purpose: everything else, notably /api/** (routes refresh the
+   * session themselves via withAuthCookies), static assets and /_next/*.
+   *
+   * The contract is pinned by src/proxy.matcher.test.ts — it fails if a gated
+   * page is added without a matching clause here.
+   *
+   * NOTE: these values must stay string literals. Next statically extracts
+   * `export const config` from the module AST (extract-const-value.js) and
+   * rejects identifier references, so `matcher: GATED_MATCHERS` would be
+   * silently ignored and Proxy would run on *every* request.
+   */
   matcher: [
-    // Run on all routes except static assets / image optimization / api
-    // (api routes read and refresh the session themselves).
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|ico|css|js|txt|xml|json|woff2?)$).*)",
+    "/admin/:path*",
+    "/atlas/:path*",
+    "/preview/:path*",
+    "/profile",
+    "/settings",
   ],
 };
