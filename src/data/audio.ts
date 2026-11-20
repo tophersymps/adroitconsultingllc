@@ -116,6 +116,7 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "opentofu-vs-terraform-2026", voice: "af_heart", storagePath: "blog/opentofu-vs-terraform-2026/af_heart.mp3", timingsStoragePath: "blog/opentofu-vs-terraform-2026/af_heart.timing.json" },
   { slug: "percent-complete-status-reporting-2026", voice: "af_heart", storagePath: "blog/percent-complete-status-reporting-2026/af_heart.mp3", timingsStoragePath: "blog/percent-complete-status-reporting-2026/af_heart.timing.json" },
   { slug: "platform-engineering-golden-paths-2026", voice: "af_heart", storagePath: "blog/platform-engineering-golden-paths-2026/af_heart.mp3", timingsStoragePath: "blog/platform-engineering-golden-paths-2026/af_heart.timing.json" },
+  { slug: "pmbok-8th-edition-2026", voice: "af_heart", storagePath: "blog/pmbok-8th-edition-2026/af_heart.mp3", timingsStoragePath: "blog/pmbok-8th-edition-2026/af_heart.timing.json" },
   { slug: "pmi-pulse-complexity-2026", voice: "af_heart", storagePath: "blog/pmi-pulse-complexity-2026/af_heart.mp3", timingsStoragePath: "blog/pmi-pulse-complexity-2026/af_heart.timing.json" },
   { slug: "portfolio-resource-contention-2026", voice: "af_heart", storagePath: "blog/portfolio-resource-contention-2026/af_heart.mp3", timingsStoragePath: "blog/portfolio-resource-contention-2026/af_heart.timing.json" },
   { slug: "post-response-side-effects-2026", voice: "af_heart", storagePath: "blog/post-response-side-effects-2026/af_heart.mp3", timingsStoragePath: "blog/post-response-side-effects-2026/af_heart.timing.json" },
