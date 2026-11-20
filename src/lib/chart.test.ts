@@ -587,11 +587,11 @@ describe("published projection vs full registry", () => {
   });
 
   /*
-   * The published-surface regression: a sky containing only the four launched
+   * The published-surface regression: a sky containing only the launched
    * courses resolves through the default (published) map, with no server data
    * and no size-match stealing a pinned figure.
    */
-  it("draws the four launched courses on the released figures", () => {
+  it("draws the eleven launched courses on the released figures", () => {
     const figures = buildChartFigures({
       stats: {
         streakDays: 0,
@@ -607,7 +607,19 @@ describe("published projection vs full registry", () => {
       isGuest: true,
     });
     expect(figures.map((f) => f.figureName).sort()).toEqual(
-      ["Centaurus", "Cetus", "Hydra", "Virgo"],
+      [
+        "Auriga",
+        "Centaurus",
+        "Cetus",
+        "Gemini",
+        "Hydra",
+        "Leo",
+        "Ophiuchus",
+        "Orion",
+        "Scorpius",
+        "Taurus",
+        "Virgo",
+      ],
     );
     for (const f of figures) {
       expect(f.figureName, `${f.seriesSlug} lost its published pin`).toBe(
@@ -626,7 +638,7 @@ describe("published projection vs full registry", () => {
  * already given to another course.
  *
  * This suite runs against `FIGURE_PINS_ALL` — the full registry, which the lab
- * and the pool use. The published four are covered by the suite above.
+ * and the pool use. The published eleven are covered by the suite above.
  */
 describe("course → constellation pins (full registry: exclusivity + surface consistency)", () => {
   it("pins every real course, so none can silently drift to another figure", () => {

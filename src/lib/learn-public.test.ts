@@ -5,6 +5,9 @@
  *
  * These tests run the REAL dataset, so a newly seeded stealth series cannot
  * silently appear in the site-search payload.
+ *
+ * Guard-only module: nothing in the app imports `learn-public.ts` any more (the
+ * live seam is `learn-visibility.ts`); this file keeps the boundary pinned.
  */
 
 import { describe, it, expect } from "vitest";
@@ -27,8 +30,10 @@ const STEALTH_SLUGS = Array.from(
 describe("learn-public — disclosure boundary (t_a6b7630b)", () => {
   it("sanity: the dataset really does contain stealth series", () => {
     expect(STEALTH_SLUGS.length).toBeGreaterThan(0);
-    expect(STEALTH_SLUGS).toContain("ai-adoption");
-    expect(STEALTH_SLUGS).toContain("sf-omni-consultant");
+    expect(STEALTH_SLUGS).toContain("hermes-consultant");
+    expect(STEALTH_SLUGS).toContain("hermes-consultant-intermediate");
+    // The reversal t_47183b5b made: formerly-withheld courses are published.
+    expect(PUBLICLY_LAUNCHED_SERIES).toContain("ai-adoption");
   });
 
   it("getPublicLearnSeries returns exactly the launched set", () => {

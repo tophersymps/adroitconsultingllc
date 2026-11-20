@@ -96,10 +96,10 @@ const SERIES = {
     totalLessons: 2,
     lessons: [],
   },
-  // STEALTH: in the static catalogue, no live `courses` row.
-  "ai-adoption": {
-    slug: "ai-adoption",
-    name: "AI Adoption for Teams",
+  // STEALTH: in the static catalogue, and never in the launch snapshot.
+  "hermes-consultant": {
+    slug: "hermes-consultant",
+    name: "Hermes Consultant Track",
     description: "Unpublished stealth syllabus.",
     gradient: "from-a to-b",
     totalLessons: 2,
@@ -154,7 +154,7 @@ describe("/atlas/[series]/preview under a token-route failure (t_91a3e30b)", () 
       new DbTokenUnavailableError("/token/anonymous"),
     );
 
-    await expect(renderPreview("ai-adoption")).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(renderPreview("hermes-consultant")).rejects.toThrow("NEXT_NOT_FOUND");
     // Fail closed BEFORE any content or DB read.
     expect(mocks.getLearnMDXContent).not.toHaveBeenCalled();
     expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
