@@ -2,6 +2,31 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "pmbok-8th-edition-2026",
+    "title": "PMBOK 8 Hands You Decisions, Not a Method",
+    "excerpt": "PMI's eighth edition keeps six principles, seven domains, and the restored processes, then declines to tell you how to run the project.",
+    "category": "Project Management",
+    "categoryColor": "pm",
+    "categoryGradient": "from-teal to-teal-dark",
+    "date": "November 20, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "8 min read",
+    "featured": false,
+    "tags": [
+      "Project Management",
+      "PMBOK",
+      "Delivery Practice",
+      "Tailoring",
+      "Governance",
+      "PMO",
+      "Consulting Delivery"
+    ],
+    "bannerImage": "/banners/pmbok-8th-edition-2026.webp",
+    "ogImage": "/banners/pmbok-8th-edition-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "reflow-zoom-text-resize-2026",
     "title": "You Tested Every Breakpoint. WCAG Tests 320 and 200.",
     "excerpt": "Breakpoints guess the device. WCAG 2.2 measures a 320 CSS pixel viewport and 200 percent text, two numbers design systems rarely test. What breaks, and the fix.",
