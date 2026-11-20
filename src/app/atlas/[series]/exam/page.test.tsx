@@ -30,7 +30,9 @@ const { mocks } = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
 
 vi.mock("@/data/learn", () => ({
-  learnSeries: [{ slug: "omni-studio-cert" }, { slug: "ai-adoption" }],
+  // `hermes-consultant` is the STEALTH control: in the static catalogue, never
+  // in the launch snapshot (the 7 `/admin`-launched courses are disclosed now).
+  learnSeries: [{ slug: "omni-studio-cert" }, { slug: "hermes-consultant" }],
 }));
 
 vi.mock("@/lib/learn", () => ({
@@ -134,13 +136,13 @@ describe("/atlas/[series]/exam degraded existence gate (F-2)", () => {
 
   it("404s a stealth series when the seam cannot decide", async () => {
     mocks.getSeriesBySlug.mockReturnValue(
-      seriesInfo("ai-adoption", "AI Adoption for Teams"),
+      seriesInfo("hermes-consultant", "Hermes Consultant Track"),
     );
     mocks.decideCourseAccess.mockRejectedValue(
       new DbTokenUnavailableError("/token/anonymous"),
     );
 
-    await expect(render("ai-adoption")).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(render("hermes-consultant")).rejects.toThrow("NEXT_NOT_FOUND");
     expect(mocks.getCourseRowBySlug).not.toHaveBeenCalled();
   });
 });
@@ -190,13 +192,13 @@ describe("/atlas/[series]/exam — kind-aware SEO head (ADR-309)", () => {
 
   it("does not disclose an unlaunched series in the head", async () => {
     mocks.getSeriesBySlug.mockReturnValue(
-      seriesInfo("salesforce-data-architect", "Platform Data Architect Certification", "certification-prep"),
+      seriesInfo("hermes-consultant-intermediate", "Unlaunched Stealth Certification", "certification-prep"),
     );
-    mocks.getCertExam.mockReturnValue({ series: "salesforce-data-architect", title: "x", questions: [{ question: "q" }] });
+    mocks.getCertExam.mockReturnValue({ series: "hermes-consultant-intermediate", title: "x", questions: [{ question: "q" }] });
 
-    const m = (await meta("salesforce-data-architect")) as { title: string; description: string };
+    const m = (await meta("hermes-consultant-intermediate")) as { title: string; description: string };
     expect(m.title).toBe("Exam | Adroit Learn");
-    expect(JSON.stringify(m)).not.toMatch(/Platform Data Architect/i);
+    expect(JSON.stringify(m)).not.toMatch(/Unlaunched Stealth/i);
   });
 
   it("returns an empty head when the series has no exam", async () => {

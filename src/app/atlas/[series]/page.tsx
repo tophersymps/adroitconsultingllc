@@ -61,12 +61,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // and description in the 404 document head. Only a publicly launched series
   // may appear here.
   //
-  // MEDIUM (t_b4c0da5f, CWE-200): the mirror alone is not enough. A series
-  // still listed there but set pending/archived in `courses` 404s on the DB
-  // seam while this head kept naming it. Gate on the two-source rule from
-  // `mayDiscloseSeries`: mirror AND (DB unreadable OR DB live). On a credential
-  // outage `isSeriesDbLive` returns null and we fall back to the mirror, so a
-  // launched series' metadata never regresses to the generic head.
+  // MEDIUM (t_b4c0da5f, CWE-200): the static snapshot alone is not enough — a
+  // series still listed there but set pending/archived in `courses` 404s on the
+  // DB seam while this head would keep naming it. Gate on `mayDiscloseSeries`:
+  // the DB verdict decides whenever it is readable (t_47183b5b — no snapshot
+  // intersection), and on a credential outage `isSeriesGuestVisible` returns
+  // null so we fall back to the snapshot, so a launched series' metadata never
+  // regresses to the generic head.
   // `getCourseRowBySlug` is per-request cached, so the page body's own row read
   // is shared rather than adding a second round trip.
   if (!(await mayDiscloseSeriesLive(series))) {

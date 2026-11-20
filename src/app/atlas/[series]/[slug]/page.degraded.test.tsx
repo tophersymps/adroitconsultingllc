@@ -37,7 +37,7 @@ vi.mock("next/navigation", () => ({ notFound: notFoundMock }));
 
 vi.mock("@/lib/learn", () => ({
   getLesson: (series: string, slug: string) =>
-    (series === "omni-studio-cert" || series === "ai-adoption") &&
+    (series === "omni-studio-cert" || series === "hermes-consultant") &&
     slug === "day-01"
       ? {
           slug,
@@ -60,14 +60,14 @@ vi.mock("@/lib/learn", () => ({
           totalLessons: 1,
           lessons: [{ slug: "day-01", title: "Day 1 — OmniStudio solutions" }],
         }
-      : slug === "ai-adoption"
+      : slug === "hermes-consultant"
         ? {
             slug,
-            name: "AI Adoption for Teams",
+            name: "Hermes Consultant Track",
             description: "Unpublished stealth syllabus.",
             gradient: "from-a to-b",
             totalLessons: 1,
-            lessons: [{ slug: "day-01", title: "Day 1 — AI adoption" }],
+            lessons: [{ slug: "day-01", title: "Day 1 — Hermes consultant" }],
           }
         : null,
   getLessonsForSeries: () => [
@@ -193,7 +193,7 @@ describe("/atlas/[series]/[slug] under a token-route 429 (R2-5, AC-6)", () => {
       sessionUser: { id: "user-1", email: "learner@test.dev" },
     });
 
-    await expect(renderLesson("ai-adoption", "day-01")).rejects.toThrow(
+    await expect(renderLesson("hermes-consultant", "day-01")).rejects.toThrow(
       "NEXT_NOT_FOUND",
     );
     expect(dataApiRequests(captured)).toHaveLength(0);

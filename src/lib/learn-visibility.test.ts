@@ -2,9 +2,10 @@
  * src/lib/learn-visibility.test.ts — tests for the guest-visibility seam
  * (ADR-217 … ADR-221, t_4b6e3daa).
  *
- * Covers: the pure row filter, the FAIL-CLOSED degradation (DB failure ⇒ the
- * static launch mirror, never every content series), the hub ordering, and the
- * card projection. `@/lib/db/server` is mocked so no Data API call is made.
+ * Covers: the pure row filter, the healthy path (the DB is the sole DISCLOSURE
+ * authority — t_47183b5b), the FAIL-CLOSED degradation (DB failure ⇒ the static
+ * launch snapshot, never every content series), the hub ordering, and the card
+ * projection. `@/lib/db/server` is mocked so no Data API call is made.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -213,13 +214,14 @@ describe("seam — FAIL CLOSED on failure", () => {
  * `src/app/sitemap.healthy.test.ts` ("sitemap on the HEALTHY path (DB read
  * succeeds)") into the seam that now owns the rule (t_a774c0d2).
  *
- * Publication requires BOTH authorities: `slug ∈ PUBLICLY_LAUNCHED_SERIES`
- * AND (DB unreadable OR row live + non-stealth). The healthy path used to
- * return the raw DB-derived set, so a `courses` row flipped live at runtime
- * (`/admin`, no seed migration) was advertised from the sitemap, the search
- * index and the funnel while its own metadata said `noindex`.
+ * t_47183b5b replaced the two-authority rule (DB ∩ static mirror) with a single
+ * DISCLOSURE authority: whenever the `courses` read succeeds, the DB verdict
+ * decides — a series is published IFF a guest can resolve it (row live +
+ * non-stealth). The static mirror is consulted only when the read FAILS. The
+ * old intersection could only drop NON-stealth rows, which is how every
+ * `/admin` launch since t_b4c0da5f silently became undiscoverable.
  */
-describe("seam — healthy path intersects the DB set with the static mirror", () => {
+describe("seam — healthy path discloses the DB guest-visible set", () => {
   type WarnMock = { mock: { calls: unknown[][] } };
 
   function learnVisibilityWarns(): string[] {
@@ -231,11 +233,11 @@ describe("seam — healthy path intersects the DB set with the static mirror", (
       );
   }
 
-  it("publishes only DB-live ∩ static-launch-mirror, and warns once about drift", async () => {
+  it("publishes a DB-live non-stealth series that is absent from the snapshot, and warns nothing", async () => {
     // `hermes-consultant` is a real content series that is NOT in the static
-    // launch mirror. `live` + `free` proves ACCESS, so only the DISCLOSURE
-    // authority (the mirror) can drop it — exactly the runtime-flip drift the
-    // `/admin` course surface can create.
+    // launch snapshot. `live` + `free` proves ACCESS, so it must now be
+    // disclosed: the snapshot no longer suppresses the healthy path.
+    // `live` + `granted` (stealth) must still be hidden — access decides first.
     anonymousClientMock.mockResolvedValue(
       clientReturning({
         data: [
@@ -248,27 +250,45 @@ describe("seam — healthy path intersects the DB set with the static mirror", (
 
     const slugs = await getGuestVisibleSeriesSlugs();
 
-    // DB proves access AND mirror proves disclosure → published.
     expect(slugs.has("agentic-ai")).toBe(true);
-    // In the DB but not in the mirror → NOT published, on any surface.
-    expect(slugs.has("hermes-consultant")).toBe(false);
+    expect(slugs.has("hermes-consultant")).toBe(true);
     expect(await isLearnVisibilityDegraded()).toBe(false);
 
     const series = await getGuestVisibleSeries();
-    expect(series.map((s) => s.slug)).toEqual(["agentic-ai"]);
+    expect(series.map((s) => s.slug).sort()).toEqual([
+      "agentic-ai",
+      "hermes-consultant",
+    ]);
     const cards = await getGuestVisibleCardSeries();
-    expect(cards.some((c) => c.slug === "hermes-consultant")).toBe(false);
+    expect(cards.some((c) => c.slug === "hermes-consultant")).toBe(true);
     const docs = await getGuestSearchDocs();
-    expect(
-      docs.some((d) => d.href.includes("/atlas/hermes-consultant")),
-    ).toBe(false);
+    expect(docs.some((d) => d.href.includes("/atlas/hermes-consultant"))).toBe(
+      true,
+    );
 
-    // Drift stays visible: exactly one warn naming the offending slug.
-    const warns = learnVisibilityWarns();
-    expect(warns).toHaveLength(1);
-    expect(warns[0]).toContain("absent from the static launch mirror");
-    expect(warns[0]).toContain("hermes-consultant");
-    expect(warns[0]).not.toContain("agentic-ai");
+    // Drift is gone: there is nothing to warn about any more.
+    expect(learnVisibilityWarns()).toHaveLength(0);
+  });
+
+  it("still hides a live granted (stealth) series, in and out of the snapshot — t_47183b5b", async () => {
+    anonymousClientMock.mockResolvedValue(
+      clientReturning({
+        data: [
+          // In the snapshot, but stealth: the DB hides it.
+          row("agentic-ai", "live", "granted"),
+          // Never in the snapshot, and stealth: still hidden.
+          row("hermes-consultant", "live", "granted"),
+          // Non-stealth control.
+          row("salesforce-architect", "live", "free"),
+        ],
+        error: null,
+      }),
+    );
+
+    const slugs = await getGuestVisibleSeriesSlugs();
+
+    expect([...slugs]).toEqual(["salesforce-architect"]);
+    expect(learnVisibilityWarns()).toHaveLength(0);
   });
 
   it("mirror members the DB did not report live are not published (DB still governs access)", async () => {
@@ -288,7 +308,7 @@ describe("seam — healthy path intersects the DB set with the static mirror", (
     expect(slugs.has("salesforce-architect")).toBe(false);
   });
 
-  it("does not warn when the live set is entirely inside the mirror", async () => {
+  it("warns nothing for either an inside- or outside-snapshot live set", async () => {
     anonymousClientMock.mockResolvedValue(
       clientReturning({
         data: [row("agentic-ai", "live", "free"), row("ai-at-work", "live", "free")],
@@ -296,25 +316,41 @@ describe("seam — healthy path intersects the DB set with the static mirror", (
       }),
     );
 
-    const slugs = await getGuestVisibleSeriesSlugs();
-
-    expect([...slugs].sort()).toEqual(["agentic-ai", "ai-at-work"]);
+    expect([...(await getGuestVisibleSeriesSlugs())].sort()).toEqual([
+      "agentic-ai",
+      "ai-at-work",
+    ]);
     expect(learnVisibilityWarns()).toHaveLength(0);
-  });
 
-  it("stealth rows never reach the mirror check (access is decided first)", async () => {
-    // live + granted is stealth: dropped by `isGuestVisibleCourse`, so it must
-    // not be reported as mirror drift either.
+    // Same outcome when the live set is entirely outside the snapshot.
     anonymousClientMock.mockResolvedValue(
       clientReturning({
-        data: [row("salesforce-architect", "live", "free"), row("hermes-consultant", "live", "granted")],
+        data: [
+          row("ai-adoption", "live", "sub-or-one-time"),
+          row("sf-data360-consultant", "live", "subscription"),
+        ],
         error: null,
       }),
     );
 
-    expect([...(await getGuestVisibleSeriesSlugs())]).toEqual([
-      "salesforce-architect",
+    expect([...(await getGuestVisibleSeriesSlugs())].sort()).toEqual([
+      "ai-adoption",
+      "sf-data360-consultant",
     ]);
+    expect(learnVisibilityWarns()).toHaveLength(0);
+  });
+
+  it("an /admin-launched series (DB live, non-stealth) is disclosed with no warning — t_47183b5b", async () => {
+    // The structural recurrence guard: a launch through `/admin` writes
+    // `status='live'` to the DB only. It is discoverable with no code change.
+    anonymousClientMock.mockResolvedValue(
+      clientReturning({
+        data: [row("ai-adoption", "live", "sub-or-one-time")],
+        error: null,
+      }),
+    );
+    const slugs = await getGuestVisibleSeriesSlugs();
+    expect(slugs.has("ai-adoption")).toBe(true);
     expect(learnVisibilityWarns()).toHaveLength(0);
   });
 

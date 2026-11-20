@@ -28,7 +28,7 @@ export interface AssignableCourse {
  * **This map is the PUBLISHED projection, not the editorial registry.** It
  * ships in a client chunk (`/atlas/[series]` and `/profile` both draw charts in
  * the browser), so it may only name series the site already names publicly —
- * exactly the four in `PUBLICLY_LAUNCHED_SERIES`. The full fourteen-course
+ * exactly the eleven in `PUBLICLY_LAUNCHED_SERIES`. The full fourteen-course
  * registry lives in `figure-pins.server.ts` (`FIGURE_PINS_ALL`, behind
  * `import "server-only"`); `chart.test.ts` asserts this map deep-equals
  * `publicPins()`, so a stealth pin cannot be added here and a launch cannot
@@ -62,6 +62,13 @@ export const FIGURE_PINS: Readonly<Record<string, string>> = {
   "agentic-ai": "Cetus",
   "omni-studio-cert": "Hydra",
   "ai-at-work": "Virgo",
+  "ai-power-user": "Taurus",
+  "ai-adoption": "Auriga",
+  "salesforce-sharing-visibility-architect": "Scorpius",
+  "salesforce-data-architect": "Ophiuchus",
+  "sf-omni-consultant": "Gemini",
+  "sf-data360-consultant": "Orion",
+  "sf-agentforce-sales-consultant": "Leo",
 };
 
 /** Deterministic processing order: biggest course first, then by slug. */

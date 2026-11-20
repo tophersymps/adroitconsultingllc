@@ -88,9 +88,16 @@ export function getRelatedPosts(
  *
  * DISCLOSURE GATE (t_b4c0da5f, CWE-200): this block renders on every public
  * blog post and shows the series' real name/description, so it may only name a
- * series that is in the static launch mirror (`isPubliclyLaunchedSeries`). The
+ * series that is in the static launch snapshot (`isPubliclyLaunchedSeries`). The
  * gate lives here, in the single resolver, so no stale CATEGORY_FUNNEL entry
  * (or future admin-written one) can publish a stealth series by accident.
+ *
+ * DELIBERATELY LEFT ON THE SNAPSHOT (t_47183b5b): the disclosure seam elsewhere
+ * is now DB-authoritative, but reading the DB here would force this resolver to
+ * be `async`, which opts all 155 prerendered post pages into dynamic rendering
+ * (the perf regression `learn-visibility.ts` documents). CATEGORY_FUNNEL is
+ * hand-wired per category anyway, so a new course here needs a hand edit and
+ * the snapshot refresh rides along with it.
  */
 export function resolveRecommendedSeries(
   post: BlogPost,
