@@ -1,6 +1,6 @@
 /**
- * src/lib/atlas-launch.ts — STATIC launch mirror for credential-outage
- * degrading (security t_c4eafa3b F-1/F-2, fix t_64253bbc).
+ * src/lib/atlas-launch.ts — STATIC launch snapshot: the fail-closed outage
+ * fallback and the source of the client chart pins (t_47183b5b).
  *
  * WHY THIS EXISTS
  * ---------------
@@ -23,14 +23,34 @@
  *   - any other series → `notFound()`, exactly as it would 404 on a healthy
  *     read (stealth existence stays hidden).
  *
- * The list is the static mirror of the `courses` rows seeded as live by
- * `supabase/migrations/008_course_catalog.sql`. It is used ONLY on the
- * `unavailable` path; every healthy decision still comes from the DB seam.
- * `src/lib/atlas-launch.test.ts` asserts parity with that seed migration so a
- * newly seeded launch cannot silently 404 during an outage.
+ * THE CONTRACT (rewritten for t_47183b5b — do not re-litigate)
+ * -----------------------------------------------------------
+ * The DB is the sole DISCLOSURE authority **whenever it is readable**. This
+ * list is a hand-maintained SNAPSHOT, and a snapshot can never track a
+ * runtime-writable table: every `/admin` launch between t_b4c0da5f
+ * (2026-10-23) and t_47183b5b was `live` + non-stealth yet absent from the
+ * four-slug mirror, so the crawler-visible surfaces silently dropped it. That
+ * drift is structural, not a matter of discipline.
  *
- * WHEN A NEW COURSE LAUNCHES: add its `series_slug` here in the same PR that
- * adds its seeded `courses` row.
+ * `PUBLICLY_LAUNCHED_SERIES` is therefore consumed on exactly TWO paths:
+ *
+ *   1. the FAIL-CLOSED fallback used only when the `courses` row cannot be
+ *      read (credential outage) — the degraded contract every `/atlas` route
+ *      and the sitemap use; and
+ *   2. `publicPins()` (`figure-pins.server.ts`), which derives the client chart
+ *      map from it.
+ *
+ * It is explicitly NOT load-bearing for healthy-path disclosure. A stale
+ * mirror can no longer hide a live, non-stealth course; the disclosure verdict
+ * comes from `isGuestVisibleCourse` (`access.ts`) via the DB seam.
+ * `src/lib/atlas-launch.test.ts` pins both directions so a stealth series
+ * cannot be added here and a seeded launch cannot silently 404 during an
+ * outage.
+ *
+ * WHEN A NEW COURSE LAUNCHES: on the healthy path, nothing is required — the
+ * DB already discloses it. Adding its `series_slug` here is only needed for
+ * the outage fallback and for its client chart pin, so do it in the same PR as
+ * the seeded `courses` row (or the pin will be missing).
  *
  * Residual risk (documented in CHANGELOG): a course row created at RUNTIME
  * (admin backend, no migration) is not mirrored here, so it 404s for the
@@ -40,9 +60,16 @@
  */
 export const PUBLICLY_LAUNCHED_SERIES = [
   "agentic-ai",
+  "ai-adoption",
   "ai-at-work",
+  "ai-power-user",
   "omni-studio-cert",
   "salesforce-architect",
+  "salesforce-data-architect",
+  "salesforce-sharing-visibility-architect",
+  "sf-agentforce-sales-consultant",
+  "sf-data360-consultant",
+  "sf-omni-consultant",
 ] as const;
 
 const PUBLICLY_LAUNCHED = new Set<string>(PUBLICLY_LAUNCHED_SERIES);
@@ -52,34 +79,46 @@ const PUBLICLY_LAUNCHED = new Set<string>(PUBLICLY_LAUNCHED_SERIES);
  * an availability-only degrade of its public surface is safe. Never use this
  * for an access decision — only to choose HOW to fail when the seam already
  * said it could not decide.
+ *
+ * Consumed as the outage fallback and as the source of `publicPins()`; NOT the
+ * healthy-path disclosure rule (t_47183b5b).
  */
 export function isPubliclyLaunchedSeries(slug: string): boolean {
   return PUBLICLY_LAUNCHED.has(slug);
 }
 
 /**
- * DISCLOSURE predicate (t_b4c0da5f, CWE-200). A series slug may be named on a
- * public surface **iff** it is in the static launch mirror AND the DB does not
- * say it is delisted:
+ * DISCLOSURE predicate. The DB is the sole disclosure authority when it is
+ * readable; this list only answers the outage case:
  *
- *   mayDiscloseSeries(slug, dbLive)
+ *   mayDiscloseSeries(slug, guestVisible)
  *
- * `dbLive` is the tri-state read of `courses.status`:
- *   - `true`  → the row says `live` in the DB;
- *   - `false` → the row exists and is `pending` / `archived` (delisted), or no
- *               row exists at all (stealth);
- *   - `null`  → the DB could not be read (credential outage) — degrade to the
- *               static mirror alone, exactly as the routes do on `unavailable`.
+ * `guestVisible` is the DB verdict for "would a guest resolve this series?" —
+ * i.e. `isGuestVisibleCourse(row)` (live && access_model !== "granted"), the
+ * single stealth rule in `access.ts` — or `null` when the DB could not be read:
+ *   - `true`  → the row is live and non-stealth: DISCLOSE (t_47183b5b — no
+ *               mirror intersection; intersecting could only ever drop
+ *               non-stealth rows, which is how every `/admin` launch since
+ *               t_b4c0da5f became undiscoverable);
+ *   - `false` → the row is stealth, delisted, or absent: do not disclose;
+ *   - `null`  → credential outage: fail closed to the static launch mirror,
+ *               exactly as the routes do on `unavailable`.
  *
- * The mirror alone is not enough on the healthy path: a series can stay in the
- * mirror after ops delists it in the DB, and the 404 head used to keep naming
- * it. The DB alone is not enough during an outage. This predicate is the single
- * choke point so page metadata, sitemap and the blog funnel cannot drift.
+ * `access.ts` imports nothing from this module, so this predicate can never
+ * change an access decision (`DISCLOSURE_NEVER_GRANTS_ACCESS`).
  */
 export function mayDiscloseSeries(
   slug: string,
-  dbLive: boolean | null,
+  /** The DB verdict for "would a guest resolve this series?", or `null` when
+   *  the DB could not be read. Must come from `isGuestVisibleCourse`, so the
+   *  stealth rule is applied exactly once, in `access.ts`. */
+  guestVisible: boolean | null,
 ): boolean {
-  if (!isPubliclyLaunchedSeries(slug)) return false;
-  return dbLive === null || dbLive;
+  // DB unreadable → fail closed to the static launch mirror.
+  if (guestVisible === null) return isPubliclyLaunchedSeries(slug);
+  // DB readable → the DB is the sole disclosure authority (t_47183b5b).
+  // There is no mirror intersection here by design: the DB predicate already
+  // excludes stealth, and intersecting could only drop NON-stealth rows —
+  // how every /admin launch since t_b4c0da5f became undiscoverable.
+  return guestVisible;
 }

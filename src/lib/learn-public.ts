@@ -8,6 +8,11 @@
  * `src/lib/atlas-launch.ts` owns DISCLOSURE / NAMING; DB `courses.status` owns
  * ACCESS / RENDERING. This module only answers the disclosure question.
  *
+ * Scope note (t_47183b5b): this module has ZERO runtime consumers — the live
+ * disclosure seam is `learn-visibility.ts` (DB-authoritative). Only
+ * `src/lib/db/server-only-guard.test.ts` and this module's own suite reference
+ * it, so it is kept as a pinned boundary, not as app code.
+ *
  * The imports here are the FULL dataset (`@/data/learn`, ~1 MB, 12 series of
  * which 8 are stealth). That is why `import "server-only"` is mandatory: if a
  * client component ever imports this module — directly or transitively through
