@@ -40,6 +40,10 @@ import { getAnonymousJwtResult, type AnonTokenResult } from "./anonymous-token";
 import { createTokenUnavailableClient } from "./degraded-client";
 import { isNextDynamicUsageError, mintFetch } from "./mint-transport";
 import { hasSessionCredential } from "@/lib/session";
+import {
+  isSecureRequest,
+  upstreamAuthCookieHeader,
+} from "@/lib/auth/transport";
 
 /** The minimal user projection the app reads off the session. */
 export interface DbSessionUser {
@@ -91,20 +95,45 @@ const requestCookieHeader = cache(async (): Promise<string | null> => {
 });
 
 /**
- * Local-dev only. Over plain `http://localhost` the auth SDK writes the session
- * cookie as `neon-auth.session_token`, but the Managed Better Auth service only
- * recognises the HTTPS name `__Secure-neon-auth.session_token`, so `/token`
- * answers 401 and every user (admins included) degrades to a guest. Re-label
- * the same cookie value for the upstream call. Never active in production
- * (HTTPS already uses the `__Secure-` name), and it forwards only the caller's
- * own cookie, so no identity or access check is changed.
+ * Transport of the CURRENT request, from the same decision the proxy, the auth
+ * routes and the SDK cookie adapter use (`isSecureRequest`).
+ *
+ * `null` means "no request scope" (a static build pass, a script, or a unit
+ * test that mocks only `cookies`): callers then send the cookie header
+ * untouched, i.e. the deployed https form. The lookup is guarded twice on
+ * purpose — a `vi.mock("next/headers")` that exports only `cookies` THROWS on
+ * property access to any other export, so "does this module have `headers`?"
+ * cannot be asked with a bare `typeof` (same guard as `@/lib/session`).
  */
-export function localDevSessionCookie(cookieHeader: string): string {
-  if (process.env.NODE_ENV !== "development") return cookieHeader;
-  return cookieHeader.replace(
-    /(^|;\s*)neon-auth\.session_token=/,
-    "$1__Secure-neon-auth.session_token=",
-  );
+const requestIsSecureTransport = cache(async (): Promise<boolean | null> => {
+  try {
+    const nextHeaders = await import("next/headers");
+    const read = nextHeaders.headers;
+    return typeof read === "function" ? isSecureRequest(await read()) : null;
+  } catch {
+    return null;
+  }
+});
+
+/**
+ * The caller's cookies as the `Cookie:` header the Managed Better Auth service
+ * expects on the upstream hop, or `null` when the request carries none.
+ *
+ * The auth service only reads the SDK's `__Secure-neon-auth.*` names, while a
+ * browser on a non-secure transport stored the plain `neon-auth.*` ones
+ * (`@/lib/auth/transport`). Re-labelling here is what makes the SSR session
+ * read agree with the WRITE path: without it, a signed-in developer on
+ * `http://localhost:3000` (or anyone on an http host) had `/profile` render
+ * the guest teaser and `/settings` bounce to `/login` (t_c03fea8a).
+ *
+ * A secure transport — and the no-request-scope case — forwards the header
+ * unchanged, so production behaviour is byte-for-byte what it was.
+ */
+async function requestAuthCookieHeader(): Promise<string | null> {
+  const cookie = await requestCookieHeader();
+  if (!cookie) return null;
+  const secure = (await requestIsSecureTransport()) !== false;
+  return upstreamAuthCookieHeader(cookie, secure);
 }
 
 /** Conservative cache lifetime when the token's `exp` claim cannot be read. */
@@ -269,8 +298,8 @@ async function fetchTokenResult(
   // user's cookie attached is exactly how user context could leak into it
   // (SEC-R2-5-L1). Never attach it there.
   if (path === "/token") {
-    const cookie = await requestCookieHeader();
-    if (cookie) headers.Cookie = localDevSessionCookie(cookie);
+    const cookie = await requestAuthCookieHeader();
+    if (cookie) headers.Cookie = cookie;
   }
 
   // The endpoint burned the budget moments ago: do not spend the render's
@@ -432,7 +461,7 @@ async function getAnonymousJwt(deadline: number): Promise<string | null> {
  */
 export const getNeonSessionUser = cache(
   async (): Promise<DbSessionUser | null> => {
-    const cookie = await requestCookieHeader();
+    const cookie = await requestAuthCookieHeader();
     if (!cookie) return null;
     // t_81b09ba8: bounded like the mints — the same request budget. A hung
     // `/get-session` must not outlive the render, and a caller that already

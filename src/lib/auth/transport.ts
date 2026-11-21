@@ -156,10 +156,22 @@ function protocolOf(headers: HeaderReader): "http" | "https" | null {
  * Whether this request arrived over TLS, i.e. whether `Secure` + `__Secure-`
  * cookies can be used.
  *
- * Precedence: explicit `AUTH_COOKIE_SECURE` override → `x-forwarded-proto`
- * (Vercel and every sane reverse proxy set it) → the scheme of the incoming
- * Origin/Referer → loopback (browsers accept `Secure` cookies on localhost) →
- * the canonical origin's scheme when there is not even a Host header.
+ * Precedence: explicit `AUTH_COOKIE_SECURE` override → loopback host → the
+ * protocol signal (`x-forwarded-proto`, else the scheme of the incoming
+ * Origin/Referer) → the canonical origin's scheme when there is not even a
+ * Host header.
+ *
+ * Loopback is consulted BEFORE the protocol signal (t_c03fea8a). `next dev`
+ * answers `x-forwarded-proto: http` for a request whose browser origin is
+ * `http://localhost:3000`, and localhost IS a secure context — browsers accept
+ * `Secure` + `__Secure-` cookies there (verified in Chrome via CDP: a
+ * `Secure` cookie set from `http://localhost:3000` is stored and read back).
+ * Letting the dev server's header win made the WRITE path store the plain
+ * `neon-auth.*` names while the READ path resolved the SDK's
+ * `__Secure-neon-auth.session_token`, so every signed-in server component
+ * under `next dev` rendered as a guest. A loopback Host is never evidence of
+ * TLS, so this only decides the plain-http case: an `https` signal already
+ * agreed.
  *
  * A request that is admitted by NO signal (a LAN ip:port over plain http with
  * no proxy headers) is treated as http, because writing a cookie the browser
@@ -171,11 +183,14 @@ export function isSecureRequest(headers: HeaderReader): boolean {
   if (override === "true") return true;
   if (override === "false") return false;
 
+  const host = headers.get("host");
+  if (isLoopbackHost(host)) return true;
+
   const protocol = protocolOf(headers);
   if (protocol) return protocol === "https";
 
-  const host = headers.get("host");
-  if (host) return isLoopbackHost(host);
+  // Non-loopback Host with no protocol signal at all: plain http.
+  if (host) return false;
 
   return canonicalOrigin().startsWith("https://");
 }
@@ -244,6 +259,56 @@ export function authCookiesForUpstream(
     pairs.push(`${wireName}${entry.slice(eq)}`);
   }
   return pairs.join("; ");
+}
+
+/**
+ * Generic cookie-pair walk: rewrite each `name=value` pair of a `Cookie:`
+ * header through `rename`, leaving everything else (order, whitespace, values)
+ * byte-identical.
+ */
+function mapCookieNames(cookieHeader: string, rename: (name: string) => string): string {
+  return cookieHeader
+    .split(";")
+    .map((entry) => {
+      // Keep any whitespace that separated this pair from the previous one:
+      // matching is on the name, not on the header's layout.
+      const leading = /^\s*/.exec(entry)?.[0] ?? "";
+      const pair = entry.slice(leading.length);
+      const eq = pair.indexOf("=");
+      if (eq <= 0) return entry;
+      const name = pair.slice(0, eq).trim();
+      const renamed = rename(name);
+      return renamed === name ? entry : `${leading}${renamed}${pair.slice(eq)}`;
+    })
+    .join(";");
+}
+
+/**
+ * Cookie header to send to the Managed Better Auth service on the upstream hop
+ * (`/token`, `/get-session`) for the transport this request arrived on.
+ *
+ * The auth service only ever reads the SDK's `__Secure-neon-auth.*` names,
+ * while a browser on a non-secure transport has stored the plain `neon-auth.*`
+ * ones (see `toStorageCookieName`). Without this translation the SSR session
+ * read forwarded the plain name verbatim, the service answered "no user", and
+ * every gated server component rendered as a guest — `/profile` showed its
+ * locked-sky teaser and `/settings` bounced to `/login` for a signed-in user
+ * (t_c03fea8a). The proxy and the SDK cookie adapter already translate through
+ * `authCookiesForUpstream()`; this is the same translation for the two direct
+ * upstream calls in `@/lib/db/server`.
+ *
+ * On a SECURE transport the header is returned UNCHANGED (byte-for-byte):
+ * the browser stored the `__Secure-` names already, and a plain
+ * `neon-auth.*` cookie must never be up-converted there — that is the
+ * session-fixation vector of M2 (t_7ecb98d7, CWE-384). Names outside the auth
+ * namespace are never touched.
+ */
+export function upstreamAuthCookieHeader(
+  cookieHeader: string,
+  secure: boolean,
+): string {
+  if (secure) return cookieHeader;
+  return mapCookieNames(cookieHeader, toUpstreamCookieName);
 }
 
 /**

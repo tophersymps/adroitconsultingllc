@@ -33,6 +33,7 @@ import {
   resolveRequestOrigin,
   toStorageCookieName,
   toUpstreamCookieName,
+  upstreamAuthCookieHeader,
 } from "./transport";
 
 function headers(init: Record<string, string> = {}): Headers {
@@ -133,9 +134,56 @@ describe("isSecureRequest", () => {
     expect(isSecureRequest(headers({ host: "[::1]:3111" }))).toBe(true);
   });
 
+  it("keeps a dev-server loopback request secure even when x-forwarded-proto says http (t_c03fea8a)", () => {
+    // `next dev` really does answer these headers (probed with a temporary
+    // route handler): host localhost:3000 + x-forwarded-proto: http. The
+    // browser origin is http://localhost:3000, which IS a secure context, so a
+    // `Secure` + `__Secure-` cookie set from it is stored and read back.
+    //
+    // Before the fix the protocol signal won, the transport was declared
+    // insecure, the WRITE path stored the plain `neon-auth.*` names while the
+    // READ path resolved the SDK's `__Secure-` name — so a signed-in user got
+    // the guest /profile teaser and a /settings -> /login bounce.
+    const devRequest = headers({
+      host: "localhost:3000",
+      "x-forwarded-proto": "http",
+      "x-forwarded-host": "localhost:3000",
+      origin: "http://localhost:3000",
+    });
+    const secure = isSecureRequest(devRequest);
+    expect(secure).toBe(true);
+
+    // Both halves of the session read/write now agree with production: the
+    // cookie is stored under the SDK's prefixed name, and that same name is
+    // the one the read paths accept.
+    expect(toStorageCookieName(SECURE_SESSION_COOKIE_NAME, secure)).toBe(
+      SECURE_SESSION_COOKIE_NAME,
+    );
+    expect(toStorageCookieName(SECURE_SESSION_COOKIE_NAME, secure)).not.toBe(
+      PLAIN_SESSION_COOKIE_NAME,
+    );
+    expect(
+      hasSessionCookie(`${SECURE_SESSION_COOKIE_NAME}=tok`, secure),
+    ).toBe(true);
+  });
+
   it("treats plain http on a LAN host as insecure — the F2 regression", () => {
     // `next start` on a LAN ip: no proxy headers, browser drops Secure cookies.
     expect(isSecureRequest(headers({ host: "192.168.1.20:3111" }))).toBe(false);
+  });
+
+  it("treats an http LAN host as insecure even when a dev server claims the protocol (t_c03fea8a)", () => {
+    // The loopback branch must not leak to a non-loopback host: only localhost
+    // is a secure context, so anything else over http keeps the plain names.
+    expect(
+      isSecureRequest(
+        headers({
+          host: "192.168.1.20:3111",
+          "x-forwarded-proto": "http",
+          origin: "http://192.168.1.20:3111",
+        }),
+      ),
+    ).toBe(false);
   });
 
   it("honours the AUTH_COOKIE_SECURE override", () => {
@@ -328,5 +376,42 @@ describe("toUpstreamCookieName", () => {
     expect(toUpstreamCookieName("__Secure-neon-auth.session_token")).toBe(
       "__Secure-neon-auth.session_token",
     );
+  });
+});
+
+describe("upstreamAuthCookieHeader", () => {
+  it("re-labels every plain neon-auth cookie for the auth service on an insecure transport (t_c03fea8a)", () => {
+    expect(
+      upstreamAuthCookieHeader(
+        "adroit_cookie_consent=granted; neon-auth.session_token=tok; neon-auth.local.session_data=data",
+        false,
+      ),
+    ).toBe(
+      "adroit_cookie_consent=granted; __Secure-neon-auth.session_token=tok; __Secure-neon-auth.local.session_data=data",
+    );
+    expect(upstreamAuthCookieHeader("neon-auth.session_token=tok", false)).toBe(
+      "__Secure-neon-auth.session_token=tok",
+    );
+  });
+
+  it("returns a secure transport's header byte-for-byte unchanged (production)", () => {
+    const header =
+      "adroit_cookie_consent=granted; __Secure-neon-auth.session_token=tok; __Secure-neon-auth.local.session_data=data";
+    expect(upstreamAuthCookieHeader(header, true)).toBe(header);
+  });
+
+  it("never up-converts a planted plain cookie on a secure transport (M2, CWE-384)", () => {
+    // The sibling-subdomain planting vector: the plain name must stay plain,
+    // i.e. unreadable as a session, exactly as authCookiesForUpstream() drops it.
+    expect(upstreamAuthCookieHeader("neon-auth.session_token=ATTACKER", true)).toBe(
+      "neon-auth.session_token=ATTACKER",
+    );
+  });
+
+  it("leaves malformed / nameless pairs alone", () => {
+    expect(upstreamAuthCookieHeader("garbage; =novalue; ok=1", false)).toBe(
+      "garbage; =novalue; ok=1",
+    );
+    expect(upstreamAuthCookieHeader("", false)).toBe("");
   });
 });
