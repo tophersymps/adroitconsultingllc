@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "salesforce-apex-callout-transaction-order-2026",
+    "title": "The Callout Waits for a Commit That Apex Cannot Make",
+    "excerpt": "Apex will not send an HTTP request while a DML write in the same transaction is still uncommitted. Every workaround moves that failure past the save.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "November 23, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "12 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Apex",
+      "Integration",
+      "Architecture",
+      "Transactions"
+    ],
+    "bannerImage": "/banners/salesforce-apex-callout-transaction-order-2026.webp",
+    "ogImage": "/banners/salesforce-apex-callout-transaction-order-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "pmbok-8th-edition-2026",
     "title": "PMBOK 8 Hands You Decisions, Not a Method",
     "excerpt": "PMI's eighth edition keeps six principles, seven domains, and the restored processes, then declines to tell you how to run the project.",
