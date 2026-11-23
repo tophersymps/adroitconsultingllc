@@ -1,0 +1,88 @@
+---
+title: "The Callout Waits for a Commit That Apex Cannot Make"
+slug: salesforce-apex-callout-transaction-order-2026
+excerpt: "Apex will not send an HTTP request while a DML write in the same transaction is still uncommitted. Every workaround moves that failure past the save."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "November 23, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "12 min read"
+tags: [Salesforce, Apex, Integration, Architecture, Transactions]
+bannerImage: "/banners/salesforce-apex-callout-transaction-order-2026.webp"
+ogImage: "/banners/salesforce-apex-callout-transaction-order-2026-og.jpg"
+---
+
+An integration that has shipped in a dozen orgs fails the same way on its first real save: `System.CalloutException: You have uncommitted work pending. Please commit or rollback before calling out.` The code that throws it looks reasonable. It inserts an order, then posts that order to the ERP so the ERP can fulfill it. The callout class was tested on its own from Execute Anonymous and returned 200. Production runs the whole path, write first, and the platform refuses to send anything.[^1]
+
+The refusal is not a misconfiguration. It is the one place where the platform states its transaction model out loud, and every workaround moves the failure somewhere else. Knowing where it moves is the design decision, and it is made once per integration, not per bug.
+
+## The rule is the transaction model, stated plainly
+
+An Apex request runs as a single transaction. Every DML statement inside the boundary commits together at the end, or rolls back together if anything throws.[^2] A record written inside that boundary stays locked until the transaction finishes, so no other client, user, or job can change it in the meantime.[^3] That lock is what makes read-then-write safe in the first place.
+
+A callout breaks the guarantee the lock exists to provide. The external service can take 10 seconds by default and up to 120 seconds of cumulative callout time in one transaction, and it is somebody else's system that decides how long it takes.[^4] Holding row locks across that wait would let one slow vendor freeze your users, so the platform forbids the combination rather than letting you create it. The wording is exact: you cannot make a callout "when there are pending operations in the same transaction," and pending includes DML statements, asynchronous Apex, scheduled Apex, and sending email.[^4] Callouts before those operations are fine. The rule is the order: the request goes out before the write, never after it.
+
+The obvious escape hatch does not work either. Apex has no explicit commit statement you can call to close the loop early.[^5] `Database.releaseSavepoint()` does not roll anything back, so whatever is uncommitted when you call it commits anyway if the transaction succeeds.[^6] The platform's own documented route to a mid-transaction callout is to roll back to a savepoint, discarding the write, and then release it. Which means the only in-transaction way to make your callout legal is to throw away the record the callout was supposed to announce.
+
+![Three orders of operations: a write followed by a callout is refused with an uncommitted work exception, a callout followed by the write is allowed because nothing is pending, and the savepoint route allows the callout only after the inserted record has been discarded](</diagrams/salesforce-apex-callout-transaction-order-2026/1-callout-order.png>)
+
+## Four ways to move the callout, and what the move costs
+
+Splitting the work into two transactions is the standard fix, and there are four mechanisms with genuinely different trade-offs. The one you pick decides what your integration can promise.
+
+**Restructure so the callout runs first.** Read what you need, call the external system, then write the record with the answer stored on it. This keeps a single transaction and a single commit, so the record never exists in a state the external system has not acknowledged. It works when the write does not depend on an identifier the external system generates. If it does, you need an identifier of your own first: generate a UUID, send it as the idempotency key, and let the remote system echo it back.
+
+**A future method.** `@future(callout=true)` runs the method later, in its own transaction, with its own callout budget.[^7] It is the smallest change to existing code and it is also the most constrained: parameters must be primitives, the method returns nothing, there is no job identifier to poll, a future method cannot call another future method, and future methods are refused inside a batch class.[^7] A synchronous caller can enqueue 50 of them per invocation.[^12]
+
+**A queueable.** Implement `Queueable` plus `Database.AllowsCallouts` and you get a job identifier, sObject members instead of primitives, and the ability to chain a child job.[^8] That combination makes queues the right home for anything you need to observe. The constraints are structural: 50 jobs can be enqueued from one synchronous transaction and exactly 1 from an asynchronous one, and each parent job may have only one child, so a 200-record trigger chunk cannot fan out into 200 jobs.[^8]
+
+**Batch Apex.** Add `Database.AllowsCallouts` to the batch class and every chunk of records runs in its own transaction with governors reset, which is how volume gets through at all.[^9] The cost is granularity: a callout failure rolls back that chunk of writes, not the whole job, so a partially delivered batch is a state you have to handle.
+
+![A five row comparison of the split options: restructuring so the callout runs before the write, a future method, a queueable that implements the callout marker interface, batch Apex, and a platform event, each showing what it buys and what it charges](</diagrams/salesforce-apex-callout-transaction-order-2026/2-split-matrix.png>)
+
+## The failure you moved past the commit
+
+Here is the part that gets skipped in design reviews. Before the split, a failed callout rolled the whole transaction back. Nothing was persisted, the ERP saw no request, and the user got one error. After the split, the write commits, a second transaction attempts the callout, and if it fails the record stays saved with no external counterpart. You did not remove the failure. You moved it to the far side of the save, where nothing rolls back on its own.
+
+The queue is also less durable than it looks. If the transaction that enqueued a queueable job rolls back, that job is never processed.[^8] So the enqueue is not a promise the way a committed row is. Retry has to live somewhere visible: a status field that moves from Pending to Confirmed, a retry counter, and a dead-letter queue or a finalizer that writes the failure to a log object so the next person can see it.
+
+Duplicate work needs a key on both ends. Salesforce can refuse a second enqueue with the same signature through `QueueableDuplicateSignature`, which throws a `DuplicateMessageException` instead of quietly double-posting.[^10] But the signature is dropped when a job is dequeued, so a job that is already running no longer carries one, and duplicates of running jobs are still possible.[^10] That is why idempotency has to be enforced by the receiving system as well: send the same key twice and it must return the same answer rather than create a second order.
+
+Bulk changes the arithmetic too. A trigger processing 200 records runs as one transaction, and from an asynchronous context you can enqueue exactly one queueable job, so per-record callouts are not available at any price.[^8] The pattern is one job carrying the whole batch payload, which is also the only shape that keeps you under 100 callouts per transaction.[^4]
+
+![Two timelines compared: in a single transaction a failed callout rolls back everything and the user sees one error, while in a split transaction the insert commits first and a failed callout leaves a saved record with no external counterpart and nothing watching the job](</diagrams/salesforce-apex-callout-transaction-order-2026/3-failure-landing.png>)
+
+## What to build, in the right order
+
+Decide which side owns the truth before writing either half. If the ERP generates the order number, the write cannot come first, so the callout is the first step and the Salesforce record is where the answer is stored. If the external system can accept a key you generate, the write can come first with a Pending status, and the callout becomes the negotiation that confirms it.
+
+Then make the split observable, because an async failure with no artifact is indistinguishable from success. Store the job identifier from `System.enqueueJob`, cap the retries so a poisoned record cannot loop until it exhausts the org's daily asynchronous limit, and give the far side a key it will honor on replay.
+
+Two smaller traps are worth checking in the same review. Test the order, not just the method: the same uncommitted-work rule applies in unit tests, where a DML insert before a mock callout needs the asynchronous work inside `Test.startTest` and `Test.stopTest` to execute at all.[^11] And remember the split changes what a partial failure means. A batch chunk that posts 50 records and fails on the fifty-first rolls all 50 back in Salesforce while the ERP keeps whatever it received, which is the exact mirror of the problem you set out to solve.
+
+If the recovery layer around the integration is still an afterthought, the [recovery chain for silent failures](/field-notes/salesforce-error-recovery-2026) is the companion piece, and the [transactional outbox pattern](/field-notes/salesforce-dual-write-outbox-2026) covers the durable version of the same problem. The order of operations is the architecture. Apex enforces it; you only get to choose which failure you would rather own.
+
+[^1]: Salesforce Help, article 000385374, on the uncommitted work error raised when a DML statement precedes a callout in the same transaction, and the options for splitting the work. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385374&language=en_US&type=1)
+
+[^2]: Salesforce, "Apex Transactions," Apex Developer Guide, the rule that all DML operations in a transaction commit together or roll back together. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-transaction.html)
+
+[^3]: Salesforce, "Locking Records," Apex Developer Guide, the rule that a locked sObject cannot be updated by another client or user during the lock period. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/langcon-apex-locking-records.html)
+
+[^4]: Salesforce, "Callout Limits and Limitations," Apex Developer Guide, 100 callouts per transaction, the 10 second default timeout, the 120 second cumulative timeout, and the ban on callouts while DML, asynchronous Apex, scheduled Apex, or email is pending. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-callouts-timeouts.html)
+
+[^5]: Salesforce Help, article 000385708, on resolving the uncommitted work error: an explicit commit is not possible in Apex, so callouts are restructured or moved to another execution context. [help.salesforce.com](https://help.salesforce.com/s/articleView?id=000385708&language=en_US&type=1)
+
+[^6]: Salesforce, "Transaction Control," Apex Developer Guide, the documented route to allowing a callout by rolling back to a savepoint, and the note that releasing a savepoint does not roll uncommitted work back. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/langcon-apex-transaction-control.html)
+
+[^7]: Salesforce, "Future Methods," Apex Developer Guide, the callout annotation, primitive parameters, no return value, and the rules against a future method calling another future method or running inside a batch class. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-invoking-future-methods.html)
+
+[^8]: Salesforce, "Queueable Apex," Apex Developer Guide, callouts through the Database.AllowsCallouts marker interface, the enqueue limits of 50 and 1, one child per parent job, and the rule that jobs enqueued by a rolled back transaction are never processed. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-queueing-jobs.html)
+
+[^9]: Salesforce, "Use Batch Apex," Apex Developer Guide, the Database.AllowsCallouts marker interface requirement for callouts in batch classes. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-batch-interface.html)
+
+[^10]: Salesforce, "Detecting Duplicate Queueable Jobs," Apex Developer Guide, the DuplicateMessageException raised by a repeated queueable signature and the removal of that signature once a job is dequeued. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-dedupe-queueable.html)
+
+[^11]: Salesforce, "Performing DML Operations and Mock Callouts," Apex Developer Guide, the requirement to enclose callouts in Test.startTest and Test.stopTest when DML or asynchronous work precedes them. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-callouts-wsdl2apex-testing-dml.html)
+[^12]: Salesforce, "Execution Governors and Limits," Apex Developer Guide, the per-transaction table row "Maximum number of methods with the future annotation allowed per Apex invocation," whose synchronous limit is 50 and whose asynchronous limit is 0 in batch and future contexts and 50 in queueable context. [developer.salesforce.com](https://developer.salesforce.com/docs/platform/apex-dev/references/apex-dev/apex-gov-limits.html)
