@@ -134,8 +134,9 @@ export function getConsentState(): ConsentState {
 /**
  * Initialize GA4 — inject the gtag.js script and send the config pageview,
  * gated on consent (merger B1: consent-gated GA4, kara CookieConsent contract).
- * The site defaults to analytics_storage: denied; the script only loads after
- * the user grants via the cookie banner (localStorage "adroit_cookie_consent").
+ * The script only loads after the user grants via the cookie banner
+ * (localStorage "adroit_cookie_consent"), and the consent default is emitted
+ * before `js`/`config` as Consent Mode requires.
  * Safe to call more than once (idempotent via an injected marker attribute).
  */
 export function initAnalytics(): void {
@@ -144,16 +145,42 @@ export function initAnalytics(): void {
 
   // Establish dataLayer + queued gtag stub BEFORE the script loads so any
   // events fired in the same tick are queued, per GA4's official snippet.
+  //
+  // The stub MUST push `arguments`, not a rest-args Array. gtag.js reads each
+  // queued entry as an array-like `arguments` object; a real Array is silently
+  // discarded, so the tag loads, google_tag_manager holds the container, the
+  // dataLayer shows the config, and no /g/collect request is ever made. Proven
+  // 2026-11-23 on a local production build of this app: identical snippet plus
+  // push(args) produced zero hits and no _ga cookie, push(arguments) produced
+  // the collect request and the cookie in the same page.
   window.dataLayer = window.dataLayer || [];
-  window.gtag = function (...args: unknown[]) {
-    window.dataLayer!.push(args);
+  // gtag.js reads the queued `arguments` object; a real Array is silently
+  // discarded, so this stub is a classic function on purpose.
+  window.gtag = function gtag() {
+    // eslint-disable-next-line prefer-rest-params
+    window.dataLayer!.push(arguments);
   };
 
+  // Consent Mode requires the DEFAULT consent state to be the FIRST command,
+  // before `js` and `config`. Pushing `js` first (as this function used to)
+  // leaves GA4 treating analytics_storage as unset, and it then drops every
+  // hit without a warning: gtag.js loads, google_tag_manager holds the
+  // container, dataLayer holds the config, and no /g/collect request is ever
+  // made. Reproduced 2026-11-23 on production with G-S2KX1D8JX3; the same ID
+  // fired normally on a bare page using Google's documented order.
+  //
+  // The script only loads after a grant, so the default is granted when the
+  // visitor has granted and denied otherwise; the `update` call is kept for
+  // the revoke path and is a no-op otherwise.
+  const granted = getConsentState() === "granted";
+  window.gtag("consent", "default", {
+    ad_storage: "denied",
+    ad_user_data: "denied",
+    ad_personalization: "denied",
+    analytics_storage: granted ? "granted" : "denied",
+  });
   window.gtag("js", new Date());
-  // Consent default is denied until the banner grants it. Persisted grant
-  // (e.g. returning visitor) is re-applied after gtag exists.
-  window.gtag("consent", "default", { analytics_storage: "denied" });
-  if (getConsentState() === "granted") {
+  if (granted) {
     window.gtag("consent", "update", { analytics_storage: "granted" });
   }
   // page_location is explicit: the gtag `config` page_view would otherwise
