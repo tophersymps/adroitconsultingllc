@@ -10,7 +10,14 @@
  * The loader is client-only: it injects the official gtag.js script on first
  * mount and tracks a `window.dataLayer`. All analytics calls must be made from
  * client components (never server components / route handlers).
+ *
+ * Funnel events are also forwarded to Vercel Web Analytics when the visitor has
+ * granted consent (`trackEvent`), so a site with no GA4 ID still measures the
+ * lesson → quiz → exam → certificate funnel. See VercelAnalytics.tsx for the
+ * gate that keeps the Vercel script itself off until consent.
  */
+
+import { track as vercelTrack } from "@vercel/analytics";
 
 declare global {
   interface Window {
@@ -184,14 +191,54 @@ export function revokeAnalyticsConsent(): void {
   }
 }
 
+/** Property values Vercel Web Analytics accepts (anything else is dropped). */
+type VercelPropertyValue = string | number | boolean | null;
+
 /**
- * Fire a GA4 custom event. No-op when analytics is disabled or gtag hasn't
- * initialised yet (events fired before the stub is up are dropped — acceptable
- * for funnel telemetry).
+ * Narrow event params to what Vercel accepts. GA4 tolerates richer values, so
+ * the shared call sites keep `Record<string, unknown>`; Vercel's `track()`
+ * warns and strips anything that is not a scalar, so filter here instead of
+ * changing every helper signature.
+ */
+function toVercelProperties(
+  params?: Record<string, unknown>,
+): Record<string, VercelPropertyValue> | undefined {
+  if (!params) return undefined;
+  const out: Record<string, VercelPropertyValue> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (
+      value === null ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+/**
+ * Fire a funnel event on every configured backend.
+ *
+ * Vercel Web Analytics first: `track()` from the package no-ops while
+ * `window.va` is undefined, which is exactly the pre-consent state — the
+ * script is only injected once VercelAnalytics mounts after a grant. The
+ * explicit consent check is defence in depth against any other code
+ * initialising that queue.
+ *
+ * GA4 second, and still env-gated: with no measurement ID (or before the gtag
+ * stub exists) the GA4 half is skipped, but that early return must never
+ * swallow the Vercel half — a site with no GA4 ID is the normal case here.
  */
 export function trackEvent(name: string, params?: Record<string, unknown>): void {
-  if (!analyticsEnabled || typeof window === "undefined") return;
-  if (typeof window.gtag !== "function") return;
+  if (typeof window === "undefined") return;
+
+  if (getConsentState() === "granted") {
+    vercelTrack(name, toVercelProperties(params));
+  }
+
+  if (!analyticsEnabled || typeof window.gtag !== "function") return;
   window.gtag("event", name, params ?? {});
 }
 
