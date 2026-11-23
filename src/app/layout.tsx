@@ -4,6 +4,7 @@ import "./globals.css";
 import { siteConfig, buildMetadata } from "@/lib/seo";
 import { ThemeProvider } from "@/components/Theme/ThemeProvider";
 import AnalyticsInit from "@/components/Analytics/AnalyticsInit";
+import VercelAnalytics from "@/components/Analytics/VercelAnalytics";
 import CookieConsent from "@/components/CookieConsent";
 
 const inter = Inter({
@@ -78,6 +79,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <AnalyticsInit />
+          <VercelAnalytics />
           <CookieConsent />
           <a href="#main" className="skip-link">
             Skip to content

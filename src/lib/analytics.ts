@@ -110,6 +110,13 @@ export function safePageLocation(href: string): string {
 export const CONSENT_STORAGE_KEY = "adroit_cookie_consent";
 export type ConsentState = "granted" | "denied";
 
+/**
+ * Fired on this tab when consent changes. The `storage` event only reaches
+ * OTHER tabs, so same-tab listeners (the Vercel Web Analytics gate) need this
+ * to react to an Accept click without a reload.
+ */
+export const CONSENT_CHANGE_EVENT = "adroit-consent-change";
+
 /** Read the persisted consent state (defaults to denied / unset). */
 export function getConsentState(): ConsentState {
   if (typeof window === "undefined") return "denied";
@@ -161,6 +168,7 @@ export function initAnalytics(): void {
 export function grantAnalyticsConsent(): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CONSENT_STORAGE_KEY, "granted");
+  window.dispatchEvent(new Event(CONSENT_CHANGE_EVENT));
   if (typeof window.gtag === "function") {
     window.gtag("consent", "update", { analytics_storage: "granted" });
   }
@@ -170,6 +178,7 @@ export function grantAnalyticsConsent(): void {
 export function revokeAnalyticsConsent(): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CONSENT_STORAGE_KEY, "denied");
+  window.dispatchEvent(new Event(CONSENT_CHANGE_EVENT));
   if (typeof window.gtag === "function") {
     window.gtag("consent", "update", { analytics_storage: "denied" });
   }
