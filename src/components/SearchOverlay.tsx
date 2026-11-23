@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EMPTY_SEARCH_RESULTS, searchDocs } from "@/lib/search";
+import { trackSearch } from "@/lib/analytics";
 import type {
   SearchDoc,
   SearchIndexResponse,
@@ -11,6 +12,12 @@ import type {
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Shortest trimmed query that counts as a real search (not a stray letter). */
+const SEARCH_TRACK_MIN_LENGTH = 2;
+
+/** Typing settle before a query is reported, so keystrokes are not events. */
+const SEARCH_TRACK_SETTLE_MS = 800;
 
 /* ------------------------------------------------------------------ */
 /*  Search-index transport (ADR-220)                                   */
@@ -74,6 +81,8 @@ export default function SearchOverlay() {
   const dialogRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const hasOpenedRef = useRef(false);
+  /** Terms already reported this mount, so refining/reopening never double counts. */
+  const searchedTermsRef = useRef<Set<string>>(new Set());
   const router = useRouter();
 
   // Lazy load on first open. Only async callbacks set state (never the effect
@@ -112,6 +121,25 @@ export default function SearchOverlay() {
       query.trim() && docs ? searchDocs(docs, query) : EMPTY_SEARCH_RESULTS,
     [query, docs],
   );
+
+  // One `search` event per distinct settled query. GA4's built-in site search
+  // reads the query from the URL and this overlay never writes one, so the
+  // event is emitted here. The 800 ms settle keeps typing from emitting per
+  // keystroke, and the ref dedupes so refining and returning to a term, or
+  // reopening the overlay, does not double count.
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < SEARCH_TRACK_MIN_LENGTH || loadState !== "ready") return;
+    if (searchedTermsRef.current.has(term)) return;
+
+    const timer = setTimeout(() => {
+      if (searchedTermsRef.current.has(term)) return;
+      searchedTermsRef.current.add(term);
+      trackSearch({ searchTerm: term, resultCount: results.total });
+    }, SEARCH_TRACK_SETTLE_MS);
+
+    return () => clearTimeout(timer);
+  }, [query, loadState, results.total]);
 
   // Auto-focus the input when the overlay opens; keep body scroll locked.
   useEffect(() => {

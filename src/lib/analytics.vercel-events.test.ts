@@ -14,6 +14,7 @@ import {
   trackEvent,
   trackLessonComplete,
   trackQuizTierComplete,
+  trackSearch,
 } from "@/lib/analytics";
 
 beforeEach(() => {
@@ -77,5 +78,40 @@ describe("trackEvent → Vercel Web Analytics", () => {
       lesson_slug: "lesson-2",
     });
     expect(gtag).not.toHaveBeenCalled();
+  });
+});
+describe("trackSearch", () => {
+  it("emits GA4's recommended search event with the term and result count", () => {
+    window.localStorage.setItem(CONSENT_STORAGE_KEY, "granted");
+    trackSearch({ searchTerm: "  salesforce flow  ", resultCount: 7 });
+    expect(trackMock).toHaveBeenCalledWith("search", {
+      search_term: "salesforce flow",
+      result_count: 7,
+    });
+  });
+
+  it("caps the term at GA4's 100-character limit", () => {
+    window.localStorage.setItem(CONSENT_STORAGE_KEY, "granted");
+    trackSearch({ searchTerm: "x".repeat(150), resultCount: 0 });
+    const [, props] = trackMock.mock.calls.at(-1) as [string, Record<string, unknown>];
+    expect(String(props.search_term)).toHaveLength(100);
+  });
+
+  it("strips control characters and skips an empty term", () => {
+    window.localStorage.setItem(CONSENT_STORAGE_KEY, "granted");
+    trackSearch({ searchTerm: "ai\u0000bo", resultCount: 2 });
+    expect(trackMock).toHaveBeenCalledWith("search", {
+      search_term: "ai bo",
+      result_count: 2,
+    });
+
+    trackMock.mockClear();
+    trackSearch({ searchTerm: "   ", resultCount: 0 });
+    expect(trackMock).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing before consent", () => {
+    trackSearch({ searchTerm: "flow", resultCount: 3 });
+    expect(trackMock).not.toHaveBeenCalled();
   });
 });
