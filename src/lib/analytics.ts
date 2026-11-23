@@ -316,3 +316,29 @@ export function trackCertificateViewed(params: {
     course_name: params.courseName,
   });
 }
+
+/** Longest search term forwarded, matching GA4's `search_term` limit. */
+const SEARCH_TERM_MAX = 100;
+
+/**
+ * A site search was performed (GA4's recommended `search` event).
+ *
+ * GA4's built-in site search needs the query in the URL, and the overlay in
+ * SearchOverlay.tsx is client-side only (no query param), so the event has to
+ * be emitted from the component. The term is trimmed to GA4's limit and
+ * control characters are stripped so a pasted value cannot break the payload.
+ */
+export function trackSearch(params: {
+  searchTerm: string;
+  resultCount: number;
+}): void {
+  const term = params.searchTerm
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .slice(0, SEARCH_TERM_MAX);
+  if (!term) return;
+  trackEvent("search", {
+    search_term: term,
+    result_count: params.resultCount,
+  });
+}
