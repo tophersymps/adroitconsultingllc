@@ -15413,6 +15413,18 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-20-r-5b-team-vs-role-vs-group-trade-offs-and-scenarios",
+    "title": "Team vs Role vs Group Trade-Offs and Scenarios",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 20,
+    "excerpt": "Given a scenario, recommend teams, roles, or groups (and their trade-offs) to satisfy record access requirements. Covers the decision rule that maps a reporting line to the role hierarchy, a recurring population to a group plus a sharing rule, and per-record collaboration to a team, plus the scalability and maintainability cost of each choice.",
+    "date": "2026-10-02",
+    "author": "Adroit Learning",
+    "readTime": "16",
+    "tags": [],
+    "status": "published"
+  },
+  {
     "slug": "day-19-r-10a-embedding-flexcards-component-tab-and-console-plac",
     "title": "R-10a: Embedding FlexCards: Component, Tab, and Console Placement",
     "series": "sf-omni-consultant",
@@ -16177,18 +16189,6 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
-    "slug": "day-20-r-5b-team-vs-role-vs-group-trade-offs-and-scenarios",
-    "title": "Team vs Role vs Group Trade-Offs and Scenarios",
-    "series": "salesforce-sharing-visibility-architect",
-    "lesson": 20,
-    "excerpt": "Given a scenario, recommend teams, roles, or groups (and their trade-offs) to satisfy record access requirements. Covers the decision rule that maps a reporting line to the role hierarchy, a recurring population to a group plus a sharing rule, and per-record collaboration to a team, plus the scalability and maintainability cost of each choice.",
-    "date": "2026-10-02",
-    "author": "Adroit Learning",
-    "readTime": "16",
-    "tags": [],
-    "status": "published"
-  },
-  {
     "slug": "kubernetes-for-agents-pods-autoscaling-gpu-scheduling",
     "title": "Lesson 56: Kubernetes for Agents: Pods, Autoscaling, and GPU Scheduling",
     "series": "agentic-ai",
@@ -16278,6 +16278,18 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-19-r-5a-teams-account-teams-sales-teams-case-teams-team-ba",
+    "title": "Teams: Account Teams, Sales Teams, Case Teams, Team-Based Record Access",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 19,
+    "excerpt": "Learn how Account Teams, Sales (Opportunity) Teams, and Case Teams grant per-record, owner-managed access with roles and access levels. Covers the additive share row teams create, the Use Account Teams setting on Opportunity that can over-share, and the decision of when a team beats a group, a rule, or a permission set.",
+    "date": "2026-10-01",
+    "author": "Adroit Learning",
+    "readTime": "16",
+    "tags": [],
+    "status": "published"
+  },
+  {
     "slug": "day-18-r-9b-state-variables-driving-dynamic-appearance-and-int",
     "title": "R-9b: State Variables: Driving Dynamic Appearance and Interaction",
     "series": "sf-omni-consultant",
@@ -16294,18 +16306,6 @@ export const learnLessons: LearnLesson[] = [
       "Data Source",
       "Interactivity"
     ],
-    "status": "published"
-  },
-  {
-    "slug": "day-19-r-5a-teams-account-teams-sales-teams-case-teams-team-ba",
-    "title": "Teams: Account Teams, Sales Teams, Case Teams, Team-Based Record Access",
-    "series": "salesforce-sharing-visibility-architect",
-    "lesson": 19,
-    "excerpt": "Learn how Account Teams, Sales (Opportunity) Teams, and Case Teams grant per-record, owner-managed access with roles and access levels. Covers the additive share row teams create, the Use Account Teams setting on Opportunity that can over-share, and the decision of when a team beats a group, a rule, or a permission set.",
-    "date": "2026-10-01",
-    "author": "Adroit Learning",
-    "readTime": "16",
-    "tags": [],
     "status": "published"
   },
   {
@@ -16379,6 +16379,18 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-18-r-4b-group-sharing-scenarios-sharing-sets-groups-vs-tea",
+    "title": "Group Sharing Scenarios: Sharing Sets, Groups vs Teams",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 18,
+    "excerpt": "Given a scenario, determine how groups and sharing sets support record access, and contrast groups with teams. Covers sharing sets for Experience Cloud external users, sharing groups in portals, the per-record nature of teams, and the routing decision between teams and groups by audience and scale.",
+    "date": "2026-09-30",
+    "author": "Adroit Learning",
+    "readTime": "15",
+    "tags": [],
+    "status": "published"
+  },
+  {
     "slug": "day-17-r-9a-conditional-rendering-in-flexcards-when-the-card-a",
     "title": "R-9a: Conditional Rendering in FlexCards: When the Card Adapts",
     "series": "sf-omni-consultant",
@@ -16394,18 +16406,6 @@ export const learnLessons: LearnLesson[] = [
       "State Variables",
       "Conditions"
     ],
-    "status": "published"
-  },
-  {
-    "slug": "day-18-r-4b-group-sharing-scenarios-sharing-sets-groups-vs-tea",
-    "title": "Group Sharing Scenarios: Sharing Sets, Groups vs Teams",
-    "series": "salesforce-sharing-visibility-architect",
-    "lesson": 18,
-    "excerpt": "Given a scenario, determine how groups and sharing sets support record access, and contrast groups with teams. Covers sharing sets for Experience Cloud external users, sharing groups in portals, the per-record nature of teams, and the routing decision between teams and groups by audience and scale.",
-    "date": "2026-09-30",
-    "author": "Adroit Learning",
-    "readTime": "15",
-    "tags": [],
     "status": "published"
   },
   {
@@ -16498,6 +16498,18 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-17-r-4a-groups-public-groups-queues-group-membership-when",
+    "title": "Groups: Public Groups, Queues, Group Membership, When to Use",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 17,
+    "excerpt": "Learn how public groups and queues aggregate users into named sets that sharing rules, permission sets, and workflows can target. Covers group membership options, the shape of a queue, and the decision of when a group is the right container for a recurring set of users.",
+    "date": "2026-09-29",
+    "author": "Adroit Learning",
+    "readTime": "15",
+    "tags": [],
+    "status": "published"
+  },
+  {
     "slug": "day-16-r-8b-child-flexcards-and-nested-action-flows",
     "title": "R-8b: Child FlexCards and Nested Action Flows",
     "series": "sf-omni-consultant",
@@ -16513,18 +16525,6 @@ export const learnLessons: LearnLesson[] = [
       "Nested Action Flows",
       "Modal"
     ],
-    "status": "published"
-  },
-  {
-    "slug": "day-17-r-4a-groups-public-groups-queues-group-membership-when",
-    "title": "Groups: Public Groups, Queues, Group Membership, When to Use",
-    "series": "salesforce-sharing-visibility-architect",
-    "lesson": 17,
-    "excerpt": "Learn how public groups and queues aggregate users into named sets that sharing rules, permission sets, and workflows can target. Covers group membership options, the shape of a queue, and the decision of when a group is the right container for a recurring set of users.",
-    "date": "2026-09-29",
-    "author": "Adroit Learning",
-    "readTime": "15",
-    "tags": [],
     "status": "published"
   },
   {
@@ -16615,6 +16615,18 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-16-r-3b-sharing-rule-scenarios-guest-user-sharing-rules-li",
+    "title": "Sharing-Rule Scenarios, Guest-User Sharing Rules, Limits, and Recalculation",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 16,
+    "excerpt": "Apply sharing rules to full scenarios: guest-user sharing rules for Experience sites, the real sharing-rule count limits, and when and how recalculation makes grants current. Covers the async delay on criteria rules and the separate configuration guest access demands.",
+    "date": "2026-09-28",
+    "author": "Adroit Learning",
+    "readTime": "15",
+    "tags": [],
+    "status": "published"
+  },
+  {
     "slug": "day-15-r-8a-flexcard-actions-links-modals-launching-omniscript",
     "title": "R-8a: FlexCard Actions: Links, Modals, Launching OmniScripts and IPs",
     "series": "sf-omni-consultant",
@@ -16630,18 +16642,6 @@ export const learnLessons: LearnLesson[] = [
       "OmniScript",
       "Integration Procedure"
     ],
-    "status": "published"
-  },
-  {
-    "slug": "day-16-r-3b-sharing-rule-scenarios-guest-user-sharing-rules-li",
-    "title": "Sharing-Rule Scenarios, Guest-User Sharing Rules, Limits, and Recalculation",
-    "series": "salesforce-sharing-visibility-architect",
-    "lesson": 16,
-    "excerpt": "Apply sharing rules to full scenarios: guest-user sharing rules for Experience sites, the real sharing-rule count limits, and when and how recalculation makes grants current. Covers the async delay on criteria rules and the separate configuration guest access demands.",
-    "date": "2026-09-28",
-    "author": "Adroit Learning",
-    "readTime": "15",
-    "tags": [],
     "status": "published"
   },
   {
@@ -16714,6 +16714,18 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-15-r-3a-sharing-rules-criteria-based-and-ownership-based-i",
+    "title": "Sharing Rules: Criteria-Based and Ownership-Based, In Depth",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 15,
+    "excerpt": "Build precise record access with sharing rules. Covers ownership-based vs criteria-based rules, the two sides of a rule, target groups and access levels, related-record granularity, and the additive model that layers above OWD.",
+    "date": "2026-09-27",
+    "author": "Adroit Learning",
+    "readTime": "15",
+    "tags": [],
+    "status": "published"
+  },
+  {
     "slug": "day-14-r-7b-designing-flexcards-for-role-and-context-clarity-a",
     "title": "R-7b: Designing FlexCards for Role and Context: Clarity and Logic",
     "series": "sf-omni-consultant",
@@ -16729,18 +16741,6 @@ export const learnLessons: LearnLesson[] = [
       "Context",
       "Design"
     ],
-    "status": "published"
-  },
-  {
-    "slug": "day-15-r-3a-sharing-rules-criteria-based-and-ownership-based-i",
-    "title": "Sharing Rules: Criteria-Based and Ownership-Based, In Depth",
-    "series": "salesforce-sharing-visibility-architect",
-    "lesson": 15,
-    "excerpt": "Build precise record access with sharing rules. Covers ownership-based vs criteria-based rules, the two sides of a rule, target groups and access levels, related-record granularity, and the additive model that layers above OWD.",
-    "date": "2026-09-27",
-    "author": "Adroit Learning",
-    "readTime": "15",
-    "tags": [],
     "status": "published"
   },
   {
@@ -16881,6 +16881,18 @@ export const learnLessons: LearnLesson[] = [
     "status": "published"
   },
   {
+    "slug": "day-14-r-2b-role-hierarchy-scenarios-and-when-not-to-use-it-ld",
+    "title": "When NOT to Use the Role Hierarchy: Scenarios, LDV Risk, and Opportunity Access",
+    "series": "salesforce-sharing-visibility-architect",
+    "lesson": 14,
+    "excerpt": "Decide when the role hierarchy is the right sharing mechanism and when it over-grants or bloats the sharing table. Covers criteria-based requirements, LDV risk, and Opportunity-specific behavior.",
+    "date": "2026-09-25",
+    "author": "Adroit Learning",
+    "readTime": "14",
+    "tags": [],
+    "status": "published"
+  },
+  {
     "slug": "day-12-r-6b-flexcard-setup-properties-and-how-they-govern-beha",
     "title": "R-6b: FlexCard Setup Properties and How They Govern Behavior",
     "series": "sf-omni-consultant",
@@ -16896,18 +16908,6 @@ export const learnLessons: LearnLesson[] = [
       "Context Record",
       "Load Behavior"
     ],
-    "status": "published"
-  },
-  {
-    "slug": "day-14-r-2b-role-hierarchy-scenarios-and-when-not-to-use-it-ld",
-    "title": "When NOT to Use the Role Hierarchy: Scenarios, LDV Risk, and Opportunity Access",
-    "series": "salesforce-sharing-visibility-architect",
-    "lesson": 14,
-    "excerpt": "Decide when the role hierarchy is the right sharing mechanism and when it over-grants or bloats the sharing table. Covers criteria-based requirements, LDV risk, and Opportunity-specific behavior.",
-    "date": "2026-09-25",
-    "author": "Adroit Learning",
-    "readTime": "14",
-    "tags": [],
     "status": "published"
   },
   {

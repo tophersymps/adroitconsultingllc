@@ -5,6 +5,7 @@ import { siteConfig, buildMetadata } from "@/lib/seo";
 import { ThemeProvider } from "@/components/Theme/ThemeProvider";
 import AnalyticsInit from "@/components/Analytics/AnalyticsInit";
 import CookieConsent from "@/components/CookieConsent";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -83,6 +84,7 @@ export default function RootLayout({
             Skip to content
           </a>
           {children}
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
