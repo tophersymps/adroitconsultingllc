@@ -10917,6 +10917,16 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
+  },
+  {
+    "slug": "sf-agentforce-specialist",
+    "name": "Salesforce Agentforce Specialist",
+    "description": "Prep course for the Salesforce Certified Agentforce Specialist certification. Covers prompt engineering for Agentforce, Data 360 fundamentals, AI agent design and reasoning, testing and deployment, governance and observability, and multi-agent orchestration. Built to the Spring '26 exam blueprint, including the MCP and A2A surfaces the Trailhead prep trail does not cover.",
+    "gradient": "from-sky-500 to-indigo-700",
+    "examKind": "certification-prep",
+    "lessons": [],
+    "totalLessons": 0,
+    "curriculumLessons": 61
   }
 ];
 
