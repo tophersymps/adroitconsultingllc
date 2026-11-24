@@ -1,0 +1,104 @@
+---
+title: "Lesson 23: Indexing and Embedding: How Vectors Are Built, Stored, and Left to Go Stale"
+slug: day-23-df-2b-indexing-and-embedding-how-vectors-are-built-store
+series: sf-agentforce-specialist
+lesson: 23
+excerpt: "Learn how Data 360 turns each chunk into a vector embedding and stores it in a search index, and how the embedding model and index staleness decide whether retrieval finds the right passage. Covers requirement df-2b in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [Embeddings, Vector Search, Data 360, Indexing]
+---
+
+# Lesson 23: Indexing and Embedding: How Vectors Are Built, Stored, and Left to Go Stale
+
+A support agent answers a compliance question by citing a policy that was retired two weeks earlier. The citation looks authoritative, down to the policy number and the section heading. The article no longer exists in the knowledge base, and nobody edited the agent. The vector that produced the citation had been created while the article was still live, and nothing rebuilt the index when the article was taken down.
+
+The cause is that indexing is a snapshot. Once content is chunked it has to become searchable by meaning, and that is a two-part job: turn each chunk into a vector embedding, then store that vector in the index. Both parts freeze the content at the moment they run. The stored vector reflects the chunk as it read when it was embedded, so when the source changes the index does not follow on its own, and an agent reading the index keeps serving the world as it was.
+
+This lesson serves requirement df-2b in the Data 360 Fundamentals domain, at 20 percent of the exam. You will learn the chain of chunk, vectorize, and store, why the query and the stored vectors must share a single embedding model, how vector search and hybrid search differ, and how to verify what an index actually holds. The exam returns here because stale retrieval shares the confident tone of correct retrieval, so it has to be diagnosed rather than noticed.
+
+## Deep Dive
+
+### Indexing is chunk, vectorize, store
+
+Once content is chunked, it has to be turned into something a machine can search by meaning, and that is indexing. Data 360 takes each chunk, converts it into a vector embedding, and stores the result. A vector embedding is a numerical representation of the chunk's text that captures semantic similarity, so two passages about the same idea end up numerically close even when they share no keywords [^1].
+
+The search index is the structure that manages these vectors along with the source content in a search-optimized way. In Data 360 the terminology is specific: chunks are stored in chunk data model objects and the vector embeddings are stored in index data model objects, and both are held inside the search index [^1]. The developer walkthrough describes the same step as storing the result in a Vector Data Model Object, and the index data model object is where the embedding itself lives, held as an array of floats [^2].
+
+Read the chain as three steps you can name in order: chunk, vectorize, store. Indexing is the vectorize-and-store half of that chain, and naming the half you are discussing is what keeps a diagnosis honest, because a problem with the vectors is not a problem with the chunks that produced them.
+
+Why semantic proximity is the point deserves a beat of its own. A keyword index stores words, while a vector index stores meaning, so two support articles that describe the same escalation path in different words end up numerically close and both surface for a question phrased a third way. That is what lets retrieval answer a paraphrase, and it is the reason a model can ground an answer on content whose wording never matched the question.
+
+The cost of that power is that a vector is opaque. You cannot read an embedding the way you read a stored field, so you verify it by its effects, by whether the right chunks rank high for known questions, and by the source content standing behind it. That is why the next two lessons keep the index and the retriever separate: one holds the meaning, the other chooses which meaning to surface.
+
+### The query and the stored vectors must share one embedding model
+
+The embedding model does the conversion, and the single most important fact about it is consistency. The model that turns a chunk into a stored vector must be the same model that turns a user's query into a vector at run time, because a similarity search only means anything if both sides live in the same numeric space [^3].
+
+If you change the embedding model on an index, every stored vector was produced by the old model and no longer shares the query's space, so the index must be rebuilt. The old vectors are not wrong in isolation; they are simply inexpressible in the new model's language, and a query expressed in the new language cannot reach them.
+
+This is why the embedding-model choice is a configuration decision with real consequences rather than a background detail, and why it is coupled to chunk size. Pick the model and the chunk size together, and treat a change to either as a trigger to rebuild the stored vectors rather than a setting you can flip in place.
+
+Picture the failure. A team experiments with a newer embedding model on an existing index and finds that search quality drops instead of improving. The new model is fine; the stored vectors were built by the old one, so the query and the content no longer share a numeric space, and the closer a query matches the new model's understanding the worse it may score against the old vectors. Until the index is rebuilt so that both sides use the same model, results degrade, which is exactly why an embedding-model change is written up as a rebuild ticket rather than a polite settings tweak.
+
+### Vector search matches meaning, hybrid search keeps exact terms
+
+At query time the index does two jobs: it narrows the candidate set quickly, and it ranks by similarity so the most relevant chunks surface first. Salesforce offers more than one search type, and the difference decides which questions each one answers well.
+
+Vector search matches purely on embedding similarity, which is exactly what lets a paraphrase find content that shares no keywords with the question. Hybrid search combines vector similarity with keyword search, so a rare exact term such as an error code, a regulation number, or a person's name is still matched even when its surrounding prose embeds poorly [^3]. The documented website-grounding index uses Hybrid Search.
+
+The combination matters because the two signals fail in opposite directions. Pure vector search can miss an exact identifier, while pure keyword search misses paraphrases. Hybrid leans on both, which is why it is the common default for grounding an agent on real content, and why the answer to which search type to pick is usually hybrid unless you have a specific reason to restrict matching to meaning alone.
+
+When you pick a search type, you are predicting how your users will phrase questions. If they type product names, error codes, regulation numbers, or account identifiers, hybrid protects those queries, because a literal token that embeds poorly still matches on keywords. If they ask in full sentences about concepts, vector matching carries most of the load and hybrid gives up very little. The documented grounding index defaults to hybrid precisely because real content and real questions mix both, and a system that only understood one of them would fail on half the traffic.
+
+### An index goes stale when source and vectors disagree
+
+An index goes stale when the source and the stored vectors stop describing the same thing. The classic case is a knowledge article that is edited, retired, or replaced after the index was built: the source changed, but the stored chunks and their vectors still reflect the old text until the index is reprocessed [^3].
+
+The danger is the one that runs through this whole domain, and it is worth stating twice. A stale index answers confidently, returning an outdated passage that was accurate when it was embedded. The user has no signal that they are reading history, and the model has no signal either, so the answer reads exactly like a current one until someone checks the source by hand.
+
+The operational habit follows directly: reindex after material content changes rather than assuming a retriever reads the live source. The refresh is tied to the index process, so a source change and a fresh answer are separated by an indexing run that you either trigger or wait for, and nothing about the agent's configuration changes that fact.
+
+There are two ways to make an index stale, and exam questions blur them together. The obvious one is a source that changed, where the stored chunks quote text that no longer exists. The subtler one is the embedding model described above: even with the source untouched, a model change leaves every stored vector expressed in the old space, so the index is stale in relation to the query rather than to the content. Both have the same remedy, which is a rebuild, and recognizing that a model change is a staleness trigger, not a content change, is often what separates the right answer from a close one.
+
+### You can verify what the index actually holds
+
+You can verify what an index contains, and the check turns a vague complaint into a specific finding. After an index finishes successfully, Data 360 lets you confirm that chunk records were created and that they match the source content you ingested [^3]. This is stored data, not a runtime guess, so it settles the question of whether the fault is even in retrieval.
+
+The path is concrete: open Data Explorer, choose the data space, set the object type to Data Lake Object, and locate the chunks object associated with your index. Seeing zero chunks, or chunks that do not match the source, tells you the problem is at ingestion or chunking, well before any retriever is involved.
+
+This verification step separates an indexing fault from a retriever fault, which is the whole point of inspecting the stored data rather than guessing at the runtime. If the chunks are present and correct, the index is likely healthy and the fault is downstream; if they are missing or wrong, everything after indexing is a distraction.
+
+Use the finding to route the fix. Zero chunks, or chunks that do not match the source, send you back to ingestion and chunking, where an empty connector or an unlucky field selection can starve the index before it is ever searched. Chunks that are present and faithful but still retrieve badly send you forward to the retriever's filters and returned fields, or to the search type, where the content is fine but the reading of it is wrong. The verification exists to pick a direction, not merely to assign blame.
+
+### Keep the four terms apart: chunk, embed, index, retrieve
+
+Keep the terms from collapsing into each other, because the exam writes questions on the seams between them. Chunking produces the units. Embedding converts a unit to a vector. The index stores and searches those vectors, and the Vector Data Model Object is where the vectors live. A retriever, which the next lesson covers, queries the index and returns the chunks the model will read [^4].
+
+When a question asks what makes an index go stale, the answer is a change to the source content or to the embedding model that is not followed by a rebuild. It is not anything a retriever or a prompt does, because neither of those writes to the index, and a misconfigured reader cannot make stale memory fresh.
+
+Indexing is storage plus similarity: it is the memory the retriever reads from. Hold that one-line definition and the questions about who stores, who converts, and who searches fall into place, which is exactly the vocabulary the exam guide is testing when it lists indexing alongside chunking and retrievers.
+
+### A rebuilt index is the fix, and you have to run it
+
+A stale index does not heal itself, so the corrective step is a rebuild, and a rebuild is an operation with a cost and a clock. It reprocesses the source content into fresh chunks and fresh vectors, which means it takes time that scales with how much content and how many fields are involved, and it spends Data 360 credits while it runs. The scheduling question is the same one this domain asks about data streams: how current does this use case actually need to be, and what is that freshness worth to the business.
+
+For high-churn content, such as a policy page that a team edits during the day, pair a tighter source refresh with a rebuild step so the index keeps pace, accepting the credit cost. For archival content that rarely moves, a rebuild after a deliberate change is enough, and a standing schedule would only pay for itself in wasted churn. The concrete way to test whether a rebuild landed is to ask the agent a question whose answer you just changed and confirm that the reply reflects the new content; if it still returns the old passage, the rebuild has not completed or did not run, and the fault is a clock rather than a model.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing keyword search and vector search are the same thing. Vector search matches on embedding similarity while keyword search matches exact terms, and Hybrid Search combines both, so an answer that treats them as identical has missed the reason hybrid exists. The second is believing the query and the stored chunks use different embedding models. Both sides must run through the same model, which is why changing the model forces a rebuild of the stored vectors rather than a quiet improvement. The third is believing an index updates itself the moment a source article changes. Until the index is reprocessed, the stored vectors still reflect the old text, so the index is stale even though the source is current, and the answer that comes back is confidently wrong.
+
+## What a consultant should walk away with
+
+Indexing is chunk, vectorize, store, and the store half is a snapshot, so a source change is an index change. Keep the query and the indexed content on a single embedding model, because a mismatch forces a rebuild and a silent quality drop until you do. Choose hybrid search whenever exact terms matter alongside meaning, and treat that as the default rather than the exception. Verify what the index holds in Data Explorer before you suspect the retriever, because stored chunks that are missing or wrong point upstream. When an answer is wrong but confident, check whether the vectors behind it still describe the world before you touch the prompt.
+
+## What's next
+
+Lesson 24 - Retrievers: Types, Selection, and How Results Reach the Model (df-2c)
+
+[^1]: Salesforce, "Vector Search" (https://help.salesforce.com/s/articleView?id=data.c360_a_search_index_vector_index.htm&language=en_US&type=5)
+[^2]: Salesforce, "Index DMO" (https://help.salesforce.com/s/articleView?id=data.c360_a_search_index_index_dmo.htm&language=en_US&type=5)
+[^3]: Salesforce, "Hybrid Search" (https://help.salesforce.com/s/articleView?id=data.c360_a_hybridsearch_index.htm&type=5)
+[^4]: Salesforce, "Using Retrieval Augmented Generation" (https://help.salesforce.com/s/articleView?id=data.c360_a_rag_overview.htm&language=en_US&type=5)

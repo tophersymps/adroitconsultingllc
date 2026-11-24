@@ -1,0 +1,99 @@
+---
+title: "Lesson 32: Choosing the Right Determinism Mechanism: Scenarios and Traps"
+slug: day-32-ag-3b-choosing-the-right-determinism-mechanism-scenarios
+series: sf-agentforce-specialist
+lesson: 32
+excerpt: "Learn how to read a use case, name the determinism job it describes, and choose the right mechanism among filters, variables, and template expressions, then recognize the wrong-mechanism traps that recur across the exam scenarios. Covers requirement ag-3b, \"Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions,\" in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Agent Script, Deterministic Behavior, Scenario Design, Agentforce]
+---
+
+# Lesson 32: Choosing the Right Determinism Mechanism: Scenarios and Traps
+
+A consultant reviewed an agent that kept escalating to a human even when the customer was verified. The script had a verified variable and an escalate subagent, and the escalation rule was written in the prompt as a sentence: only escalate verified customers. The variable was sometimes set by the model and sometimes not, so on some turns the sentence was true and on others the model guessed, and the escalation fired at random. The three mechanisms were all present in the agent; the problem was that each job had been handed to the wrong one.
+
+That is the shape of this objective. The previous lesson defined filters, variables, and template expressions; this one is the scenario skill of picking between them. Every determinism question resolves to one of three jobs, gate an action, remember a fact, or shape a message, plus a fourth case where the job is really sequencing and branching. Name the job first, and the mechanism is almost always obvious, because the wrong options are the other mechanisms wearing a plausible label.
+
+This lesson serves requirement ag-3b, the same requirement as day thirty one, taken now from the side of the choice: given a use case, manage deterministic behavior with the right mechanism. It sits in the AI Agents domain at 35 percent. By the end you can run four worked scenarios to their answer, and name the wrong-mechanism traps that recur across all of them.
+
+## Deep Dive
+
+### Name the determinism job, then the mechanism
+
+Read the case and ask what the requirement is really about. If it is about whether the model may take an action now, the mechanism is a filter. If it is about a fact the agent must remember and branch on, the mechanism is a variable with a deterministic set path. If it is about how a known fact appears in what the user reads, the mechanism is a template expression. If it is about the order in which steps run and which branch is chosen, the mechanism is logic instructions with run, set, and a conditional.
+
+The reason to name the job first is that the exam options are constructed to punish mechanism-first reading. A gate question will offer set a variable and reword the prompt as tempting answers; a memory question will offer rendering it in the reply and a filter; a message question will offer letting the model look it up. The correct option is the one whose mechanism matches the job, so decide the job before you look at the options.
+
+The four jobs are not arbitrary; they map to the four things a deterministic script can change about a turn. It can change what exists for the model to use, a filter. It can change what the agent knows, a variable. It can change what the output says, a template expression. And it can change the order in which work happens, logic with run and a conditional. Ask which of those four the requirement is changing, and you have the job.
+
+### Scenario one: gate a sensitive action with a filter
+
+Picture a banking agent that transfers money, and the transfer must be impossible until the account details, the amount, and the balance are all validated. The mechanism is a filter: an available when clause on the transfer action, keyed to a validation variable. The script sets that variable false by default and flips it true only when every check clears, and any earlier failed check sets it back to false. Until then the action is absent from the tool list, so no amount of conversational pressure can trigger it.[^1]
+
+The documentation walks exactly this case: the transfer action carries available when on a validation variable, the amount is checked against a configured limit, and the balance is checked with a guard clause before the transfer can run. The tempting wrong answers are to reword the prompt to say not yet, which the model may ignore, or to store a note in a variable without gating the action, which leaves the action callable. The gate is the only mechanism that makes the action physically unavailable.[^1]
+
+The gate also has to close behind itself, and that is where a subtle failure lives. If the available when condition stays satisfied after the action runs and the instructions do not tell the model to stop, the action remains available on the next parse and the model can call it again, which produces an action loop. The two reliable fixes are to set the gate variable to a closed state as part of the action's post-execution logic, or to use a separate has-run boolean that closes the gate after first execution. Either way the gate is given a deterministic closed state.
+
+Notice that the gate is paired with a variable, and that is not a weakness of the mechanism. A filter decides whether the action exists; the variable decides what the filter evaluates. Choosing a filter does not mean the answer has no variable, it means the job the scenario names is the gate, and the variable is the supporting state the gate reads.
+
+### Scenario two: remember a fact across the conversation with a variable
+
+Picture a customer who verified their identity in one subagent, and a later subagent that must not ask again. The mechanism is a variable: capture the verified id in code and read it in the next subagent's logic instructions. Relying on the model's context memory is the trap, because memory is not guaranteed across turns or across subagents, while a variable in known state is. The variable also carries the fact between subagents, which is part of why the agent does not re-ask a question the user already answered.[^3]
+
+Notice the two follow-on uses once the fact is captured. If the fact drives a branch, the branch reads the variable directly in a logic condition. If the fact must appear in the reply, it is rendered with a template expression. Either way the fact was captured deterministically, so every downstream use of it is reliable, which is the point: the variable is the single trustworthy source, and everything else is a read of it.
+
+The reason model memory fails here is worth stating plainly, because the exam tests it as a fact. The model's context is a reconstruction of the conversation, not a guaranteed record of it, and across subagents the run may start a fresh resolution that does not carry the earlier turn. A variable, by contrast, is declared state that survives the subagent transition because the script reads it explicitly. When a requirement says a fact must persist, the durable mechanism is the variable, and memory is the fragile one.
+
+### Scenario three: shape the message with a template expression
+
+Picture a reply that must name the product the customer is eligible for, and the script has already determined that product from a lookup. The mechanism is a template expression: the script captures the value into a variable and the prompt line renders it with braces and a leading exclamation, so the model receives the concrete value rather than a placeholder. Because resolution happens before the prompt is built, the model is describing something the script established, which keeps the answer grounded.[^2]
+
+Asking the model to look the product up in the prompt is the wrong mechanism, because it routes a known fact back through the model and reopens the variability the variable had already closed. The tell in a scenario is a phrase such as the reply must state the value the agent already determined. The words already determined are the cue that the value belongs in a variable and its appearance belongs in a template expression, not in a model lookup.
+
+A quick test separates the two mechanisms. If the reply must contain a value the agent already computed, it is a template expression, because the value exists and only needs to be shown. If the reply must contain a value the agent does not yet have and cannot compute, then something else has to produce it first, either an action the script runs or a question the model asks, and the template expression renders the result. The expression never creates the fact; it only presents it.
+
+### Scenario four: sequence and branch with logic instructions
+
+Picture a refund flow that must validate the order and fetch the loyalty tier first, then decide which refund path to take. The mechanism is logic instructions with a variable branch: the actions run with a run directive in a fixed order, their outputs land in variables, and conditional statements read those variables to select the path. This is deterministic ordering and branching, which the engine resolves before it reasons.
+
+The trap is putting the sequence in the prompt and hoping the model calls the actions in order, because a prompt line is a suggestion while a run directive executes unconditionally. When order and conditionality both matter, they belong as logic, and the model should only see the branch that was already chosen. Action chaining, where a sequence of actions must run in a guaranteed order, is the documented pattern for exactly this case, and it is a signal that the work belongs in logic rather than in a prompt.[^5]
+
+The ordering guarantee is the core of this scenario. A run directive executes unconditionally in the sequence it is written, so a fetch that must precede a decision is written before it and cannot be skipped or reordered by the model. A conditional that reads the fetched value then selects the path deterministically. The model receives the already-chosen branch, not the choice of branches, which is exactly the split hybrid reasoning is built for.
+
+### The wrong-mechanism traps that recur, and how to name them
+
+Several wrong-mechanism traps recur across these scenarios, and naming them is the fastest way to pass. Gating by prompt wording instead of an available when clause. Branching on model context memory instead of a variable. Letting the model set a gate variable, which makes the gate as random as the model. Rendering a known fact by asking the model to produce it instead of using a template expression. Putting a must-run sequence in a prompt instead of a run directive. And using a threshold recalled from memory instead of a configured variable, so the rule is not auditable.
+
+Two more misfires are subtler because each mechanism is present but pointed at the wrong job. Putting a filter where a variable was needed: a condition that hides an action when the requirement was really to remember and branch on a value. Putting a variable where a template expression was needed: storing the fact correctly but then asking the model to phrase it, which throws away the grounding the variable provided. In both cases the fix is to re-read the job, not to add another mechanism.
+
+A useful discipline is to write the requirement as a single sentence with the job as the verb. The agent must not transfer until validation passes is a gate. The agent must not re-ask for the verified id is a memory. The reply must name the determined product is a message. The agent must validate, then fetch, then choose a path is a sequence. One sentence, one job, one mechanism, and the scenario answer falls out of the sentence you wrote.
+
+There is a pattern under all the traps: each one hands a deterministic job to the model. Gating by wording, remembering by context, setting a gate variable from the model, producing a known value by generation, sequencing by prompt, and recalling a threshold by memory are all the same mistake in different clothes. The correction is always to move the job back to the mechanism that runs before the model, and the reason is always the same: what the model may or may not do is not a rule, it is a tendency.
+
+### Closing the loop: prove the path came from code, not the model
+
+The way you confirm a determinism choice in practice is to test it and read the state, not to trust that it looks right. Run Simulate against mock data first, then Live Test when you need production-shaped records, and use the Variables tab and the trace to confirm that each path was chosen by code rather than by the model. If a gate opened, the variable that controls it should show the value the script set, before the model ran.[^4]
+
+That check is the practical meaning of the whole objective. A determinism mechanism that was chosen correctly will leave a trace in which the fact, the gate, and the rendered value all line up, and a mechanism chosen incorrectly will leave a trace in which the model decided something it should not have. Read the trace for that line, and you will know whether you picked the right mechanism rather than merely a plausible one.
+
+It is worth naming what you are looking for in the trace, because the variables tab will show values regardless of who set them. The question is provenance. A variable that a run or set sequence populated shows the script as its source; a variable the model filled shows the conversation as its source. If a gate opened, the value behind it should trace to code, and if it traces to the model, the mechanism choice is wrong even when the outcome happened to look right once. One correct run is not proof; a code-set value is.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is choosing a prompt rewrite when the requirement is a hard gate, when only an available when clause removes the action from the tool list, so wording that says wait is the wrong mechanism. The second is relying on model context memory for a fact that must persist, when memory is not guaranteed across turns or subagents, so the fact belongs in a variable with a deterministic set path. The third is asking the model to produce a value the script already knows, which routes a known fact back through the model when a template expression would render it directly and keep the answer grounded.
+
+## What a consultant should walk away with
+
+Read every scenario and name the job before you look at the options: a gate, a remembered fact, a rendered message, or a sequence. Gate with a filter, an available when clause that removes the action from the tool list, and set the controlling variable false by default so any false value keeps it closed. Remember with a variable on a deterministic set path, never on model memory, and branch on it directly in logic. Render with a template expression when the fact is known and must appear in the reply, rather than letting the model look it up again. Sequence with run and set in a fixed order and branch with a conditional, because a run directive executes unconditionally while a prompt line does not. Then close the loop in Simulate and Live Test, and read the Variables tab and the trace to confirm the path came from code, not from the model.
+
+## What's next
+
+Lesson 33 - Standard and Custom Topics and Actions: The Agentforce Building Blocks (ag-4a)
+
+[^1]: Salesforce, "Agent Script Pattern: Enforce Business Rules with Filters" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-patterns-filtering.html)
+[^2]: Salesforce, "Agent Script Language Characteristics" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-lang.html)
+[^3]: Salesforce, "Agent Script Pattern: Using Variables Effectively" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-patterns-variables.html)
+[^4]: Salesforce, "Hybrid Reasoning with New Agentforce Builder and Agent Script" (https://architect.salesforce.com/docs/architect/fundamentals/guide/hybrid-reasoning-agentforce-builder-agent-script.html)
+[^5]: Salesforce, "Action Chaining" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-patterns-action-chaining.html)

@@ -285,9 +285,282 @@ export const learnSeries: LearningSeries[] = [
           "Governance"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-17-df-1a-the-agentforce-data-library-a-retrieval-layer-not",
+        "title": "Lesson 17: The Agentforce Data Library: A Retrieval Layer, Not a Knowledge Base",
+        "series": "sf-agentforce-specialist",
+        "lesson": 17,
+        "excerpt": "Learn how the Agentforce Data Library wires your own content to an agent so answers are grounded in your data rather than the model's memory, and how to name the Data 360 objects a library quietly builds. Covers requirement df-1a in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Agentforce Data Library",
+          "Data 360",
+          "Retrieval",
+          "Grounding"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-18-df-1b-getting-data-in-streams-dmo-mapping-and-file-eligi",
+        "title": "Lesson 18: Getting Data In: Streams, DMO Mapping and File Eligibility",
+        "series": "sf-agentforce-specialist",
+        "lesson": 18,
+        "excerpt": "Learn how content reaches a data library in two shapes, structured rows carried by data streams into data lake objects and mapped to data model objects, and unstructured files referenced by a UDLO and modeled as an unstructured data model object. Covers requirement df-1b in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Data 360",
+          "Data Streams",
+          "DMO Mapping",
+          "Ingestion"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-19-df-1c-the-retrieval-pipeline-from-query-to-grounded-prom",
+        "title": "Lesson 19: The Retrieval Pipeline: From Query to Grounded Prompt",
+        "series": "sf-agentforce-specialist",
+        "lesson": 19,
+        "excerpt": "Learn how a user's question travels from the query through a retriever and a search index into a grounded prompt, and how each stage of the Data 360 pipeline turns stored chunks into the content a model actually reads. Covers requirement df-1c in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Data 360",
+          "Retrieval",
+          "Search Index",
+          "Retriever",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-20-df-1d-access-control-and-permission-propagation-for-retr",
+        "title": "Lesson 20: Access Control and Permission Propagation for Retrieval",
+        "series": "sf-agentforce-specialist",
+        "lesson": 20,
+        "excerpt": "Learn which permissions let a user retrieve from a data library, why the running user rather than the builder decides what comes back, and how external audiences need visibility tags the internal org never asks for. Covers requirement df-1d in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Data 360",
+          "Permissions",
+          "Data Spaces",
+          "Retrieval Security"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-21-df-1e-freshness-refresh-cadence-and-retrieval-failure-mo",
+        "title": "Lesson 21: Freshness, Refresh Cadence and Retrieval Failure Modes",
+        "series": "sf-agentforce-specialist",
+        "lesson": 21,
+        "excerpt": "Learn how to keep an Agentforce Data Library serving current answers, and how to diagnose the four retrieval failure modes that freshness, refresh cadence, and index staleness produce in Data 360. Covers requirement df-1e in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Agentforce Data Library",
+          "Data 360",
+          "Retrieval",
+          "Freshness"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-22-df-2a-chunking-why-documents-are-split-and-what-the-size",
+        "title": "Lesson 22: Chunking: Why Documents Are Split and What the Sizes Cost You",
+        "series": "sf-agentforce-specialist",
+        "lesson": 22,
+        "excerpt": "Learn how Data 360 splits source content into chunks on a search index, and what chunk size, overlap, and title prepending each do to answer quality in a retrieval grounded agent. Covers requirement df-2a in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Chunking",
+          "Data 360",
+          "RAG",
+          "Answer Quality"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-23-df-2b-indexing-and-embedding-how-vectors-are-built-store",
+        "title": "Lesson 23: Indexing and Embedding: How Vectors Are Built, Stored, and Left to Go Stale",
+        "series": "sf-agentforce-specialist",
+        "lesson": 23,
+        "excerpt": "Learn how Data 360 turns each chunk into a vector embedding and stores it in a search index, and how the embedding model and index staleness decide whether retrieval finds the right passage. Covers requirement df-2b in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Embeddings",
+          "Vector Search",
+          "Data 360",
+          "Indexing"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-24-df-2c-retrievers-types-selection-and-how-results-reach-t",
+        "title": "Lesson 24: Retrievers: Types, Selection, and How Results Reach the Model",
+        "series": "sf-agentforce-specialist",
+        "lesson": 24,
+        "excerpt": "Learn how a Data 360 retriever queries a search index, how to choose between individual retrievers and the retriever a data library creates, and how filters and returned fields shape what the model reads. Covers requirement df-2c in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Retrievers",
+          "RAG",
+          "Data 360",
+          "Prompt Builder"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-25-df-2d-the-query-path-end-to-end-from-user-question-to-gr",
+        "title": "Lesson 25: The Query Path End to End: From User Question to Grounded Answer",
+        "series": "sf-agentforce-specialist",
+        "lesson": 25,
+        "excerpt": "Learn how the Data 360 query path carries a user question from raw ingested content to a grounded, cited answer through chunking, indexing, and a retriever. It covers requirement df-2d in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Data 360",
+          "Retrievers",
+          "Grounding",
+          "RAG"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-26-df-2e-diagnosing-bad-retrieval-chunking-indexing-or-retr",
+        "title": "Lesson 26: Diagnosing Bad Retrieval: Chunking, Indexing, or Retriever Configuration",
+        "series": "sf-agentforce-specialist",
+        "lesson": 26,
+        "excerpt": "Learn how to locate the exact stage of a retrieval pipeline that broke, separating a chunking fault, an indexing fault, and a retriever configuration fault before touching the prompt. It covers requirement df-2e in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Data 360",
+          "Retrieval",
+          "Debugging",
+          "Chunking"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-27-ag-1a-how-agentforce-agents-work-the-building-blocks-of",
+        "title": "Lesson 27: How Agentforce Agents Work: The Building Blocks of Agent Script",
+        "series": "sf-agentforce-specialist",
+        "lesson": 27,
+        "excerpt": "Learn how an Agentforce agent routes a user turn to scoped subagents and how Agent Script expresses each building block, from instructions and actions to variables. It covers requirement ag-1a in the AI Agents domain: Explain how an agent works and its basic building blocks of agent script.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "AI Agents",
+          "Agent Script",
+          "Subagents",
+          "Agentforce Builder"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-28-ag-1b-what-agent-script-cannot-express-execution-model-a",
+        "title": "Lesson 28: What Agent Script Cannot Express: Execution Model and Failure Modes",
+        "series": "sf-agentforce-specialist",
+        "lesson": 28,
+        "excerpt": "Learn what Agent Script cannot express, how the Atlas Reasoning Engine executes the compiled Agent Graph, and the failure modes around parse boundaries, action gates, and displayable exits. It covers requirement ag-1b in the AI Agents domain: Explain how an agent works and its basic building blocks of agent script.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "AI Agents",
+          "Agent Script",
+          "Hybrid Reasoning",
+          "Atlas Engine"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-29-ag-2a-hybrid-reasoning-components-benefits-and-where-age",
+        "title": "Lesson 29: Hybrid Reasoning: Components, Benefits, and Where Agent Script Runs",
+        "series": "sf-agentforce-specialist",
+        "lesson": 29,
+        "excerpt": "Learn how hybrid reasoning lets one agent run deterministic code and model judgment side by side, name the layers that carry a decision from Agent Script to a running agent, and explain the reliability, cost, and control benefits that follow. Covers requirement ag-2a, \\\"Explain the components and benefits of hybrid reasoning, including how Agent Script functions in Canvas and Script View,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Hybrid Reasoning",
+          "Agent Script",
+          "Atlas Reasoning Engine",
+          "Agentforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-30-ag-2b-canvas-and-script-view-two-surfaces-one-agent",
+        "title": "Lesson 30: Canvas and Script View: Two Surfaces, One Agent",
+        "series": "sf-agentforce-specialist",
+        "lesson": 30,
+        "excerpt": "Learn how Canvas view and Script view are two editors over one Agent Script file, what each surface does well, and how the source compiles to the Agent Graph that the Atlas Reasoning Engine runs at runtime. Covers requirement ag-2b, \\\"Explain the components and benefits of hybrid reasoning, including how Agent Script functions in Canvas and Script View,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent Script",
+          "Canvas View",
+          "Script View",
+          "Agentforce Builder"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-31-ag-3a-managing-deterministic-behavior-filters-variables",
+        "title": "Lesson 31: Managing Deterministic Behavior: Filters, Variables, and Template Expressions",
+        "series": "sf-agentforce-specialist",
+        "lesson": 31,
+        "excerpt": "Learn how filters, variables, and template expressions work together to fix an agent's path, from the gate that removes an action to the expression that renders a known value into the reply, and how the chain stays deterministic before the model reasons. Covers requirement ag-3a, \\\"Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Agent Script",
+          "Deterministic Behavior",
+          "Filters",
+          "Variables"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-32-ag-3b-choosing-the-right-determinism-mechanism-scenarios",
+        "title": "Lesson 32: Choosing the Right Determinism Mechanism: Scenarios and Traps",
+        "series": "sf-agentforce-specialist",
+        "lesson": 32,
+        "excerpt": "Learn how to read a use case, name the determinism job it describes, and choose the right mechanism among filters, variables, and template expressions, then recognize the wrong-mechanism traps that recur across the exam scenarios. Covers requirement ag-3b, \\\"Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Agent Script",
+          "Deterministic Behavior",
+          "Scenario Design",
+          "Agentforce"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 16,
+    "totalLessons": 32,
     "curriculumLessons": 61
   },
   {
@@ -11474,6 +11747,279 @@ export const learnLessons: LearnLesson[] = [
       "Agent Script",
       "Prompt Builder",
       "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-17-df-1a-the-agentforce-data-library-a-retrieval-layer-not",
+    "title": "Lesson 17: The Agentforce Data Library: A Retrieval Layer, Not a Knowledge Base",
+    "series": "sf-agentforce-specialist",
+    "lesson": 17,
+    "excerpt": "Learn how the Agentforce Data Library wires your own content to an agent so answers are grounded in your data rather than the model's memory, and how to name the Data 360 objects a library quietly builds. Covers requirement df-1a in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Agentforce Data Library",
+      "Data 360",
+      "Retrieval",
+      "Grounding"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-18-df-1b-getting-data-in-streams-dmo-mapping-and-file-eligi",
+    "title": "Lesson 18: Getting Data In: Streams, DMO Mapping and File Eligibility",
+    "series": "sf-agentforce-specialist",
+    "lesson": 18,
+    "excerpt": "Learn how content reaches a data library in two shapes, structured rows carried by data streams into data lake objects and mapped to data model objects, and unstructured files referenced by a UDLO and modeled as an unstructured data model object. Covers requirement df-1b in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Data 360",
+      "Data Streams",
+      "DMO Mapping",
+      "Ingestion"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-19-df-1c-the-retrieval-pipeline-from-query-to-grounded-prom",
+    "title": "Lesson 19: The Retrieval Pipeline: From Query to Grounded Prompt",
+    "series": "sf-agentforce-specialist",
+    "lesson": 19,
+    "excerpt": "Learn how a user's question travels from the query through a retriever and a search index into a grounded prompt, and how each stage of the Data 360 pipeline turns stored chunks into the content a model actually reads. Covers requirement df-1c in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Data 360",
+      "Retrieval",
+      "Search Index",
+      "Retriever",
+      "RAG"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-20-df-1d-access-control-and-permission-propagation-for-retr",
+    "title": "Lesson 20: Access Control and Permission Propagation for Retrieval",
+    "series": "sf-agentforce-specialist",
+    "lesson": 20,
+    "excerpt": "Learn which permissions let a user retrieve from a data library, why the running user rather than the builder decides what comes back, and how external audiences need visibility tags the internal org never asks for. Covers requirement df-1d in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Data 360",
+      "Permissions",
+      "Data Spaces",
+      "Retrieval Security"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-21-df-1e-freshness-refresh-cadence-and-retrieval-failure-mo",
+    "title": "Lesson 21: Freshness, Refresh Cadence and Retrieval Failure Modes",
+    "series": "sf-agentforce-specialist",
+    "lesson": 21,
+    "excerpt": "Learn how to keep an Agentforce Data Library serving current answers, and how to diagnose the four retrieval failure modes that freshness, refresh cadence, and index staleness produce in Data 360. Covers requirement df-1e in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Agentforce Data Library",
+      "Data 360",
+      "Retrieval",
+      "Freshness"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-22-df-2a-chunking-why-documents-are-split-and-what-the-size",
+    "title": "Lesson 22: Chunking: Why Documents Are Split and What the Sizes Cost You",
+    "series": "sf-agentforce-specialist",
+    "lesson": 22,
+    "excerpt": "Learn how Data 360 splits source content into chunks on a search index, and what chunk size, overlap, and title prepending each do to answer quality in a retrieval grounded agent. Covers requirement df-2a in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Chunking",
+      "Data 360",
+      "RAG",
+      "Answer Quality"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-23-df-2b-indexing-and-embedding-how-vectors-are-built-store",
+    "title": "Lesson 23: Indexing and Embedding: How Vectors Are Built, Stored, and Left to Go Stale",
+    "series": "sf-agentforce-specialist",
+    "lesson": 23,
+    "excerpt": "Learn how Data 360 turns each chunk into a vector embedding and stores it in a search index, and how the embedding model and index staleness decide whether retrieval finds the right passage. Covers requirement df-2b in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Embeddings",
+      "Vector Search",
+      "Data 360",
+      "Indexing"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-24-df-2c-retrievers-types-selection-and-how-results-reach-t",
+    "title": "Lesson 24: Retrievers: Types, Selection, and How Results Reach the Model",
+    "series": "sf-agentforce-specialist",
+    "lesson": 24,
+    "excerpt": "Learn how a Data 360 retriever queries a search index, how to choose between individual retrievers and the retriever a data library creates, and how filters and returned fields shape what the model reads. Covers requirement df-2c in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Retrievers",
+      "RAG",
+      "Data 360",
+      "Prompt Builder"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-25-df-2d-the-query-path-end-to-end-from-user-question-to-gr",
+    "title": "Lesson 25: The Query Path End to End: From User Question to Grounded Answer",
+    "series": "sf-agentforce-specialist",
+    "lesson": 25,
+    "excerpt": "Learn how the Data 360 query path carries a user question from raw ingested content to a grounded, cited answer through chunking, indexing, and a retriever. It covers requirement df-2d in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Data 360",
+      "Retrievers",
+      "Grounding",
+      "RAG"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-26-df-2e-diagnosing-bad-retrieval-chunking-indexing-or-retr",
+    "title": "Lesson 26: Diagnosing Bad Retrieval: Chunking, Indexing, or Retriever Configuration",
+    "series": "sf-agentforce-specialist",
+    "lesson": 26,
+    "excerpt": "Learn how to locate the exact stage of a retrieval pipeline that broke, separating a chunking fault, an indexing fault, and a retriever configuration fault before touching the prompt. It covers requirement df-2e in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Data 360",
+      "Retrieval",
+      "Debugging",
+      "Chunking"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-27-ag-1a-how-agentforce-agents-work-the-building-blocks-of",
+    "title": "Lesson 27: How Agentforce Agents Work: The Building Blocks of Agent Script",
+    "series": "sf-agentforce-specialist",
+    "lesson": 27,
+    "excerpt": "Learn how an Agentforce agent routes a user turn to scoped subagents and how Agent Script expresses each building block, from instructions and actions to variables. It covers requirement ag-1a in the AI Agents domain: Explain how an agent works and its basic building blocks of agent script.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "AI Agents",
+      "Agent Script",
+      "Subagents",
+      "Agentforce Builder"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-28-ag-1b-what-agent-script-cannot-express-execution-model-a",
+    "title": "Lesson 28: What Agent Script Cannot Express: Execution Model and Failure Modes",
+    "series": "sf-agentforce-specialist",
+    "lesson": 28,
+    "excerpt": "Learn what Agent Script cannot express, how the Atlas Reasoning Engine executes the compiled Agent Graph, and the failure modes around parse boundaries, action gates, and displayable exits. It covers requirement ag-1b in the AI Agents domain: Explain how an agent works and its basic building blocks of agent script.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "AI Agents",
+      "Agent Script",
+      "Hybrid Reasoning",
+      "Atlas Engine"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-29-ag-2a-hybrid-reasoning-components-benefits-and-where-age",
+    "title": "Lesson 29: Hybrid Reasoning: Components, Benefits, and Where Agent Script Runs",
+    "series": "sf-agentforce-specialist",
+    "lesson": 29,
+    "excerpt": "Learn how hybrid reasoning lets one agent run deterministic code and model judgment side by side, name the layers that carry a decision from Agent Script to a running agent, and explain the reliability, cost, and control benefits that follow. Covers requirement ag-2a, \\\"Explain the components and benefits of hybrid reasoning, including how Agent Script functions in Canvas and Script View,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Hybrid Reasoning",
+      "Agent Script",
+      "Atlas Reasoning Engine",
+      "Agentforce"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-30-ag-2b-canvas-and-script-view-two-surfaces-one-agent",
+    "title": "Lesson 30: Canvas and Script View: Two Surfaces, One Agent",
+    "series": "sf-agentforce-specialist",
+    "lesson": 30,
+    "excerpt": "Learn how Canvas view and Script view are two editors over one Agent Script file, what each surface does well, and how the source compiles to the Agent Graph that the Atlas Reasoning Engine runs at runtime. Covers requirement ag-2b, \\\"Explain the components and benefits of hybrid reasoning, including how Agent Script functions in Canvas and Script View,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent Script",
+      "Canvas View",
+      "Script View",
+      "Agentforce Builder"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-31-ag-3a-managing-deterministic-behavior-filters-variables",
+    "title": "Lesson 31: Managing Deterministic Behavior: Filters, Variables, and Template Expressions",
+    "series": "sf-agentforce-specialist",
+    "lesson": 31,
+    "excerpt": "Learn how filters, variables, and template expressions work together to fix an agent's path, from the gate that removes an action to the expression that renders a known value into the reply, and how the chain stays deterministic before the model reasons. Covers requirement ag-3a, \\\"Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Agent Script",
+      "Deterministic Behavior",
+      "Filters",
+      "Variables"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-32-ag-3b-choosing-the-right-determinism-mechanism-scenarios",
+    "title": "Lesson 32: Choosing the Right Determinism Mechanism: Scenarios and Traps",
+    "series": "sf-agentforce-specialist",
+    "lesson": 32,
+    "excerpt": "Learn how to read a use case, name the determinism job it describes, and choose the right mechanism among filters, variables, and template expressions, then recognize the wrong-mechanism traps that recur across the exam scenarios. Covers requirement ag-3b, \\\"Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Agent Script",
+      "Deterministic Behavior",
+      "Scenario Design",
+      "Agentforce"
     ],
     "status": "published"
   },

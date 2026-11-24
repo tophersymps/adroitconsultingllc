@@ -1,0 +1,106 @@
+---
+title: "Lesson 22: Chunking: Why Documents Are Split and What the Sizes Cost You"
+slug: day-22-df-2a-chunking-why-documents-are-split-and-what-the-size
+series: sf-agentforce-specialist
+lesson: 22
+excerpt: "Learn how Data 360 splits source content into chunks on a search index, and what chunk size, overlap, and title prepending each do to answer quality in a retrieval grounded agent. Covers requirement df-2a in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Chunking, Data 360, RAG, Answer Quality]
+---
+
+# Lesson 22: Chunking: Why Documents Are Split and What the Sizes Cost You
+
+A returns agent is asked whether an opened item can still be sent back. It answers that returns are accepted within thirty days, fluently and without qualification. The policy page says returns are accepted within thirty days, except for items marked final sale. The exception sat in the next paragraph. Chunking had split the rule from its qualifying sentence, retrieval returned only the first half, and the model completed a careful policy into a confident overstatement.
+
+The cause is a configuration decision made long before the user typed anything. Data 360 breaks a source into chunks before it embeds them, and the chunk boundaries decide which ideas travel together into the model's context. When a boundary falls between a rule and its exception, the model receives half a thought and finishes it from general knowledge, which is how a thirty-day window with conditions becomes a thirty-day window without them.
+
+This lesson serves requirement df-2a in the Data 360 Fundamentals domain, at 20 percent of the exam, and it is one of the lessons the official exam guide names by name when it lists chunking, indexing, and retrievers as foundational concepts. You will learn why chunking exists, what chunk size, overlap, and title prepending each do to answer quality, and why a chunk size cannot be chosen without looking at the embedding model that will vectorize it.
+
+## Deep Dive
+
+### A context window is what forces the split
+
+A large language model can only process so much text in a single request, and a full knowledge article, PDF, or web page routinely exceeds that budget. Data 360 answers the constraint by breaking the source into smaller units called chunks before anything is embedded. A chunk is a passage that still makes sense on its own, such as a paragraph or a section, not an arbitrary slice of characters.
+
+The purpose of the split is retrieval precision. At query time the system searches through chunks and returns only the most relevant passages to the model, not the entire document, so the model receives a focused context instead of a wall of text. Smaller units make that search cheaper and sharper, but only when each unit still carries a complete idea.
+
+Chunking is a configuration step on a search index, which means it is a decision you make and can change rather than a fixed property of the platform. Read it as the front of the pipeline: it decides what units exist for the rest of Data 360 to embed, store, and retrieve, so an error here is inherited by every layer downstream.
+
+### Chunk size is a two-way trade
+
+Chunk size is the first trade to get right, and it runs in both directions. Make a chunk too large and its vector embedding averages many ideas together, so the chunk stops being a sharp match for any single question and retrieval turns vague. The model then receives a long passage in which the answer is buried among unrelated sections and may quote the wrong part.
+
+Make a chunk too small and you strip the context the model needs. It retrieves the right sentence but answers as if the surrounding paragraph never existed, which is precisely the returns failure above: it has the thirty-day rule and none of the exception. The model is not lying; it is completing the incomplete fragment it was handed.
+
+The optimum depends on the content, not on a rule of thumb. Well-structured pages with clear headings tolerate larger chunks because the structure keeps ideas together, while dense prose in a long PDF often needs a smaller limit so boundaries land in sensible places. You are tuning for a chunk that is complete enough to answer from and narrow enough to match sharply.
+
+Two failure shapes follow from the size choice, and naming them lets you recognize each in a scenario. An oversized-chunk failure looks like an answer that is plausible but generic, drawn from a passage too broad to be about the question, because the model had the answer somewhere in a large block and reached for the wrong part of it. An undersized-chunk failure looks like an answer that is precise but incomplete, a correct fact stripped of the condition that should have qualified it. Neither is a model defect, and neither is repaired by rewording the prompt.
+
+Because the trade runs both ways, the practical method is to start from the content's structure and adjust until each chunk holds a whole idea. A sectioned help page with clear headings wants chunks that follow those sections. A transcript or a long narrative wants boundaries that fall at topic changes rather than at a token count. The token limit is a ceiling that keeps chunks from growing without bound, not a target that every chunk should reach.
+
+### The documented defaults are a lesson, not a universal law
+
+In the website-grounding walkthrough Salesforce documents, the recommended configuration for sectioned help-center HTML is Section Aware Chunking with a maximum of 1,200 tokens, chosen because the page is well structured and the limit gives each chunk enough context without making it unnecessarily large [^1].
+
+Section-Aware Chunking is the default strategy for HTML and PDF files in the Data 360 advanced search index builder, and it works by respecting the document's own structure. Within that strategy, the Max Tokens setting combines adjacent small sections into a larger chunk so each unit stays coherent while approaching the size you set [^2]. The 1,200 number is tuned to the content shape, not a platform ceiling; long or heavily structured pages often need a different strategy or a different limit.
+
+Contrast the documented website case with the general default. When you create a default search index, Data 360 chunks the content into semantic passages and then groups them back together until it reaches the size you specify, or the default maximum chunk size of 512 tokens [^3]. So the platform carries a small default and the walkthrough raises it for structured HTML. Reading both numbers side by side is the honest lesson: chunk size is a knob you set with the content in mind, not a constant to memorize.
+
+The reason the walkthrough landed on 1,200 rather than the 512 default is that the source was short, cleanly sectioned help-center HTML, where a larger unit stays coherent and carries more context into each retrieved result. Turn the same limit on a noisy PDF of scanned tables and the larger chunks would average unrelated rows together. Same platform, same setting, opposite outcome, because the content shape differs, and that reasoning is what the exam rewards rather than the specific number.
+
+### Overlap protects the seam and costs storage
+
+Overlap is the second knob, and it exists to protect the boundary. When you split at a fixed size, an idea can straddle the seam, with the setup in one chunk and the conclusion in the next. Overlap tokens repeat a tail of the previous chunk at the head of the following one so a boundary idea survives intact in at least one chunk. In the strategy documentation, overlap applies when a single section produces multiple chunks, and it is described as preserving context between chunks and improving search and retrieval [^2].
+
+Salesforce sets overlap to 0 tokens in the documented section-aware website example, on the reasoning that when pages are already well structured the section boundaries fall in the right places, and overlap would only add duplicate text and index bloat [^1]. That is a decision, not a default. The exam-relevant idea is the reason overlap exists, and the trade that it carries.
+
+State the trade cleanly: overlap buys boundary safety and costs storage and near-duplicate matches. Turn it up when your content has long ideas that run across natural boundaries, such as unstructured prose, and turn it down when the source is cleanly sectioned so the boundaries already fall in the right place.
+
+Overlap is easiest to reason about as insurance against an unlucky cut. If you cannot predict where ideas will fall relative to the boundary, a small overlap buys a second chance that a straddling idea appears whole in at least one chunk. If you can predict the cut, because the document is sectioned, the insurance is not needed and the premium, paid in duplicate text and near-duplicate matches that crowd the returned results, is wasted.
+
+### Prepending a title gives a fragment an identity
+
+Title prepending is the third lever, and it is the easiest to overlook. Section-aware chunking can attach a field such as the page Title to each chunk, so a chunk that reads only as a fragment still carries a label telling the model and the index what document it came from. Concretely, a bare paragraph about a shipping policy retrieves better when the chunk also says it belongs to the returns page.
+
+The mechanism generalizes beyond titles. Prepend fields let you add metadata to chunks generated from data model objects so the chunk is easier to identify, and the documented example prepends the Title field of a Knowledge article because its Description field can on its own exceed the optimal chunk size [^2].
+
+One limit is worth carrying into a build. If a record's prepended value reaches the maximum token limit you set for the index, Data 360 does not create chunks for that record, and the record then does not appear in search results at all [^2]. Prepending is context you gain at the cost of space per chunk, so choose the prepend field with care and keep it comfortably inside the chunk size.
+
+That limit is a real trap because its failure is silent. A record whose prepended value exceeds the token limit does not produce a shorter or truncated chunk; it produces no chunk at all, so the record drops out of search with no error to follow. A very long Title, or a prepended field chosen without checking its length, can quietly remove whole records from an index, which is exactly why the guidance is to select prepend fields whose values fit within the chunk size limit.
+
+### Chunk size and the embedding model are coupled
+
+The chunking configuration sits beside the embedding-model choice, and the two are locked together. You must pick an embedding model whose supported sequence length covers your chunk size. The embedding model is what converts each chunk into the vector the index will search, so a chunk the model cannot fit is a chunk the model cannot represent faithfully.
+
+The documented pairing makes the coupling concrete. In the website walkthrough, Salesforce Embedding V2 Small, also referred to as SFR-v2-small, supports the 1,200-token chunk size, and the same guidance notes that if you choose a smaller chunk size, such as 512 tokens, you should use a model with a smaller supported sequence length [^1]. The chunk and the model move as a set, which is why the advanced setup selects them on the same path.
+
+This is why a chunk-size change is not a local decision. Raise the limit beyond what the selected model supports and retrieval quality degrades for reasons that look like a model problem but began as a configuration mismatch. Set chunk size and embedding model together, and change them together [^4].
+
+There is a practical order to those two decisions. Read the content first to decide the shape a chunk should take, then choose the chunk size that fits that shape, then choose an embedding model whose supported sequence length covers it. Choosing the model first can force a chunk size the content did not ask for, which is a compromise the content did not need, and it is the reverse of the order the setup path encourages when you move from chunking to vectorization.
+
+### Chunking runs per file type and bounds everything downstream
+
+A search index commonly ingests more than one kind of document, so chunking is configurable per file type. The workflow lets you remove file extensions you do not want and then set the strategy and token limits per extension, so a dense PDF can be chunked differently from clean HTML [^1]. That granularity matters when a single index serves several sources with different shapes.
+
+Read chunking as a boundary on what the rest of the pipeline can do. The retriever can only return the chunks that chunking created, so no retriever setting downstream can fully repair a bad split. If the exception sentence was chunked away from its rule, ranking and filtering will faithfully surface the half that exists, and the model will answer from half a policy.
+
+This is the line to hold for the exam. Chunking decides what units exist; embedding turns each unit into a vector; the index stores and searches them; the retriever queries the index. Every later layer is downstream of the split, which is why the exam guide names chunking first when it lists the retrieval concepts.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a chunk is a fixed-size slice of characters. Chunking breaks content into meaningful passages such as paragraphs or sections, so an answer that describes it as an arbitrary byte or character cut has misread the mechanism. The second is believing more overlap is always safer. Overlap protects an idea that straddles a boundary, but in the documented well-structured example it is set to 0 tokens because it otherwise adds duplicate text and index bloat, so overlap is a trade rather than a safety default. The third is believing chunk size is independent of the embedding model. The chunk must fit the model's supported sequence length, which is why the 1,200-token chunk pairs with a model built for that size, and choosing one without the other is a configuration error.
+
+## What a consultant should walk away with
+
+Chunking decides what units exist, and every retriever downstream can only return the chunks that chunking already created, so treat the split as the first and most consequential decision in the pipeline. Choose a chunk size large enough to keep a rule with its exception and small enough to match a single question, and set a limit you can justify from the content shape rather than a number you memorized. Add overlap only when long ideas run across natural boundaries, prepend a title when a fragment needs an identity, and pair the chunk size with an embedding model whose supported sequence length covers it. When answers come back half-formed, look at the chunk boundaries before you look at the prompt.
+
+## What's next
+
+Lesson 23 - Indexing and Embedding: How Vectors Are Built, Stored, and Left to Go Stale (df-2b)
+
+[^1]: Salesforce, "Step 3: Create Search Index and Retriever" (https://developer.salesforce.com/docs/ai/ground-agentforce-on-website/guide/aes-create-search-index-and-retriever)
+[^2]: Salesforce, "Chunking Strategies" (https://help.salesforce.com/s/articleView?id=data.c360_a_search_index_supported_chunking_strategies.htm&language=en_US&type=5)
+[^3]: Salesforce, "Optimizing Search Indexes: Field Selection and Chunking" (https://help.salesforce.com/s/articleView?id=data.c360_a_search_index_optimize.htm&language=en_US&type=5)
+[^4]: Salesforce, "Create a Vector Search Index with Advanced Setup" (https://help.salesforce.com/s/articleView?id=data.c360_a_search_index_create_vector_index_config.htm&language=en&type=5)

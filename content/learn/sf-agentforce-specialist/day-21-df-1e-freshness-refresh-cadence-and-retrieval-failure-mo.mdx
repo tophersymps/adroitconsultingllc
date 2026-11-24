@@ -1,0 +1,101 @@
+---
+title: "Lesson 21: Freshness, Refresh Cadence and Retrieval Failure Modes"
+slug: day-21-df-1e-freshness-refresh-cadence-and-retrieval-failure-mo
+series: sf-agentforce-specialist
+lesson: 21
+excerpt: "Learn how to keep an Agentforce Data Library serving current answers, and how to diagnose the four retrieval failure modes that freshness, refresh cadence, and index staleness produce in Data 360. Covers requirement df-1e in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Agentforce Data Library, Data 360, Retrieval, Freshness]
+---
+
+# Lesson 21: Freshness, Refresh Cadence and Retrieval Failure Modes
+
+A service team retires a sixty-day refund window and publishes the replacement policy at nine in the morning. By lunchtime the agent is still telling customers that returns are accepted for sixty days, in fluent, confident sentences, with no sign that anything is wrong. The article is current. The permissions are correct. The agent instructions were never touched. The only thing that did not change is the search index the agent actually reads, which was built the night before and had no reason to rebuild itself when the policy moved.
+
+That gap between a current source and a stale index is the failure mode this objective exists to catch, and it is not an agent defect. A data library automates a pipeline when you create it, but it does not keep every source synchronized forever. Freshness lives in two places that sit upstream of the agent: the refresh schedule of the data stream that feeds the library, and the last time the search index and its chunks were rebuilt. When you assume the index is a live read of your content, you eventually ship an agent that is confidently wrong, and that is the worst kind of wrong because nothing in the response signals doubt.
+
+This lesson serves requirement df-1e in the Data 360 Fundamentals domain, at 20 percent of the exam. You will learn how each piece of the pipeline refreshes, why a healthy status card does not prove the data is fresh, and the four failure modes a scenario in this objective is usually testing: the stale answer, the missing answer, the incomplete build, and unbalanced coverage. The exam keeps returning here because the fix is counterintuitive. It almost never lives in the agent's instructions, and a candidate who reaches for prompt rewording has misread the problem.
+
+## Deep Dive
+
+### A library automates the build, not the forever
+
+When you save an Agentforce Data Library, the platform runs a fixed chain for you. It creates a data stream, then the data lake and data model objects, then maps the data lake object to the data model object, and only after those steps are successful and active does it create the search index. After the index exists, chunking begins [^1]. The status card in the data library setup page walks each stage as it completes and links into the underlying Data 360 objects, so it doubles as a map of the pipeline.
+
+What the status card proves is that the chain reached the end once. It is a build receipt, not a freshness gauge. A library whose status reads as ready tells you the index was created and a retriever was configured. It does not tell you that the content behind that index still matches the sources today, and it will keep reading as ready long after a policy has changed underneath it. Candidates lose points here by treating the green status as a guarantee of currency.
+
+The distinction matters because the library's automation is front-loaded. It removes the manual work of wiring a stream, a mapping, an index, and a retriever, and that is a large convenience. It does not remove the operational job of watching whether the stream keeps running and whether the index keeps rebuilding. Those two watches are yours, and the exam tests whether you know that they are yours.
+
+### Freshness is a data stream property first
+
+Before any index can be current, the objects feeding it have to be current, and that is the data stream's job. Data streams ingest on a configured schedule, and the schedule is not one setting but a small family of them. The available frequencies are hourly, daily at a specified hour, weekly on a specified day and time, and monthly on a specified day and time, all expressed in UTC. Some object-storage connectors support much narrower intervals, at five, fifteen, or thirty minutes [^2].
+
+The refresh mode decides what each run does. Incremental mode fetches records added or changed since the last refresh and is available for most non-file streams that carry a last-modified datetime field. Upsert mode applies to file-based streams and updates added or changed rows. Full Refresh deletes the existing data and replaces it with the newly imported dataset, and it is the default when no other mode is available [^2]. The connector can also fix a cadence you do not choose: the Salesforce CRM connector refreshes incrementally every ten minutes, while its periodic full refresh is disabled by default on new streams to avoid unnecessary cost [^3].
+
+Read this layer first when an agent looks stale. If the stream that carries your Knowledge articles refreshes daily at midnight, then a policy edited at nine in the morning cannot be in the library before the next run, no matter how healthy the agent is. The schedule is a design decision with a user-visible consequence, and it is the first number to check.
+
+Choosing that schedule is a real design decision, and it turns on how often each object actually changes. A Knowledge base that a team edits during business hours may justify a tighter stream refresh than a nightly job would give, while a static policy archive does not. The frequency is also expressed in UTC, so a daily refresh set for midnight runs at midnight UTC, which lands in the middle of a business day for some teams and can surprise a user who expected the change to be live by their morning. Read the schedule against the clock the business actually keeps, not the clock the admin set it on.
+
+### The index is a snapshot, and the retriever cannot read its age
+
+Even after the objects refresh, the chunks and their vectors are still whatever the last indexing run produced. The search index is a stored structure, and bringing it current is a second job that depends on the first. The rebuild is neither free nor instant: chunking time scales with the number, size, and complexity of the articles or files and with how many Knowledge fields you selected, so a large library re-indexes slowly and spends credits doing it.
+
+This produces the first operational failure mode, the stale answer. The symptom is an agent citing a superseded procedure or a retired policy with full confidence. The cause is a source that changed without an index refresh, or a data stream that quietly stopped. The trap is that the retriever has no way to warn the model that the content is old. It returns the chunks it can see, and those chunks are whatever was last indexed, with no timestamp attached that the model could reason about.
+
+The published troubleshooting guidance makes the dependency concrete. You must wait for the search index status to read as ready before an Answer Questions with Knowledge action will work, and when no articles come back you rebuild the index and wait for the status to return to ready [^4]. None of those steps touch the agent. They are all statements that freshness is a data-layer property, and the documented fix sits in Data 360 rather than in the prompt.
+
+A worked version makes the sequence visible. A price updated at ten in the morning sits in the source system immediately, enters the library only when the data stream next runs, and reaches the index only when the index next rebuilds. That is three clocks, in order, and the answer a user sees at any moment reflects the slowest of them. When someone reports that the agent is behind, the real question is which of those three clocks last ran, and the agent itself is almost never the answer.
+
+### The missing answer is usually a permission or eligibility fault
+
+The second failure mode looks like the opposite problem, an agent that says it does not know, but it grows from the same class of oversight: a check that was never run. When the agent returns nothing useful, the diagnosis is rarely the model and almost always one of a short list of gates. For a Knowledge-based library the source articles must be public and published and the data categories must be visible. The running user needs read access to the Knowledge object, field-level security on every field selected in the search index, and the app permission that allows viewing Knowledge.
+
+Two other causes complete the list. A library whose search index never completed has nothing to return, and a user missing the Data 360 access that retrieval requires cannot reach the index even when it is full. The discipline is to work the eligibility rules and the permissions before you touch the model or the prompt, because a missing answer is almost always an access answer. Editing the agent's instructions cannot grant a user a field that they cannot read.
+
+Keep the layer boundaries in view while you diagnose. A missing answer is a question about who can see what, and the answer is decided by object permissions, field-level security, data categories, and the running user's Data 360 grants. The model is downstream of all of that; it can only phrase what retrieval hands it, and retrieval hands it nothing when a gate is closed.
+
+### A stalled index points upstream, not at the agent
+
+The third failure mode is the incomplete build, and it is the easiest to misdiagnose because it fails silently. The search index can be created only after the data stream, the objects, and the mapping are successful and active [^1]. A mapping that half-fails does not produce a partial index; it stops the chain before the index exists at all. The agent then has a library with no vectors behind it, and it answers from nothing.
+
+The status card is your first read here, because it walks each stage in order and links to the underlying objects. An index that is stuck before ready tells you the problem is upstream in Data 360, not in the agent. For file-based libraries the per-file lifecycle makes the same point at a finer grain: a file moves through the states of Uploading, Uploaded, Indexing, and Indexed, so a file stuck before Indexed is a pipeline stall rather than an answer-quality problem [^5].
+
+The exam-relevant habit is to read the chain as ordered and to locate the break rather than guess. If the index is missing, nothing downstream can be correct, and no retriever setting or prompt edit will repair it. Naming which stage failed is the whole skill, and the status card is the tool that lets you name it.
+
+### Coverage is a build-time decision you pay for once
+
+The fourth failure mode is unbalanced coverage, and it is the only one on this list that you can prevent at build time instead of diagnosing later. Chunking works over the fields you select, so those fields are effectively the library's scope. Select too few Knowledge fields and relevant content never enters the index, so the agent simply lacks it and answers thin. Select too many and the index fills with low-value text that dilutes matches and slows every rebuild.
+
+This is a design choice, not a break, which is why it hides until someone asks a question whose answer lived in a field nobody indexed. The corrective habit is to decide the field set deliberately against the questions the agent is expected to answer, and to revisit it when a real question falls through. Coverage sits at the front of the pipeline, so an error here propagates to every answer the agent will ever give.
+
+State the trade plainly for the exam. A library is only as good as the content it was told to index, and the field selection is where that decision is made. The failure is quiet because a missing field produces no error, only an agent that never knew the fact existed.
+
+The reverse is also true and worth naming for coverage questions. A field that is indexed but never queried is pure cost: it takes space in every chunk, slows every rebuild, and can only add noise to a match. Coverage is a decision about which fields earn their place, read from both ends of the questions the agent is expected to answer, so the honest move is to add a field when a real question falls through and to drop one that has never been the source of an answer.
+
+### Freshness and cost pull against each other
+
+Freshness has a price, and the price is measured in Data 360 credits. Data libraries consume credits, and every refresh that re-chunks content spends more, so re-indexing is a budgeted operation rather than a free background task [^1]. That turns freshness into a trade. A very tight rebuild cadence keeps answers current and keeps spending credits, while a loose one saves cost and lets answers drift behind the source.
+
+The right cadence is the one that keeps answers current without paying to re-chunk content nobody queries. That means matching the refresh schedule to how often each source actually changes, and treating a high-churn policy article differently from an archival document that never moves. When you retire a library, delete its unused indexes to recover the space, because a dormant index still consumes what a live one does.
+
+Hold the two pressures together, because the exam likes the pairing. Freshness and cost are not independent settings; a rebuild decision pays both bills at once. The consultant's job is to choose the cadence the use case can justify, and to be able to say why a daily refresh is enough here and would be wasteful there.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a data library keeps every source synchronized automatically and forever. The library automates the build, but the stream refreshes on its schedule and the index must rebuild, so an agent whose configuration has not changed can still be answering from stale chunks. The second is believing a search index that is stuck is an agent problem. The index is created only after the stream, the objects, and the mapping are successful and active, so a stalled index points upstream into Data 360, and the fix is in the data layer rather than in the agent. The third is believing the agent can tell when its data is old. The retriever returns whatever chunks sit in the index and has no mechanism to warn the model that the content has been superseded, which is exactly why staleness produces confident wrong answers instead of cautious ones.
+
+## What a consultant should walk away with
+
+A healthy status card proves the pipeline built, not that the data is fresh, so read freshness in two places: the data stream schedule and the last index rebuild. When an answer is stale, fix the stream and the index rather than the prompt. When an answer is missing, work the eligibility rules and the running user's permissions before you suspect the model. When the library looks empty, read the status card in order and find the stage that failed, because a stalled index is upstream of the agent. When coverage is thin, revisit the selected fields, and when you set a cadence, remember that every rebuild spends credits, so match the schedule to how often the content actually changes.
+
+## What's next
+
+Lesson 22 - Chunking: Why Documents Are Split and What the Sizes Cost You (df-2a)
+
+[^1]: Salesforce, "What Are Data Libraries?" (https://help.salesforce.com/s/articleView?id=ai.data_library_concept.htm&language=en_US&type=5)
+[^2]: Salesforce, "Data Stream Settings and Refresh Modes" (https://help.salesforce.com/s/articleView?id=data.c360_a_data_stream_edit_settings.htm&language=en_US&type=5)
+[^3]: Salesforce, "Data Stream Schedule in Data 360" (https://help.salesforce.com/s/articleView?id=sf.c360_a_data_stream_schedule.htm&language=en_US&type=5)
+[^4]: Salesforce, "Agentforce: Setup & Troubleshoot Agentforce Data Libraries & Answer Question with Knowledge" (https://help.salesforce.com/s/articleView?id=004333412&language=en_US&type=1)
+[^5]: Salesforce, "Use Uploaded Files" (https://help.salesforce.com/s/articleView?id=ai.data_library_file_upload.htm&language=en&type=5)

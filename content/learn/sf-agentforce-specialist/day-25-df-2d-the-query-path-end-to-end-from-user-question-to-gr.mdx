@@ -1,0 +1,91 @@
+---
+title: "Lesson 25: The Query Path End to End: From User Question to Grounded Answer"
+slug: day-25-df-2d-the-query-path-end-to-end-from-user-question-to-gr
+series: sf-agentforce-specialist
+lesson: 25
+excerpt: "Learn how the Data 360 query path carries a user question from raw ingested content to a grounded, cited answer through chunking, indexing, and a retriever. It covers requirement df-2d in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Data 360, Retrievers, Grounding, RAG]
+---
+
+# Lesson 25: The Query Path End to End: From User Question to Grounded Answer
+
+A delivery team stands up an Agentforce service agent to answer billing questions from a Knowledge base. In the demo it reads cleanly. In production it tells a customer that the late-payment fee is two percent, a rate the company retired eight months earlier. The prompt has not changed since the demo, and the model is one the org already trusts, so the reflex is to blame the wording. The team spends a day making the instructions more cautious. The agent still quotes the retired fee, with the same calm confidence, because nothing they touched was ever the cause.
+
+The prompt was never the problem. The article that held the correct fee had been edited after the search index was built, so the stored vectors still described the old rate. No instruction, however firm, can recover content that never entered the index or correct content that entered it stale. The fault sits three hops upstream of the model, on a path most teams have never laid out end to end, which is why a broken grounding pipeline reads as magic that misbehaves rather than a process that stopped working.
+
+This lesson serves requirement df-2d, in the Data 360 Fundamentals domain, which carries 20 percent of the exam, and the objective asks you to explain foundational concepts of Data 360 such as chunking, indexing, and retrievers. The exam tests those three as a sequence, not as isolated facts, because the skill being paid for is the ability to say which stage of the path produced a bad answer. By the end you will be able to split the mechanism into a setup phase and a run-time phase, name every hop from the user's question to the grounded response, describe exactly what the model receives at the final hop, and walk the path in order to find the first point that does not hold.
+
+## Deep Dive
+
+### Setup and run time are two different problems
+
+The move that makes grounding legible is to stop treating it as one event and split it into two phases that never overlap in time. The setup phase runs ahead of any user. You connect and ingest the unstructured content, create a search index configuration that chunks and vectorizes it, and store the resulting vectors in the index.[^2] Only once the index exists do you create a retriever that reads from it. Across that entire phase, nothing a user types happens at all.
+
+The separation is the load-bearing fact of the domain rather than a teaching convenience. Everything that looks instantaneous at question time depends on groundwork finished earlier: the content is already ingested, already split into chunks, already converted to vectors, and already stored where a search can reach it.[^1] When a consultant says a retriever is slow or wrong, there are really two questions hiding in that sentence, and only one of them is about the retriever. If the content never reached the index, no amount of run-time tuning will produce it, because a retriever can only search what a prior job put there.
+
+Read exam scenarios with that split in mind, because they are built to test it. A question will describe an agent giving a confident wrong answer and then offer four fixes. Three of them will be run-time moves: wording the instruction differently, adjusting a model setting, adding a caution to the prompt. The credited answer names the phase that actually broke, and that phase is usually setup, so the fix is to reprocess or reconfigure the index rather than to touch anything the user sees.
+
+### The runtime sequence, hop by hop
+
+Once the index is ready, the run-time phase is a fixed sequence, and naming each hop is how you debug it. The user's query enters the prompt template. The retriever is invoked with a dynamic query initiated from that template, and the query text is run through the same embedding model that produced the stored vectors. The query then searches the indexed data in the search index and returns the relevant content. The original prompt is populated with that retrieved information, and the enriched prompt, now carrying the query, the retrieved passages, and the prompt instructions together, is submitted to the LLM, which generates and returns a response.[^1]
+
+Walk a single support question through the hops to see why the order is not arbitrary. A customer asks how long a return window lasts. The question is embedded, the search index is scanned for the nearest chunks, and the two or three chunks that mention the return window come back. Those chunks, the customer's question, and the template's instruction to answer only from the provided policy are fused into one prompt, and only then does the model write the reply. The model never touches the index. By the time it runs, the search is already finished, which is why no amount of model cleverness repairs a retrieval that returned the wrong passages.
+
+For an agent, the Answer Questions with Knowledge action drives this same sequence and forwards the response back to the agent.[^3] That is the reason the action exists: it wraps the template and the retriever into something an agent can call from a subagent, so the agent never assembles the retrieval by hand. When you read a scenario that says an agent answers policy questions, picture this chain, because the agent is not a new mechanism, it is the same path with a conversational front end.
+
+The exam tests the order more than the names. A question will list the hops out of sequence, or swap two of them, and ask which arrangement is correct. The watch point is the pair that must stay adjacent: the query is embedded, then it searches, then the results are fused into the prompt, then the model generates. If a choice embeds the query after the search, or generates before the prompt is augmented, it is wrong no matter how plausible the rest of the wording looks.
+
+### What the model actually receives
+
+The composition of the final prompt answers a surprising number of exam questions, so state it plainly. The model does not receive the user's question alone. It receives three things fused together: the instructions written in the prompt template, the user's actual query, and the top chunks the retriever pulled from the index. Grounding is not a separate call the model makes to fetch facts. It is context prepended to the prompt before the model ever sees it.
+
+Exam distractors exploit the opposite intuition, that the model goes and looks things up. An option that describes the model querying the index, or choosing which document to open, is describing a mechanism the platform does not use on this path. The retriever is invoked before the model, by the template, with a query the template initiates. Any answer that hands the model the job of fetching its own context is wrong for that reason alone, no matter how sensible the rest of the sentence sounds.
+
+That single fact explains the symptom that opens this lesson. If the retrieved set is weak, the answer is weak even when the instructions are excellent, because the model writes from the material it was handed and the material is thin. The reverse also holds: strong, current chunks can carry a spare set of instructions, because the model has good facts to phrase. Quality of answer tracks quality of retrieval far more tightly than most teams assume when they reach first for the prompt.
+
+So when a scenario asks what to change to improve answer quality, sort the options by whether they change what the model receives. Rewording the instructions changes one of the three inputs. Changing the chunks the retriever returns, or fixing the index behind them, changes a different input, usually the one that decides the answer. The exam rewards the candidate who asks which input is deficient before choosing a lever.
+
+### Retrieval is one embedding model shared by query and corpus
+
+A point that looks like trivia until it explains a bug: the query and the stored content are run through the same embedding model. Vector search works by placing both the question and each chunk in the same numerical space and returning the chunks that sit closest to the question. That only means anything if both sides were embedded by the same model, because a vector is not a universal coordinate, it is a position defined by the model that produced it.
+
+The failure this prevents is an embedding mismatch. If the content was chunked and vectorized by one model and the query is embedded by a different one, the two sets of vectors live in different spaces, and the similarity scores between them are meaningless. The retriever still returns results, which is what makes the bug cruel: the agent answers, confidently, from chunks that merely happened to score high in a comparison that carried no signal.[^1] Results look random rather than empty, and random results send teams hunting for a prompt fix that cannot exist.
+
+Hold this as a foundational concept rather than an edge case. When the exam describes retrieval that returns consistently irrelevant passages and offers both a retriever-tuning option and an embedding-consistency option, the credited answer is usually the one that restores the shared model. It is the same lesson as the shared-vector fact itself: retrieval is a comparison, and a comparison is only as good as the guarantee that both sides are measured the same way.
+
+### Every hop is a place to fail, and you name them in order
+
+Because the path is fixed, its failure modes are fixed too, and a disciplined reader names them in hop order instead of guessing. Ingestion can leave the index empty because the connector pulled nothing. Chunking can split the answer apart or bury it inside an oversized chunk that dilutes it. Indexing can be stale, holding vectors from content that has since changed, or mismatched to the query's embedding model. The retriever can be misconfigured: an inactive retriever returns nothing, an over-tight filter excludes the answer, and fields-to-return that omit the passage text hand the model metadata instead of content. And finally the model itself can disregard good context and answer from its general knowledge.
+
+The first four are data and configuration faults, and each is provable with records rather than with impressions. You can open the chunks the index actually holds and see whether the answer is there, current, and whole. You can read the retriever's settings and see whether it is active, whether a filter excludes the answer, and whether it returns the passage text. The last fault is a model behavior, and you reduce it by giving the model better grounding, not by assuming the retrieval worked and then arguing with the model. Separating the provable faults from the behavioral one is what keeps a debugging session short.
+
+The exam leans on the ordering here. A scenario will describe a bad answer and a set of candidate fixes, and the correct answer is the fix for the earliest hop that is broken, because a fix applied downstream of the real fault changes nothing. Rewriting the prompt is the fix for the last hop, which is why it is so often the wrong answer: it is the one lever that cannot repair an empty, stale, or filtered index.
+
+Take the stale-fee failure and run it through the hop list to watch the method work. The answer is not missing from the source, so it is not an ingestion fault. The model received a chunk, so indexing did produce records. The chunk it received described the old rate, which means the stored vectors are older than the source, so this is an indexing fault fixed by reprocessing the index. The retriever was active and returning passage text, so it is cleared. Each hop is cleared or convicted in one move, and the fix lands where the fault is instead of where the symptom shows.
+
+### Citations close the loop, and the agent layer adds one more hop
+
+In the agent runtime flow the path gains one more step after generation. The response is reviewed against the prompt instructions before the end user sees it, and when citations are configured the answer can show where the grounded passages came from.[^3] That review step is the platform checking that the reply it is about to send is grounded in what was retrieved and consistent with the subagent's scope, rather than a check the team has to build.
+
+The citation path is also why the retriever's fields-to-return matter more than they first appear. A retriever that returns a source URL and a title alongside the chunk text is what lets the agent attribute an answer to its source, and it is what lets an agent team trace a bad answer back to the specific chunk that caused it. A configuration that returns titles and links but omits the passage text gives the model a citation with nothing to cite, which is the opposite failure of the one that opens this lesson and just as invisible.
+
+Treat an uncitable correct answer as half a grounded answer in any support or sales context. The customer cannot verify it, and the builder cannot audit it, which means the same defect can recur silently. When a scenario says the answer must be verifiable or traceable, the requirement is pointing at citations, and citations are a retriever and index configuration choice rather than a phrasing choice.
+
+## Exam Traps
+
+Three traps recur in this objective. The first is believing the model fetches its own grounding at answer time. It does not: the retriever pulls the chunks before generation, and the prompt template fuses them into the prompt, so grounding is context prepended to the prompt rather than a model action the model decides to take. The second trap is believing a broken run-time flow can be fixed by editing the prompt instructions. It cannot, because if ingestion, chunking, indexing, or the retriever is at fault, no instruction wording restores content that never reached the index, and the prompt sits at the last hop rather than the first. The third trap is believing the query and the stored content are embedded separately. They are not: both are run through the same embedding model, and that shared model is precisely what makes the similarity search meaningful, so a query embedded by a different model than the corpus returns noise dressed up as results.
+
+## What a consultant should walk away with
+
+Split every grounding question into setup and run time before you answer it. Setup ingests, chunks, vectorizes, stores, and creates a retriever; run time takes the query through the same embedding model, searches the index, augments the prompt with the top chunks, generates a response, and can cite the sources. Remember that the model receives instructions, query, and chunks fused into one prompt, so a weak answer is usually a weak retrieved set rather than a weak instruction. When something goes wrong, do not guess and do not start rewriting the prompt: walk the hops in order, check the chunk records and the retriever settings, and fix the first hop that fails to hold. Name the phase, name the hop, and the fix names itself.
+
+## What's next
+
+Lesson 26 - Diagnosing Bad Retrieval: Chunking, Indexing, or Retriever Configuration (df-2e)
+
+[^1]: Salesforce, "Retrieve Data" (https://help.salesforce.com/s/articleView?id=data.c360_a_ai_retriever.htm&language=en_US&type=5)
+[^2]: Salesforce, "Chunk Data" (https://help.salesforce.com/s/articleView?id=data.c360_a_search_index_grounding.htm&language=en_US&type=5)
+[^3]: Salesforce, "The Building Blocks of Agents" (https://help.salesforce.com/s/articleView?id=ai.copilot_building_blocks.htm&type=5&language=en_US)

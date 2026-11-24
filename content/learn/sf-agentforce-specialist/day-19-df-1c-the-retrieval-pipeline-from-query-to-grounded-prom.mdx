@@ -1,0 +1,106 @@
+---
+title: "Lesson 19: The Retrieval Pipeline: From Query to Grounded Prompt"
+slug: day-19-df-1c-the-retrieval-pipeline-from-query-to-grounded-prom
+series: sf-agentforce-specialist
+lesson: 19
+excerpt: "Learn how a user's question travels from the query through a retriever and a search index into a grounded prompt, and how each stage of the Data 360 pipeline turns stored chunks into the content a model actually reads. Covers requirement df-1c in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Data 360, Retrieval, Search Index, Retriever, RAG]
+---
+
+# Lesson 19: The Retrieval Pipeline: From Query to Grounded Prompt
+
+An agent that answered well on Monday starts returning vague answers on Wednesday, and the team blames the model. Someone swaps in a larger model, the answers stay vague, and the trust in the whole feature drops. What actually changed was upstream: a retriever had been pointed at an index that had not finished, and two libraries had been quietly crossed so one agent was calling the other's retriever.
+
+The symptom looked like a reasoning problem and was a pipeline problem. Retrieval is a chain of distinct stages, each with one job, and a failure in any link shows up as a bad answer at the top. The index holds the chunks and their vectors, the retriever points at that index, and the prompt template calls the retriever. When those three roles blur into one mental object, every question about the pipeline becomes guesswork.
+
+This lesson serves requirement df-1c in the Data 360 Fundamentals domain, which carries 20 percent of the exam. You will learn the fixed chain a library builds, how chunks and vectors produce a match, the difference between vector and hybrid search, what a retriever really is, and the exact runtime path from a query to a grounded answer. The exam tests these stages separately, so the goal is to keep each link distinct.
+
+## Deep Dive
+
+### The chain is fixed and every link is visible
+
+Creating a library runs a fixed chain you can watch and, when needed, repair: a data stream, then data lake and data model objects, then the mapping, then the search index, then chunking, then the retriever [^1]. The order is not a suggestion. The search index is created only after the earlier steps are successful and active, so the chain is a dependency list, and each link waits on the one before it.
+
+What makes the chain useful rather than merely true is that it is inspectable. Each stage appears on the status card in the data library setup page, and each links into the underlying Data 360 objects, so the pipeline is something you can open and read rather than a black box [^1]. When a question asks why an agent retrieves nothing, the honest first move is to walk the chain and find the first stage that did not reach an active state.
+
+Knowing the order is how you localize a failure instead of blaming the agent. A missing retriever points at an index that was never ready. A missing index points at a mapping that did not finish. A missing object points at a stream that did not land. The exam rewards this backward walk, because it distinguishes a candidate who understands the dependency graph from one who only knows the feature's name.
+
+A useful consequence follows from the dependency order: you rarely need to inspect all six stages. If the retriever exists and is healthy, then the stream, the objects, the mapping, the index and chunking all completed, because each waits on the one before it. The presence of a later object is proof that the earlier ones succeeded, so a healthy retriever lets you skip straight to how it is being called. The chain is not just a list to memorize; it is a shortcut that tells you which stages you can rule out.
+
+### Chunks, vectors and a similarity score do the matching
+
+After indexing, the content is chunked into small pieces, such as paragraphs or sections, that still make sense on their own [^2]. Chunking is the act of cutting a long document into units small enough to be retrieved precisely and large enough to carry meaning. A chunk that is one sentence is too small to answer a question; a chunk that is the whole article is too big to match tightly.
+
+Unstructured data then goes through chunking, indexing and embedding before it is stored in Data 360's vector database [^2]. Embedding converts each chunk into a numeric representation, a vector, that captures what the chunk is about rather than the exact words in it. That is what lets the system find a passage that answers a question even when the passage never uses the question's words.
+
+At query time each chunk is compared to the question with a similarity score, and the chunks with the highest scores are the ones returned [^2]. The score is a measure of closeness in the vector space, not a keyword count. Days 22 to 24 go deep on chunking strategy, index configuration and embeddings; here the point is that these steps run automatically and produce the vector store a retriever reads, and that the quality of the match depends on how the chunks were cut.
+
+Chunk quality is where retrieval quietly succeeds or fails, even though this objective stops short of the tuning detail. A chunk cut by heading tends to hold one complete idea, so when it is retrieved the model receives a coherent passage. A chunk cut by a fixed length tends to split a definition across two pieces or to merge two unrelated topics into one, and either way the retrieved passage can mislead. Days 22 to 24 own the strategy; here it is enough to know that the matching you rely on is only as good as the pieces that were made.
+
+### Hybrid search beats vector search when exact terms matter
+
+Data 360 gives you two search modes: vector search and hybrid search, where hybrid combines vector and keyword matching [^3]. Vector search understands semantic similarity and context but lacks specific domain vocabulary, while keyword search excels at literal similarity but not at meaning. Hybrid fuses the two, querying a vector index for semantic closeness and a keyword index for lexical closeness, then merging and ranking the combined results [^3].
+
+Hybrid usually wins when exact terms matter, such as a product code, a regulation number, or a person's name [^3]. Pure vector similarity can miss a literal token that does not match semantically, because a code like XYZ123 carries no meaning a model can embed. A Knowledge-based library can lean on hybrid matching for precisely this reason, because policy and product content is full of exact identifiers that a semantic match alone would overlook.
+
+If you cannot predict which mode a given question needs, let the default stand and revisit when exact-term misses show up in testing. The practical rule is to start with the platform's default and let real questions decide, because the failure that tells you to switch is specific: a query that names an exact token and gets an answer about the topic but not the token. That is the signal that hybrid matching would have served the question better.
+
+### A retriever is a pointer, not a store
+
+A retriever is a pointer between data and features, and the retriever assigned to a library determines which Data 360 datasets a feature can reach [^4]. It does not contain the content; it knows where to look and how to ask. The distinction matters because people talk about retrievers as if they were databases, and that is the confusion the exam targets.
+
+Each Agentforce Data Library gets its own retriever regardless of settings, and retrievers can point to the same search index while each pointer stays unique [^4]. Two libraries over the same index still have two retrievers, so a request that reaches across libraries is really asking one pointer to do another pointer's job, which fails. Uniqueness is the property to remember: the pointer belongs to its library even when the index it points at is shared.
+
+The packaged Answer Questions with Knowledge action takes a dynamically supplied retriever id and uses it to fetch chunks and hydrate the prompt, which is why the same action can serve different libraries without a rebuild [^5]. The action is generic; the retriever id is the variable that aims it. That is why pointing an agent at the wrong library shows up as the agent answering from the wrong content rather than as a configuration error.
+
+The uniqueness of a retriever also explains a common test failure. If an agent answers from the wrong content after a library change, the likely cause is that the action is still aimed at the previous library's retriever, because the retriever id is what the action uses and the id changes with the library. Re-pointing the action at the correct retriever is the fix, and it is a configuration change rather than a rebuild. Knowing that the pointer, not the content, is what you swapped keeps the diagnosis quick.
+
+### The runtime flow runs in a straight line
+
+The runtime flow is linear, and memorizing its order answers the questions that ask what happens when a user asks something. The user's query is added to the prompt template, which references the retriever; the system searches the index, finds the most pertinent chunks, and folds them back into the prompt; the LLM receives the query, the added content and the prompt instructions and generates a response; and the Service Planner reviews that response against the prompt instructions before the end user sees an answer [^6].
+
+Every stage keeps the answer tied to the prompt rather than to the model's memory. The retriever supplies the content, the template frames it, and the review step checks the result against the instructions. That is the whole reason grounding works: the model is answering from content the pipeline just assembled, not from what it learned in training, and the review stage is the last gate before a human reads the reply.
+
+Read the flow whenever a scenario asks where a problem lives. If the answer ignores content the index clearly holds, the failure is upstream in retrieval, not in the model's writing. If the answer contains the right content but is formatted wrongly, the failure is in the template, not the retriever. Placing a bug on the right stage is the skill this objective is really measuring.
+
+One detail of the flow surprises people the first time they meet it: a review happens after generation. The Service Planner reviews the generated response against the prompt instructions before the end user sees it, which means the pipeline holds a check between the model's draft and the answer shown. That review is why grounding and instruction quality both matter, because the model drafts from retrieved content and the review stage holds the draft against the instructions you wrote, so weak instructions weaken the answer even when retrieval worked perfectly.
+
+### The packaged template or your own: speed against control
+
+The Answer Questions with Knowledge action uses a pre-formatted prompt template and returns sourced answers with citations, which is why it is the default for a service FAQ topic [^6]. You get citation-rich responses with little setup, and the platform decides how the retrieved chunks are shaped into the prompt. For most straightforward question-answering use cases, that default is the correct and fastest answer.
+
+When you build your own template you control the formatting and which retriever is called, at the cost of more setup and more to maintain [^4]. You decide how the chunks are woven into the instructions, how the output is worded, and which dataset the pointer reaches. That control is worth it when the house style is strict or when the agent must pull from one specific source among several.
+
+The exam treats both as valid and expects you to know that the action is the fast path and a custom template is the control path. A stem that emphasizes cited answers and quick setup points at the action; a stem that emphasizes formatting rules or dataset selection points at a custom template. The two are not rivals, only different amounts of control, and reading which one the scenario wants is the whole task.
+
+A near miss worth naming: both paths still depend on the same underlying index and retriever roles. Choosing a custom template does not free you from building the retriever or from the index it points at; it only changes how the retrieved chunks are shaped and which retriever id the template calls. The control you gain is over formatting and dataset selection, not over the retrieval machinery itself. Candidates who read the custom path as a way to bypass the index choose it for the wrong reason and miss the questions that test the index and retriever split.
+
+### Do not collapse the retriever and the search index
+
+The single most valuable distinction in this lesson is between the index and the retriever. The index holds the chunks and their vectors; the retriever is the pointer that queries that index for a feature [^4]. They are different objects with different jobs, and an answer that treats them as one is wrong on the exam and unhelpful in an org.
+
+A retriever also belongs to its library, which has a hard consequence. Referencing another library's retriever fails, and the documented fix is to use a custom retriever instead [^4]. You cannot borrow a pointer; if the content you need sits behind a different library's retriever, you build your own retriever over the index or you reuse the library that already owns it.
+
+Hold the three roles apart and the pipeline questions stop being tricky: the index holds the chunks, the retriever points at the index, and the prompt template calls the retriever. Every failure question in this objective is answered by asking which of the three is misconfigured, and the answer follows from the roles rather than from memory of a diagram.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing the retriever and the search index are the same thing; the search index stores the chunks and vectors, while the retriever is the pointer that queries that index for a feature. The second is believing two libraries can share one retriever; each library has its own retriever even when they point at the same search index, and referencing another library's retriever fails. The third is believing the Answer Questions with Knowledge action hardcodes a retriever; it takes a dynamically supplied retriever id and uses it to fetch chunks and hydrate the prompt, which is why the same action can serve different libraries without a rebuild.
+
+## What a consultant should walk away with
+
+Keep the three roles separate: the index holds the chunks and vectors, the retriever points at the index, and the prompt template calls the retriever. Treat the chain as a dependency list and diagnose from the top down, walking backward from the missing object to the first stage that never reached an active state. Choose hybrid search when exact tokens such as codes, regulation numbers or names matter, and let the default stand until a real query shows the miss. Remember that a retriever is a pointer that belongs to its library, and that the packaged Answer Questions with Knowledge action takes a dynamically supplied retriever id. Then pick the fast path for cited answers and a custom template when the use case needs formatting control or a specific dataset.
+
+## What's next
+
+Lesson 20 - Access Control and Permission Propagation for Retrieval (df-1d)
+
+[^1]: Salesforce, "Setting Up Data Libraries" (https://help.salesforce.com/s/articleView?id=sf.data_library_setup.htm&language=en_US&type=5)
+[^2]: Salesforce, "Data 360 Search Index" (https://help.salesforce.com/s/articleView?id=data.c360_a_process_content_search_index.htm&language=en_US&type=5)
+[^3]: Salesforce, "Hybrid Search" (https://help.salesforce.com/s/articleView?id=data.c360_a_hybridsearch_index.htm&language=en_US&type=5)
+[^4]: Salesforce, "What Are Data Libraries?" (https://help.salesforce.com/s/articleView?id=ai.data_library_concept.htm&language=en_US&type=5)
+[^5]: Salesforce, "Agentforce Platform | Answer Questions with Knowledge" (https://help.salesforce.com/s/articleView?id=sf.copilot_actions_ref_answer_questions_with_knowledge.htm&language=en_US&type=5)
+[^6]: Salesforce, "Ground with Knowledge Using Retrieval Augmented Generation" (https://help.salesforce.com/s/articleView?id=sf.prompt_builder_ground_rag.htm&language=en_US&type=5)

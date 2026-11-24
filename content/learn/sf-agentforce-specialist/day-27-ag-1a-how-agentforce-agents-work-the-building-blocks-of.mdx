@@ -1,0 +1,93 @@
+---
+title: "Lesson 27: How Agentforce Agents Work: The Building Blocks of Agent Script"
+slug: day-27-ag-1a-how-agentforce-agents-work-the-building-blocks-of
+series: sf-agentforce-specialist
+lesson: 27
+excerpt: "Learn how an Agentforce agent routes a user turn to scoped subagents and how Agent Script expresses each building block, from instructions and actions to variables. It covers requirement ag-1a in the AI Agents domain: Explain how an agent works and its basic building blocks of agent script."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [AI Agents, Agent Script, Subagents, Agentforce Builder]
+---
+
+# Lesson 27: How Agentforce Agents Work: The Building Blocks of Agent Script
+
+A team is asked to build an agent that handles a retail customer's order questions, returns, and delivery complaints. They do the thing that feels efficient: they write one large instruction block that describes every one of those jobs, paste in the actions for all of them, and ship it. It works in the demo. In the field it drifts. The agent offers a returns policy to a customer asking about a delivery date, and it forgets the order number the customer gave two turns earlier. The team's instinct is that the model needs a better prompt. The real issue is that they built a single worker and asked it to be a whole department.
+
+An Agentforce agent is not a chatbot with one large prompt. It is a router plus a set of scoped workers, and the unit of work is the subagent, the construct the platform introduced to replace the older idea of a topic. The agent receives a user turn, classifies it against the subagents the agent declares, picks the best match, and runs that subagent's instructions, which carry their own actions and their own access to the agent's variables. Splitting the department into workers is what gives each one a narrow job and a small set of tools, and the routing layer is what sends each request to the right worker.
+
+This lesson serves requirement ag-1a, in the AI Agents domain, which carries 35 percent of the exam, the largest block on the blueprint. The objective asks you to explain how an agent works and its basic building blocks of agent script, and it is the opening of the domain, so the building blocks must be clear before the later lessons on hybrid reasoning and authoring surfaces can land. By the end you will be able to describe an agent as a router plus scoped subagents, name the top-level blocks of Agent Script, read the instruction block where logic and prompt instructions meet, explain an action as a target with bound inputs and captured outputs, and say why variables exist.
+
+## Deep Dive
+
+### An agent is a router plus scoped workers, not one large prompt
+
+The core mental model is four moves, and everything else in Agent Script is structure arranged around them. The agent receives a user turn. It classifies that turn against the subagents the agent declares and picks the best match. It enters that subagent and resolves its instructions. Then it acts and responds, calling the subagent's actions and generating a reply. The start_agent block is the entry point where classification and routing begin, so the four moves are classify, enter, resolve, and act.[^3]
+
+The reason this matters is that a single large prompt loses the two things a routed design keeps. It loses scope, because a worker that holds every rule and every tool can apply the wrong rule to the wrong job, which is the returns policy offered on a delivery question. And it loses focus, because a worker carrying every instruction has more to track than it can hold across a conversation, which is how the order number slips away. Routing assigns each turn to a worker whose instructions are small enough to follow and whose tools are few enough to choose among.
+
+The exam tests this as a design question rather than a definition. A scenario will describe an agent that behaves inconsistently across request types, and the credited answer usually restructures the work into scoped subagents rather than enlarging the prompt. When you see a question that asks what is wrong with a design that keeps everything in one instruction set, the answer is almost always that it collapsed the routing layer the platform provides.
+
+### Agent Script is a set of blocks, not a program with loops
+
+Agent Script is the declarative language that defines the agent, and the honest way to read it is as a set of key-value blocks rather than as a program with control flow. It is designed to be human-readable, and it is structured as properties that can span multiple lines or nest, which is what lets it describe configuration, business logic, and prompting in one file without exposing the graph that runs underneath.[^1]
+
+The top-level blocks are the building blocks the objective asks you to name. The system block holds the agent's general instructions and the messages it uses in specific scenarios, including the required welcome and error messages. The config block holds the agent name. The access block names the default agent user the agent runs as. The language block sets the default locale and any additional locales. The variables block declares typed session state. The connection block links a channel such as messaging. And the start_agent block is the routing entry point where the four moves begin.[^2]
+
+Below start_agent you declare subagent blocks, and each subagent carries its own instructions and its own actions. Reading the file in that shape is the whole skill: top-level blocks describe the agent, the start_agent block describes how requests arrive, and the subagent blocks describe what the workers do. The exam will ask you to place a given piece of agent behavior in the right block, so hold the map rather than memorizing syntax.
+
+### The instruction block is where logic and prompt meet
+
+The instruction block is where the two halves of Agent Script meet, and it is the detail that makes the language distinctive. A line beginning with a right arrow opens a logic instruction: a condition, a variable assignment, an action call, or a transition. A line beginning with a vertical bar opens a prompt instruction that the model reads as natural language. Both kinds of line sit in the same block, in the order you wrote them, and that is the whole trick.[^1]
+
+The consequence is that a subagent's instruction block is a top-to-bottom script that mixes exact steps with natural-language wording. The logic lines execute as code, and only the prompt lines reach a model. That is why the same file can promise reliability and flexibility at once instead of choosing one: the refund subagent can run its validation action as code and then let the model phrase the reply in the customer's language, without any ambiguity about which part is which.[^2]
+
+For the exam, the useful reading is that the arrow and the bar are not decoration. A question that shows an instruction block and asks which line the model sees is testing whether you know that only the bar opens a prompt instruction. A question that asks how a builder guarantees a step runs every time is testing whether you know that the arrow executes as code while the bar is a suggestion.
+
+### Actions are the agent's hands: a target, bound inputs, captured outputs
+
+An action is the agent's hands, and it is a reference to something the platform already knows how to do rather than something you write here. The supported targets are a Flow, an Apex class, an external API reached through an external service, or a prompt template built in Prompt Builder. You declare the action with a target, and you bind its inputs with with clauses that map values into the action's parameters.[^2]
+
+Binding inputs is where a working action most often turns into a broken one, and the exam reflects that. Each with clause maps a value the script already holds into an action parameter, so a mismatch in type or a missing binding fails as the script is resolved rather than as the model reasons. A consultant who tests an action in isolation and then binds it into a subagent can be surprised, because the binding, not the action, is the new thing. Read every with clause as a contract between a value in the script and a parameter in the tool.
+
+Capturing the result is the third part, and it is the one people forget. Outputs are captured into variables with set directives that read from the outputs namespace, so the value an action returns lands in a named variable the rest of the script can use. An action that runs and returns a value that nothing captures has done its work and then dropped it, which is a common cause of an agent that appears to call a tool and then forget what the tool said.
+
+The scope fence matters on the exam as much as it does in delivery. Wiring existing capabilities into the agent is what you do in Agent Script; authoring the Flow or the Apex is a separate job that belongs to another tool. A question that offers to solve an agent problem by writing new Apex inside the script is testing whether you know the boundary, and the credited answer treats the action as a reference plus bound inputs plus captured outputs, not as a place to put code.
+
+### Variables are the memory that survives the conversation
+
+Variables are the agent's memory, and they exist because the model's own context memory is unreliable across turns and across subagents. A variable declared in the variables block has a type such as string, number, or boolean, a default value, and a description. A variable marked mutable can be reassigned; one declared as linked draws its value from an external source such as the messaging session, so it reflects something outside the conversation rather than being set inside it.[^2]
+
+The reason to lift a value into a variable is that anything you must reuse, compare, or branch on should have a known state rather than a remembered one. When a customer gives an order number, storing it in a variable means the next subagent reads a fact instead of hoping the model recalls it, and it means a condition can test the value deterministically. A slot token goes one step further and lets the model fill a value when that is appropriate, as in a with clause that binds an order id that the model supplies.
+
+Types and defaults are not ceremony either; they are what makes a variable safe to branch on. A string variable defaults to an empty string, and a condition can test that case explicitly, which is how an agent asks for a missing order number instead of guessing. A variable left untyped or under-described defeats the purpose, because the script and the trace both lose the ability to explain what the value was meant to hold. Declare the type, the default, and a short description, and the variable becomes a contract rather than a slot.
+
+Read scenario questions about state with this in mind. If a scenario says the agent forgets information across turns, the fix is a variable with a declared type and a deterministic set path, not a stronger instruction to remember. If a scenario says a behavior must depend on something that changed outside the conversation, the fix is a linked variable. Variables are the mechanism the exam uses to distinguish remembered context from guaranteed state.
+
+### Where all of this lives: Agentforce Builder and Studio
+
+Where the building blocks live is part of knowing them. You author an agent in Agentforce Builder, the next-generation authoring experience inside Agentforce Studio, which replaced the legacy Setup experience as the primary path while leaving the old path available. Builder gives you a Canvas view, a Script view, and a conversational mode where you describe the behavior and it scaffolds subagents and actions as Agent Script.[^1][^4]
+
+The conversational mode is worth understanding because it changes how a team builds without changing what they build. A builder describes the behavior in natural language, and the assistant scaffolds subagents and actions that it converts into Agent Script, which the team then reads in Script view and refines. The scaffold is a starting point rather than a separate artifact, so the same rules apply: whatever the assistant drafts still has to sit in the right block and still runs from the single file.
+
+Canvas and Script view are not two different agents. Both edit the same single Agent Script file, so a claim that one surface produces a separate agent is wrong. The Canvas view summarizes the script into readable blocks with shortcuts, and the Script view exposes the language directly with syntax highlighting and validation, and a conversational mode can draft the same script from a description. What you learn in one surface is what runs in all of them, because the artifact is one file.
+
+Testing follows the same shape. You test in Simulate, which uses mock data and changes nothing in the org, or in Live Test, which runs real actions and changes real records, with Simulate useful for early validation and Live Test for confirming the agent behaves against live data. Both tests, and all three authoring surfaces, act on the same agent, which is why the building blocks are worth learning as one system rather than as separate features.[^5]
+
+## Exam Traps
+
+Three traps recur in this objective. The first is believing a subagent is just a prompt. It is not: a subagent carries its own instructions, its own actions, and access to the agent's variables, and routing decides which one runs, so a design that collapses everything into one prompt misses the structure the exam tests. The second trap is believing Agent Script is a general programming language. It is a declarative set of blocks and expressions, so an answer that describes classes and loops describes the wrong tool, and the right answer treats the script as configuration plus logic plus prompt instructions rather than as an application. The third trap is believing Canvas and Script view build different agents. They do not, because both surfaces edit the same single Agent Script file, so a claim that one view produces a separate agent is wrong by construction.
+
+## What a consultant should walk away with
+
+Hold the agent as a router plus scoped workers, and read a design that keeps everything in one prompt as the collapse of the routing layer that causes inconsistent behavior. Name the top-level blocks as the agent's skeleton: system, config, access, language, variables, connection, and start_agent, with subagent blocks below it. Inside a subagent, remember that the right-arrow line runs as code and only the vertical-bar line reaches the model, so reliability and phrasing live in the same block without ambiguity. Treat an action as a target plus bound inputs plus captured outputs, and treat authoring the Flow or the Apex as a separate job. Reach for variables when a value must survive the conversation, and remember that Canvas, Script view, and the conversational mode all edit one file. Build the map, and the later lessons on execution and authoring surfaces have somewhere to land.
+
+## What's next
+
+Lesson 28 - What Agent Script Cannot Express: Execution Model and Failure Modes (ag-1b)
+
+[^1]: Salesforce, "Hybrid Reasoning with New Agentforce Builder and Agent Script" (https://architect.salesforce.com/docs/architect/fundamentals/guide/hybrid-reasoning-agentforce-builder-agent-script.html)
+[^2]: Salesforce, "Agent Script Blocks" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-blocks.html)
+[^3]: Salesforce, "The Building Blocks of Agents" (https://help.salesforce.com/s/articleView?id=ai.copilot_building_blocks.htm&type=5&language=en_US)
+[^4]: Salesforce, "Introducing Hybrid Reasoning with Agent Script" (https://developer.salesforce.com/blogs/2025/10/introducing-hybrid-reasoning-with-agent-script)
+[^5]: Salesforce, "Learn About New Agentforce Builder with Agent Script" (https://help.salesforce.com/s/articleView?id=005232662&language=en_US&type=1)

@@ -1,0 +1,101 @@
+---
+title: "Lesson 29: Hybrid Reasoning: Components, Benefits, and Where Agent Script Runs"
+slug: day-29-ag-2a-hybrid-reasoning-components-benefits-and-where-age
+series: sf-agentforce-specialist
+lesson: 29
+excerpt: "Learn how hybrid reasoning lets one agent run deterministic code and model judgment side by side, name the layers that carry a decision from Agent Script to a running agent, and explain the reliability, cost, and control benefits that follow. Covers requirement ag-2a, \"Explain the components and benefits of hybrid reasoning, including how Agent Script functions in Canvas and Script View,\" in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Hybrid Reasoning, Agent Script, Atlas Reasoning Engine, Agentforce]
+---
+
+# Lesson 29: Hybrid Reasoning: Components, Benefits, and Where Agent Script Runs
+
+A consultant on a lending engagement built an agent that collected an applicant's details, ran a credit check, and routed the file to one of three underwriters. It worked in the demo. Then the compliance team ran the same applicant twice and watched the agent route to a different underwriter the second time, because the model had interpreted a lightly different phrasing of the same request. The reviewer did not ask for a better prompt. She asked a harder question: which line of code decides the path, and can you show it. There was no such line, because every decision had been left to the model.
+
+That is the failure hybrid reasoning was built to answer. In the previous Agentforce model the agent was a reactive loop: intent interpretation, action selection, and response generation all happened in the model on every turn, so there was no guaranteed path through a workflow and no artifact that said how a given transaction was supposed to run. The new Agentforce, generally available since February 2026, keeps the model for the work the model is good at and moves the rules that can be written down into code.[^1] The agent still reasons, but only where the author asked it to, and everywhere else it executes a path the author defined.
+
+This lesson serves requirement ag-2a, "Explain the components and benefits of hybrid reasoning, including how Agent Script functions in Canvas and Script View," in the AI Agents domain, the heaviest on the exam at 35 percent. By the end you can name the layers that carry a decision from what you write to what runs, describe the three execution zones inside a subagent, and give the reliability, cost, and control reasons the split exists. You can also name the two views you author in and say plainly that they are one file.
+
+## Deep Dive
+
+### Two kinds of decision in one engine, and where the line falls
+
+Hybrid reasoning is the combination of two kinds of decision inside a single engine: deterministic execution and probabilistic model reasoning. Deterministic execution means the agent follows a defined path regardless of how the user phrases the input. Conditions, variable assignments, and action calls run as code, in order, with no model involvement. Probabilistic reasoning means the model interprets intent and generates language. The design question on every agent is where the boundary between those two falls.
+
+Agent Script makes that boundary explicit rather than inferred. It lets you write two fundamentally different kinds of instruction in the same block: logic instructions, which run deterministically every time, and prompt instructions, which are natural language the model interprets at run time.[^3] The presence of a prompt instruction is the trigger for a model call; a node without one executes as code. That is the governing rule to keep in your head, and it is the rule the exam tests: if you can express a decision as a condition, a variable assignment, or an action filter, it belongs as logic, and only the work that genuinely needs judgment, interpretation, or language generation belongs as a prompt.
+
+The practical value of naming the line is that everything downstream follows from it. Cost, latency, auditability, and reliability all move with where you draw the boundary. A reader who cannot say which of the two kinds of instruction a given line is cannot answer the scenario questions, because the answer almost always turns on whether the requirement is a rule or a judgment.
+
+A worked boundary makes the abstract concrete. Suppose a subagent must fetch the account balance before it can say anything useful. Fetching is a rule, so it is an action call in logic and costs no model cycle. Deciding how to phrase the apology when the balance is low is a judgment, so it is a prompt line and does cost a model call. The same turn contains both, and the agent's cost profile is set entirely by which lines you wrote as the arrow that begins logic and which as the pipe that begins a prompt.
+
+### Name the layers: Builder, Agent Script, Agent Graph, and the Atlas Reasoning Engine
+
+The components stack in layers, and naming them is half of the objective. At the top is the authoring layer, Agentforce Builder, where you work in either Canvas view or Script view. What you author there is Agent Script, a declarative, domain-specific language that defines an agent's configuration, business logic, and prompting as key-value properties.[^2] Agent Script is the only layer you interact with directly.
+
+Below authoring sits compilation. When you save a version, the Salesforce compiler transforms your Agent Script into an Agent Graph, a serialized execution plan optimized for machine execution rather than human readability.[^1] You do not debug at this layer, and by design it is not directly accessible to you. The Agent Graph is the artifact the runtime consumes.
+
+At the bottom sits the runtime, and this is where the name the exam expects lives. The Atlas Reasoning Engine is a state machine executor. On each turn it traverses the Agent Graph based on the session state, executes deterministic nodes as code, and triggers a model call only where prompt instructions are present.[^4] It also enforces the guard clauses and conditional routing your script defines. The engine is where hybrid reasoning is actually implemented: your script defines the boundary, and the engine respects it.
+
+Say the four names in order to yourself, Builder, Agent Script, Agent Graph, Atlas Reasoning Engine, because exam questions mix them deliberately. Canvas and Script view are authoring surfaces, Agent Script is the source, the Agent Graph is the compiled plan, and the Atlas Reasoning Engine is the executor. Asking which layer produces which artifact is a common way to separate the two.
+
+### The parse boundary: before_reasoning, reasoning, and after_reasoning
+
+The unit of execution in Agent Script is not the user turn. It is the parse, a single complete cycle through a subagent's three lifecycle blocks. The engine starts a parse on first entry into a subagent, again after every tool call returns a result, and again on each new user turn inside that subagent.[^1] That count matters because it decides how many times each block runs.
+
+Every subagent defines three zones. The before_reasoning block runs at the start of every parse, before the model sees anything, with no model involvement. The reasoning block runs during deterministic resolution and holds the mixed work: logic that resolves against current state plus the prompt instructions that will be assembled. The after_reasoning block runs after reasoning completes and the model has responded. Both before_reasoning and after_reasoning are fully deterministic: they run actions, set variables, and apply conditional logic without involving the model, which is why they are the reliable, low-cost blocks in the script.[^1]
+
+Two design consequences follow from the parse model. First, a run directive in before_reasoning is code: it executes unconditionally on every parse, unlike a prompt line that asks the model to run something and may or may not be followed. Second, because before_reasoning runs on every parse and not only on first entry, it is not a one-time constructor. Anything that must happen once per session needs an explicit guard, typically a boolean variable checked before the action runs. A designer who treats before_reasoning as a setup block that fires once will run their initialization more often than they expect.
+
+The parse boundary also decides where a piece of logic belongs, and one platform behaviour is worth naming because it surprises people. When an action is marked as displayable, the engine exits the reasoning loop as soon as the model decides to surface that output, and that exit happens immediately, which means the after_reasoning block for that parse never runs. The consequence for orchestration is direct: any logic you placed in after_reasoning to run after the model responds will be skipped when a displayable action is part of the flow. The fix is to move logic that must execute reliably into the before_reasoning block of the following subagent rather than the after_reasoning block of the current one.[^1]
+
+### The first benefit: reliability and auditability
+
+The first benefit of hybrid reasoning is reliability and auditability. Because logic executes as code and does not vary between runs, a multi-stage workflow such as a loan approval, an inventory transfer, or a patient triage produces the same path every time. That is exactly what an audit trail needs: proof that a specific process ran a specific way for a specific transaction.
+
+Contrast that with a purely probabilistic model, where the path varied with context and model version. In that world, a practice that passed in staging could route differently in production, no reliable way existed to reproduce a given execution for debugging, and an explanation built on the idea that the agent simply decided was not defensible in a compliance review.[^1] Hybrid reasoning replaces that with a path the script defines and the engine enforces, and the trace shows you that path after the fact along with the variables that drove it.
+
+This is the benefit to reach for when a scenario is set in a regulated or high-stakes process. The exam frames auditability as the reason the deterministic side exists, so when a requirement says a step must run identically for every case and be explainable afterward, the answer is the deterministic path, not a more careful prompt.
+
+### The second benefit: cost and latency
+
+The second benefit is cost and latency. In the previous model every interaction paid several model cycles, and multi-step tasks paid more, because there was no mechanism to short-circuit a step that did not need judgment.[^1] With Agent Script the engine can short-circuit: nodes without prompt instructions execute as code with no model call, and deterministic action calls that run a Flow, Apex, or a REST API run without any prompt assembly.
+
+Push work onto the deterministic path and you remove model calls, which removes latency and variability at the same time. The design guidance that follows is to push logic to code by default and reserve the model for cases that genuinely need its reasoning capability, such as interpreting an ambiguous request or writing a natural reply. Every unnecessary model call is a cost, a delay, and a source of run-to-run variation you did not have to accept.
+
+The exam pairs this with the boundary rule from earlier in the lesson, so hold the two together. The reason to move a decision into logic is not style; it is that a model call is the expensive, slow, variable option, and the only good reason to spend one is that the task actually needs judgment.
+
+### The third benefit: control and memory
+
+The third benefit is control and memory over what the model can see and do. Variables store the facts of a session, such as a verified customer id or an account status, in a known state rather than trusting the model's context memory to carry them. Conditional availability, written as an available when clause, controls which actions and subagents exist for the model on a given turn: when the condition is false, the item is removed from the list the model sees, so a risky action can be physically absent until its preconditions pass.[^1]
+
+That combination, deterministic state plus gates plus prompts, is what lets an enterprise hand an agent a consequential transaction. The model still handles the ambiguous and conversational parts, while the consequential parts run as code. The platform does not ask the model politely to wait; it removes the option until the rule says otherwise. Flexibility is preserved exactly where it is a feature and removed where it is a risk.
+
+The gate is also where a common mistake lives, and a later lesson takes it further: a gate variable must be set by code, not by the model. If the model sets the variable the gate is keyed to, the gate opens as randomly as the model would have, and the control you thought you had is gone.
+
+### Two views, one file: where you meet hybrid reasoning
+
+You meet the whole model through two views over one file. In Canvas view, Agent Script is summarized into understandable blocks you can expand to view the underlying script, and you edit with the shortcut that inserts a common pattern such as a conditional and the shortcut that inserts a resource such as a subagent, an action, or a variable. In Script view you edit the script directly, with syntax highlighting, autocompletion, and inline validation.[^5] Both views read and write the same agent, so nobody maintains two definitions, and a conversational mode that scaffolds behavior from a description still writes Agent Script, meaning all three paths converge on the same source.
+
+This is the part of the objective that ties hybrid reasoning to the authoring surface, so do not treat it as an aside. The boundary you choose between logic and prompt is visible in either surface: in Canvas as the blocks you place and the conditions you set, in Script view as the arrow that begins logic and the pipe that begins a prompt. Whichever surface you use, what is stored is Agent Script, and what ships to the runtime is the Agent Graph compiled from it.
+
+The single sentence worth memorizing is that the two views are skins over the same file. A question that treats Canvas and Script view as two kinds of agent, or as one producing a Flow and the other producing something else, is testing whether you know that both produce Agent Script and both compile to one Agent Graph.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing hybrid reasoning means two separate agents, one deterministic and one conversational. It is one engine that executes deterministic nodes as code and invokes the model only where a prompt instruction sits, so a scenario that describes two cooperating agents is describing something the product does not do. The second is believing the model still decides everything, just faster. Logic instructions execute with no model involvement at all, so a claim that the model picks each path is wrong; the model sees only the branches the script has already left open. The third is believing Canvas and Script view are different products that build different agents. Both edit the same single Agent Script file, the file compiles to one Agent Graph, and the Atlas Reasoning Engine runs that graph, so neither view produces a separate agent or a separate behavior.
+
+## What a consultant should walk away with
+
+Read every requirement and ask which decisions can be written as code and which genuinely need judgment, then put the first in logic instructions and the second in prompt instructions, because that boundary is the whole design. Name the layers in order, Builder for authoring, Agent Script for source, Agent Graph for the compiled plan, and the Atlas Reasoning Engine for the runtime that enforces the split. Remember that before_reasoning and after_reasoning are fully deterministic and that a parse runs them more than once, so guard anything that must happen once. Reach for the reliability, cost, and control benefits by name when a scenario is regulated, high-volume, or consequential, and be precise that the model is the expensive and variable option you spend only where judgment is needed. Finally, hold the two authoring views as one file: the surface changes, the artifact does not.
+
+## What's next
+
+Lesson 30 - Canvas and Script View: Two Surfaces, One Agent (ag-2b)
+
+[^1]: Salesforce, "Hybrid Reasoning with New Agentforce Builder and Agent Script" (https://architect.salesforce.com/docs/architect/fundamentals/guide/hybrid-reasoning-agentforce-builder-agent-script.html)
+[^2]: Salesforce, "Agent Script" (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-script.html)
+[^3]: Salesforce, "Agent Script Language Characteristics" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-lang.html)
+[^4]: Salesforce, "The Building Blocks of Agents" (https://help.salesforce.com/s/articleView?id=ai.copilot_building_blocks.htm&language=en_US&type=5)
+[^5]: Salesforce, "Explore the New Agentforce Builder" (https://trailhead.salesforce.com/content/learn/modules/new-agentforce-builder-quick-look/explore-the-new-agentforce-builder)

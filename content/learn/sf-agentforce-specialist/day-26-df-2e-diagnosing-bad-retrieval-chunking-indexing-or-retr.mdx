@@ -1,0 +1,91 @@
+---
+title: "Lesson 26: Diagnosing Bad Retrieval: Chunking, Indexing, or Retriever Configuration"
+slug: day-26-df-2e-diagnosing-bad-retrieval-chunking-indexing-or-retr
+series: sf-agentforce-specialist
+lesson: 26
+excerpt: "Learn how to locate the exact stage of a retrieval pipeline that broke, separating a chunking fault, an indexing fault, and a retriever configuration fault before touching the prompt. It covers requirement df-2e in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Data 360, Retrieval, Debugging, Chunking]
+---
+
+# Lesson 26: Diagnosing Bad Retrieval: Chunking, Indexing, or Retriever Configuration
+
+A consultant is handed an agent that answers refund policy questions badly. The replies are fluent and confident, and about one in five is wrong. Over two days the consultant rewrites the instruction block four times, adding qualifiers, examples, and a caution about not guessing. The wrong answers persist at roughly the same rate. The fifth rewrite is the moment the consultant stops treating the system as one thing and starts asking a narrower question: is the answer even in the material the model was handed?
+
+It was not, in the way that mattered. The refund policy lived in a long article, and the chunking strategy had cut the sentence that carried the exception into a different chunk from the sentence that carried the rule. The model was grounding on the rule without the exception, so it answered a qualified policy as though it were absolute. No prompt words can restore a condition that was severed from its rule before the model ever read it. The fix was a chunking setting, and it took ten minutes once the stage was named.
+
+This lesson serves requirement df-2e, in the Data 360 Fundamentals domain, which carries 20 percent of the exam. It picks up where the previous lesson left off: having walked the whole query path, you now learn to find which stage of it broke. The exam tests this as a diagnostic skill rather than a recall skill, because the wrong answer and the right answer look identical from the outside, and the only way to tell them apart is to check the stage rather than the symptom. By the end you will be able to name the three families of retrieval fault, describe the signature of each, prove a fault at the chunk records or the retriever settings, and change one stage at a time.
+
+## Deep Dive
+
+### A bad answer is two problems wearing one symptom
+
+When grounding fails, the instinct is to rewrite the prompt, and that is almost always the wrong first move. Retrieval faults and prompt faults look the same from the outside, because both end in a bad answer. The way to tell them apart is to stop treating the system as one thing and walk the hops from the previous lesson in order, checking each one against evidence instead of impression. There are exactly three families of retrieval fault, one per stage: a chunking problem, an indexing problem, or a retriever configuration problem.[^1]
+
+Your job is to find which stage broke before you change anything, because a fix applied to the wrong stage wastes time and can introduce a second fault. The consultant who rewrites the prompt for a chunking problem has not just failed to fix the defect, they have added a new variable to a system they no longer understand. The discipline that separates a strong consultant from a busy one is the willingness to prove the stage first and change it second, even when the prompt is the most obvious thing on the screen.
+
+There is a reason the exam weights this so heavily, and it is not trivia. In production, a retrieval fault that is misdiagnosed as a prompt fault will be rewritten away, tested, and shipped because the rewording happens to change the sample the team tried. The defect returns when the next user asks a slightly different question. Naming the stage turns a recurring mystery into a one-time repair.
+
+A second reason the prompt is a bad first move is that prompt wording and retrieval quality are not independent. A model handed thin or split context will often compensate by sounding more general, which reads like a tone problem and invites a tone fix. The rewrite then changes the sample the team retried, and the symptom appears to move, so the team ships a wording that masked the fault rather than a repair. Walking the hops first removes that illusion, because the stage is named against evidence before any wording changes.
+
+### Prove a chunking fault by reading the chunks, not the source
+
+A chunking problem has a signature: the source genuinely contains the answer, but the returned passage does not. You see a fragment of the answer without its surrounding condition, or the model answers a qualified policy as though it were absolute. The cause is that the split landed in the wrong place, or the chunk boundaries do not match how the content is structured. The document was divided by a rule that did not respect where one idea ends and the next begins.
+
+To confirm it, look at the chunks the system actually created rather than at the source document. In Data 360 you inspect the chunk records through Data Explorer, selecting the data space, setting the object to Data Lake Object, and opening the chunks object tied to your index. If a chunk plainly straddles two ideas, or an idea is cut in half across a boundary, that is a chunking fault, and the fix is a chunking setting such as the strategy, the maximum size, or the overlap, not a retriever change.[^2] Those chunk records are not the source documents: creating a search index configuration produces a chunk data model object and an index data model object that hold the generated content and embeddings, which is why you inspect them in Data Explorer rather than in the original article.[^3]
+
+The chunking controls are the ones worth knowing by name, because the fix is a choice among them. Data 360 supports several chunking strategies and can select one automatically based on content type, and the maximum token setting caps how much text goes into a chunk.[^2] Raising the cap can keep a rule and its exception together, while overlap can carry context across a boundary that still has to fall somewhere. None of these changes touch the retriever, which is the point: a chunking fault is fixed where the splitting happens.
+
+### An indexing fault hides the answer or serves it stale
+
+An indexing problem has a different signature: the content that should be searchable is not there, or it is there but does not match the query's meaning. The most common form is staleness, where the source was edited after the index was built and the stored vectors still describe the old text, so the retriever confidently returns an outdated passage. This is the fault behind the retired fee in the previous lesson, and it is the one teams mislabel most often as a model problem.
+
+A second form is an embedding mismatch, where the stored vectors and the query are not produced by the same model, so similarity is meaningless and results look random rather than empty. A third form is emptiness, where the indexing job never produced chunk records at all, and the retriever searches an index that holds nothing. All three are proven at the same place, the chunk records in the index: stale content, missing chunks, or chunks that no longer correspond to the current source all point at indexing, and the fix is to reprocess the index rather than to tune the retriever.[^1]
+
+The trap in this stage is that a stale answer often reads perfectly well, which makes it feel like a prompt or model fault. The agent is fluent because the material was fluent. It is wrong because the material was old. Once you know to check the freshness of the chunks against the source, the diagnosis is mechanical, and the remedy, reprocessing the index, is the correct narrow fix rather than a broad rebuild of everything.
+
+### A retriever fault leaves healthy data unreachable
+
+A retriever configuration problem is the one people miss, because the data behind it is healthy. The signature is an index that holds good, current, correctly chunked passages, and a retriever that still hands the model nothing useful. Nothing upstream is broken, and the failure lives entirely in the settings of the component that reads the index. Walk those settings one at a time.
+
+Ask first whether the retriever is activated, because an inactive retriever returns nothing. Ask whether the filter is too tight, so a search that should span All Documents was narrowed and the answer's chunk now sits outside the filter. Ask whether the fields to return include the passage text, or whether the retriever sends titles and URLs without the chunks the model needs to ground on. Ask whether citation is configured, so a real answer cannot be traced back to its source.[^1] Each of these is a retriever setting, not a data fault, and each is fixed in the retriever rather than in the index.
+
+There is a design reason these settings drift, and it is worth understanding. A search index is usually built to be general, indexing an entire knowledge base, while a retriever applies that multipurpose index to one use case. When the use case is a category of articles, a recent window, or a region, the retriever is where that narrowing happens, and an over-narrow filter is simply a narrowing taken one step too far. Reading the retriever's filters as an expression of intent is what tells you whether the intent was wrong or the data was.
+
+### The three signatures side by side
+
+The distinguishing move is comparative and cheap. If you can find a query that returns the right chunk and a query that returns the wrong one against the same index, and the difference is only which filter or field set applied, you have a retriever problem. If every query against a source that plainly contains the answer returns nothing because the chunks are missing or stale, you have an indexing problem. If the right chunk is returned but it reads as a half idea, you have a chunking problem. The comparison isolates the variable without changing any configuration.
+
+Testing one variable at a time is what makes the diagnosis reliable. Changing the chunking, the index, and the retriever at once may accidentally fix the symptom while leaving you unable to say which stage was broken, so the next occurrence starts from zero again. The exam rewards the ordered method for the same reason a senior consultant uses it: a named stage is a repeatable fix, and a lucky fix is a debt.
+
+Put the three signatures side by side and the item resolves cleanly. Chunking: the answer exists but is split, fixed in the chunking settings. Indexing: the answer is absent, stale, or from a mismatched model, fixed by reprocessing the index. Retriever: the index is healthy but the results are filtered away, mis-fielded, or inactive, fixed in the retriever. Name the stage, prove it at the chunk records or the retriever settings, and the correct fix follows without argument.
+
+Run one failing question through all three stages to see the comparison work. Suppose the agent gives a wrong return window. Open the chunk records and find the passage that holds the window: if it exists and reads whole, chunking is cleared; if it exists but is stale against the source, indexing is the fault; if it is missing entirely, indexing is still the fault, because the job never produced it. If the passage is present, current, and whole, move to the retriever and check its activation, its filters, and its returned fields. The stage that fails the check is the stage you fix, and the other two are ruled out rather than guessed at.
+
+### Change one stage and re-test
+
+The method closes with a discipline rather than a fact. Change one stage, then re-test against the same question that failed, so the comparison is honest. A change made without a re-test of the original failure is a change you cannot attribute, and an agent team that cannot attribute a change cannot improve an agent on purpose. The original failing question is your control, and it should be the first thing you run after every edit.
+
+Record what you changed and what you observed, even in a short note. Retrieval debugging is the one part of this domain where the evidence is easy to lose, because the settings that caused the fault are the settings you have just replaced. A note that says the chunk that held the answer did not exist before reprocessing, and did exist after, is worth more to the next person than a paragraph of explanation, because it points at the stage with proof attached.
+
+It is worth saying why this order is the senior skill and not a checklist. A junior consultant can name the chunking controls and the retriever fields and still fail the scenario, because the scenario does not ask what the settings are, it asks which one to change. The added value is the judgment that reads a bad answer, forms a hypothesis about the stage, and then tests the hypothesis against the chunk records before touching a setting. That judgment is what the exam samples, and it is what a client is paying for when retrieval breaks in production.
+
+That habit is also what the exam is testing, dressed as a scenario. The credited answer is rarely the clever one; it is the measured one, the choice that checks the stage against evidence and changes a single setting rather than several. A senior consultant debugs a grounding failure by walking the hops in order and naming the first that does not hold, and this whole domain is testing that skill rather than the names of the settings.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a bad answer means the prompt needs rewriting. It does not, because if the fault is in chunking, indexing, or the retriever, no prompt change restores grounding, and the prompt is the last hop rather than the first, so verify the retrieval stage before touching it. The second trap is believing stale content is a retriever problem. It is not: stored vectors that still describe an edited source is an indexing fault, proven at the chunk records, and the fix is reprocessing the index rather than retuning the retriever. The third trap is believing good chunks guarantee a good answer. They do not, because a healthy index with a filter that excludes the answer, fields that omit the passage text, or an inactive retriever still fails, and that is a retriever configuration fault, not a data fault.
+
+## What a consultant should walk away with
+
+When grounding fails, do not reach for the prompt. Walk the path and name the stage. Chunking splits the answer, so read the chunk records and adjust the strategy, size, or overlap. Indexing hides the answer or serves it stale, so reprocess the index and confirm the embedding model matches the one used at query time. The retriever filters or mis-fields the answer, so confirm it is active, review its filters, and check that the fields to return carry the passage text and a citation. Then change one setting, re-test the original failing question, and write down what you changed. The signature tells you the stage, the stage tells you the fix, and the order is the skill.
+
+## What's next
+
+Lesson 27 - How Agentforce Agents Work: The Building Blocks of Agent Script (ag-1a)
+
+[^1]: Salesforce, "Retrieve Data" (https://help.salesforce.com/s/articleView?id=data.c360_a_ai_retriever.htm&language=en_US&type=5)
+[^2]: Salesforce, "Chunk Data" (https://help.salesforce.com/s/articleView?id=sf.c360_a_search_index_grounding.htm&language=en_US&type=5)
+[^3]: Salesforce, "Chunk and Index Data Model Objects" (https://help.salesforce.com/s/articleView?id=data.c360_a_search_index_chunk_index_dmo.htm&language=en_US&type=5)

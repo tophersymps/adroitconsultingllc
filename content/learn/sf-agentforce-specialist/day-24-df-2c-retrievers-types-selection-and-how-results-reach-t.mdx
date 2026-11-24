@@ -1,0 +1,107 @@
+---
+title: "Lesson 24: Retrievers: Types, Selection, and How Results Reach the Model"
+slug: day-24-df-2c-retrievers-types-selection-and-how-results-reach-t
+series: sf-agentforce-specialist
+lesson: 24
+excerpt: "Learn how a Data 360 retriever queries a search index, how to choose between individual retrievers and the retriever a data library creates, and how filters and returned fields shape what the model reads. Covers requirement df-2c in the Data 360 Fundamentals domain: Explain foundational concepts of Data 360 such as chunking, indexing, and retrievers."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [Retrievers, RAG, Data 360, Prompt Builder]
+---
+
+# Lesson 24: Retrievers: Types, Selection, and How Results Reach the Model
+
+A build passes every check a consultant knows to run. The library is ready, the index is full of chunks, the source articles are published, and the agent still answers a simple question with a polite "I do not have that information." The retriever had been configured and saved but never activated, so it returned nothing at runtime while looking complete on the setup screen, and the fault sat in a single state flag rather than in any content.
+
+The cause is that a retriever is the component that connects a search index to the feature that needs the knowledge, and it is a separate object from the index with its own configuration and its own active state. It does not store content and it does not build vectors; it queries the index that already holds them and returns the chunks the model will read. When a retriever is misconfigured, inactive, or filtered too tightly, a perfectly healthy index produces an unsupported answer.
+
+This lesson serves requirement df-2c in the Data 360 Fundamentals domain, at 20 percent of the exam. You will learn what a retriever is and is not, the difference between an individual retriever and the one a data library creates, how to select a retriever for a consumer, and how filters and returned fields decide what reaches the model. The exam tests the division of labor between the index and the retriever, so knowing who stores and who searches is most of the score.
+
+## Deep Dive
+
+### A retriever is a pointer, not a store
+
+A retriever is the component that connects a search index to the feature that needs the knowledge. Salesforce describes a retriever as a resource that searches a search index and returns relevant data, and as a pointer between data and features: it decides which indexed content a given agent, prompt template, or flow is allowed to pull from [^1].
+
+You create and customize retrievers in AI Models, formerly Einstein Studio, for retrieval augmented generation in Data 360 [^1]. The retriever does not store the content and does not build the vectors; it queries the index that already holds them and returns the chunks the model will read. That single sentence divides the retrieval layer from the indexing layer cleanly.
+
+Keep that division straight, because exam questions turn on who does what. The index is the memory and the retriever is the reader. A retriever that is said to store vectors is being described wrongly, and a fault that lives in the index cannot be repaired by a retriever setting, no matter how the scenario is worded [^1].
+
+A useful way to hold the boundary is to name the question each layer answers. The index answers where the content lives and what it looks like as a vector. The retriever answers which of that content a given feature may see, how much of it, and in what shape it comes back. Those are different questions, so a scenario that complains the model received the wrong passage is usually asking the retriever question, while a scenario that complains the passage was never stored at all is asking the index question. Naming which question the stem is really posing is most of the work.
+
+### Individual retrievers, and the retriever a library makes for you
+
+There is more than one kind of retriever, and the documented setup distinguishes them by scope. Salesforce documents an Individual Retriever, created one at a time and pointed at a specific search index, which you configure to return the fields most useful for grounding and citations [^2].
+
+At the other end sits the retriever that a data library creates automatically. When you add an Agentforce Data Library, the platform builds a working solution using default settings, and each library has its own unique retriever that can point to the same search index but operates independently [^3]. The library path gives you a working reader without a configuration screen, which is convenient until you need to change what that reader returns.
+
+The practical reason for many retrievers over one index is focus. You create different retrievers that concentrate a search on just the relevant subset of information for a use case, so a billing agent and a shipping agent can share indexed content yet retrieve from it differently [^2]. One index, several readers, each tuned to its own job, which is the design the exam expects you to recognize.
+
+Two consequences follow for a build. First, adding a second use case usually means adding a second retriever rather than a second index, because the content is shared and only the reading rules differ. Second, because a library's retriever is created with default settings, a use case with specific filtering or citation needs is often better served by an individual retriever you configure by hand, while the library still supplies a working baseline on day one. The general shape is many readers over one body of content, and the exam rewards a candidate who does not reach for a new index when a new reader would do.
+
+### Selecting a retriever is selecting where it attaches
+
+Selecting a retriever is really selecting where it attaches. In Prompt Builder you ground a prompt template by inserting and configuring a retriever as a resource, and at run time that retriever supplies the model with current, pertinent information to improve the prompt [^1].
+
+When the consumer is an agent rather than a raw prompt, the agent reaches knowledge through the Answer Questions with Knowledge standard action, which runs the associated prompt template and invokes the retriever with a dynamic query [^4]. The action packages the retrieval and the prompt so a topic can answer from knowledge with little setup.
+
+So the retriever is chosen either directly, when you attach one to a prompt template, or indirectly, when an agent action or a data library brings its own. Either way the retriever is a named, reusable resource rather than an inline block of text, and that is what makes it configurable, governable, and testable apart from the prompt it serves.
+
+Notice that this makes the retriever the natural place to enforce scope. If one audience should only ever receive passages from a subset of an index, the cleanest expression of that rule is a retriever whose filters restrict it to that subset, reused by every prompt and agent that serves the audience. The rule then lives in one governed resource rather than being repeated inside each prompt template, and a change to who may see what is a change to one retriever rather than a hunt through prompts.
+
+### The setup path is short and every field is a decision
+
+Configuring a retriever is a short, concrete path. In AI Models, on the Retrievers tab, you start a new retriever, select Individual Retriever as the type, and choose Data Cloud as the data source [^2].
+
+Then you define retrieval details: the data space where the index resides, the data model object associated with it, and the search index to read from. Next you define filters, and the simple case returns across the whole index. Then you configure which information to return and how much: the maximum number of results, and one or more fields that ground the prompt, each given a unique descriptive label [^2].
+
+Two settings deserve attention because both appear in exam scenarios. Filters narrow the search, and the documented example uses conditions such as a category and a language to define a specific subset, with up to ten conditions in a single filter [^2]. Fields to return decide what the model sees, and the documented example returns fields such as URL, Title, and Chunks, chosen so the agent can ground on the passage and still cite where the passage came from [^5]. You finish by saving and activating, and an inactive retriever returns nothing, which is why activation is a step rather than a formality.
+
+Treat the retriever name and description as part of the build rather than decoration. A retriever is a named, reusable resource that other builders will attach to their own prompts, so a clear name and a short description of its scope is how the next person knows which reader to reach for. A retriever named without regard to its job, returning three fields for no audience in particular, is how a well-indexed org ends up with thin answers, because nobody could tell which reader matched the requirement.
+
+### Filtering and ranking happen before the model sees anything
+
+Filtering and ranking both happen before anything reaches the model, and this is where a retriever earns its keep. Filtering narrows the candidate set: a broad setting searches the whole index, while a narrower filter scopes the search to a subset, so a wrong filter can exclude the very chunk that holds the answer.
+
+Ranking then orders the surviving chunks by relevance so the most pertinent passages are the ones handed to the model. The filter choices and the fields-to-return choices together control both what the model sees and how much it sees, because the retrieved chunks are what populate the prompt.
+
+The failure mode is easy to picture and common in practice. A retriever that returns the wrong fields, or returns almost nothing, degrades the answer even though the underlying index is perfectly healthy. The index is doing its job; the reader is asking the wrong question of it, and the correction belongs in the retriever's configuration rather than in the model.
+
+Ranking also deserves a clear definition, because it is easy to conflate with filtering. Filtering removes candidates; ranking orders the candidates that remain. A filter that is too narrow can remove the correct chunk before ranking ever sees it, which is why an over-tight filter often looks exactly like an empty index. Ranking cannot recover a passage that filtering discarded, so when results come back thin, check the filter before you question the order, and when results come back noisy, check the returned fields and the search type before you reach for a larger model.
+
+### An inactive retriever grounds nothing
+
+Saving a retriever is not the same as activating it. You build retrievers in AI Models and then activate them to make them available to Prompt Builder users, and an inactive retriever returns no grounding [^1]. That is a configuration fault rather than a data fault, and the distinction matters because the two send you to different places to fix them.
+
+The same discipline shows up in the library path. The published troubleshooting guidance says the search index status must read as ready, and that a library whose chunk and index objects are not active returns nothing even though the components look present [^3]. Presence in a setup screen is never proof that a component is in service.
+
+Read activation the way you read it everywhere else in this course. A resource that is saved but not active is a draft, and a draft grounds nothing. When a build looks complete and an agent stays silent, check the active state of the retriever before you rewrite a single instruction, because the cheapest fix is often the one you skipped.
+
+Make activation part of the checklist rather than the afterthought. A build that ends when the retriever is saved is a build that ships a silent agent, and the symptom is indistinguishable from an empty index until someone opens the state flag and looks. Building and activating are two distinct steps, and the second one is what turns a configured reader into grounding that an agent can actually use.
+
+### Read the retriever as the last decision before generation
+
+Read the retriever as the last decision before generation and the first place to look when grounding fails for no obvious reason. It sits after chunking and indexing and before the model, so it is the narrowest point in the pipeline and the easiest to misconfigure without noticing.
+
+If the index holds good chunks but the answer is unsupported, suspect the retriever: a filter that is too tight, fields that omit the passage text, an unset citation so the reader cannot verify the answer, or a retriever that was saved but never activated. Each of those is a configuration choice rather than a content problem, and each produces the same symptom of a healthy pipeline and a hollow answer.
+
+The next lessons trace the full query path and then the diagnostic method that tells a retriever fault apart from a chunking or indexing fault. Hold the sequence in mind now: chunk, embed, store, then retrieve, and the retriever is the last hand on the data before generation.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a retriever stores or builds the vectors. The index stores the embeddings; the retriever only queries that index and returns the relevant chunks, so an answer that says the retriever embeds or stores content has the two layers reversed. The second is believing one search index can back only one retriever. Each data library has its own retriever that can point to the same search index but operates independently, so multiple retrievers over one index is normal and is in fact the point of individually tuned readers. The third is believing that saving a retriever is enough. You must activate it, and an inactive retriever returns no grounding at all, which is a configuration fault rather than a data fault.
+
+## What a consultant should walk away with
+
+The index stores the vectors, the retriever queries them and returns the chunks the model reads, so keep the two roles distinct and diagnose in the correct layer. Expect multiple retrievers over one index, each tuned to a use case, and expect a data library to create its own reader for you. Configure the data space, the source object, and the search index, set filters and returned fields deliberately, and activate the retriever, because a saved but inactive retriever grounds nothing. When a healthy index still yields an unsupported answer, read the retriever's filters, its returned fields, and its active state before you touch the model or the prompt.
+
+## What's next
+
+Lesson 25 - The Query Path End to End: From User Question to Grounded Answer (df-2d)
+
+[^1]: Salesforce, "Retrieve Data" (https://help.salesforce.com/s/articleView?id=data.c360_a_ai_retriever.htm&language=en_US&type=5)
+[^2]: Salesforce, "Create an Individual Retriever" (https://help.salesforce.com/s/articleView?id=data.c360_a_ai_retriever_create.htm&language=en_US&type=5)
+[^3]: Salesforce, "Agentforce: Setup & Troubleshoot Agentforce Data Libraries & Answer Question with Knowledge" (https://help.salesforce.com/s/articleView?id=004333412&language=en_US&type=1)
+[^4]: Salesforce, "Customize the Knowledge Answers Prompt Template" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_answer_questions_with_knowledge.htm&language=en_US&type=5)
+[^5]: Salesforce, "Get Trusted AI Responses with Retriever Citations" (https://help.salesforce.com/s/articleView?id=data.c360_a_ai_citations_retriever.htm&language=en_US&type=5)

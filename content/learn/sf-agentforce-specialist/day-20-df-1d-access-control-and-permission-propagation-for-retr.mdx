@@ -1,0 +1,107 @@
+---
+title: "Lesson 20: Access Control and Permission Propagation for Retrieval"
+slug: day-20-df-1d-access-control-and-permission-propagation-for-retr
+series: sf-agentforce-specialist
+lesson: 20
+excerpt: "Learn which permissions let a user retrieve from a data library, why the running user rather than the builder decides what comes back, and how external audiences need visibility tags the internal org never asks for. Covers requirement df-1d in the Data 360 Fundamentals domain: Explain the considerations of Agentforce Data Library and its concepts."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Data 360, Permissions, Data Spaces, Retrieval Security]
+---
+
+# Lesson 20: Access Control and Permission Propagation for Retrieval
+
+An admin builds a data library, tests it, watches it return clear cited answers, and ships it to the support team. The next morning the team reports that the agent answers every question with a polite nothing. The admin runs the same test, sees the same good answers, and cannot reproduce the problem. The library is healthy, the index is ready, and the agent is wired correctly, yet the people who need it get nothing.
+
+The gap is a permissions gap, and it lives between the person who built the library and the person who runs it. Retrieval is gated by several distinct grants, and the admin holds all of them while the reps hold none. A library that looks complete from the builder's seat can be completely dark from the running user's seat, and the fix is never to rebuild the library; it is to name the running user and grant what that user is missing.
+
+This lesson serves requirement df-1d in the Data 360 Fundamentals domain, which carries 20 percent of the exam. You will learn the layered permissions that gate retrieval, why data space scope is a hard boundary, how Knowledge eligibility doubles as permission, the difference between setting up a library and using one, and the external visibility step that Community users need. The exam frames most of these as a permission that a scenario forgot to assign.
+
+## Deep Dive
+
+### Three permissions gate retrieval, and they sit at different layers
+
+Three permissions gate retrieval, and they sit at different layers, which is why one missing grant produces an empty answer with no error. To reach the retriever and the default data space, the running user needs the Data Cloud User permission with the default data space added to it [^1] [^2]. To access the hydrated prompt and call the LLM, the user needs the Prompt Template User permission [^2]. Those are separate grants, and a user can hold one without the other.
+
+It is common to see a library that looks perfectly healthy return nothing because the running user holds one of the two and not the other. The Data Cloud User permission opens the door to the retriever and the data space; the Prompt Template User permission opens the door to the template and the model call. Retrieval needs both because it needs both halves of the request: fetching the chunks and then grounding and generating from them.
+
+The discipline this produces is a single habit: name the running user first, then check the grants. Before you touch any setting, confirm which user the request actually runs as, because an admin testing in their own session will always hold more than the end user does. Only once you have the running user in hand does checking the permissions make sense, and only then does the fix become obvious.
+
+### Data space scope is a hard boundary
+
+Data space scope is a hard boundary rather than a preference. Agentforce Data Library operations are supported only in the default data space; there is no setting that enables a non-default data space, and a request that targets one fails [^1]. This is not a configuration you can widen by granting more permission; the feature itself is scoped to the default space.
+
+The consequence for onboarding is concrete. A user provisioned only into some other data space cannot retrieve from a library, no matter how the source is configured or how many other permissions that user holds. The content may be indexed perfectly, the retriever may be healthy, and the answer will still be nothing, because the user stands outside the one space the feature operates in.
+
+When you onboard a team, adding the default data space to the Data Cloud User permission is the step people skip. It is easy to assign the permission set and forget that the permission needs the space attached, and the omission is invisible until someone who is not an admin tries to retrieve. Naming this step in your runbook removes the single most common empty-answer cause.
+
+It is worth separating scope from permission plainly, because the exam offers both as explanations. A permission problem is something you can grant; a scope problem is a limit you cannot lift, because the feature simply does not operate outside the default space. When a scenario shows a user who holds every standard Data 360 permission but is provisioned only into a non-default space, the answer is not to add another permission. The user must be brought into the default space, because no grant reaches a space the feature does not serve.
+
+### Eligibility rules for Knowledge double as permission rules
+
+For a Knowledge-based library the eligibility rules double as permission rules, and the two cannot be separated. The source articles must be public and published, surfaced as IsVisibleInPkb being true, and the data categories must be visible [^3] [^4]. The running user also needs read access to the Knowledge object, field level security on every field selected in the search index, and the Allow View Knowledge app permission [^2] [^3].
+
+The subtle one is field level security, because its failure is quiet and partial. A missing field permission drops that field's content from retrieval, which shows up as an agent that answers in generalities while the article clearly contains the answer [^2]. The article is there, the field is there, and the running user simply cannot read the part that mattered, so the retrieved chunk is thin and the answer is vague.
+
+Treat this as a rule about the running user, not the library. Every eligibility condition, published status, visible category, object read, and field read, is evaluated for the user making the request. When a Knowledge library under-answers, walk the conditions against that user, and the missing grant will explain the missing content more reliably than any inspection of the library settings.
+
+### Setting up a library and using one are different jobs
+
+Setting up a library and using a library are different jobs with different permissions, and the exam returns to this split repeatedly. To set up libraries at all you need Data 360 enabled and the Data Cloud Architect permission, formerly Data Cloud Admin, along with System Administrator, and creating a library requires the Manage Data Libraries system permission [^5]. These are builder permissions.
+
+The running user needs none of those builder permissions and typically holds none of them. What the running user needs is the retrieval set: the Data Cloud User permission with the default data space, and the Prompt Template User permission, plus object and field access on the source [^2]. Builder and runner are genuinely different roles, and the platform hands them different tools on purpose.
+
+Because the setup user is not automatically the running user, a successful build proves nothing about whether end users can retrieve. The builder can watch the library return good answers all day without ever exercising the permission path a rep will hit. That is why the first move on any empty-answer report is to test as a representative runner, not to re-examine the build the admin already validated.
+
+Keep the two permission sets straight as well, because they are easy to confuse by name. The Data Cloud User permission governs reach into Data 360 and the retriever; the Prompt Template User permission governs the template and the model call. Both are required for a request to return an answer, and they are granted separately, so a scenario that supplies one and not the other is describing a retrieval that fails at the second gate. Reading the scenario for which grant is present and which is missing is usually all the question is testing.
+
+### External users need a step internal users never see
+
+External users need a step internal users never see, and it is the single most common Community retrieval failure. When Salesforce indexes a document library it creates data model objects in Data 360 [^6]. Internal platform users are covered automatically by Salesforce's All Data Access ruleset policy, but external Community users are not [^6]. Without an extra step, an external user reaches an agent that retrieves nothing.
+
+The extra step is a classification tag on the library's data model objects. You must tag those objects with ExternalData.Visibility.Portal or ExternalData.Visibility.Public so the external user can reach the retriever [^6]. Data 360 denies external users access to everything by default, so until an object is classified as visible to a portal or public audience, it stays invisible to anyone outside the org [^7].
+
+The reason this failure is so persistent is that it is invisible if you only test as an internal admin. An admin holds the All Data Access coverage and never hits the gap, so the library looks complete from every internal seat. Tagging the objects for external visibility is the step that closes the gap, and remembering that external audiences need their own classification keeps a Community rollout from shipping dark.
+
+The tag choice is a deliberate security decision, not a formality. Portal or Public classifies the object as reachable by authenticated external users or by anyone, and data without a tag stays inaccessible to users who are not explicitly granted access. Tagging too widely exposes content to audiences you did not intend; tagging too narrowly leaves the retriever dark. Because Data 360 is secure by default, the safe failure is the narrower tag, so start restrictive and widen only when a real external user is blocked from content that should be visible.
+
+### The published error reference makes propagation concrete
+
+The published error reference makes the propagation of permissions concrete, and reading it is a fast way to internalize this objective. One error says you or the running user lack access to the Data 360 object that backs a source, or the object is read-only [^7]. Another says the user has not been granted Data 360 drive access, or the permission was changed or revoked [^7]. Both describe a gap at the running user's seat, not a defect in the library.
+
+The documented fix is almost always the same, and it is the lesson of the whole objective: confirm which user the request ran as, then ask an admin to grant the missing Data 360 permission to that user rather than to the admin who built the library. The instinct to widen the builder's access, or to rebuild the source, misses the point. The permission travels with the runner, so the fix travels to the runner as well.
+
+Notice how specific the errors are about the user. They do not say the library is broken; they say a user lacks access to an object, or a permission was revoked. That phrasing is the platform telling you where to look. When you see these errors in an org, you already know the shape of the answer: name the running user, then grant to that user, not to yourself.
+
+That single instruction is the cure for a habit that wastes hours. Widening the builder's own access feels productive because it makes the admin's test pass, but it changes nothing for the person who reported the problem. Every minute spent granting permission to the wrong account is a minute the real user stays blocked. The error text points at the running user on purpose, and treating that pointer as the instruction rather than a clue is what turns a frustrating report into a one-step fix.
+
+### A four-layer check is the practical discipline
+
+The practical discipline is a four-layer check, run in order, whenever retrieval returns nothing. Confirm the running user, then verify in order that the user has access to the default data space, the Data Cloud User permission, the Prompt Template User permission, and object plus field permissions on the source, with the external-visibility tags added when the audience is outside the org [^1] [^2] [^5]. The order matters because each layer is a gate the next one depends on.
+
+Running the check in order is what makes it fast. If the user is not in the default data space, nothing further matters, and you have found the cause in one step. If the space is fine but the Data Cloud User permission is missing, you stop there. Walking the four layers top to bottom finds the first broken gate instead of testing everything and guessing, which is the whole point of a checklist.
+
+The check also doubles as an onboarding template. When you add a person to a team that uses a library, the four layers are exactly what you provision: the default data space, the two permissions, and the object and field access on the source. Confirming each layer before the user ever runs a query turns the most common retrieval failure into a step that simply cannot be skipped.
+
+Keep the four layers in the same order every time, because the order is what makes the check decisive. Access to the default data space comes first, since a user outside it cannot retrieve regardless of any other grant. The Data Cloud User permission comes next, then the Prompt Template User permission, and only then the object and field access on the source, with external visibility tags when the audience is outside the org. Walking the layers in sequence stops you at the first broken gate, and the first broken gate is always the real cause.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing a permission that lets you build the library also lets the end user retrieve from it; setup needs Manage Data Libraries and Data Cloud Architect, while retrieval needs Data Cloud User with the default data space and Prompt Template User. The second is believing external Community users are covered like internal users; internal users get the All Data Access ruleset policy automatically, but external users need the library's data model objects tagged ExternalData.Visibility.Portal or ExternalData.Visibility.Public. The third is believing a data library works in any data space; Agentforce Data Library operations are supported only in the default data space, and no setting changes that.
+
+## What a consultant should walk away with
+
+Name the running user first, because every retrieval permission is evaluated for that user and not for the admin who built the library. Keep builder and runner apart: Manage Data Libraries and Data Cloud Architect set the library up, while Data Cloud User with the default data space and Prompt Template User let a user retrieve from it. Treat data space scope as a hard boundary, since library operations work only in the default data space and no setting widens it. Remember that Knowledge eligibility doubles as permission, so published status, visible categories, object read and field read all bind the running user. And never forget the external step: when the audience sits outside the org, tag the library's data model objects with ExternalData.Visibility.Portal or ExternalData.Visibility.Public, because internal admins are covered automatically and will never see the gap.
+
+## What's next
+
+Lesson 21 - Freshness, Refresh Cadence and Retrieval Failure Modes (df-1e)
+
+[^1]: Salesforce, "Data 360 Standard Permission Sets" (https://help.salesforce.com/s/articleView?id=data.c360_a_userpermissions.htm&language=en_US&type=5)
+[^2]: Salesforce, "Troubleshoot Knowledge in Service Assistant" (https://help.salesforce.com/s/articleView?id=service.sp_test_knowledge.htm&language=en_US&type=5)
+[^3]: Salesforce, "Use Salesforce Knowledge" (https://help.salesforce.com/s/articleView?id=sf.data_library_select_fields.htm&language=en_US&type=5)
+[^4]: Salesforce, "Choose A Data Source for Your Library" (https://help.salesforce.com/s/articleView?id=data_library_choose_data_source.htm&language=en_US&type=5)
+[^5]: Salesforce, "Agentforce: Setup & Troubleshoot Agentforce Data Libraries & Answer Question with Knowledge" (https://help.salesforce.com/s/articleView?id=004333412&language=en_US&type=1)
+[^6]: Salesforce, "Create a Document Library for the Applicant and Grantee Support Agent" (https://help.salesforce.com/s/articleView?id=ind.grmk_create_document_library_grantseeker_agent.htm&language=en_US&type=5)
+[^7]: Salesforce, "Troubleshoot External User Access Errors" (https://help.salesforce.com/s/articleView?id=data.c360_a_troubleshoot_external_user_access.htm&language=en_US&type=5)

@@ -1,0 +1,99 @@
+---
+title: "Lesson 31: Managing Deterministic Behavior: Filters, Variables, and Template Expressions"
+slug: day-31-ag-3a-managing-deterministic-behavior-filters-variables
+series: sf-agentforce-specialist
+lesson: 31
+excerpt: "Learn how filters, variables, and template expressions work together to fix an agent's path, from the gate that removes an action to the expression that renders a known value into the reply, and how the chain stays deterministic before the model reasons. Covers requirement ag-3a, \"Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions,\" in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Agent Script, Deterministic Behavior, Filters, Variables]
+---
+
+# Lesson 31: Managing Deterministic Behavior: Filters, Variables, and Template Expressions
+
+A service team shipped an agent that could issue a goodwill credit. The prompt was careful: it told the model to confirm the order was inside the return window before offering the credit. The first week it behaved. The second week a customer asked twice in a row, and the agent, reading the second request as a fresh instruction, offered the credit on an order that was outside the window. Nothing in the prompt was wrong; the prompt was just not the right kind of control for a rule that had to hold.
+
+The lesson is that some behavior should not be negotiated with the model at all. Agent Script gives you three families of mechanism for the parts that must be fixed: filters, which decide what the model can see and reach; variables, which hold the state the rules branch on; and template expressions, which render that state into the words the user or the model reads. Used together they form a chain, and the chain is what makes the agent's path deterministic instead of hopeful.
+
+This lesson serves requirement ag-3a, "Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions," in the AI Agents domain, at 35 percent. By the end you can describe what a filter actually removes, how a variable must be set to stay trustworthy, and how a template expression resolves before the model reads a word. The recurring idea is that determinism is not a property of the model; it is a property of everything the script does before the model runs.
+
+## Deep Dive
+
+### The chain: a variable holds a fact, a filter exposes it, an expression renders it
+
+Deterministic behavior means the agent's path is fixed by rules rather than left to the model, and the three mechanisms are easier to hold as one chain than as three definitions. A variable holds a fact. A filter uses that fact to expose or hide an action or a subagent. A template expression uses the same fact to shape what is written. One fact, three jobs, and the same source of truth underneath all of them.
+
+The reason to learn the chain rather than the features is that the scenario questions almost always name a job, not a mechanism. If the question is whether the model may do something right now, that is a filter. If it is whether the agent remembers a fact and branches on it, that is a variable. If it is how that fact appears in the reply, that is a template expression. Read the job, and the mechanism follows.
+
+Read the same idea from the other direction and the design principle is that the fact lives once. If the reply must name a product, the script should not store the product in one variable, gate on a second copy, and render a third; it should establish the fact in one variable and let the filter and the expression both read it. Duplicated facts drift, and a drifted fact is exactly the variability the chain was meant to remove.
+
+### A filter removes the action; it does not ask the model politely
+
+A filter is a condition that includes or excludes something at run time, and in Agent Script the mechanism is conditional availability, written as an available when clause on an action or a subagent. When the condition is false, the action is removed from the list the model sees. This is not a hint. It is a platform gate, and the model cannot call what it cannot see.[^1]
+
+The guidance on the filtering pattern is blunt about why: without filtering, customers might convince the model to use features that are not allowed, and the model might make reasoning errors during long or complex conversations when the context has drifted. Filter business-sensitive features rather than relying on prompt wording, and the gate is enforced by the platform rather than by instruction. A worked example from the documentation gates a return action on whether the order is inside the return window and the order is verified, and hides it completely otherwise.[^1]
+
+The reason a gate beats a prompt is mechanical. A prompt line asking the model not to act yet is advice the model weighs against everything else in the conversation, including a persuasive user. An available when clause is evaluated by the platform before the model runs, and a false result deletes the action from the list the model is given. There is no negotiation because there is nothing to negotiate with: the option is not there.
+
+One more nuance from the pattern guidance is that parentheses should be used when you nest and and or conditions, both to make the evaluation order explicit and to keep the script maintainable. A compound gate such as verified plus business hours is common, and the grouping matters when the condition grows, because the platform evaluates the expression as written and a mis-grouped condition can open a gate you meant to keep closed.[^4]
+
+### Any false value closes the gate, including zero and the empty string
+
+The mechanics of the gate are worth getting exactly right, because the exam tests the edge. When an available when condition evaluates to false, the action is removed from the tool list entirely, and any false value suppresses it, including None, False, zero, and an empty string. That is why a variable that defaults to empty correctly hides its action until it is populated: the default makes the condition false, the action is absent, and it appears only once the variable carries a real value.[^3]
+
+This edge is a favourite of scenario writers because it inverts a natural assumption. A reader expects an empty string to be harmless, and a zero amount to be a small number rather than a closed gate, but the platform treats both as false and suppresses the action. So the default value you choose is a design decision: an empty string default quietly closes a gate, and a sentinel value you did not intend can open or close one unexpectedly. Set defaults deliberately.
+
+Filters also apply to subagents, not just actions, so you can scope which subagents are reachable on a given turn, and the same conditional idea extends to scoping what a retriever can pull. Keep one caution from the documentation close: the model can call any action that is available, even one you did not explicitly tell it to call, so availability is a permission, not a suggestion, and an action that must not run yet must not be available yet.[^1]
+
+### Variables are typed session state, and a gate variable must be set by code
+
+Variables are typed session state declared in the variables block, each with a type such as string, number, or boolean, a default value, and a description. A variable marked mutable can be reassigned; one declared linked draws its value from an external source such as the messaging session. Because the type decides the format of the value a condition compares against, a boolean checks True or False, a number checks a numeric value, and a string checks a quoted value, and getting the type wrong is a common source of a condition that never evaluates the way the author expected.[^2][^3]
+
+The rule that makes variables deterministic is the one that matters most: any variable you branch on or gate with must be set by code, not by the model. Use a set directive to copy an action output into a variable, or fill the variable in before_reasoning, so its value has a known source. If you rely on the model to set a gate variable, the gate opens and closes as randomly as the model would have, which is precisely the variability the gate exists to remove. Variables also carry facts between subagents, so the agent does not re-ask the user for something it already established.[^3]
+
+The typed declaration is not decoration; it is what a condition compares against at run time. A boolean variable checked for truth only ever holds True or False, a number variable is compared numerically, and a string variable must be matched against a quoted value, so a condition that compares a number variable to a string literal can never be true. When a gate never opens in Simulate, a data type mismatch between the variable and the value it is compared with is one of the first things to check.
+
+The linked declaration is the other mechanism worth naming, because it explains where an externally sourced value comes from. A variable declared linked draws its value from a source outside the script, such as the messaging session, rather than from a set directive, so its value is populated by the platform's connection to that source. That is different from a slot token, which asks the model to fill a value, and different from a set directive, which stores a value the script computed.
+
+### The slot token is for the model; a gate wants a deterministic set path
+
+There is a second way a variable can get a value, and it helps to know when to use it. A slot token lets the model fill a value when that is appropriate, which is useful for a fact that genuinely comes from the conversation, such as a customer name or an order id the user is stating. The token is a request for the model to set the value, not a guarantee about when or whether it does so.[^3]
+
+That distinction is the point of the previous subsection. A slot token is fine for a variable that feeds a prompt, because the model producing the value is the same model consuming it. It is the wrong tool for a variable behind an available when gate, because the gate needs a value in known state before the model runs. So the design rule is simple: let the model fill conversational values, but set every gating and branching variable in code, either in before_reasoning at the top of a parse or with a run and set sequence in the reasoning block.
+
+Put the two mechanisms side by side in a decision. Ask where the value comes from. If it comes from the conversation and the model is the right thing to read it, a slot token is appropriate. If it comes from an action result or a rule the script evaluates, a set directive is appropriate. If it comes from the platform's session, a linked declaration is appropriate. A gate should almost never depend on the first of those, because a value the model may or may not set is not a value a gate can trust.
+
+### A template expression renders a known value into the words
+
+A template expression resolves a variable or a resource into content, and it is written with braces and a leading exclamation, for example a reference to a promotion product variable or to an action such as the one that creates a case. It works inside a prompt instruction so the model receives the resolved value rather than a placeholder. This is the merge-field mechanism of the agent: the script computes or captures a fact, and the prompt renders it.[^2]
+
+The value of rendering rather than asking is that the model is describing something the script already established, which keeps the reply grounded in state rather than in the model's guess. You also use variables directly, without the braces, inside logic conditions, when the value drives a branch rather than wording. Same fact, two syntaxes, and the difference is whether the fact is being decided or being spoken.
+
+The syntax is the detail to keep exact: the expression is written with braces and a leading exclamation, as in a variable reference, and it resolves to the value at prompt-assembly time. A prompt line that references a variable this way will show the concrete value in the resolved prompt, which is what you preview before activating. If the preview shows a placeholder rather than a value, the expression is not resolving, and the usual causes are a misspelled variable name or a variable that was never set.
+
+### Resolution runs in order, so determinism happens before the model reads a word
+
+The reason this chain is reliable is the order of resolution. Before any model reasoning, the engine resolves the subagent's logic instructions from top to bottom, running actions and setting variables as it goes. Conditional statements are evaluated deterministically against the current variable values, and the surviving prompt lines, with their template expressions already resolved, are assembled into the prompt and sent.[^5]
+
+So by the time the model reads anything, the filters have opened or closed, the variables already hold their values, and the template expressions render real data. Determinism is therefore not a property of the model; it is a property of everything the script does before the model runs, which is why the same input can produce a fixed path. Read the scenario for which of the three mechanisms the requirement is really about, and answer with the mechanism that makes the deterministic part happen before the model is involved at all.
+
+The order is also why the three mechanisms compose rather than compete. A variable set in before_reasoning is available to a filter evaluated in the same parse, and that filter's result shapes which prompt lines survive to be assembled with their template expressions resolved. Because the sequence is top to bottom within the parse, a fact established early is usable by everything after it, and a fact established late is not usable by what came before. When a gate opens a parse too early or too late, the fix is often the position of the set rather than the condition itself.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing a prompt instruction can enforce a gate, when only an available when condition removes an action from the model's tool list and asking politely is a suggestion the model may not follow. The second is believing the model should set the variable behind a gate, when a gate variable with no deterministic set path opens and closes as randomly as the model, so it must be set in code. The third is believing a non-true value fails to suppress a gated action, when any false value, including None, False, zero, or an empty string, suppresses it, so an empty default correctly hides the action until the variable is populated.
+
+## What a consultant should walk away with
+
+Keep the chain in front of you: a variable holds the fact, a filter uses it to expose or hide, and a template expression renders it, and the same fact runs through all three. When a requirement is about whether the model may act now, write an available when clause and remember that any false value, including zero and the empty string, closes the gate; when it is about whether the agent remembers and branches, declare a typed variable and give every gating or branching variable a deterministic set path in before_reasoning or a run and set sequence, never a model-filled slot; and when it is about how a fact appears in the reply, render it with a template expression instead of asking the model to produce it. Then hold the ordering fact that makes it all work: logic resolves before the model reads anything, so determinism is what the script does first, not what the model chooses later.
+
+## What's next
+
+Lesson 32 - Choosing the Right Determinism Mechanism: Scenarios and Traps (ag-3b)
+
+[^1]: Salesforce, "Agent Script Pattern: Enforce Business Rules with Filters" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-patterns-filtering.html)
+[^2]: Salesforce, "Agent Script Language Characteristics" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-lang.html)
+[^3]: Salesforce, "Agent Script Pattern: Using Variables Effectively" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-patterns-variables.html)
+[^4]: Salesforce, "Agent Script Pattern: Using Conditionals" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-patterns-conditionals.html)
+[^5]: Salesforce, "Hybrid Reasoning with New Agentforce Builder and Agent Script" (https://architect.salesforce.com/docs/architect/fundamentals/guide/hybrid-reasoning-agentforce-builder-agent-script.html)
