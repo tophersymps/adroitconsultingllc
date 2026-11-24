@@ -1,0 +1,95 @@
+---
+title: "Lesson 36: Channel Identity, Session, and Context: What Each Channel Can Carry"
+slug: day-36-ag-5b-channel-identity-session-and-context-what-each-cha
+series: sf-agentforce-specialist
+lesson: 36
+excerpt: "Learn to ask three questions of every channel, who the user is, whether there is a live session, and what context travels, and to design the agent for the answers. Covers requirement ag-5b in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Agentforce Channels, Agent Identity, Conversation Context, Session Handling]
+---
+
+# Lesson 36: Channel Identity, Session, and Context: What Each Channel Can Carry
+
+A support lead moves a chat agent that has passed every test onto the email channel and expects the same experience. Within a week the agent is asking customers to confirm their case number, then losing it on the next message and asking again, and customers are replying that this is the third time they have told it. The agent behaved perfectly in the test chat, where it could hold the number in a live session and refer back to it. On email there is no live session to hold anything, so every message is a first message, and the agent's habit of building on the last turn became a habit of amnesia. The configuration never changed. The channel did.
+
+The cause is that the channels look interchangeable from the builder and are not, because each differs in three things: who the user is, whether there is a live session, and what context travels with the conversation. Identity decides what data the agent can reach, because the agent runs as a user. Session handling decides what the agent may assume about the turns before it. Context decides what the agent can ground on, and context that a chat surface hands over freely may have to be rebuilt from scratch in a conversation on another channel.
+
+This lesson serves requirement ag-5b in the AI Agents domain, which carries 35 percent of the exam. You will learn to profile each channel on those three axes, to see why the same agent behaves well on one surface and oddly on another, and to decide when the fix is an added step and when it is a channel-specific agent. The exam frames this as scenario fit, so the win is naming the mismatch before it reaches a customer.
+
+## Deep Dive
+
+### Three questions separate the channels: identity, session, and context
+
+The channels look interchangeable from the builder, and they are not, because each one differs in three things: who the user is, whether there is a live session, and what context travels with the conversation. Slack and the Agentforce panel run for a signed-in employee, so the agent inherits that person's identity and access. A messaging or web chat surface usually runs for an unauthenticated or lightly identified customer, so the agent may not know who it is talking to unless the interaction verifies identity. Email arrives with no live session at all, and voice runs in real time but on audio [^1].
+
+Those differences are why the same agent that behaves well in one channel can behave oddly in another, and why Salesforce recommends a separate agent for email and telephony rather than one agent everywhere [^1]. The recommendation is not about taste; it is about the mismatch between what an agent assumes and what a channel provides. An agent written for a signed-in employee with an open record and a live session is making three assumptions, and a channel is a place where any one of them can be false.
+
+Adopt the three questions as a habit and they will carry you through every channel scenario. Who is the user, so you know whose access the agent acts under. Is there a live session, so you know whether the agent can build across turns. What context travels, so you know whether the agent will receive a record or have to ask for one. Ask all three of every channel and the mismatch that would otherwise surprise you in production shows up at design time.
+
+### Identity decides what the agent can touch
+
+Identity is the difference that affects security the most. When an employee agent runs in Slack or the Agentforce panel, the signed-in person's profile, permissions, field-level security, and sharing determine what the agent can reach, because the agent runs as that user [^3]. A service agent on a messaging or web surface typically runs as a dedicated agent user, not as the anonymous visitor, unless credential-based verification is enabled, in which case it runs as the signed-in site user [^1]. That single switch changes what the agent can see.
+
+The practical consequence is that identity is a design decision you make on purpose. When you plan a channel, decide whose identity the agent should act under, because that decision sets both what the customer will get and what data the agent can touch on the customer's behalf. An agent running as a dedicated agent user has a fixed, known reach that does not vary by visitor, which is simpler to govern. An agent running as the signed-in site user has the access of that specific person, which is more precise and depends on verification having happened.
+
+Read identity scenarios by tracing whose permissions are in play. If the requirement is that an employee agent can only see what the employee can see, the answer is that the agent runs as the signed-in user, so the access follows automatically [^3]. If the requirement is that a web agent serves anonymous visitors safely, the answer is the dedicated agent user, or credential-based verification for the cases that need more. The identity choice is the security answer, and it belongs in the channel plan, not in a later hardening pass.
+
+### Session handling decides what the agent may assume
+
+Session handling is the second difference and it decides what the agent can assume. A messaging or chat channel holds a live conversation, so the agent has an open session with conversation state and variables that persist across turns. Email has no such session: a message arrives, the agent answers it, and the next message is a fresh interaction, so the agent cannot rely on carrying conversation variables across a thread the way it can in chat. Voice holds a real-time audio session but no screen [^1].
+
+This is where the email amnesia in the opening scene comes from. An agent designed assuming a live session, then connected to email, finds that the assumptions break, because the context the agent expects to still be there simply is not [^1]. The agent is not forgetting; the channel never carried the memory. The fix is a design fix: the agent's instructions have to be written for the channel's actual cadence, and on a turn-based channel that means being complete in one turn and expecting to re-establish anything it needs.
+
+So design the instructions for the channel's actual cadence. On a live chat, the agent can ask a follow-up and wait in the same session. On email, the agent should answer fully and, where it must gather something, either find it from the address or ask once and store it somewhere durable rather than in conversation memory. Voice sits in between as a live session with no visual channel, so the agent converses across turns but cannot point at anything. Teaching the agent which of these it is on is the whole job.
+
+### Context is what the agent grounds on, and it does not always travel
+
+Context is the third difference, and it is what the agent uses to ground its answers. On Slack and in the Agentforce panel the agent can carry record context, so it can act on the record the user is looking at. On a messaging or web surface there is no record open, so identity and any relevant context have to be established in the conversation, often by asking for an identifier and looking it up. On email the only reliable identity signal is the sender's address, which the platform can match back to a contact, so the agent's grounding depends on that match [^1].
+
+This is the axis where a channel that looks richer than chat can actually carry less. The agent in the panel is handed a record for free, because the user is looking at it. The same agent on the web has been handed nothing and must reconstruct the record from what the customer says and what the agent can look up. Moving an agent to a channel that cannot carry the context it expects means adding the step that reconstructs that context in the conversation rather than assuming it is present [^1].
+
+Read context scenarios by asking where the grounding comes from. If the requirement is that the agent already knows which case the customer means, that is a panel or Slack behavior where a record is open, or a messaging behavior where a verification step has established identity. If the requirement is that the agent handles a customer who has just messaged from an unknown address, that is email, and the grounding hinges on matching the sender. Name the source of context and the channel falls out.
+
+### Adaptive response formats declare what a channel can render
+
+The adaptive response formats are how a channel declares what it can render, and they are part of the connection rather than the agent. The messaging connection carries Rich Choice Response, Rich Link Response, and a Time Picker for Apple Messages for Business. The service email connection carries a Rich Service Email Response format. The marketing email connection carries Marketing Email Text with inputs such as the email signature and disclosure [^2]. Telephony has no rich card surface, so anything that assumes buttons, links, or a picker does not translate to a voice call.
+
+When an action returns a rich choice the channel cannot render, the customer sees a degraded or empty result, which is a common real-world failure that a scenario question can hang on [^2]. The agent did what it was told; the channel simply could not present the answer. Voice is the extreme case, where the only response medium is audio and every visual affordance is gone, so an agent tuned to return structured content loses that ability entirely when it is connected to telephony [^4].
+
+Treat the format list as a contract between the agent and the surface. An action that returns a rich choice is safe on messaging and not on voice. An action that returns a record page is safe in the panel and meaningless on a call. Reading the connection's formats before you wire the actions is how you avoid shipping an agent that renders an empty card or a broken picker on the one surface a customer happens to use.
+
+### Match the agent's assumptions to the channel before go-live
+
+The practical discipline is to match the agent's assumptions to the channel before go-live. Ask three questions for every channel: who is the user, is there a live session, and what context travels. A Slack or panel agent assumes a known employee with record context and a live session. A messaging agent assumes a customer whose identity may need verifying and a live session. An email agent assumes a turn-based interaction with identity reconstructed from the address and no carried session. A voice agent assumes real time plus audio and no screen [^1].
+
+Line the agent's design up against that profile and the gaps show themselves. If the agent assumes a live session and the channel is email, the gap is session. If the agent assumes a known customer and the channel is an anonymous web surface, the gap is identity. If the agent assumes a record is open and the channel is email, the gap is context. Naming the gap tells you the fix, which is either to add the missing step, such as a verification or an identity lookup, or to build a channel-specific agent [^1].
+
+When a channel cannot carry what the agent expects, the fix is either to add the missing step or to build a channel-specific agent, which is exactly why Salesforce recommends separate agents for email and telephony [^1]. Adding the step is the lighter change and works when the gap is small, such as needing to look up a customer from an email address. Building a separate agent is the heavier and often better change when the channel's whole cadence differs, because the shared agent would otherwise carry assumptions that are wrong on one surface or the other.
+
+### A dedicated agent per channel is often the right answer
+
+The recommendation to split email and telephony into their own agents is worth understanding as a pattern, not just a rule. Voice-enabled agents are created and then connected to a voice-capable channel such as telephony, with call routing and escalation configured around them [^5]. That build carries a real-time audio assumption from the start, so it does not inherit the visual habits of a chat agent. A service email agent carries a turn-based assumption from the start, so it does not inherit the live-session habit.
+
+Building a separate agent is a cost, because you now maintain more than one. The trade is worth it when the channel's cadence and media differ enough that a shared instruction set would be a compromise on both surfaces. Chat and messaging are close enough to share an agent in many builds, because both assume a live session and a customer identity that may need verifying. Email and voice are different enough from each other and from chat that Salesforce's own guidance is to give them their own agents [^1].
+
+Read a scenario that asks whether to reuse an agent or build a new one by asking how many of the three axes differ. If identity, session, and context all match between two channels, reusing one agent is reasonable. If a channel changes the session model or the media in a way that contradicts the agent's instructions, that channel earns its own agent. The three questions that profiled the channels are also the test for whether one agent can span them.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing channels carry the same session: chat and messaging hold a live session with persistent variables, but email is turn-based with no carried session, so an agent that assumes a live session breaks on email [^1]. The second is believing the customer's identity is always known: on a messaging or web surface the agent usually runs as a dedicated agent user, and only credential-based verification makes it run as the signed-in site user with that person's access, so identity is a decision rather than a given [^1]. The third is believing a rich response works everywhere: adaptive response formats are declared per connection, so a rich choice, link, or time picker that a channel does not support renders poorly or not at all, and voice has no such surface [^2].
+
+## What a consultant should walk away with
+
+Profile every channel on three questions before you design anything: who is the user, is there a live session, and what context travels. Identity sets access, so a signed-in employee means the agent runs as that user and inherits their permissions, while an anonymous customer means a dedicated agent user or credential-based verification. Session sets what the agent may assume, so a live chat can build across turns and email cannot, which means a turn-based agent must be complete in one turn. Context sets what the agent can ground on, so a panel hands over a record and an email address is the only signal email reliably carries. Read each connection's adaptive response formats as the list of responses that surface can render, and never assume a rich choice or a record page translates to voice. When a channel cannot carry what the agent expects, add the missing step for a small gap and build a channel-specific agent when the cadence or the media genuinely differs, which is why email and telephony usually earn their own agents.
+
+## What's next
+
+Lesson 37 - The Agent's Security Context and How It Shapes Action Execution (ag-6a)
+
+[^1]: Salesforce, "Deploy Your Agent to Channels" (https://help.salesforce.com/s/articleView?id=service.agent_setup_channels.htm&language=en_US&type=5)
+[^2]: Salesforce, "Standard Agent Connection Reference" (https://help.salesforce.com/s/articleView?id=ai.agent_surfaces_ref.htm&language=en_US&type=5)
+[^3]: Salesforce, "Connect an Agent to Slack" (https://help.salesforce.com/s/articleView?id=ai.agent_deploy_emp_slack.htm&language=en_US&type=5)
+[^4]: Salesforce, "Agentforce Voice" (https://help.salesforce.com/s/articleView?id=ai.agentforce_voice.htm&language=en_US&type=5)
+[^5]: Salesforce, "Create a Voice-Enabled Service Agent" (https://help.salesforce.com/s/articleView?id=ai.service_agent_voice.htm&language=en_US&type=5)

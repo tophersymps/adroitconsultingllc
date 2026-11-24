@@ -1,0 +1,97 @@
+---
+title: "Lesson 37: The Agent's Security Context and How It Shapes Action Execution"
+slug: day-37-ag-6a-the-agents-security-context-and-how-it-shapes-acti
+series: sf-agentforce-specialist
+lesson: 37
+excerpt: "Learn how an Agentforce agent runs under a security context, whose identity and permissions decide what each action can actually reach at run time, and why an action that works in the builder can fail for a real user. Covers requirement ag-6a, \"Explain the security context in which the agent is actually running, and how it impacts agent action execution,\" in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Agent Security, Running User, Einstein Trust Layer, Agentforce]
+---
+
+# Lesson 37: The Agent's Security Context and How It Shapes Action Execution
+
+A delivery lead demoed a new Employee agent to a regional sales manager and it answered every question cleanly: it pulled opportunity amounts, summarized account histories, and drafted follow-up notes the manager called exactly what the team needed. Two days after go-live, half the reps reported the same agent answering that it could not find records they opened every morning. Nothing in the agent had changed between the demo and the failure. The consultant had built and tested it while signed in as an administrator, and the reps were running it as themselves, under their own field-level security and sharing. The agent had not broken. It could not see what its current user could not see.
+
+That failure is the whole subject of this objective, and it is the one consultants misread most often because an agent feels like a system feature. It is not. An Agentforce agent does not run as a privileged platform process that reaches whatever it wants. Every agent acts under a Salesforce identity, and that identity decides what the agent can query, what records it can modify, and what platform operations it can perform. When you plan an agent's security, the first question is never which permission set to grant. It is whose identity the agent will run as, and once you know that, every later decision has a foundation.
+
+This lesson serves requirement ag-6a, "Explain the security context in which the agent is actually running, and how it impacts agent action execution," in the AI Agents domain, which carries 35 percent of the exam and is the heaviest domain on the blueprint. The objective is less about a single setting than about a chain of authority. By the end you can name the running user for any agent type, explain how the standard Salesforce controls enforce access through that identity, show how an action's own execution context layers on top of it, and place the Einstein Trust Layer at the boundary where it belongs. Lesson 38 takes the same requirement from the debugging side, tracing a live failure to the exact gate that caused it.
+
+## Deep Dive
+
+### The agent acts as an identity, not as the platform
+
+An agent is not a magic system process that reaches whatever it wants. Every agent acts under a Salesforce identity, its running user, and that identity determines what the agent can query, what records it can modify, and what platform operations it can perform. The running user is either the signed-in person whose context the agent inherits, or a dedicated identity you provision, and which one it is depends on how the agent is invoked and what type it is.
+
+The consequence for planning is direct. When you secure an agent, the first question is never which permission set to grant; it is whose identity the agent will run as. Get that wrong and every later permission decision is built on the wrong foundation. The running user is the single fact that sets the ceiling of what any action can touch, so name it before you open a permission set or a sharing rule.
+
+It helps to hold two ideas apart that beginners merge. The identity is who the agent is for the duration of a turn, and the action is what the agent tries to do with that identity. The identity is the boundary, and the action is the work. Almost every security scenario you will meet on the exam is really a question about which of those two the scenario is describing, and the answer falls out once you separate them.
+
+### Agent type decides whose identity the agent runs as
+
+Agent type drives the running user, and the mapping is precise. An employee agent, which helps staff with internal work, runs as the logged-in user, so that person's profile, permission sets, field-level security, and sharing rules govern what the agent can reach. A service agent, the customer-facing kind, typically runs as a dedicated agent user with its own profile and role, unless credential-based user verification is enabled, in which case it runs as the signed-in site user for the rest of the session.[^1]
+
+Some specialized agents run as their own dedicated user with system-level permissions, which is a third pattern worth knowing rather than assuming away. The agent user for a service agent is created with minimal access on purpose, and it carries its own profile, its own role, and its own permission sets, separate from any human account.[^2] That separation is the design, not an accident: it means the reach of every customer conversation can be reviewed in one place.
+
+Before you deploy, map each agent to its running user, because only then do you know whose access to review and what data a well-crafted request could reach. The audience and the identity move together. Internal staff arrive authenticated and the agent borrows their access; external visitors arrive without a Salesforce identity and the agent acts as the agent user you provisioned. Lesson 39 works this mapping through the two audience types in detail, but the rule to carry here is that the agent type is the first thing that fixes the identity.
+
+### The running user's controls are what actually enforce access at run time
+
+Because the running user sets the boundary, the standard Salesforce controls are what actually enforce access at run time. Licenses, object permissions, field-level security, organization-wide defaults, and sharing rules all apply through that identity.[^3] There is no separate agent permission model that overrides them, and there is no privileged mode the agent slips into when a request is phrased well.
+
+An action that queries a field the running user cannot see returns nothing, and an action that updates a record the running user cannot edit fails. The agent respects these controls rather than bypassing them, which is both the reassuring half and the examinable half: an agent can never do more than its running user is permitted to do. That single sentence answers a large share of the questions on this objective, because it converts an "agent can or cannot" question into a "this identity can or cannot" question.
+
+Take a plain scenario. A service rep asks an Employee agent to summarize an account whose opportunities sit under a Private organization-wide default that the rep does not share. The agent runs as the rep, the rep cannot see those opportunities, and the summary comes back thin no matter how the prompt is worded. When a scenario describes an agent that cannot retrieve a record it should know about, the answer usually lives in the running user's permissions or in the record's sharing, not in the agent configuration. Checking the identity's access before you rebuild a topic saves a week.
+
+### The action's own execution context layers on top of the running user
+
+The action's own execution context layers on top of the running user, and this is where a lot of confusion sits. When an action runs a Flow, the Flow has its own run context, and it can run in system context or in user context. A Flow set to run in system context without sharing can reach records the running user could not, because system context without sharing is granted access to all data.[^4]
+
+Apex behaves similarly: a class can run with or without sharing, and it can run in user mode to enforce the caller's permissions or in system mode to bypass them. The running user sets the ceiling, and the action's context decides how much of that ceiling applies. Two ideas, two levers, and the exam tests the seam between them rather than either one alone.
+
+That layering explains a class of surprising behavior. A Flow that runs in system context without sharing might let a low-access user reach a record they should not see, which looks like the agent ignoring security when in fact the action is overreaching relative to the user. The mirror case is just as real: a Flow set to enforce the running user's access, or Apex running in user mode, can fail where a system-context version would succeed, which looks like a permissions bug when it is a context choice.
+
+Custom action access itself depends on the asset behind it, so a custom action backed by a Flow follows that Flow's permissions and run context. Two actions offered on the same subagent can therefore behave differently for the same running user, because the assets behind them execute under different contexts. When you review an agent, read each action's context, not just the agent's type.
+
+### Least privilege is the working rule, and it produces a precise failure mode
+
+Least privilege is the working rule, and it produces a specific failure mode you must recognize. The agent user starts with a limited set of permissions, which is correct from a security standpoint but means the agent will not function until you grant it what it needs. Grant exactly the object and field access each agent's job requires, and review and remove unused permissions after deployment.[^2]
+
+The failure mode is an agent that works in the builder and fails in production, because the builder ran under your administrator identity while the live agent runs as the agent user or as the employee. That gap between the builder's context and the production context is the most common source of a works-for-me agent that fails for everyone else. It is not a bug in the agent; it is a mismatch between the identity you tested under and the identity the agent will actually carry.
+
+The fix for a failing action is almost never to widen access broadly. Granting Modify All Data or a full system administrator profile to make the failure disappear also makes the agent a far larger security surface, and it hides which specific permission was missing so the next failure is just as hard to trace. The disciplined move is to grant the narrow object permission or field access the action actually needs, confirm the action now succeeds, and record why that permission was added.
+
+### The Einstein Trust Layer is a model boundary, not a data boundary
+
+The Einstein Trust Layer sits between the agent and the underlying large language model, and you must keep its job separate from record security. The Trust Layer applies platform controls at inference time: it filters known prompt injection patterns, checks model outputs for toxic content, and logs interactions for audit.[^5] It governs the traffic to and from the model, and its value depends on not overloading it with a job it was never built to do.
+
+What the Trust Layer does not do is decide which records the agent may read or write; that is the running user's job through the standard access controls. Salesforce notes that Trust Layer data masking applies to embedded generative AI features and is not applied for agents, so the record-level controls, not the masking layer, are what keep sensitive data out of reach.[^5] That single fact removes the assumption most people carry about where data protection happens.
+
+Treat the Trust Layer as the model-traffic boundary, and the running user as the data boundary. A scenario that asks who stops the agent from pulling a sensitive record into a reply is a question about the running user's permissions and sharing, and the Trust Layer is the wrong answer even though it sounds protective. Lesson 38 pushes this boundary further, including what happens when an action reaches an external system and leaves the platform's controls behind.
+
+### Read the running user first when an action fails
+
+When an agent action misbehaves, the fastest diagnostic is to read the chain in order. First, whose identity is the agent running as: the logged-in user or the agent user. Second, does that identity hold object permission on the target object. Third, can it read or edit the specific fields the action touches. Fourth, is the record visible to it under the organization-wide default and sharing. Fifth, what is the action's own run context. The first four are the running user's boundary, and the fifth is how much of that boundary the action applies.
+
+That order matters because it moves from the broadest cause to the narrowest, and it stops you from changing agent configuration for a problem that lives in a permission set. A blank field is a field-level security symptom. A missing record is a sharing symptom. An outright error is usually object permission. A Flow that succeeds when it should not is a run-context symptom. Match the symptom to the gate and the diagnosis is quick.
+
+Hold the two ideas apart as you read scenarios: who the agent is, and what the action does with that identity. The exam rarely asks you to recite a permission set name; it asks you to trace an action to the identity and context that gate it, and to say where the boundary sits. Practice stating that boundary in one sentence, and the scenario answers become mechanical.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing the agent bypasses Salesforce permissions, when an agent acts under its running user and respects licenses, object permissions, field-level security, organization-wide defaults, and sharing, so it can never do more than that identity may do. The second is believing the Einstein Trust Layer enforces record access, when the Trust Layer governs model traffic with injection filtering, toxicity checks, and audit logging, and record-level access is enforced by the running user's permissions and sharing. The third is believing an agent that works in the builder will work in production, when the builder runs under your identity while the live agent runs as the agent user or the employee, so missing agent-user permissions cause production failures that never appear while you build.
+
+## What a consultant should walk away with
+
+Name the running user before you name a permission set, because the identity sets the ceiling and least privilege follows from it. Map every agent to its running user by type: an employee agent runs as the logged-in person, a service agent runs as its dedicated agent user unless credential-based verification switches it to the signed-in site user, and a specialized agent may run as its own system-level user. Enforce access through the standard controls, because licenses, object permissions, field-level security, organization-wide defaults, and sharing rules all apply through that identity and the agent cannot exceed them. Read each action's own execution context, since a Flow or Apex can run in system context or as the user and either widen or narrow what the running user could reach. Grant the narrowest permissions the job needs and remove the rest, test under the production identity rather than your administrator login, and keep the Einstein Trust Layer at the model-traffic boundary while the running user owns the data boundary.
+
+## What's next
+
+Lesson 38 - Running User Permissions, Action Execution Context, and the Trust Layer Boundary (ag-6b)
+
+[^1]: Salesforce, "Agent Execution Context and Data Access by Type" (https://help.salesforce.com/s/articleView?id=ai.agent_execution_data.htm&language=en_US&type=5)
+[^2]: Salesforce, "Best Practices for Agent User Permissions" (https://help.salesforce.com/s/articleView?id=ai.agent_user.htm&type=5)
+[^3]: Salesforce, "Common User Access for Standard Agent Actions" (https://help.salesforce.com/s/articleView?id=ai.agent_actions_common_perms.htm&language=en_US&type=5)
+[^4]: Salesforce, "Flow Run Context" (https://help.salesforce.com/s/articleView?id=flow_concepts_running_user.htm&language=en_US&type=0)
+[^5]: Salesforce, "Trust and Agentforce" (https://help.salesforce.com/s/articleView?id=ai.copilot_trust.htm&type=5)

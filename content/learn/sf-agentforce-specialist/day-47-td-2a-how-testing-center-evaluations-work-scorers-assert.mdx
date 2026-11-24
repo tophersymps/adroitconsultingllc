@@ -1,0 +1,90 @@
+---
+title: "Lesson 47: How Testing Center Evaluations Work: Scorers, Assertions, and the Judge"
+slug: day-47-td-2a-how-testing-center-evaluations-work-scorers-assert
+series: sf-agentforce-specialist
+lesson: 47
+excerpt: "Learn how Testing Center scores a run: the default, quality, and custom scorer tiers, and the difference between deterministic assertions and a judge model. Covers requirement td-2a, \"Explain how Testing Center evaluations work.\", in the Testing, Deployment, and Maintenance domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [Agent Testing, Scorers, Assertions, LLM Judge]
+---
+
+# Lesson 47: How Testing Center Evaluations Work: Scorers, Assertions, and the Judge
+
+A tester ran a suite, saw a column of red, and pasted the whole column into a ticket titled agent broken. The engineer opened the agent, found nothing obviously wrong, and closed the ticket as cannot reproduce. Both people were reading the same grid. The tester had not read that the red column was the response-quality scorer, which is a judgment, and the engineer had not read that the failure was a phrasing problem rather than a routing one. Neither had asked the only question that mattered: what is this column actually measuring.
+
+A Testing Center result is readable only if you know that two different kinds of evaluation sit underneath the labels. One kind compares what the agent did against an expected value and returns pass or fail. The other asks a judge model how good the reply was and returns a score. Confusing the two makes a green grid look like a passing agent and a red grid look like a broken one, when the first is a set of expectations met and the second can be a single sentence phrased badly.
+
+This lesson serves requirement td-2a, "Explain how Testing Center evaluations work.", in the Testing, Deployment, and Maintenance domain at ten percent of the exam. It teaches the scorer tiers, the two evaluation families, and each default scorer's exact contract, so that a label on a column stops being a mystery and becomes a question with a known answer.
+
+## Deep Dive
+
+### A scorer is one criterion applied to every case
+
+A scorer is one evaluation criterion applied to every case in a run. Results land in a grid with one row per case and one column per scorer, so the unit you read is a cell and the unit you act on is usually a column. Testing Center organizes scorers into tiers. The default tier runs on every agent test: response evaluation, subagent assertion, and action assertion.[^1] The quality tier is opt-in, and it holds completeness, coherence, conciseness, latency, and instruction adherence. A custom tier covers what the default scorers cannot, from brand voice to a compliance rule, either as a label list you define or as free-form output, and a custom scorer can be a value from a list you control or unconstrained output such as text, a number, or a URL.[^2]
+
+The tiers exist because the default three answer a narrow question and nothing more. They tell you whether the agent routed, acted, and replied acceptably. They do not tell you whether the reply was complete, readable, short, fast, or faithful to the subagent's instructions. When a scenario needs one of those, you opt into the quality tier or you write a custom scorer, and the exam tests that choice as often as it tests the scorer names.
+
+The tiers are not a ranking of importance; they are a division of labor. Default scorers are always on because they answer the question every agent test must answer, and you cannot turn them off. Quality scorers are optional because not every test needs to know how short or how fast a reply was. Custom scorers exist because the criteria that matter for a compliance-heavy agent or a brand-sensitive one are not in any built-in list, and the platform would rather you define them than approximate them with a scorer that measures something else.
+
+### Two kinds of evaluation, and why the split carries the weight
+
+Assertion-based scorers are deterministic: they compare what the agent did against an expected value and return a pass or a fail. Subagent assertion and action assertion work this way, and so does latency, which reports the milliseconds from request to response. Judge-based scorers are judgments: a judge model reads the response, compares it against criteria or against your expected response, and assigns a score. Response quality belongs in that second group. Salesforce's own framing for a scenario is that assertions test the deterministic elements of the agent and the judge tests the stochastic ones.[^1]
+
+Hold that split, because the exam uses it to separate two questions that look alike. Did the agent do the expected thing is an assertion question with a pass or fail answer. How good was the reply is a judge question with a score. A scenario that asks which scorer to add for tone, or which scorer cannot be trusted as ground truth, is testing whether you can tell the two families apart before you name a scorer.
+
+The practical difference shows up when a result surprises you. A surprising assertion is a fact to be rechecked: either the agent really chose the wrong subagent, or your expected value was wrong. A surprising judge score is a judgment to be examined: the judge may have read a reply a human would call fine, or your expected response may have led it astray. Same grid, two entirely different investigations, and the family a scorer belongs to tells you which one to begin.
+
+### The subagent assertion checks routing and nothing else
+
+The subagent assertion checks one thing: did the agent select the subagent you expected for this utterance. It scores 1 when the agent identifies the appropriate subagent and 0 when it selects an unexpected one.[^3] Generated cases are built to trigger their assigned subagent, so each one carries that expectation with it, which makes a generated set strong at catching a routing problem and blind to a problem in a subagent nobody generated cases for. In metadata terms this expectation is the topic_sequence_match scorer, which takes the API name of the expected subagent as its expected value and returns a pass or a fail.[^4]
+
+That blindness is worth naming for the exam. A generated set is only as wide as the subagents you told it to exercise, so a subagent left out of generation is a subagent with no routing evidence at all, no matter how green the rest of the grid looks.
+
+One consequence worth carrying is what the subagent assertion is not. It does not check that the subagent did a good job once selected; it checks only that the right subagent was selected. So a suite can be green on every subagent assertion while every selected subagent behaves poorly, which is why the response evaluation and the quality tier exist alongside it. Routing and performance are separate questions, and the subagent assertion answers only the first.
+
+### The action assertion and the conversation-level rule
+
+The action assertion checks action selection, either within a subagent for a single utterance or across a whole conversation. It scores 1 when the agent correctly identified all of the appropriate actions and 0 when it chose the wrong ones or failed to select every necessary one.[^3] The conversation-level rule is the detail worth carrying into the exam: the test passes if every expected action occurred, even if the agent also performed additional actions, so missing an expected action fails the case and extra actions do not.[^5] When a case fails, the reasoning field names which expected action did not occur. As metadata this is the action_sequence_match scorer, and its expected value is the list of expected actions, with an empty list meaning you expect no actions.[^4]
+
+The asymmetry between missing and extra actions is deliberate and worth restating as a rule. The assertion asks whether the agent did everything the scenario required, and it tolerates the agent doing more, because a required action that did not run is a broken outcome while an extra action is often harmless. On the exam, the scenario that trips people is the one where the agent called four actions for a case that expected three: that case passes, and an answer that calls it a failure has misread the assertion's contract.
+
+### The response evaluation is the judge in the flow
+
+The response evaluation is the judge in the flow. Testing Center sends the utterance to the agent, records the reply, has the judge determine the expected response, compares the two, and assigns a score.[^1] What you write in the expected response field is therefore part of the score, which is why Salesforce warns against putting instructions in it: a field that says the agent should be polite and mention the order number describes desired behavior instead of stating a reply, and it produces an inaccurate score.[^6] The judge's reasoning and the full JSON output are visible when you select the result cell, and that panel is where you go when a number looks wrong or surprising rather than straight back to the agent.
+
+The panel is the reason you rarely need to guess. When a judged score looks off, the reasoning field usually states plainly what the judge compared and why it landed where it did, and the JSON holds the fuller record behind the number. Reading it before changing the agent is the discipline that keeps you from tuning a working agent to satisfy a misread score. The judge is a model, and like the agent it grades, it can be led by a fuzzy target, so the first thing to check is always the expected response you handed it.
+
+### The optional quality scorers, including the one that measures time
+
+The optional quality scorers measure different things, and one of them does not measure language at all. Completeness asks whether the response covered all the essential information the utterance called for. Coherence asks whether the reply reads as grammatically correct, conversational language, which is the scorer that catches raw field values or a JSON structure being handed to a customer. Conciseness asks whether the reply is short but accurate. Latency reports execution time in milliseconds, so it is a performance number sitting in a quality column. Instruction adherence asks how well the response followed the subagent instructions, and it is the one scorer that reports HIGH, LOW, or UNCERTAIN rather than a pass, a fail, or a number.[^3]
+
+Read those six together and the tiers make sense. The default tier asks whether the agent did the expected thing. The quality tier asks how well it did it, which is a different question that happens to share a grid.
+
+A note on instruction adherence, because it is the outlier. It asks a subtle question, how well the reply followed the subagent's instructions, and it answers with HIGH, LOW, or UNCERTAIN rather than a number. The UNCERTAIN value is not a failure and not a pass; it is the judge reporting that it could not tell, which usually means the instructions themselves admit more than one reading. Treat UNCERTAIN as a note that the instructions need sharpening, and it becomes the most useful of the quality signals rather than the most confusing.
+
+### The same machinery runs over prompt templates
+
+The same batch machinery runs over prompt templates as well as agents, and the scorer names change with the target. Prompt template runs are scored on coherence, conciseness, completeness, factuality, instruction following, and response match, which is a different set from the agent's default three.[^2] The mechanics stay identical: define the scorer once, apply it to every input in the batch, and read the grid column by column. One more structural point closes the picture. A turn-level case carries one utterance with its expectations, a conversation-level case carries the turns plus the expected actions for the exchange, and the scorers evaluate at whichever level the case was built for, so the same underlying agent can be measured one reply at a time or one exchange at a time.
+
+The takeaway from the prompt-template set is that the machinery is general. Assertions and judges and quality dimensions work the same way whether the subject under test is an agent or a template, and only the labels change. So when you learn to read one grid, you have learned to read both, and the exam can ask about a prompt-template scorer set knowing you will recognize the shared mechanics.
+
+## Exam Traps
+
+Three misconceptions carry the marks here. The first is believing every scorer returns a pass or a fail. Assertions do, the judge returns a score, latency returns milliseconds, and instruction adherence returns HIGH, LOW, or UNCERTAIN, so a question that asks what a scorer returns needs the scorer named before it can be answered, and a scenario that assumes one bar fits every column is already wrong. The second is believing an action assertion fails when the agent does more than expected. It passes when all expected actions occurred, so extra actions do not fail the case, and a wrong answer here is usually a tester who assumed the assertion bounded the whole action set instead of the expected subset. The third is believing the judge measures truth. It compares the reply to the expected response you wrote, so a badly written expectation produces a confident, wrong score, and improving the agent will not move a number that was never anchored to a real target.
+
+## What a consultant should walk away with
+
+Know which family a result comes from before you act on it. Assertions, meaning the subagent assertion and the action assertion, compare against an expected value and return pass or fail, while the judge scores the reply on a scale and latency reports a duration. Read the default three on every agent test, add quality scorers when you need to know how good the reply was rather than whether it passed, and add a custom scorer when your criterion is neither, using a label list for classification and open output for anything richer. Remember the exact contracts: the subagent assertion scores 1 or 0 on whether the expected subagent was chosen, the action assertion scores 1 or 0 on whether all expected actions occurred while allowing extras, and the response evaluation is a judged score anchored to the expected response you wrote. Treat that expected response field as the target the judge aims at, because it is, and open the detail panel to read the judge's reasoning before you change the agent.
+
+## What's next
+
+Lesson 48 - Scoring, Pass Lines, and Regressions: Reading a Result That Looks Ambiguous (td-2b)
+
+[^1]: Salesforce, "Default Scorers" (https://help.salesforce.com/s/articleView?id=ai.agent_studio_testing_center_default_evaluations.htm&language=en_US&type=5)
+[^2]: Salesforce, "Build and Test Observability Tools" (https://help.salesforce.com/s/articleView?id=ai.agentforce_observability_build_test_tools.htm&language=en_US&type=5)
+[^3]: Salesforce, "Use Test Results" (https://help.salesforce.com/s/articleView?id=ai.agent_testing_center_use_test_results.htm&language=en_US&type=5)
+[^4]: Salesforce, "Agentforce Testing API Metadata Reference" (https://developer.salesforce.com/docs/ai/agentforce/references/testing-api/testing-agentforce-metadata-reference.html)
+[^5]: Salesforce, "Understanding Agentforce Testing Center Results" (https://trailhead.salesforce.com/content/learn/modules/agentforce-agent-testing/view-test-results)
+[^6]: Salesforce, "Choose Evaluations" (https://help.salesforce.com/s/articleView?id=ai.agent_testing_center_evaluations.htm&language=en_US&type=5)

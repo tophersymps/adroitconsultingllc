@@ -1,0 +1,105 @@
+---
+title: "Lesson 40: What Each Agent Type Can Reach: Purpose, Build Choices, Verification, and Two Audiences"
+slug: day-40-ag-7b-what-each-agent-type-can-reach-purpose-build-choic
+series: sf-agentforce-specialist
+lesson: 40
+excerpt: "Learn what each agent type can actually reach from the identity it runs under, why the shared agent user makes security the real design work, and how to build a two-audience org as two agents with disjoint actions. Covers requirement ag-7b, \"Given a scenario, identify when to use an Employee or Service agent,\" in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Employee Agent, Service Agent, Agent User, Two-Audience Design]
+---
+
+# Lesson 40: What Each Agent Type Can Reach: Purpose, Build Choices, Verification, and Two Audiences
+
+A consultant inherited a single agent that had been built to do two jobs: answer staff IT questions inside the Salesforce app and answer customer billing questions on the company website. It had been sold internally as one assistant that did everything. On review, the two jobs could not coexist. The staff side needed to run as each employee, seeing internal articles and their own cases; the customer side needed to run as a fixed service identity that answered strangers. One agent can carry only one identity, so it was either too generous for the website or too narrow for the staff, and in this build it was both at once, which is how it ended up exposing an internal article to a customer.
+
+That failure is the design problem this objective describes. The previous lesson named the two audience types and the identity each runs under. This one asks what each type can actually reach and how the reach is built, because the answer to what an agent can do is the running user, not the conversation and not the channel. The exam tests this from the scenario side, so the lesson is written to be read as a decision drill: name the audience, name the identity, name the reach, and name the components that follow.
+
+This lesson serves requirement ag-7b, the same objective as Lesson 39, taken now from the side of reach and build. It sits in the AI Agents domain at 35 percent. By the end you can state what each agent type can reach and why, explain why the shared agent user makes the security boundary the real design work, list the components each type brings, keep context variables separate from data access, and design a two-audience org as two agents rather than one.
+
+## Deep Dive
+
+### Purpose tells you the audience, and the audience tells you the type
+
+Start with what each agent type is for, because the purpose tells you the audience and the audience tells you the type. An employee agent exists to give internal people company knowledge, run tasks, and move workflow steps across departments, so its users arrive already authenticated in Salesforce, Slack, or the mobile app. A service agent exists to handle customer and partner inquiries and to escalate the complex ones to a human, so its users arrive from outside, often with no Salesforce identity at all.[^3]
+
+A scenario phrased around enabling staff is an employee agent, and a scenario phrased around serving or deflecting customer cases is a service agent, before you ever look at the channel. This ordering matters because it is the same ordering the exam uses to build its wrong answers: a distractor will describe the right job with the wrong identity, and you only catch it if you decided the audience first.
+
+The same purpose also predicts the failure mode if you pick wrong. Put an employee agent in front of strangers and it either sees too little, because there is no logged-in user to inherit, or, if you hand it a service identity to make it work, it sees too much for a stranger. Put a service agent in front of staff and the staff lose the personal data the agent would have inherited from them. The purpose, read correctly, tells you which of those failures you are risking.
+
+The purpose also predicts the reach before you inspect a single permission. An agent built to help staff do their jobs has to see what those staff see. An agent built to answer strangers must be scoped so it sees almost nothing of any individual. Read the purpose and you already know which direction the permissions will go.
+
+### What each type can reach is set by its identity
+
+The next thing to reason about is what each agent can actually reach, because the answer is set by its identity. An employee agent inherits the running user's reach exactly: it can read and act on whatever that person can, and it cannot reach anything the person cannot, so a rep without access to an opportunity gets an agent that cannot discuss it.[^1]
+
+A service agent running as the agent user has whatever the org grants that user and nothing else, which is deliberate. The agent user is created with minimal access, and the design principle is the minimum required permissions rather than the broadest access, because the agent user is a single shared identity that speaks for every customer at once.[^2]
+
+A useful test is to ask who set the reach. For an employee agent, the reach was set by whoever configured the person's profile and permission sets, and it changes when that person moves roles. For a service agent, the reach was set by whoever configured the agent user, and it changes only when you change the agent user. The exam phrase least privilege applies to the service agent precisely because nobody else is checking that identity.
+
+That contrast is the heart of the objective. The employee agent's reach is a copy of a person's reach, and it changes as that person's access changes. The service agent's reach is a fixed grant that you designed and must review, and it does not move with any customer. When a scenario asks what an agent can reach, the answer is never the conversation and never the channel; it is whichever identity the agent runs under.
+
+### The shared agent user is why the security boundary is the real design work
+
+That shared identity is why the security boundary is the real design work. The agent user record is the one place access is granted once for all customers, so it must be scoped tightly and reviewed, and an anonymous visitor must never inherit an over-privileged service account. Every grant on that record applies to every conversation the agent holds, so a single generous grant is a single point of failure with org-wide reach.
+
+Audit attribution also differs, and this matters to a regulated org. An employee agent's action is logged against the individual user's name, while a service agent's action is logged against the agent, so when compliance asks who did something, the two types give different answers.[^3] Field-level security and sharing rules follow the same split, applying as the logged-in user for the employee agent and as the agent user for the unverified service agent.
+
+So the design work for a service agent is not the conversation flow; it is the agent user's permission set. Review it the way you would review a highly privileged integration user, because that is effectively what it is: one account acting on behalf of everyone.
+
+That is also why a service agent's permissions are a deliverable, not a detail. A record of which objects, fields, and actions the agent user may touch belongs with the agent's design, so the next admin can tell a deliberate grant from an oversight. A service agent shipped without that record is a service agent nobody can safely change.
+
+### The choice changes the build surface, not just the security model
+
+The choice changes the build surface, not just the security model. A service agent brings the Messaging and Omni-Channel stack, Prompt Builder for its generated replies, the Agentforce Data Library of knowledge, an escalation handoff to a human, and a customer verification subagent that can store the confirmed identity in a variable after the customer proves who they are.[^4] An employee agent brings the in-app assistant panel, deployment to Slack and mobile, and role-based tasks built from actions the employee already has permission to run.[^4]
+
+Pick the type and the required components largely choose themselves, which is why naming the components is a way of naming the type. A scenario that mentions Omni-Channel routing and an escalation to a human is describing a service agent. A scenario that mentions the Slack assistant panel and tasks built from the employee's own permissions is describing an employee agent.
+
+Keep this as a reading skill rather than a list to memorize. The components are evidence of the audience, and when a scenario lists components, it has usually told you the type twice, once by the job and once by the parts.
+
+### Context variables say who the user is, the running user says what they reach
+
+Identity across the conversation is where the two types diverge in a way that trips candidates. Context variables such as the messaging session's contact id tell the agent who the user claims to be, but they do not control what the agent can read.[^1] Data access is governed by the running identity, so for an unverified external conversation the agent user's grants still decide.
+
+Once credential-based verification succeeds, the platform can store the verified customer id in a variable and switch the session to the logged-in site user's access for the rest of the conversation. The exam distinction is that context tells the agent who the person is, while the running user or the verification governs what the agent may reach. Those are two different questions, and conflating them is the single most common error on this objective.
+
+State the separation in one line and carry it into every scenario: context is identity, the running user is access. A scenario that says the contact id is set correctly, then asks why the agent still cannot see an order, is testing whether you know that the contact id alone grants nothing.
+
+### Two-audience designs are built as two agents
+
+Two-audience designs are common and the exam tests the shape, so build them deliberately. When one company needs both staff help and customer service, you configure two agents with non-overlapping subagents rather than one agent that tries to serve both, because the running user differs and a single agent cannot act as an internal person and an external visitor at once.
+
+Do not split by channel alone: the split follows the audience and the identity. Give the employee agent the internal knowledge and workflow subagents, give the service agent the customer-facing subagents and escalation, and keep their action lists disjoint so neither can reach the other audience's data. The disjoint action list is the concrete test of a clean split, because two agents that share an action that reads internal data will eventually leak it through the customer-facing one.
+
+Keep the audiences' knowledge sources separate as well as their actions. An employee agent grounds on internal articles that a customer must never see, and a service agent grounds on published help content that is safe to share. If both point at the same library, the customer-facing agent inherits whatever the internal library holds, and the split you designed in actions is undone at the knowledge layer.
+
+Read the scenario for the tell: a single agent described as serving both staff and customers is a wrong answer by construction, and the correct answer names two agents with separate identities and separate actions.
+
+### Test the split: prove neither agent can reach the other audience
+
+Close the design with a test rather than an assumption. Test that the service agent cannot reach internal-only data and the employee agent cannot act for an external visitor, and test the employee agent under a representative low-access employee rather than under your administrator login, because the employee agent inherits that person's access and a generous test identity will hide every gap.[^5] For the service agent, test under the agent user's actual permissions, not under a profile that resembles them.
+
+Write the two tests down as acceptance criteria, because a two-audience build is not finished until both pass. The employee test is that a representative employee can complete the internal task the agent was built for, with the agent showing exactly that employee's data. The service test is that an anonymous visitor can complete the external task, with the agent showing nothing that belongs to any individual customer.
+
+This is the same builder-versus-production discipline from the security context lessons, applied to the audience decision. A two-audience build is only correct when each side's reach has been proven from the identity it will actually carry, so the test is part of the design, not a step after it.
+
+The exam-side value of the test is that it forces you to name the identity behind each claim. When you say the service agent cannot reach internal data, you mean the agent user has no grant to it. When you say the employee agent cannot act for an external visitor, you mean it runs as a logged-in internal user. Naming the identity turns an assertion into a verifiable statement, which is exactly what the scenario questions reward.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing an employee agent can be exposed to external users just by placing it on a site, when it still needs a logged-in internal user, so the audience follows the running user rather than the page you put it on. The second is believing context variables such as the messaging contact id control data access, when they tell the agent who the user is but do not govern what the agent can read, which the agent user grants or the verification decides. The third is believing one agent can serve staff and customers together, when the running user differs between the two audiences, so you build two agents with non-overlapping subagents instead.
+
+## What a consultant should walk away with
+
+Read a scenario for its purpose first, because purpose names the audience and the audience names the type. Then state the reach from the identity: an employee agent copies the logged-in person's access exactly, while a service agent has only the fixed grants on the agent user. Treat the agent user as the real design surface, because it speaks for every customer at once, and review it like a privileged integration user. Expect the components each type brings, Omni-Channel, escalation, verification, and the data library for a service agent, and the assistant panel and Slack for an employee agent. Keep context variables, which say who the user is, separate from the running user, which says what they reach, and remember that credential-based verification is what moves a service agent onto the customer's own access. When both audiences exist, build two agents with disjoint actions and separate knowledge, and prove each side's reach from the identity it will actually carry.
+
+## What's next
+
+Lesson 41 - Decision Drill: Choosing an Employee or a Service Agent From the Scenario (ag-7c)
+
+[^1]: Salesforce, "Agent Execution Context and Data Access by Type" (https://help.salesforce.com/s/articleView?id=ai.agent_execution_data.htm&language=en_US&type=5)
+[^2]: Salesforce, "Best Practices for Agent User Permissions" (https://help.salesforce.com/s/articleView?id=ai.agent_user.htm&type=5)
+[^3]: Salesforce, "Agent Types and Considerations" (https://help.salesforce.com/s/articleView?id=ai.agent_setup_explore_types.htm&language=en_US&type=5)
+[^4]: Salesforce, "Create an Agent" (https://help.salesforce.com/s/articleView?id=ai.agent_setup_create.htm&language=en_US&type=5)
+[^5]: Salesforce, "Common User Access for Standard Agent Actions" (https://help.salesforce.com/s/articleView?id=ai.agent_actions_common_perms.htm&language=en_US&type=5)

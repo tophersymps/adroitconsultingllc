@@ -1,0 +1,94 @@
+---
+title: "Lesson 34: Topic Selection and Action Descriptions at Run Time"
+slug: day-34-ag-4b-topic-selection-and-action-descriptions-at-run-tim
+series: sf-agentforce-specialist
+lesson: 34
+excerpt: "Learn how the classification description picks the topic and the action names, descriptions, and inputs pick the tool, and how to fix whichever layer actually failed at run time. Covers requirement ag-4b in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Agentforce Topics, Agent Actions, Classification Description, Plan Tracer]
+---
+
+# Lesson 34: Topic Selection and Action Descriptions at Run Time
+
+A customer types "please cancel my subscription, I moved to a competitor" into a web chat, and the agent cheerfully pulls up their last invoice and asks if they need a copy. In the release meeting the next morning, someone says the model is confused, and the room nods. Nobody looks at the two topics that were both written to catch anything about accounts, because the overlap is invisible when you read each topic on its own. The agent did not reason badly. It reasoned perfectly over a set of descriptions that gave it two doors into the same room.
+
+The cause is that topic selection and action selection are two separate decisions that run at different levels, and the natural language at each level is what drives them. The topic's classification description decides which door a request walks through. Inside that topic, the action's name, description, and input and output definitions decide which tool fires. When a request lands in the wrong place, or a tool fires that should not have, the fault is almost always in one of those descriptions, and the fix belongs at the layer that failed rather than in a longer prompt.
+
+This lesson serves requirement ag-4b in the AI Agents domain, which carries 35 percent of the exam. You will learn how an agent selects a topic and then an action at run time, why most misrouting is overlap or vagueness rather than a broken model, and how to choose between reusing a standard action and building a custom one. The exam frames this as a scenario skill, so the win is diagnostic: given a symptom, name the layer and the fix.
+
+## Deep Dive
+
+### At run time the agent picks a door, then a tool inside it
+
+At run time the agent does not search a flat list of every action. It first selects a relevant topic, then chooses and launches one or more actions inside that topic [^1]. The routing into a topic runs on the topic's classification description, which the reasoning engine reads against the user's request. Only once the agent is inside a topic do the scope and the topic instructions shape what it does next. That ordering is the whole mechanism: the classification description decides which door the request walks through, and everything inside the topic decides how the job is done [^2].
+
+That sequence has a consequence candidates often miss. An action is reachable only if it is attached to the topic the request lands in, no matter how well that action is written [^3]. If the correct tool lives under a topic the request never entered, the agent cannot call it, and no action-level tuning will help. This is why the first diagnostic question on any routing bug is not what the action does but whether the request arrived in the topic that owns the action.
+
+So read every request as two decisions stacked. The outer decision is classification, made from the topic names and classification descriptions the agent compares against the user's input and the recent conversation history. The inner decision is tool choice, made from the actions available inside the topic the agent chose. When a request lands in the wrong topic, or in no topic at all, the first thing to inspect is the set of classification descriptions for overlap, vagueness, or territory that nobody claimed.
+
+### Most misrouting is overlap you wrote, not a model that broke
+
+Most misrouting is overlap, not a broken model. If two topics both plausibly describe a request, the classifier has to guess, and it guesses by whichever description matches most closely. The fix is to make each classification description say what the job is in terms the other jobs do not also match. A topic about order status should not read as though it also covers returns. When you write these descriptions, imagine the request that sits exactly between two topics and make sure one description clearly owns it [^1].
+
+Salesforce markets the capacity to create custom topics precisely so you can carve the boundary sharply. A broad topic that overlaps three others is the single most common reason an agent behaves inconsistently, because the same sentence can lean one way or the other depending on the phrasing and the conversation before it. The remedy is not to make the descriptions longer, which tends to add more shared vocabulary, but to make them narrower and distinct, using the words the user actually says for each job and only that job.
+
+The scope field is the second half of the fix. Where the classification description pulls requests in, the scope states what the agent should and should not do inside the job, so borderline requests route to the topic that owns them [^1]. A topic that says plainly that it handles password resets and cannot modify account details other than passwords gives the classifier a boundary to respect. Write the two together, and then check them against the neighbor topics, because overlap is a property of the whole set and never of one description in isolation.
+
+### Action names and descriptions are the model's only map
+
+Action selection works the same way one level down, and it leans on the action's name, its description, and its input and output descriptions. The model distinguishes actions largely by their names and descriptions, which is why Salesforce tells you to avoid similarly named actions and to vary the verbs: Locate Project Details and Retrieve Task Information separate cleanly, whereas Get Project Details and Get Task Details blur together [^3]. Vary the verb and the noun so two actions do not read as paraphrases of each other.
+
+The action description should run one to three sentences and say what the action does, what goal it serves, and its scope, including what happens when the record is not found [^3]. That last clause is easy to skip and surprisingly useful, because it tells the model the action's edge behavior before it commits. Nested guidance written directly into the action keeps the instruction payload small and the choice clearer, which is the same reason narrow beats broad at the topic level.
+
+When two actions in a topic still look interchangeable, the honest read is that one of them is redundant. Two actions that both fetch a customer and both accept an identifier will compete, and the model's choice between them will be effectively random. Collapse them into one action with a clear name, or separate what they actually do so the names and descriptions no longer overlap. A topic with six action names that each describe a distinct tool is far easier for the model to navigate than a topic with six names that could all mean the same thing.
+
+### Describe inputs and outputs, and name the action that must run first
+
+Inputs and outputs are part of how the model picks and wires an action, so describe them precisely. Each input needs a name, a type, and a plain description of where its value comes from, whether from a prior action or from the user [^3]. Each output needs a description of what it returns. When the descriptions are thin, the agent can pick the correct action and still call it with the wrong parameter, and the resulting failure looks like a logic bug when it is really a description bug.
+
+The dependency case is where this pays off most. When one action depends on another running first, say so in the instructions, for example by naming the action that provides the account Id the second action needs [^3]. Without that guidance, the agent has no reason to know that the lookup must precede the update, and it can fire the update with an empty identifier. Naming the provider action turns an assumption into an instruction the model can follow. The more precisely you describe the data in and out, the less often the agent calls the right action with the wrong parameters.
+
+Validation of input format belongs inside the action, in the Flow or the Apex, because that is deterministic; leaning on topic instructions to enforce a format is unreliable [^3]. If a phone number must match a pattern or an order number must exist, the action is where that guarantee lives, because a rule the model is merely asked to honor is not enforced. Describe the input so the model knows what to pass, and validate the input where it always runs, and the two working together remove a whole category of production failures.
+
+### When a custom action beats reusing a standard one
+
+The choice between reusing a standard action and building a custom one follows from what the action must touch. A standard action fits when the job is generic and the tool already does exactly what you need. A custom action wins when the action must reach your org's specific objects, enforce your business rules, or hit a system of record the standard tool does not know about, because the custom action lets you put that logic where it always runs [^3].
+
+Build the custom action from a Flow, Apex, a prompt template, an External Service, or a MuleSoft API, choosing the builder by where the logic already lives [^3]. Building a custom action is not free: it inherits the access and run context of the asset behind it, and you own its maintenance. So the discipline is to reuse the standard action when it genuinely serves the job and to build only when the standard tool would force a workaround, because a workaround pushed into topic instructions is exactly the fragile design this domain keeps warning against.
+
+Read the build question as a question about where the logic must be exact. If the standard action already touches the right objects and enforces the right rules, reuse it and save the maintenance. If the standard action would leave your rule in natural language, or reach a system it cannot see, that gap is the signal to build, because the custom action is the only place the rule can run the same way every time.
+
+### Sort the failure into a bucket before you change anything
+
+Debugging reasoning is a distinct skill from debugging an action. The Plan Tracer in Agentforce Builder shows the steps the agent took for a request, so you can see which topic it entered and which actions it considered and chose [^2]. Testing Center runs defined scenarios against the agent to check that it selects the correct topics and actions across inputs [^4]. Before you change any configuration, use them to sort the failure into a bucket.
+
+The three buckets map to the three layers. If the agent never enters the right topic, the classification description is the suspect. If it enters the right topic but fires the wrong action, the action names and descriptions are the suspect. If it fires the right action but the result is wrong, the Flow or the Apex is the suspect [^2]. Sorting the failure into one of those three is how you fix the right layer instead of guessing, and it is the difference between a ten-minute correction and a week of prompt rewriting that never touches the real fault.
+
+The exam tests this diagnostic framing directly, so practice saying the bucket out loud. A stem that describes an agent handling a request in the wrong area is a classification-description problem. A stem that describes the agent taking the wrong tool for a correctly understood request is an action-description problem. A stem that describes a correct tool returning a wrong answer is a tool-logic problem. Naming the layer is most of the answer.
+
+### Design the fallback so nothing is a dead end
+
+Design a fallback so the agent has a defined path when nothing matches well. Escalation topics and handoff instructions give the agent somewhere to go when the request is out of scope or the confidence is low, which avoids a dead end in front of a customer [^1]. A well-built service agent does not improvise its way through an unknown request; it hands the conversation to a topic or a person that is equipped for it.
+
+Keep the fallback explicit in the instructions so the agent escalates rather than improvising an action it was never meant to run. An agent with no fallback will reach for the closest available action and produce a confident answer to a question it was never designed to answer, which is worse than admitting it cannot help. The escalation path is part of the design, not an afterthought, and it should be tested with the same scenarios that exercise the main topics.
+
+The exam frames topic and action selection as a scenario choice about which asset to use and how to describe it, so the winning reasoning names the mechanism: the classification description selects the topic, the action descriptions and names select the action, and the fallback handles what neither should handle. Hold those three pieces together and every routing symptom has an owner.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing the agent searches all actions at once: it selects a topic first and only then chooses actions inside that topic, so an action is unreachable if it is not attached to the topic the request lands in [^3]. The second is believing two similarly named actions are harmless: the model distinguishes actions largely by name and description, so near-duplicate names blur the choice, and the fix is to vary the verbs and describe each action distinctly [^3]. The third is believing a confusing result means the model is broken: misrouting is usually overlap or vagueness in the classification descriptions, so fix the descriptions before you change the agent, because the agent is reasoning correctly over bad boundaries [^1].
+
+## What a consultant should walk away with
+
+Read the symptom, name the layer. The classification description selects the topic, so make each one distinct and give its scope a boundary; overlap between topics is the leading cause of inconsistent routing. The action names, descriptions, and input and output definitions select the tool, so keep names verb-led and unlike each other, describe what each action does and what happens when a record is missing, and name any action that must run first. Put format validation and deterministic rules inside the Flow or the Apex, not in the instructions, because that logic must always run the same way. Reuse a standard action when it already touches your objects and enforces your rules; build a custom one when it would leave a rule in natural language or reach a system the standard tool cannot see. Give the agent an explicit fallback for out-of-scope requests, and use the Plan Tracer and Testing Center to sort every failure into the topic layer, the action layer, or the tool layer before you change anything.
+
+## What's next
+
+Lesson 35 - Connecting an Agent to Channels: Lightning, Messaging, Email, Voice, and Slack (ag-5a)
+
+[^1]: Salesforce, "Agent Topics" (https://help.salesforce.com/s/articleView?id=ai.copilot_topics.htm&language=en_US&type=5)
+[^2]: Salesforce, "The Building Blocks of Agents" (https://help.salesforce.com/s/articleView?id=sf.copilot_building_blocks.htm&language=en_US&type=5)
+[^3]: Salesforce, "Create a Custom Action" (https://help.salesforce.com/s/articleView?id=ai.agent_actions_custom.htm&language=en_US&type=5)
+[^4]: Salesforce, "Agentforce Testing Center" (https://help.salesforce.com/s/articleView?id=ai.agent_testing_center.htm&type=5&language=en_US)

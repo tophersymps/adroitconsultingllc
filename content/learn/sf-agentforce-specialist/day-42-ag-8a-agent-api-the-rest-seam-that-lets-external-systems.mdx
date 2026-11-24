@@ -1,0 +1,93 @@
+---
+title: "Lesson 42: Agent API: The REST Seam That Lets External Systems Talk to an Agent"
+slug: day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems
+series: sf-agentforce-specialist
+lesson: 42
+excerpt: "Learn what the Agent API exposes, how an external system starts and continues an agent session, and the authentication and session choices that decide whether it is the right seam for a program. Covers requirement ag-8a, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Agent API, REST, Agent Session, Integration]
+---
+
+# Lesson 42: Agent API: The REST Seam That Lets External Systems Talk to an Agent
+
+A developer is asked to let the company's order system ask the support agent whether a return is eligible. He opens a terminal, copies the instance URL from My Domain into a curl command, posts a start session call against it, and gets back an HTML page that says the URL no longer exists. The agent is healthy, the token is valid, and the topic is configured. The base URL is simply wrong, and the platform answered with a web page instead of JSON because the request missed the API host entirely.
+
+Agent API is served from a fixed platform host, not from your org's instance. The instance endpoint travels inside the session payload, not in the URL. That split trips up integration teams because almost every other Salesforce REST call they know targets the My Domain instance, so they carry the habit across and point Agent API at the wrong place. The fix is small, but the exam plants it because it is the most common wrong answer in this objective.
+
+This lesson covers what Agent API exposes, how an external system starts and continues a session, and what the authentication and session choices decide about whether the API is the right seam at all. It serves requirement ag-8a, "Given a scenario, identify when it's appropriate to use Agent API," in the AI Agents domain, which carries 35 percent of the exam. By the end you can state the base URL and the path from memory, walk the session lifecycle, set the running identity field correctly, and name the cases where a native channel or a Flow callout is the better answer.
+
+## Deep Dive
+
+### Agent API is the door a program knocks on, not a chat widget
+
+Agent API is the REST interface that lets an external system communicate with an agent in your org. Where a channel like enhanced messaging serves a human typing in a widget, Agent API serves a program. It gives a caller outside Salesforce access to the agent's topics and actions by accepting messages and returning the agent's response, so the caller can hand the agent a request and receive the agent's reasoned answer plus any structured output its actions produced.[^1] The developer guide frames it plainly: use the Agent API to communicate with AI agents directly from a REST API, and start sessions, send messages, receive messages, and end sessions.
+
+The distinction that matters for scoping is that Agent API is a seam for software, not a replacement for a user interface. A chatbot widget needs typing indicators, reconnect behavior, and abuse protection, and it needs someone to build and host all of that. A service that wants one structured value back needs none of it. Agent API assumes the caller is a program that already knows what to do with a JSON response. That assumption is why the same agent can sit behind both a channel and the API without changing its topics or actions: only the seam moves, and the reasoning behind it stays the same.
+
+### The base URL is fixed, and the instance endpoint lives inside the session
+
+The Agent API base is always https://api.salesforce.com, and the agent endpoints live under the /einstein/ai-agent/v1 path, not under your instance URL. This is the single most common wrong answer the exam plants, because every other REST call a Salesforce developer knows targets the org's My Domain instance. For Agent API the roles reverse: the API host is a fixed platform host, and your org's instance endpoint is a value you pass inside the session payload.
+
+The reference documents the start session call as a POST to https://api.salesforce.com/einstein/ai-agent/v1/agents/{id}/sessions, and the message call as a POST to https://api.salesforce.com/einstein/ai-agent/v1/sessions/{session-id}/messages.[^1] Government Cloud orgs substitute api.gov.salesforce.com for api.salesforce.com across every endpoint, with the path and request format otherwise identical.[^3] A team that uses the instance URL as the base gets back an HTML error page rather than a JSON response, which is the symptom to recognise when an integration claims it cannot find the agent.
+
+The practical consequence is portability. Because the host is fixed, the same integration code can point at a sandbox or a production org by changing only the instance endpoint inside the session payload. That design is why the instance endpoint is a session field and not a base URL, and why the exam treats the two as separate facts. Memorise the base host and the path cold, and treat the instance endpoint as session data rather than as part of the address.
+
+### A session has a lifecycle: start, message, end, and feedback
+
+The surface is built around a session lifecycle, and the exam expects you to know the phases. You start a session by posting to the agents endpoint with the agent's id, and the response returns a session id you reuse for the conversation.[^5] You send a message to the session, synchronously or as a stream. You end the session when the conversation is done. You can also submit feedback on a message, keyed by a feedback id and a rating, and that feedback is stored in Data 360.[^1]
+
+The five endpoints are start session, send message synchronous, send message streaming, end session, and submit feedback.[^1] The message and feedback endpoints carry the session id in the path, while the start session endpoint carries the agent id. The agent id is the eighteen character id at the end of the agent details page URL in Setup.[^4] Every call carries a bearer token in the Authorization header, and the streaming send message endpoint additionally expects an Accept header of text/event-stream because its response is a server sent event stream.
+
+The lifecycle framing is load bearing because a session is billable, stateful, and time bound. The API has a 120 second timeout, and a call that exceeds it returns an HTTP 500.[^3] So the caller treats each call as bounded work: open the session, take the turns it needs, and close it. Leaving a session open and opening a fresh session per message break the model in two opposite ways, one by holding a resource the org is paying for and one by discarding the context the agent would otherwise carry between turns.
+
+### Authentication starts before the first call
+
+Authentication is the heart of the Agent API story, and it starts before any call. You create a Salesforce external client app in your org for the integration, enable the client credentials flow, and generate a token, then send that token as a bearer value on each request.[^2] The client credentials flow is enough to get a first call working, though the guide notes you can use any flow that provides a JWT based access token.
+
+The scopes tell you what the integration needs. A working external client app for Agent API uses api to manage user data via APIs, refresh_token and offline_access to perform requests at any time, chatbot_api to access chatbot services, and sfap_api to reach the Salesforce API Platform.[^2] The app also sets a Run As user, and that user should have at least API Only access so the integration runs under a dedicated identity rather than a person's account. The token you create with the consumer key, the consumer secret, and the domain comes back as a JWT, and the token response even reports that api_instance_url is https://api.salesforce.com, which is the base URL restated by the platform itself.[^2]
+
+The exam relevant point is that the identity a token carries is the thing you reason about next. Because the base URL is the fixed platform host, the session still needs to know which org it belongs to, and because the token carries a user, the session needs to know whose access governs. Those two questions, which org and which user, are exactly what the session payload answers.
+
+### The running identity field decides whose access governs the session
+
+The start session payload carries a field called bypassUser, and it is the field the exam builds a question around. If bypassUser is true, the session uses the user associated with the agent, which is the agent user. If bypassUser is false, the session uses the user associated with the token. The field defaults to false.[^1] The documentation is explicit that a client credentials flow should set it to true, because that flow has no interactive user behind the token.
+
+Reason about it from the flow, not from the name. When the integration authenticates with client credentials, there is no person to run as, so the session should run as the agent's own user, and bypassUser is true. When the integration carries a specific person's identity and that person's access should govern, bypassUser stays false so the token's user is the running identity. Getting this backwards is how an integration silently runs with too much or too little access, and the failure is quiet: the agent answers, but as the wrong identity, reaching the wrong records.
+
+This connects the Agent API seam to the agent types you met earlier in the domain. The agent user that bypassUser selects when it is true is the same dedicated identity a Service agent runs as. So an Agent API integration with client credentials and bypassUser true is the program's route to an agent that runs as the agent user, while a token that carries a person and leaves bypassUser false routes the session to that person's access instead.
+
+### The start session payload carries the context the reasoning begins from
+
+The start session payload carries the fields that decide how the session behaves. externalSessionKey is a UUID you supply so the conversation can be traced in the agent's event logs. instanceConfig.endpoint names your Salesforce instance. variables is an array of context and custom agent variables passed in at session start, and context variables carry a $Context prefix. The session can also declare synchronous or streaming message handling through the featureSupport enum, whose values are Sync and Streaming.[^1]
+
+Treat the variables array as write once at the session boundary. Many agent variables are read only and can only be set during the start session call, and by default context variables with the $Context prefix are not editable after the session starts, with the exception of the end user language variable. You can modify editable variables during a send message call, but the context you want the reasoning to start from belongs in the start session request, not in the first message.[^1] When a variable comes from a custom field, you drop the __c suffix and address it with the $Context prefix, so Conversation_Key__c becomes $Context.Conversation_Key.[^1]
+
+This is the seam where an external system injects the CRM context the agent will reason over. If the agent needs to know the account, the entitlement, or the prior interaction before it answers, the caller sets those variables in the start session call. A caller that tries to set context after the session has started finds that the read only variables are already fixed, and the agent reasons from less than the caller intended. Pass the starting context with the session, and the first message carries only the question.
+
+### When Agent API is the right seam, and when it is not
+
+The closing fact is when Agent API is the right tool at all. Reach for it when an external system, a service, or another org needs to invoke the agent programmatically and receive its structured response as part of a larger workflow. Do not reach for it when a human is chatting through a native Salesforce channel that already handles authentication, identity propagation, rate limiting, and abuse protection, because there you would be rebuilding protections the channel gives you for free.
+
+And do not reach for it when the caller is already inside Salesforce and an AI Agent action in Flow would do, because then the agent runs under the running user with no external token to obtain and no session object to manage. The judgment reduces to a small set of questions: is the caller outside Salesforce, and is it a human or a system. A system outside Salesforce is Agent API. A human on a native channel is the channel. A caller inside Salesforce is a Flow callout, and a caller that is an MCP client has its own path that manages sessions.
+
+One product-state caveat belongs here as a fact rather than a rule. Agent API is not supported for agents of the retired Agentforce (Default) type, so a scoping conversation that lands on the default needs the migration to an Employee agent before any API plan makes sense.[^3] Keep that in view when you are asked to expose an existing agent and the existing agent turns out to be the retired default.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing the Agent API base URL is your instance URL. It is always api.salesforce.com, and the instance endpoint belongs inside the start session payload instead, which is why a request to the instance host returns an HTML error page rather than JSON. The second is believing bypassUser can be ignored: set it true when the integration uses the client credentials flow so the session runs as the agent user, and leave it false when the token's user should govern, because a wrong value makes the agent answer as the wrong identity. The third is believing context variables can be changed freely after the session starts: most are read only once the session begins, so pass the starting context in the start session call and let the first message carry only the question. Each trap turns on a single field or path, which is why the exam keeps reaching for them.
+
+## What a consultant should walk away with
+
+Fix the base URL at api.salesforce.com and put the agent endpoints under the /einstein/ai-agent/v1 path, then pass your org's instance endpoint inside the session payload rather than using it as the address. Walk the lifecycle in order: start a session with the agent id and an externalSessionKey, send messages against the returned session id, end the session when the conversation is done, and submit feedback keyed by a feedback id when the integration collects a rating. Authenticate with an external client app before the first call, set a Run As user with API Only access, and send the resulting bearer token on every request. Set the running identity field to true for a client credentials integration so the session uses the agent user, and leave it false when a token carrying a specific person should govern. Set the context variables the reasoning needs at session start, because the read only ones will not move afterward. Then make the final call on the seam: a system outside Salesforce is Agent API, a human on a native channel is the channel, and a caller already inside Salesforce is a Flow callout.
+
+## What's next
+
+Lesson 43 - Calling Agent API from an External System: Sessions, Identity, and When It Is the Right Seam (ag-8b)
+
+[^1]: Salesforce, "Agent API Reference," (https://developer.salesforce.com/docs/ai/agentforce/references/agent-api?meta=summary)
+[^2]: Salesforce, "Get Started with the Agent API," (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-api-get-started.html)
+[^3]: Salesforce, "Agent API Considerations," (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-api-considerations.html)
+[^4]: Salesforce, "Agent API Examples," (https://developer.salesforce.com/docs/einstein/genai/guide/agent-api-examples.html)
+[^5]: Trailhead, "Build Custom AI Agents with Agent API," (https://trailhead.salesforce.com/content/learn/modules/agent-api-quick-look/build-custom-ai-agents-with-agent-api)

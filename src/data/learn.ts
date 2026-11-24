@@ -558,9 +558,281 @@ export const learnSeries: LearningSeries[] = [
           "Agentforce"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-33-ag-4a-standard-and-custom-topics-and-actions-the-agentfo",
+        "title": "Lesson 33: Standard and Custom Topics and Actions: The Agentforce Building Blocks",
+        "series": "sf-agentforce-specialist",
+        "lesson": 33,
+        "excerpt": "Learn how to name the job an agent does, list the tools that job needs, and decide when a shipped standard topic or action fits and when to build a custom one. Covers requirement ag-4a in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "22 min read",
+        "tags": [
+          "Agentforce Topics",
+          "Agent Actions",
+          "Agentforce Builder",
+          "Agent Design"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-34-ag-4b-topic-selection-and-action-descriptions-at-run-tim",
+        "title": "Lesson 34: Topic Selection and Action Descriptions at Run Time",
+        "series": "sf-agentforce-specialist",
+        "lesson": 34,
+        "excerpt": "Learn how the classification description picks the topic and the action names, descriptions, and inputs pick the tool, and how to fix whichever layer actually failed at run time. Covers requirement ag-4b in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agentforce Topics",
+          "Agent Actions",
+          "Classification Description",
+          "Plan Tracer"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-35-ag-5a-connecting-an-agent-to-channels-lightning-messagin",
+        "title": "Lesson 35: Connecting an Agent to Channels: Lightning, Messaging, Email, Voice, and Slack",
+        "series": "sf-agentforce-specialist",
+        "lesson": 35,
+        "excerpt": "Learn how connections put one agent onto several surfaces, which channels each agent type supports, and why email and voice behave so differently from a live chat window. Covers requirement ag-5a in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agentforce Channels",
+          "Agent Connections",
+          "Agentforce Voice",
+          "Messaging"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-36-ag-5b-channel-identity-session-and-context-what-each-cha",
+        "title": "Lesson 36: Channel Identity, Session, and Context: What Each Channel Can Carry",
+        "series": "sf-agentforce-specialist",
+        "lesson": 36,
+        "excerpt": "Learn to ask three questions of every channel, who the user is, whether there is a live session, and what context travels, and to design the agent for the answers. Covers requirement ag-5b in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Agentforce Channels",
+          "Agent Identity",
+          "Conversation Context",
+          "Session Handling"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-37-ag-6a-the-agents-security-context-and-how-it-shapes-acti",
+        "title": "Lesson 37: The Agent's Security Context and How It Shapes Action Execution",
+        "series": "sf-agentforce-specialist",
+        "lesson": 37,
+        "excerpt": "Learn how an Agentforce agent runs under a security context, whose identity and permissions decide what each action can actually reach at run time, and why an action that works in the builder can fail for a real user. Covers requirement ag-6a, \\\"Explain the security context in which the agent is actually running, and how it impacts agent action execution,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent Security",
+          "Running User",
+          "Einstein Trust Layer",
+          "Agentforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-38-ag-6b-running-user-permissions-action-execution-context",
+        "title": "Lesson 38: Running User Permissions, Action Execution Context, and the Trust Layer Boundary",
+        "series": "sf-agentforce-specialist",
+        "lesson": 38,
+        "excerpt": "Learn how to trace a failing agent action back to the identity it runs as and the execution context it runs in, and how to place the Einstein Trust Layer at the model boundary rather than the data boundary. Covers requirement ag-6b, \\\"Explain the security context in which the agent is actually running, and how it impacts agent action execution,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Agent Security",
+          "Run Context",
+          "Execution Context",
+          "Einstein Trust Layer"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-39-ag-7a-employee-agents-and-service-agents-the-two-audienc",
+        "title": "Lesson 39: Employee Agents and Service Agents: The Two Audience Types and What Separates Them",
+        "series": "sf-agentforce-specialist",
+        "lesson": 39,
+        "excerpt": "Learn how an Agentforce Employee agent and a Service agent differ by audience, running user, and channel, and how to read a scenario to pick the right one, including the credential-verification case and the retired templates to reject. Covers requirement ag-7a, \\\"Given a scenario, identify when to use an Employee or Service agent,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Employee Agent",
+          "Service Agent",
+          "Agent Types",
+          "Agentforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-40-ag-7b-what-each-agent-type-can-reach-purpose-build-choic",
+        "title": "Lesson 40: What Each Agent Type Can Reach: Purpose, Build Choices, Verification, and Two Audiences",
+        "series": "sf-agentforce-specialist",
+        "lesson": 40,
+        "excerpt": "Learn what each agent type can actually reach from the identity it runs under, why the shared agent user makes security the real design work, and how to build a two-audience org as two agents with disjoint actions. Covers requirement ag-7b, \\\"Given a scenario, identify when to use an Employee or Service agent,\\\" in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Employee Agent",
+          "Service Agent",
+          "Agent User",
+          "Two-Audience Design"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-41-ag-7c-decision-drill-choosing-an-employee-or-a-service-a",
+        "title": "Lesson 41: Decision Drill: Choosing an Employee or a Service Agent From the Scenario",
+        "series": "sf-agentforce-specialist",
+        "lesson": 41,
+        "excerpt": "Learn how to read a scenario and name the agent type from the audience and the running identity, so a portal login and an internal chat surface stop pulling you toward the wrong answer. Covers requirement ag-7c, given a scenario, identify when to use an Employee or Service agent, in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Employee Agent",
+          "Service Agent",
+          "Agent Types",
+          "Decision Drill"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems",
+        "title": "Lesson 42: Agent API: The REST Seam That Lets External Systems Talk to an Agent",
+        "series": "sf-agentforce-specialist",
+        "lesson": 42,
+        "excerpt": "Learn what the Agent API exposes, how an external system starts and continues an agent session, and the authentication and session choices that decide whether it is the right seam for a program. Covers requirement ag-8a, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent API",
+          "REST",
+          "Agent Session",
+          "Integration"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-43-ag-8b-calling-agent-api-from-an-external-system-sessions",
+        "title": "Lesson 43: Calling Agent API from an External System: Sessions, Identity, and When It Is the Right Seam",
+        "series": "sf-agentforce-specialist",
+        "lesson": 43,
+        "excerpt": "Learn how an external system calls the Agent API, which session pattern fits each interaction, which OAuth flow carries the right identity across the boundary, and when the API is the correct seam at all. Covers requirement ag-8b, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Agent API",
+          "Sessions",
+          "OAuth",
+          "Identity"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-44-ag-8c-decision-drill-agent-api-versus-a-standard-channel",
+        "title": "Lesson 44: Decision Drill: Agent API Versus a Standard Channel or a Flow Callout",
+        "series": "sf-agentforce-specialist",
+        "lesson": 44,
+        "excerpt": "Learn to read a scenario for where the caller sits and who owns the protections, so you can choose between the Agent API, a native channel, and a Flow callout that never leaves Salesforce. Covers requirement ag-8c, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent API",
+          "Flow Callout",
+          "Channels",
+          "Decision Drill"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-45-td-1a-testing-an-agent-in-testing-center-test-sets-data",
+        "title": "Lesson 45: Testing an Agent in Testing Center: Test Sets, Data Modes, and the Setup Path",
+        "series": "sf-agentforce-specialist",
+        "lesson": 45,
+        "excerpt": "Learn how a batch test suite in Agentforce Testing Center validates an agent's routing, actions, and replies before release. Covers requirement td-1a, \\\"Given a scenario, test an agent using Testing Center.\\\", in the Testing, Deployment, and Maintenance domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Agent Testing",
+          "Testing Center",
+          "Test Sets",
+          "Agentforce"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-46-td-1b-building-a-test-set-from-real-conversations-what-a",
+        "title": "Lesson 46: Building a Test Set from Real Conversations: What a Passing Result Proves",
+        "series": "sf-agentforce-specialist",
+        "lesson": 46,
+        "excerpt": "Learn how to build a Testing Center test set from real production utterances, and read exactly what a green suite does and does not prove. Covers requirement td-1b, \\\"Given a scenario, test an agent using Testing Center.\\\", in the Testing, Deployment, and Maintenance domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent Testing",
+          "Test Sets",
+          "Session Trace",
+          "Regression"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-47-td-2a-how-testing-center-evaluations-work-scorers-assert",
+        "title": "Lesson 47: How Testing Center Evaluations Work: Scorers, Assertions, and the Judge",
+        "series": "sf-agentforce-specialist",
+        "lesson": 47,
+        "excerpt": "Learn how Testing Center scores a run: the default, quality, and custom scorer tiers, and the difference between deterministic assertions and a judge model. Covers requirement td-2a, \\\"Explain how Testing Center evaluations work.\\\", in the Testing, Deployment, and Maintenance domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Agent Testing",
+          "Scorers",
+          "Assertions",
+          "LLM Judge"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-48-td-2b-scoring-pass-lines-and-regressions-reading-a-resul",
+        "title": "Lesson 48: Scoring, Pass Lines, and Regressions: Reading a Result That Looks Ambiguous",
+        "series": "sf-agentforce-specialist",
+        "lesson": 48,
+        "excerpt": "Learn how to read a Testing Center results grid column by column, interpret pass lines and ambiguous cells, and use a held suite to catch regressions between releases. Covers requirement td-2b, \\\"Explain how Testing Center evaluations work.\\\", in the Testing, Deployment, and Maintenance domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "18 min read",
+        "tags": [
+          "Agent Testing",
+          "Pass Lines",
+          "Regressions",
+          "Release Gate"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 32,
+    "totalLessons": 48,
     "curriculumLessons": 61
   },
   {
@@ -12020,6 +12292,278 @@ export const learnLessons: LearnLesson[] = [
       "Deterministic Behavior",
       "Scenario Design",
       "Agentforce"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-33-ag-4a-standard-and-custom-topics-and-actions-the-agentfo",
+    "title": "Lesson 33: Standard and Custom Topics and Actions: The Agentforce Building Blocks",
+    "series": "sf-agentforce-specialist",
+    "lesson": 33,
+    "excerpt": "Learn how to name the job an agent does, list the tools that job needs, and decide when a shipped standard topic or action fits and when to build a custom one. Covers requirement ag-4a in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "22 min read",
+    "tags": [
+      "Agentforce Topics",
+      "Agent Actions",
+      "Agentforce Builder",
+      "Agent Design"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-34-ag-4b-topic-selection-and-action-descriptions-at-run-tim",
+    "title": "Lesson 34: Topic Selection and Action Descriptions at Run Time",
+    "series": "sf-agentforce-specialist",
+    "lesson": 34,
+    "excerpt": "Learn how the classification description picks the topic and the action names, descriptions, and inputs pick the tool, and how to fix whichever layer actually failed at run time. Covers requirement ag-4b in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agentforce Topics",
+      "Agent Actions",
+      "Classification Description",
+      "Plan Tracer"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-35-ag-5a-connecting-an-agent-to-channels-lightning-messagin",
+    "title": "Lesson 35: Connecting an Agent to Channels: Lightning, Messaging, Email, Voice, and Slack",
+    "series": "sf-agentforce-specialist",
+    "lesson": 35,
+    "excerpt": "Learn how connections put one agent onto several surfaces, which channels each agent type supports, and why email and voice behave so differently from a live chat window. Covers requirement ag-5a in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agentforce Channels",
+      "Agent Connections",
+      "Agentforce Voice",
+      "Messaging"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-36-ag-5b-channel-identity-session-and-context-what-each-cha",
+    "title": "Lesson 36: Channel Identity, Session, and Context: What Each Channel Can Carry",
+    "series": "sf-agentforce-specialist",
+    "lesson": 36,
+    "excerpt": "Learn to ask three questions of every channel, who the user is, whether there is a live session, and what context travels, and to design the agent for the answers. Covers requirement ag-5b in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Agentforce Channels",
+      "Agent Identity",
+      "Conversation Context",
+      "Session Handling"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-37-ag-6a-the-agents-security-context-and-how-it-shapes-acti",
+    "title": "Lesson 37: The Agent's Security Context and How It Shapes Action Execution",
+    "series": "sf-agentforce-specialist",
+    "lesson": 37,
+    "excerpt": "Learn how an Agentforce agent runs under a security context, whose identity and permissions decide what each action can actually reach at run time, and why an action that works in the builder can fail for a real user. Covers requirement ag-6a, \\\"Explain the security context in which the agent is actually running, and how it impacts agent action execution,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent Security",
+      "Running User",
+      "Einstein Trust Layer",
+      "Agentforce"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-38-ag-6b-running-user-permissions-action-execution-context",
+    "title": "Lesson 38: Running User Permissions, Action Execution Context, and the Trust Layer Boundary",
+    "series": "sf-agentforce-specialist",
+    "lesson": 38,
+    "excerpt": "Learn how to trace a failing agent action back to the identity it runs as and the execution context it runs in, and how to place the Einstein Trust Layer at the model boundary rather than the data boundary. Covers requirement ag-6b, \\\"Explain the security context in which the agent is actually running, and how it impacts agent action execution,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "Agent Security",
+      "Run Context",
+      "Execution Context",
+      "Einstein Trust Layer"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-39-ag-7a-employee-agents-and-service-agents-the-two-audienc",
+    "title": "Lesson 39: Employee Agents and Service Agents: The Two Audience Types and What Separates Them",
+    "series": "sf-agentforce-specialist",
+    "lesson": 39,
+    "excerpt": "Learn how an Agentforce Employee agent and a Service agent differ by audience, running user, and channel, and how to read a scenario to pick the right one, including the credential-verification case and the retired templates to reject. Covers requirement ag-7a, \\\"Given a scenario, identify when to use an Employee or Service agent,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Employee Agent",
+      "Service Agent",
+      "Agent Types",
+      "Agentforce"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-40-ag-7b-what-each-agent-type-can-reach-purpose-build-choic",
+    "title": "Lesson 40: What Each Agent Type Can Reach: Purpose, Build Choices, Verification, and Two Audiences",
+    "series": "sf-agentforce-specialist",
+    "lesson": 40,
+    "excerpt": "Learn what each agent type can actually reach from the identity it runs under, why the shared agent user makes security the real design work, and how to build a two-audience org as two agents with disjoint actions. Covers requirement ag-7b, \\\"Given a scenario, identify when to use an Employee or Service agent,\\\" in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Employee Agent",
+      "Service Agent",
+      "Agent User",
+      "Two-Audience Design"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-41-ag-7c-decision-drill-choosing-an-employee-or-a-service-a",
+    "title": "Lesson 41: Decision Drill: Choosing an Employee or a Service Agent From the Scenario",
+    "series": "sf-agentforce-specialist",
+    "lesson": 41,
+    "excerpt": "Learn how to read a scenario and name the agent type from the audience and the running identity, so a portal login and an internal chat surface stop pulling you toward the wrong answer. Covers requirement ag-7c, given a scenario, identify when to use an Employee or Service agent, in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Employee Agent",
+      "Service Agent",
+      "Agent Types",
+      "Decision Drill"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems",
+    "title": "Lesson 42: Agent API: The REST Seam That Lets External Systems Talk to an Agent",
+    "series": "sf-agentforce-specialist",
+    "lesson": 42,
+    "excerpt": "Learn what the Agent API exposes, how an external system starts and continues an agent session, and the authentication and session choices that decide whether it is the right seam for a program. Covers requirement ag-8a, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent API",
+      "REST",
+      "Agent Session",
+      "Integration"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-43-ag-8b-calling-agent-api-from-an-external-system-sessions",
+    "title": "Lesson 43: Calling Agent API from an External System: Sessions, Identity, and When It Is the Right Seam",
+    "series": "sf-agentforce-specialist",
+    "lesson": 43,
+    "excerpt": "Learn how an external system calls the Agent API, which session pattern fits each interaction, which OAuth flow carries the right identity across the boundary, and when the API is the correct seam at all. Covers requirement ag-8b, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "Agent API",
+      "Sessions",
+      "OAuth",
+      "Identity"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-44-ag-8c-decision-drill-agent-api-versus-a-standard-channel",
+    "title": "Lesson 44: Decision Drill: Agent API Versus a Standard Channel or a Flow Callout",
+    "series": "sf-agentforce-specialist",
+    "lesson": 44,
+    "excerpt": "Learn to read a scenario for where the caller sits and who owns the protections, so you can choose between the Agent API, a native channel, and a Flow callout that never leaves Salesforce. Covers requirement ag-8c, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent API",
+      "Flow Callout",
+      "Channels",
+      "Decision Drill"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-45-td-1a-testing-an-agent-in-testing-center-test-sets-data",
+    "title": "Lesson 45: Testing an Agent in Testing Center: Test Sets, Data Modes, and the Setup Path",
+    "series": "sf-agentforce-specialist",
+    "lesson": 45,
+    "excerpt": "Learn how a batch test suite in Agentforce Testing Center validates an agent's routing, actions, and replies before release. Covers requirement td-1a, \\\"Given a scenario, test an agent using Testing Center.\\\", in the Testing, Deployment, and Maintenance domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Agent Testing",
+      "Testing Center",
+      "Test Sets",
+      "Agentforce"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-46-td-1b-building-a-test-set-from-real-conversations-what-a",
+    "title": "Lesson 46: Building a Test Set from Real Conversations: What a Passing Result Proves",
+    "series": "sf-agentforce-specialist",
+    "lesson": 46,
+    "excerpt": "Learn how to build a Testing Center test set from real production utterances, and read exactly what a green suite does and does not prove. Covers requirement td-1b, \\\"Given a scenario, test an agent using Testing Center.\\\", in the Testing, Deployment, and Maintenance domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent Testing",
+      "Test Sets",
+      "Session Trace",
+      "Regression"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-47-td-2a-how-testing-center-evaluations-work-scorers-assert",
+    "title": "Lesson 47: How Testing Center Evaluations Work: Scorers, Assertions, and the Judge",
+    "series": "sf-agentforce-specialist",
+    "lesson": 47,
+    "excerpt": "Learn how Testing Center scores a run: the default, quality, and custom scorer tiers, and the difference between deterministic assertions and a judge model. Covers requirement td-2a, \\\"Explain how Testing Center evaluations work.\\\", in the Testing, Deployment, and Maintenance domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Agent Testing",
+      "Scorers",
+      "Assertions",
+      "LLM Judge"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-48-td-2b-scoring-pass-lines-and-regressions-reading-a-resul",
+    "title": "Lesson 48: Scoring, Pass Lines, and Regressions: Reading a Result That Looks Ambiguous",
+    "series": "sf-agentforce-specialist",
+    "lesson": 48,
+    "excerpt": "Learn how to read a Testing Center results grid column by column, interpret pass lines and ambiguous cells, and use a held suite to catch regressions between releases. Covers requirement td-2b, \\\"Explain how Testing Center evaluations work.\\\", in the Testing, Deployment, and Maintenance domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "18 min read",
+    "tags": [
+      "Agent Testing",
+      "Pass Lines",
+      "Regressions",
+      "Release Gate"
     ],
     "status": "published"
   },

@@ -1,0 +1,86 @@
+---
+title: "Lesson 45: Testing an Agent in Testing Center: Test Sets, Data Modes, and the Setup Path"
+slug: day-45-td-1a-testing-an-agent-in-testing-center-test-sets-data
+series: sf-agentforce-specialist
+lesson: 45
+excerpt: "Learn how a batch test suite in Agentforce Testing Center validates an agent's routing, actions, and replies before release. Covers requirement td-1a, \"Given a scenario, test an agent using Testing Center.\", in the Testing, Deployment, and Maintenance domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "19 min read"
+tags: [Agent Testing, Testing Center, Test Sets, Agentforce]
+---
+
+# Lesson 45: Testing an Agent in Testing Center: Test Sets, Data Modes, and the Setup Path
+
+A consultant demoed an agent to a client on a Tuesday, the demo went well, the client approved go-live, and by Friday the support queue held a stack of conversations the agent had answered confidently and wrongly. Nothing in the demo was a lie. The consultant had opened one conversation, typed one question, watched the agent reply well, and signed off on a single good impression. The failure was never the reply quality. It was the sample size.
+
+One manual conversation tells you what happened once, on that day, with that phrasing, for that one customer. A generative agent is non-deterministic, so the next utterance, a typo, a half-sentence, or a request that shifts topic halfway through, can route somewhere else entirely. A single conversation is not a test. It is an anecdote, and an anecdote scaled to a release is a gamble with a deadline attached. To know how an agent behaves you have to run many scenarios and score each one against criteria you chose before you saw the answers.
+
+Testing Center is the batch test runner built for exactly that. This lesson serves requirement td-1a, "Given a scenario, test an agent using Testing Center.", in the Testing, Deployment, and Maintenance domain at ten percent of the exam. It teaches what a test suite is, where its cases come from, what every case carries, what the two data access modes actually claim, and where Testing Center sits beside Builder preview and Live Test. After it, you should be able to stand up a suite and defend both what a run proves and what it leaves untouched.
+
+## Deep Dive
+
+### A manual conversation is a sample of one
+
+Testing Center is a batch test runner for a non-deterministic system.[^1] The old habit, open a conversation, type a question, judge the reply, is a sample of one, and a generative agent makes that sample untrustworthy because the same utterance can route one way today and another way tomorrow. Testing Center replaces the sample of one with a set of scenarios run together, each scored against expectations you wrote down in advance. The current surface is Testing Center in Agentforce Studio, a grid where a suite holds the cases, and the legacy surface still lives in Setup under Agentforce Testing Center, so recognize both entry points even though the workflow is the same.[^1]
+
+The mental model is a grid. One case is one row. One scorer is one column. A suite is the set of rows you run together, and a run fills every cell of that grid with a result. That geometry matters on the exam, because almost every question about reading Testing Center output is really a question about whether you should read a row or a column. Creating tests needs two permissions acting together, Manage Agentforce Grids and Manage Agentforce Testing, so a user who can build an agent but holds neither cannot author a suite.[^2]
+
+### Cases arrive from three on-ramps
+
+You do not have to write every test case by hand. Cases arrive from three on-ramps, and the choice between them is a choice about coverage. The first is generation from subagents and actions: you select the subagents you want to exercise, write a short description of the test focus, and the system writes utterances designed to trigger those subagents and their actions.[^2] The second is generation from knowledge: when the agent is grounded through an Agentforce Data Library, the system can write question-and-answer style cases from the content linked to that library, including articles and uploaded files. The third is a CSV template you download, fill with your own scenarios, and upload, which is the on-ramp for exact wording and the edge cases you already know you care about.
+
+Generation trades precision for volume, and volume is the point. You can generate up to 200 test cases at a time, which makes breadth a deliberate decision rather than an accident: cover the subagents that carry business risk, not the subagents that already work. Generated cases arrive as conversations, so one set can be evaluated at the single-utterance level and at the multi-turn level. Know which level a case was built for, because the scorers and the supported data modes both change with it, a point this lesson returns to.
+
+### Every case carries an expected side
+
+A test case is not just a thing you said. Every case carries an utterance plus an expected side: the subagent you expect to handle it, the action or actions you expect it to select, and the response you expect it to give. That expected side is the whole contract, because the run compares the agent's actual routing, actual action selection, and actual reply against what you wrote, and scores the difference. A case with a vague expectation produces a vague score, which is why the expected side is the part of authoring that carries the most weight and the part a hurried tester fills in last.
+
+Two features widen what a case can simulate. Personas make the input realistic rather than tidy: background noise, natural conversational flow, accents and phonetic spelling, incomplete information, and verification problems, so the agent meets something closer to a real caller. And for a voice channel you can ask for text and voice output, which returns an audio recording of the simulated conversation, while employee agents support text only. The exam likes the phrase employee agents support text only because it is an easy fact to reverse, and reversing it turns a supported test case into an imagined one.
+
+The expected response is the part of the contract the judge scores directly, so it is worth more care than it looks. Write it as the reply you would be happy for a customer to read, in the language the agent should use, and keep it specific: a vague expectation lowers the bar for a passing score and hides a weak reply behind a green cell. When a case fails the response evaluation, the first question is never what is wrong with the agent, it is whether the expected response described the reply you actually wanted.
+
+### Data Access Mode is the claim your result makes
+
+Data Access Mode decides what the agent can touch while the suite runs, and the mode you pick is the claim your result makes. Live Data runs the tests against your active environment, real CRM data, real actions, real external service connections.[^3] Because the agent behaves as it would in production, this is the mode that surfaces system latency, cross-service dependencies, and data retrieval problems, and it is the mode that final validation and pre-deployment sign-off run on. Mocked Data runs in an isolated environment that does not connect to external services or affect your active org, which makes it faster and safer for iterating on conversation logic and instruction wording.[^3]
+
+One boundary decides the mode for a whole class of suites: conversation-level testing does not support mocked data, so any multi-turn suite is a live suite whether you wanted one or not. That is not an arbitrary restriction, because a multi-turn test needs real history and real service responses to mean anything. It also means a team that drafts only multi-turn cases has quietly signed up for live execution, and live execution can modify CRM data, which is a further reason Testing Center belongs in a sandbox rather than on a whim in an org you care about.[^1]
+
+The sign-off discipline follows from that split. Before a release you want the run that exercised real records, real actions, and real services, because that is the run whose pass means the agent behaved as it will in production. The mocked run is a development tool you keep beside it, useful for shaping a prompt without touching live data, but a mocked green is a statement about logic and not a statement about readiness. If the two disagree, the live run is the one that describes production.
+
+### Two optional conditions shape the run
+
+Two optional conditions shape a run, and one of them is a documented catch. Include conversation history adds a column to the downloadable CSV template where you place the preceding utterances you want tested, and that history is not factored into generated test cases.[^3] The practical consequence is a trap you will meet on the exam: if you generate a multi-turn scenario and expect the turns to be filled in, they are not, so a generated multi-turn case needs you to add the turns yourself. Include context variables lets you pass data to the agent or narrow the test, and it maps to fields on objects associated with the agent, so you can set a region, a customer tier, or an identifier the agent must recognize and exercise the branch you care about instead of a generic happy path. Testing Center does not validate context variable values, so check the data type before you run.[^3]
+
+Used well, context variables turn a broad suite into a targeted one. If the agent branches on a region or an account tier, a suite without context variables tests whichever default branch happens to apply, and a suite with them tests the branch that actually carries the risk. The two conditions together are how you make a run resemble production without hand-writing every turn of every conversation.
+
+Context variables are also the lever for testing a specific customer or a specific branch that a support team has flagged. If a known failure involved a gold-tier customer in a particular region, set those values and the case reproduces the exact conditions rather than a generic conversation that happens to route correctly. The suite stops being a broad net and becomes a set of targeted probes, each one aimed at the branch you are worried about.
+
+### Testing Center is not your only test surface
+
+Testing Center is not the only place you test an agent, and the exam expects you to keep the surfaces apart. In Agentforce Builder you preview a conversation and run a Live Test that fires actions against real records, which is how you debug the single conversation you are writing right now.[^4] The division of labor is clean: Builder for the single conversation, Live Test for confirming that an action really changes a record end to end, and Testing Center for repeatable breadth before a release. A batch run is slow feedback for the tight loop of authoring one flow of dialogue, which is why you do not reach for it mid-sentence.
+
+That division also reframes a result that looks like failure. A suite that passes on mocked data and fails on live data is a useful finding rather than a broken test: the conversation logic was fine and the data or service wiring was not, and you want that news before go-live rather than after. Read the two runs as two different claims about the same agent rather than as a contradiction, because that is exactly what they are.
+
+### What the setup path asks you to decide
+
+The click path is short, and each step is a decision. From Setup you open Agentforce and then Agentforce Studio and open Testing Center, remembering that the legacy path is Setup and then Agentforce Testing Center. You create a test suite and choose how cases arrive: generate from subagents and actions, generate from knowledge content, or download the CSV template to write your own. You select the subagents to exercise, write a short description to focus generation, and set how many cases to generate. Under Data Access Mode you choose Live Data for a sign-off run or Mocked Data for an iteration run, remembering that conversation-level testing supports only live. You turn on Include conversation history and Include context variables where you need preceding turns or targeted field values. Then you choose the scorers, save, run, and read the results grid one row per case and one column per scorer.
+
+The exam frames this objective as a scenario, so the setup path is really a decision tree. Which cases, from which on-ramp, at which level, in which data mode, with which conditions on, and read how. Answer those six and the scenario resolves.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a generated test set already contains conversation history. It does not: the history column arrives in the CSV template and is not factored into generated cases, so a multi-turn scenario you generated needs the preceding turns added by hand, and a team that assumes otherwise tests a single-turn agent while believing it tested a conversation. The second is believing mocked data is the safer choice for sign-off. It is the opposite: mocked data is for iterating on logic and wording, while Live Data is the mode that exercises real records, actions, and external services, and it is what pre-deployment sign-off runs on, not to mention the only mode available to conversation-level tests. The third is believing Testing Center replaces Builder testing. Builder preview and Live Test debug one conversation in real time against real records, while Testing Center runs many cases to score breadth, so a question about debugging a single exchange belongs to Builder and a question about repeatable coverage belongs to Testing Center.
+
+## What a consultant should walk away with
+
+Treat Testing Center as the batch runner you reach for when you need breadth over a written set of scenarios, and treat the data mode as the claim your result makes: Mocked Data while you are still shaping logic and wording, Live Data for the run you sign off on, remembering that conversation-level cases cannot run mocked at all. Remember the grid. One case is one row and one scorer is one column, and the suite is the set of rows you run. Generate cases from subagents and actions for volume, from your knowledge content when the agent is grounded in a Data Library, and from the CSV template when you need exact wording. Write the expected side of every case as a fact, because that side is the contract the run scores against. Keep Testing Center in a sandbox, because a live run can change CRM data, and keep it beside Builder preview and Live Test rather than in place of them: Builder to watch one conversation, Live Test to prove an action writes, Testing Center to fence a release.
+
+## What's next
+
+Lesson 46 - Building a Test Set from Real Conversations: What a Passing Result Proves (td-1b)
+
+[^1]: Salesforce, "Agentforce Testing Center" (https://help.salesforce.com/s/articleView?id=ai.agent_testing_center.htm&language=en_US&type=5)
+[^2]: Salesforce, "Select Your Test Data" (https://help.salesforce.com/s/articleView?id=ai.agent_studio_testing_center_add_data.htm&language=en_US&type=5)
+[^3]: Salesforce, "Define Test Conditions" (https://help.salesforce.com/s/articleView?id=ai.agent_studio_testing_center_test_conditions.htm&language=en_US&type=5)
+[^4]: Salesforce, "Build and Test Observability Tools" (https://help.salesforce.com/s/articleView?id=ai.agentforce_observability_build_test_tools.htm&language=en_US&type=5)

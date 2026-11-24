@@ -1,0 +1,95 @@
+---
+title: "Lesson 38: Running User Permissions, Action Execution Context, and the Trust Layer Boundary"
+slug: day-38-ag-6b-running-user-permissions-action-execution-context
+series: sf-agentforce-specialist
+lesson: 38
+excerpt: "Learn how to trace a failing agent action back to the identity it runs as and the execution context it runs in, and how to place the Einstein Trust Layer at the model boundary rather than the data boundary. Covers requirement ag-6b, \"Explain the security context in which the agent is actually running, and how it impacts agent action execution,\" in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [Agent Security, Run Context, Execution Context, Einstein Trust Layer]
+---
+
+# Lesson 38: Running User Permissions, Action Execution Context, and the Trust Layer Boundary
+
+A support engineer filed a bug that had already cost the team a week: one agent action worked every time in Agentforce Builder and failed every time for live customers. The action fetched a case and updated a status field. In the builder it ran green, because the builder had been tested while signed in as an administrator. In production the service agent ran as its agent user, and the agent user had read access to Case but no permission on the specific field the action wrote. Nothing about the action was wrong. The identity it ran under in the builder was never the identity it would run under in production.
+
+That gap defines this lesson. The scenario, an action that passes every test in the builder and then fails for a real user, has two causes and you must keep them apart. The first is the running user: the builder runs under your identity, usually an administrator, while production runs the agent as the agent user or as the signed-in employee. Anything your administrator identity could see that the agent user cannot is a permissions gap, and the action fails the moment the agent runs under the narrower identity. The second is the action's own execution context, which can widen or narrow access relative to the running user. Diagnose by checking both, in that order, before you touch the agent configuration.
+
+This lesson serves requirement ag-6b, the same objective as Lesson 37, taken now from the failure side: given a broken action, explain which part of the security context caused it. It sits in the AI Agents domain at 35 percent. By the end you can separate the running user from the execution context, walk a failure through each gate it can hit, and state exactly where the Einstein Trust Layer does and does not protect data. Lesson 37 named the running user; this lesson turns that name into a debugging method.
+
+## Deep Dive
+
+### The builder hides a second identity, and that is the whole bug
+
+The scenario that defines this objective is an action that passes every test in the builder and then fails for a real user in production. The first and most common reason is the running user. The builder runs under your identity, usually an administrator, while production runs the agent as the agent user or as the signed-in employee. Anything your administrator identity could see that the agent user cannot is a permissions gap, and the action fails the moment the agent runs under the narrower identity.
+
+The reason this hides so well is that the builder never asks you to sign in as the agent. You author, you preview, you test, and everything resolves because your own access is generous. The gap only appears under the identity the agent will actually carry, which is why a builder pass proves nothing about a production run. Treat the builder as a place to check logic, not a place to check security.
+
+So the first move in any production failure is to name the identity the live agent runs under and compare it to the identity you tested under. For an employee agent that is the signed-in person; for a service agent it is the agent user; for a service agent with credential-based verification it is the signed-in site user.[^1] Only when you know the production identity can you ask whether it can do what the action needs.
+
+### The running user and the execution context are two different levers
+
+The running user and the action's execution context are not the same thing, and conflating them causes wrong fixes. The running user sets the ceiling: the agent will never reach data that identity cannot reach. But a Flow run in system context without sharing, or an Apex class that does not enforce sharing, can reach records the running user could not, which is why an action sometimes succeeds for a user who should not have that access.[^4]
+
+The reverse is just as real. A Flow set to run in user context, or Apex running in user mode, applies the running user's permissions and can fail where a system-context version would succeed. So the action's context is a second lever that decides how much of the ceiling applies, and a correct diagnosis names both.
+
+Talent for this objective is asking, for each action, both whose identity the agent runs as and how the action executes. A scenario that says the action reached a record the user could not open is describing an overreaching context, not a permissions hole. A scenario that says the action failed for a user who should have access is describing an under-reaching context or a missing grant. Name which lever moved and the answer follows.
+
+### Walk the failure through its gates
+
+An action that fails in production usually fails at one of a few gates, and each has a distinct symptom. The agent user lacks object permission on the record's object, and the action fails immediately with an error. Field-level security hides a field the action reads or writes, and the action does not error but returns blank or writes nothing, which is the more insidious case because it runs and produces a wrong answer. The record is not visible to the running user under the organization-wide default and sharing, and the record simply is not there. The Flow or Apex runs in a context narrower than the action needs, and the action fails even though the user's permissions look sufficient.
+
+Match the symptom to the gate. A blank field is a field-level security problem, so check the agent user's field access on the exact field. A missing record is a sharing problem, so check the organization-wide default and any sharing rules for that object and user. An outright error is usually object permission, so check the object-level access on the agent user's permission set group. A failure that looks like a permissions problem but persists after you grant permissions is usually a run-context problem, so read the Flow or Apex context.
+
+This gate list is also the checklist the exam scenarios are built from. When a question describes an action that returns nothing for one user and a value for another, the answer is field-level security or sharing. When it describes an error, the answer is object permission. When it describes an action that works for one user it should not, the answer is an overreaching execution context, not a missing one.
+
+### The Trust Layer boundary, and why overloading it fails
+
+The Trust Layer boundary is the other half of this objective, and its whole value depends on not overloading it. The Einstein Trust Layer is the platform layer between the agent and the model. It filters known prompt injection patterns, checks model outputs for toxic content, and logs interactions for audit, and it operates at inference time on the traffic to and from the model.[^5] It is a model-traffic boundary, and that is the whole of its job.
+
+It is not a record-level security control. It does not decide which records the agent may read or write, and it is not the thing that stops the agent from pulling a sensitive record into a response. Salesforce states that Trust Layer data masking applies to embedded generative AI features and is not applied for agents, which removes the one feature people most often assume covers agent data.[^5]
+
+Because the Trust Layer does not enforce record access, the running user and the standard access controls are your only real data boundary for an agent. Treat the Trust Layer as the boundary for what leaves the org toward the model, and the running user as the boundary for what enters the prompt from your records. A scenario that asks how to stop an agent reading a sensitive record is pointing at the running user's permissions, and the Trust Layer is a plausible-looking wrong answer.
+
+### Grounding respects the running user
+
+Where the agent grounds its answers in Salesforce data, the grounding respects the running user's permissions. The agent can only ground on records the running user can see, and where grounding uses a retriever, that retriever is bounded by the same access rules. This is why least privilege on the agent user matters so much: a generous agent user is a generous data boundary, and an instruction that asks the agent to summarize a record it should not have will reach it if the agent user can.[^2]
+
+The practical consequence is that you never widen the agent user to make grounding richer. If the agent needs a field the customer should see, grant the field; if it does not, leave it hidden and let the grounding come back thin. The thin answer is correct, because the alternative is an agent that shows one customer another customer's data.
+
+Think of the agent user as a shared identity that speaks for every conversation at once. Every grant you add to it applies to all of them, so the discipline is to grant for the job and never for the demo. A single over-broad grant on the agent user is the most consequential mistake available in this objective, because the Trust Layer will not catch it.
+
+### Outside the platform, the controls change hands
+
+For actions that reach outside the platform, the same discipline applies at the integration boundary, but the boundary moves. An action that calls an external service or an outbound MCP server leaves the platform's access controls behind, so the external system's own authorization and any integration user you provision become the boundary there.[^3] The running user still sets the ceiling inside Salesforce, but the external call is governed by the credentials the action presents to the outside system.
+
+Inside the platform, the two Apex modes are worth stating plainly because the exam tests the choice. Apex that runs in user mode enforces the caller's permissions, and Apex that runs with sharing respects record sharing, so you choose the mode deliberately rather than accepting a default. The same is true of Flow run context: system context with sharing respects the organization-wide default and sharing rules but not object and field-level permissions, while system context without sharing can access all data.[^4]
+
+The exam rewards a candidate who can trace, for a given action, exactly which identity and which context gate it, then say where the boundary sits and what would have to change for the action to succeed without overreaching. That sentence, identity plus context plus the external boundary if there is one, is the complete answer to almost any security scenario on this objective.
+
+### Diagnose in order: running user first, then action context
+
+Put the method in an order you can run under pressure. Start with the running user: name it, then check object permission, then field-level security, then sharing. Only then move to the action's execution context, because a context problem mimics a permission problem and you will chase the wrong one if you start there. The order is running user, then action context, then the external boundary if the action leaves the platform.
+
+This order is also the order the builder-versus-production gap appears in. The builder never exercised the running user, so the first suspect in a production-only failure is the identity, and the second is the context the action runs in. When both check out, look at the external system the action calls, and at the mode the Apex or Flow is set to.
+
+State the diagnosis as a boundary sentence and you cannot go wrong: the agent runs as this identity, that identity can or cannot do this, and the action executes in this context, which widens or narrows the result. Name the boundary and the remedy, and the exam answer is complete.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing a system-context action widens the running user's access safely, when a Flow in system context or Apex without sharing can reach records the running user cannot, so an action that succeeds for one user may be overreaching rather than configured correctly. The second is believing the Trust Layer stops the agent from reading sensitive records, when the Trust Layer governs model traffic and its data masking is not applied for agents, so the running user's permissions and sharing are the only record-level boundary. The third is believing the builder is a fair test of production security, when the builder runs under your identity, so an action that works there proves nothing about whether the agent user can run it in production.
+
+## What a consultant should walk away with
+
+Read every action as two questions: whose identity runs it, and in what context does it execute. Name the running user first, because the builder hides it and production exposes it. Then walk the gates in order, checking object permission for errors, field-level security for blanks, and sharing for missing records, and only then check whether the Flow or Apex run context is narrower than the action needs. Keep the agent user tight, because it speaks for every conversation at once and the record-level boundary is exactly as generous as its grants. Put the Einstein Trust Layer at the model-traffic boundary and keep the running user at the data boundary, remembering that masking is not applied for agents. When an action leaves the platform, move the boundary to the external system's authorization and the integration user you provision, and state each boundary explicitly so the remedy is obvious.
+
+## What's next
+
+Lesson 39 - Employee Agents and Service Agents: The Two Audience Types and What Separates Them (ag-7a)
+
+[^1]: Salesforce, "Agent Execution Context and Data Access by Type" (https://help.salesforce.com/s/articleView?id=ai.agent_execution_data.htm&language=en_US&type=5)
+[^2]: Salesforce, "Best Practices for Agent User Permissions" (https://help.salesforce.com/s/articleView?id=ai.agent_user.htm&type=5)
+[^3]: Salesforce, "Common User Access for Standard Agent Actions" (https://help.salesforce.com/s/articleView?id=ai.agent_actions_common_perms.htm&language=en_US&type=5)
+[^4]: Salesforce, "Set Flow Run Context" (https://help.salesforce.com/s/articleView?language=en_US&id=platform.flow_distribute_system_mode.htm&type=5)
+[^5]: Salesforce, "Trust and Agentforce" (https://help.salesforce.com/s/articleView?id=ai.copilot_trust.htm&type=5)

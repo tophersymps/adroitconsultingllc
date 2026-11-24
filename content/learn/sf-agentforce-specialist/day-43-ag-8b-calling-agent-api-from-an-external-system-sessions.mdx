@@ -1,0 +1,93 @@
+---
+title: "Lesson 43: Calling Agent API from an External System: Sessions, Identity, and When It Is the Right Seam"
+slug: day-43-ag-8b-calling-agent-api-from-an-external-system-sessions
+series: sf-agentforce-specialist
+lesson: 43
+excerpt: "Learn how an external system calls the Agent API, which session pattern fits each interaction, which OAuth flow carries the right identity across the boundary, and when the API is the correct seam at all. Covers requirement ag-8b, given a scenario, identify when it's appropriate to use Agent API, in the AI Agents domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "18 min read"
+tags: [Agent API, Sessions, OAuth, Identity]
+---
+
+# Lesson 43: Calling Agent API from an External System: Sessions, Identity, and When It Is the Right Seam
+
+A partner ships an integration that lets customers ask the agent about their orders, and in user testing every customer sees the same account summary. The agent is answering fine and the topics are configured. The integration authenticated once with a shared service token, never carried the customer's identity across the hop, and so the session ran as one identity for everyone, and the agent dutifully answered as that identity.
+
+This is an identity failure, not a reasoning failure, and it is the most common way an Agent API integration goes wrong. Agent API leaves channel duties like authentication, rate limiting, and abuse protection to your host application, which means the identity that governs the session is a decision you make in code, not a default the platform hands you. When the decision is wrong, the agent still speaks, and it speaks with access that belongs to someone else.
+
+This lesson covers how an external system calls Agent API: the two things it exposes to a caller, the session patterns that fit different interactions, the OAuth flows that decide whose identity crosses the boundary, and the judgment about when the API is the right seam at all. It serves requirement ag-8b, "Given a scenario, identify when it's appropriate to use Agent API," in the AI Agents domain, which carries 35 percent of the exam. By the end you can choose a session pattern from the interaction, choose an OAuth flow from the identity that must cross, and keep credentials on the server.
+
+## Deep Dive
+
+### The response carries the agent's reasoning and its actions' structured output
+
+Agent API exposes two things to a caller: the agent's reasoning and the agent's actions, delivered as a response. The response carries the agent's natural language output and any structured values produced by the actions the agent invoked while reasoning, so the calling system does not have to parse a chat transcript to get a value it can use. A send message response is a batched response with a messages array, and each message carries a type and can carry the results the actions produced along with cited references.[^1] That structured output is the point for most system integrations, because the caller wants a field to drive its own logic, not prose to display.
+
+The message you send is typed as well. The send message payload requires a message object that can be a Text, Reply, Cancel, TransferFailed, TransferSucceeded, or PlanTemplate message, and a Text message carries a sequence id and the text itself.[^1] The type tells the agent what kind of turn this is, so a Reply answers a question the agent asked and a Cancel withdraws one, rather than every turn arriving as raw text the agent must interpret.
+
+When a scenario says the downstream system must act on what the agent decided, the structured output is the reason the answer is Agent API rather than a channel. A channel gives a human prose to read. The API gives a program a value to branch on, which is a different contract entirely.
+
+### The single turn synchronous pattern fits request response integrations
+
+The single turn synchronous pattern is the simplest shape and fits a request response integration. The external system authenticates, creates a session and passes context variables in that creation call, sends one message, receives the agent's response, and closes the session. The entire exchange completes within one HTTP request and response cycle, which suits a caller that needs an immediate structured answer and whose timeout tolerance covers the agent's reasoning time.
+
+The caller manages the whole session lifecycle itself: it opens the session, takes the turn, and terminates it, so nothing is left dangling between calls. This is the pattern behind the nightly batch that asks the agent to classify each open case, or the order system that asks whether a return is eligible. Each request is independent, the context it needs travels in the start session call, and the session ends the moment the answer is read.[^2]
+
+The constraint to respect is the timeout. The API has a 120 second ceiling and returns an HTTP 500 when a call exceeds it, so the single turn pattern is only safe while the agent's reasoning finishes comfortably inside that window.[^3] A caller whose own timeout is shorter than the agent's reasoning time cannot use this pattern at all, which is what the asynchronous shape later in this lesson exists to solve.
+
+### The multi turn pattern keeps the session id as the thread of state
+
+The multi turn pattern fits a conversational integration that needs state across exchanges. Here the external system creates the session once and reuses the session id across multiple messages, so the agent retains the conversational context of what was asked, what it retrieved, and what it decided, without the caller re supplying it each turn. Use this when the external surface is conversational, such as a chat widget or a voice interface, and reaching a resolution takes more than one exchange.[^2]
+
+The session id is the thread that holds the state, so it is the value the caller must keep between turns. The start session response returns the session id, and every subsequent message posts to a path built from that id.[^5] A caller that creates a new session for each message throws the thread away, and the agent begins each turn with no memory of the last. This is the failure a conversational surface shows when it forgets the user's earlier answer, and the cause is almost always a fresh session per message.
+
+The choice between the two patterns is driven by the interaction, not by preference. One exchange with a value at the end is single turn. A conversation that builds across turns is multi turn, and the session id is what makes multi turn possible. When a scenario describes a caller that must remember what was asked before, the answer names the reused session id.
+
+### When reasoning outlasts the caller's timeout, wrap the call asynchronously
+
+A third pattern handles the case where reasoning takes longer than the caller can wait. When the agent's processing time is non trivial, holding an open HTTP connection degrades the caller's experience or trips an upstream timeout, so the practical shape is asynchronous: the caller submits the request and immediately receives an acknowledgment with a job or session id, then polls a status endpoint or receives a webhook when the reasoning completes.[^3]
+
+Agent API itself is the synchronous interface, so this asynchronous pattern is implemented with a wrapper API, commonly hosted on middleware, that manages the Agentforce session and calls back the external system when the agent responds. The middleware owns the session lifecycle, absorbs the reasoning time, and returns control to the caller immediately. The wrapper is the piece that makes a slow agent usable from a caller that cannot block.
+
+The exam tests this by describing a caller with a tight timeout and a task the agent needs time to complete. The answer is not to raise the timeout. It is to front the call with a wrapper that acknowledges and calls back. Middleware earns its place here and only here, because for a fast request response call the direct synchronous pattern is enough and a wrapper is needless complexity.
+
+### Pick the OAuth flow from the identity that must cross the boundary
+
+Identity is where an integration most often goes wrong, so plan it before you write a call. For a system that connects to an agent as itself, the client credentials flow gives a dedicated integration identity, and the token represents one shared service identity, so those credentials must stay server side and never be exposed in a browser. This is the flow the get started guide sets up, using an external client app with a Run As user that has at least API Only access.[^2]
+
+When the integration must carry a specific person's context across the hop, an OAuth 2.0 token exchange flow presents the user's existing identity provider token to Salesforce, which maps it to a Salesforce user and issues a Salesforce access token, so the person's identity carries forward instead of collapsing into a shared account. The guide supports any flow that provides a JWT based access token, and the external client app settings include issuing JWT based access tokens for named users, which is how a headless internal user's context is carried.[^2]
+
+The decision rule is the identity that must survive the hop. A service acting as itself uses client credentials, and the token is one shared identity that must never reach a browser. A person's identity that must govern the session uses a flow that carries it, such as token exchange, so each caller runs as themselves. Getting this wrong is how every customer sees the same account summary, which is the failure the introduction described.
+
+### Session context and observability: variables at creation, externalSessionKey for tracing
+
+Pass the context variables you want the reasoning to start from at session creation, not in the first message, so the agent opens with the account, entitlement, or prior interaction summary in hand. Many agent variables are read only and can only be set during the start session call, and context variables with the $Context prefix are not editable after the session starts, apart from the end user language variable.[^4] A caller that waits until the first message to set context finds the read only variables already fixed.
+
+Use externalSessionKey as the UUID that lets you trace the conversation in the agent's event logs, which is how an integration team investigates an unexpected answer after the fact.[^4] The key you supply at session start is the thread that connects the external system's view of the interaction to Salesforce's record of it. Without it, a support engineer debugging a wrong answer has no way to find the session that produced it.
+
+Remember that the session is a real, billable slip of state: you open it, you take turns, you end it. Leaving sessions open or opening one per message defeats both the session model and the context the agent holds. The variables at creation and the trace key are two observability habits that separate a production integration from a demo, and the exam rewards the consultant who sets both deliberately.
+
+### Decide whether Agent API is the right seam at all
+
+Then decide whether Agent API is the right seam at all, because the exam is really testing that judgment. Use it when a system outside Salesforce must invoke the agent programmatically, especially when it needs the structured output to drive downstream logic, or when it must pass a specific user's identity through to Salesforce. Do not use it to replace a native chat channel for human conversations, because the native channel handles channel authentication, identity propagation, rate limiting, and abuse protection for you while Agent API leaves those duties to your host application.
+
+Do not use it for a caller already inside Salesforce either, where an AI Agent action invoked from Flow reaches the same agent under the running user with no external token. And when the caller is an MCP compatible client, the MCP path manages the session lifecycle so the caller makes a tool call rather than building an integration by hand. The pattern to carry into the exam is two questions plus an identity check: where the caller sits, whether it is a human or a system, and whose identity must cross the boundary.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing Agent API and a native chat channel are interchangeable: the native channel handles authentication, identity propagation, rate limiting, and abuse protection, while Agent API leaves those to your host application, so a human surface belongs on the channel. The second is believing you can pass context variables after the session has started: most are read only once the session begins, so set the account and entitlement context in the start session call and let the first message carry only the question. The third is believing a client credential token is safe in a browser: it represents one shared service identity, so it must stay server side, and identity a browser user needs should travel through a token exchange instead. Each trap is a mismatched identity or a mismatched duty, which is why the whole objective turns on knowing whose access governs.
+
+## What a consultant should walk away with
+
+Choose the session pattern from the interaction, not from preference. One exchange with a value at the end is single turn: create the session, send one message, read the structured output, and close it. A conversation that builds across turns is multi turn: create the session once and reuse its id so the agent keeps context. When reasoning may exceed the caller's timeout, front the call with a wrapper that acknowledges and calls back, because Agent API itself is synchronous and would otherwise block. Choose the OAuth flow from the identity that must cross the boundary: client credentials for a service acting as itself, with the token kept server side, and a flow such as token exchange when a specific person's access must govern. Set the context variables the reasoning needs at session creation, use externalSessionKey so the conversation is traceable in the event logs, and end the session when you have what you need. Then make the final call on the seam, and use the API only when a system outside Salesforce must reach the agent and a native channel or a Flow callout would not do.
+
+## What's next
+
+Lesson 44 - Decision Drill: Agent API Versus a Standard Channel or a Flow Callout (ag-8c)
+
+[^1]: Salesforce, "Agent API Reference," (https://developer.salesforce.com/docs/ai/agentforce/references/agent-api?meta=summary)
+[^2]: Salesforce, "Get Started with the Agent API," (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-api-get-started.html)
+[^3]: Salesforce, "Agent API Considerations," (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-api-considerations.html)
+[^4]: Salesforce, "Agent API Variables," (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-api-variables.html)
+[^5]: Salesforce, "Agent API Session Lifecycle," (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-api-lifecycle.html)
