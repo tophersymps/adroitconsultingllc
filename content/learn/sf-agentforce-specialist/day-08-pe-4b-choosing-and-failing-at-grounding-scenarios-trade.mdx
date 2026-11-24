@@ -1,0 +1,80 @@
+---
+title: "Lesson 8: Choosing and Failing at Grounding: Scenarios, Trade-offs, and Failure Modes"
+slug: day-08-pe-4b-choosing-and-failing-at-grounding-scenarios-trade
+series: sf-agentforce-specialist
+lesson: 8
+excerpt: "Learn how to pick the right grounding technique for a scenario, weigh the trade-offs between merge fields, Flow, Apex, retrievers and data libraries, and recognize the stale, missing and over-broad grounding failures. Covers requirement pe-4b in the Prompt Engineering domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "10 min read"
+tags: [Prompt Builder, Grounding, Retrieval, Failure Modes]
+---
+
+# Lesson 8: Choosing and Failing at Grounding: Scenarios, Trade-offs, and Failure Modes
+
+A retailer's agent is told to quote the current returns policy, and for three weeks it is flawless. Then the policy changes. The agent keeps quoting the old one, in the same confident tone, because its grounding runs against a search index that refreshes on a schedule and nobody changed the retriever. The team spends a day rewriting the prompt instructions to say use the most recent policy, which does nothing, because the wording was never the problem. The index was serving content from before the change, and the model presented it as current.
+
+The cause is a mismatch between how fresh the requirement is and how fresh the technique can be. Every grounding technique has a trade-off, and the failures all come from ignoring one. A retriever reads an index that updates on a schedule, so a fact that changes often can be served stale. A prompt with no grounding falls back on training data and invents specifics. A retriever tuned too loose pulls in noise that pulls the answer off course. None of these are prompt-writing problems, and none are fixed by rewording.
+
+This lesson is the scenario half of the grounding objective, so it drills the choice and then the failures. Name the requirement, weigh the trade-off that matters most in the case, and match the technique to it. The exam cares because these are the questions where four options all sound plausible and only one matches the constraint the scenario actually names, whether that constraint is freshness, reach, cost, or access.
+
+## Deep Dive
+
+### Scenario skill: name the requirement, then name the technique
+
+This objective is a scenario skill, so read the case, name the requirement, then name the technique. A field value already on the associated record is a merge field. A value computed or fetched across objects is a Flow or Apex resource. A meaning-based search over a large or unstructured corpus is a Data 360 retriever. A quick single-source Knowledge or file library is the Agentforce Data Library[^3].
+
+The wrong options are almost always one of the other techniques, so naming the requirement first is what makes the choice clean. A scenario rarely asks for a technique in the abstract. It tells you the value is live, or the corpus is huge, and that detail is the decider.
+
+### The trade-offs decide the close calls
+
+When two techniques could work, the trade-offs decide. Merge fields are the cheapest and most deterministic, but they only reach fields on the associated record and cannot search. A Flow or Apex resource is the most flexible, because it can compute and fetch anything, but it adds a run-time step and logic you maintain. A Data 360 retriever reaches large and unstructured content and matches on meaning, but it depends on an indexing schedule for freshness and on Data Cloud permission sets and data spaces for access. The Agentforce Data Library is the fastest setup, but one library holds one data source and offers no real-time or zero-copy capability[^6].
+
+Match the technique to the constraint that matters most. If the scenario stresses freshness, the index-based techniques are suspect. If it stresses reach across many sources, the single-source library is out. If it stresses deterministic exactness, the search-based techniques are out. The constraint is the answer key.
+
+### Failure one: stale grounding, because the index refreshes on a schedule
+
+The first failure mode is stale grounding. A search index is refreshed on an indexing schedule, so a retriever returns whatever the last indexing run captured[^5]. A price, a policy, or a status that changed after that run is served as if current, and the model presents it with confidence. The fix is to set a freshness expectation that fits the use case.
+
+For any fact that must be live, ground the prompt with an action that reads the record at run time instead of a retriever that reads the index. Do not try to solve staleness by rewording the prompt, because the wording is not the problem.
+
+### Failure two: no grounding, and its mirror image of the wrong data
+
+The second failure mode is no grounding at all. With nothing pulled into the resolved prompt, the model falls back on its training data: it produces generic phrasing and plausible but wrong specifics such as a hallucinated policy or an invented detail. The fix is to ground the prompt in the data the answer needs, through a merge field, a Flow resource, or a retriever.
+
+The mirror-image mistake is grounding with the wrong data, such as a field loosely related to the question, which is just as damaging because the model writes confidently from an irrelevant fact. Presence is not the goal. Relevance is, and the technique must match the question rather than merely exist.
+
+### Failure three: over-broad retrieval is a configuration problem
+
+The third failure mode is over-broad retrieval. When a retriever returns too much or matches too loosely, the prompt fills with noisy, off-topic chunks that dilute the signal, and the model can be pulled toward an answer from the noise rather than the relevant passage. Fix it at configuration time, not in the prompt: narrow the retriever to the right data space and source object, filter by metadata such as an id, chunk by semantic boundary rather than a fixed token count, and return only the fields the answer needs[^7].
+
+The instinct to move to a larger model, or to tell the prompt to ignore irrelevant parts, is the trap. Retrieval quality is a configuration decision, and a tighter retriever usually beats a larger model.
+
+### Access to retrieved content is scoped by data space and permission sets
+
+Access to retrieved content is governed by Data Cloud permission sets and scoped by data space and data category, so scope each library by audience and never rely on the model to redact what a user should not see[^6]. This is the same principle that governs merge fields: the grounding a run can reach is bounded by the caller's entitlements. A library that mixes content for different audiences will eventually surface the wrong content to the wrong person.
+
+Enforce access at retrieval time, not after. Grounding and access are the same design decision seen from two angles, and retrieval does not know who should read what unless you scope it.
+
+### Retrievers do not travel with the template, so promotion is a trap
+
+Two operational facts close the scenario set. Access scoping is a build step, not a default, and retrievers and search indexes do not travel as prompt-template metadata, so plan to create them in each org before the template that uses them is deployed[^6]. A promotion that copies the template without the retriever lands a template whose grounding does not exist yet.
+
+Grounding that works in a sandbox is not automatically grounding that works in production. Test the deployment path, not just the template, and sequence the org setup so the index and retriever exist before the template references them. In a real build this is the difference between a launch that works and one that fails on day one.
+
+## Exam Traps
+
+Three misconceptions recur. The first is believing a retriever returns live data. The index refreshes on a schedule, so a retriever can serve content older than the last change, and a fact that changes often belongs behind an action that reads it live. The second is believing more retrieved context always helps. Over-broad retrieval returns noisy chunks that dilute the prompt, so narrowing the source, the filters, and the returned fields usually improves the answer. The third is believing the model will filter out content the user should not see. Access is governed by Data Cloud permission sets and data spaces, so it must be enforced at retrieval time rather than left to the model.
+
+## What a consultant should walk away with
+
+Name the requirement before you name the technique, then let the constraint in the scenario pick between close options. For a field that already exists, a merge field. For a computed or cross-object value, a Flow or Apex resource. For meaning-based search over a corpus, a Data 360 retriever, with its type following the shape of the question. For a quick single-source library, the Agentforce Data Library. When the requirement is freshness, ground with a run-time action rather than an index. When retrieval returns noise, tighten the configuration rather than the prompt.
+
+## What's next
+
+Lesson 9 - Creating, Activating, and Executing Prompt Templates (pe-5a)
+
+[^3]: Salesforce, "Prompt Builder Key Concepts" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_key_concepts.htm&language=en_US&type=5)
+[^5]: Salesforce, "Ground with Knowledge Using Retrieval Augmented Generation" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_ground_rag.htm&language=en&type=5)
+[^6]: Salesforce, "Ground Agentforce in Data" (https://help.salesforce.com/s/articleView?id=ai.agent_parent_data.htm&language=en_US&type=5)
+[^7]: Salesforce, "Retrieve Data" (https://help.salesforce.com/s/articleView?id=data.c360_a_ai_retriever.htm&language=en&type=5)

@@ -1,0 +1,78 @@
+---
+title: "Lesson 16: When Model Access Is Withdrawn: Admin Controls, Author Impact, and Existing Templates"
+slug: day-16-pe-8b-when-model-access-is-withdrawn-admin-controls-auth
+series: sf-agentforce-specialist
+lesson: 16
+excerpt: "Learn how a withdrawn model reaches the people who built on it: the override order for reasoning, why prompt templates keep their own model, and the sequence that keeps a governance change from taking an agent down. Covers requirement pe-8b in the Prompt Engineering domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "11 min read"
+tags: [Model Access, Agent Script, Prompt Builder, Governance]
+---
+
+# Lesson 16: When Model Access Is Withdrawn: Admin Controls, Author Impact, and Existing Templates
+
+A platform team decided to retire a model that a business unit had been using for months. The admin toggled the provider off on a Friday, expecting a quiet change. By Monday, three agents had stopped answering and a nightly integration calling the same vendor was failing silently. The references were never inventoried, so the withdrawal meant to reduce risk instead took production down and left everyone guessing which change caused it.
+
+The cause is that withdrawing a model is a sequence, and the sequence runs the wrong way if you start with the toggle. The controls each have a scope, the people who built on the model feel the change differently depending on which control you used, and existing templates behave in ways that surprise anyone who assumes a blocked model stops everything.
+
+This lesson lists the controls by scope, fixes the override order the reasoning engine follows, and walks the correct sequence for withdrawing access so a governance change never takes an agent down by accident. The objective matches day fifteen, explain how to manage and prevent specific models from being accessed, taken now from the side of the people downstream of the admin.
+
+## Deep Dive
+
+### List your controls by scope
+
+Start by listing the controls by scope, because each is a different lever. The provider toggle in Einstein Setup blocks a vendor's models org wide. Hide and show in the AI Models Model Library controls whether authors can select a configuration in Prompt Builder. The Agentforce model option in Einstein Audit, Analytics, and Monitoring Setup sets the org default for the reasoning engine. And the model configuration in Agent Script overrides the model at the agent or subagent scope [^2].
+
+Governance is choosing the right scope for the requirement, and the rest of this lesson is what happens when a model is taken away after people have built on it. When a scenario names the surface, such as an author's pick list or a single subagent, the scope tells you which control is in play.
+
+### The override order decides the reasoning model
+
+The override order is exam bait, so fix it in memory. When a subagent runs, Agentforce determines which model to use in this order: first the model set on the subagent, then the model set for the agent, then the model selected in Setup [^1]. A subagent override always wins, an agent override beats the org default, and the org default is the fallback.
+
+But there is a limit the exam likes to test: model override does not affect the model that prompt templates inside actions use. A prompt template runs on the model its own configuration names, whatever the subagent is set to [^2]. So a single conversation can use one model for reasoning and another for an action's prompt, and neither overrides the other.
+
+### Prompt templates run on their own model, not the subagent's
+
+The separation deserves its own beat because it trips people up. Reasoning and prompt generation are two different models chosen by two different mechanisms. The reasoning engine follows the override chain that ends at the org default. A prompt template follows the model its configuration names and is not moved by a subagent's model configuration [^2].
+
+This means withdrawing a model has two audiences, not one. If the model is used for reasoning, the override chain and the org default decide who is affected. If it is used inside a prompt template, the template's own configuration decides. A governance plan that covers only one of the two will miss half the references.
+
+### A hidden model is a soft withdrawal, a disabled provider is a hard one
+
+How a blocked model surfaces to an author depends on which control you used. If you hid the configuration, the author does not get an error when they look at an existing template. They see that the model is hidden, the Model Visibility column reads Hidden, and the configuration name carries the Not Available prefix, so it is visibly not selectable. From there, the author selects an available model from the Models list to move the template [^3].
+
+If you turned off the provider instead, the failure is harder: the components that referenced that vendor's models stop running. So the author facing signal for a hidden model is a visible, non selectable entry, while the signal for a disabled provider is a component that no longer runs.
+
+### Hiding never breaks running templates, disabling a provider can
+
+What happens to existing templates when access is withdrawn is the question people get wrong. The governing rule is that hiding a model does not break a template that already uses it. Those templates run the same as before, and hiding only removes the model from new selection [^3]. The harder action is turning off the provider, and that is the one that stops affected components from running, which is why you re-point every reference before you do it.
+
+Cloning is a smaller edge worth knowing. If an author clones a template that uses a hidden model, they must select another model before the clone can be saved. So a hidden model is a soft withdrawal that leaves running templates alone, and a disabled provider is a hard withdrawal that can take work down.
+
+### Withdraw access last, after the inventory
+
+The correct sequence for withdrawing access is an inventory first. Before you change anything, list every place the model is referenced: agents, subagents through the model configuration, prompt templates, custom actions, and API calls. Re-point each to a permitted model. Then withdraw access by toggling the provider off or hiding the configuration. Then wait for the change to take effect and confirm it with a real check, because a provider change can take up to ten minutes.
+
+Skipping the inventory is how a governance change takes an agent down in production, and an agent that silently falls back is worse than one that fails loudly. Withdraw access last, after the references are safe, not first.
+
+### Match the control to the requirement
+
+Finally, match the control to the requirement, because the exam frames these as scenario choices. When the requirement is data residency or a regulated subagent, the relevant control is which models can keep traffic inside the Salesforce trust boundary, and Bedrock hosted Anthropic models can keep language model traffic within the Salesforce network, which is why they appear in compliance patterns [^4]. When the requirement is author choice, the control is hiding the configuration. When the requirement is a hard org wide block, the control is the provider toggle. And when the requirement is the reasoning engine itself, remember it is constrained to Salesforce managed models, so a model you brought yourself is used by actions, not by the reasoning loop.
+
+## Exam Traps
+
+Three misconceptions carry the marks. The first is believing hiding a model breaks templates already using it, when prompt templates that use a hidden model run the same as before and hiding only removes the model from new selection. The second is believing a subagent override changes the prompt template's model, when model override does not affect the model that prompt templates in actions use, so the two follow separate configuration. The third is believing a brought-in custom model can run the reasoning engine, when the reasoning engine is constrained to Salesforce managed models, so a custom model is used by actions rather than by the reasoning loop.
+
+## What a consultant should walk away with
+
+Withdraw access only after you re-point every reference, and remember that hiding a model never stops a template that already uses it. Fix the override order, subagent beats agent beats org default, and remember that prompt templates run on their own configuration regardless. Match the control to the requirement: the provider toggle for a hard block, hiding for author choice, and the model option for the reasoning engine. Then confirm the change took before you call it done.
+
+## What's next
+
+Lesson 17 - The Agentforce Data Library: A Retrieval Layer, Not a Knowledge Base (df-1a)
+
+[^1]: Salesforce, "Choosing an AI Model for a Subagent" (https://help.salesforce.com/s/articleView?id=ai.agent_subagents_model.htm&language=en_US&type=5)
+[^2]: Salesforce, "Configure Models in Agent Script" (https://developer.salesforce.com/docs/ai/agentforce/guide/ascript-model.md)
+[^3]: Salesforce, "Change LLM Configurations in Prompt Templates" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_changing_llm_configurations.htm&language=en_US&type=5)
+[^4]: Salesforce, "Supported Models" (https://developer.salesforce.com/docs/ai/agentforce/guide/supported-models.html)

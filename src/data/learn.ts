@@ -8,6 +8,289 @@ import { LearnLesson, LearningSeries } from "./types";
 /** All series, sorted by newest lesson date DESC (ties → slug asc). Empty dirs included with lessons: []. */
 export const learnSeries: LearningSeries[] = [
   {
+    "slug": "sf-agentforce-specialist",
+    "name": "Salesforce Agentforce Specialist",
+    "description": "Prep course for the Salesforce Certified Agentforce Specialist certification. Covers prompt engineering for Agentforce, Data 360 fundamentals, AI agent design and reasoning, testing and deployment, governance and observability, and multi-agent orchestration. Built to the Spring '26 exam blueprint, including the MCP and A2A surfaces the Trailhead prep trail does not cover.",
+    "gradient": "from-sky-500 to-indigo-700",
+    "examKind": "certification-prep",
+    "lessons": [
+      {
+        "slug": "day-01-pe-1a-when-to-reach-for-prompt-builder-scope-fit-and-how",
+        "title": "Lesson 1: When to Reach for Prompt Builder: Scope, Fit, and How This Course Maps to the Exam",
+        "series": "sf-agentforce-specialist",
+        "lesson": 1,
+        "excerpt": "Learn how to read a business requirement and decide when a prompt template is the right tool, turning generated, record-grounded text into a reusable, governed asset instead of a one-off chat prompt. Covers requirement pe-1a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Engineering",
+          "Agentforce Specialist",
+          "Exam Blueprint"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-02-pe-1b-the-decision-boundary-in-practice-when-a-prompt-te",
+        "title": "Lesson 2: The Decision Boundary in Practice: When a Prompt Template Is the Wrong Tool",
+        "series": "sf-agentforce-specialist",
+        "lesson": 2,
+        "excerpt": "Learn how to draw the line between generated text and computed truth, so you know when a prompt template is the wrong tool and a formula, a Flow, or a report is the right one. Covers requirement pe-1b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Engineering",
+          "Flow",
+          "Exam Scenarios"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-03-pe-2a-access-controls-for-prompt-templates-permission-se",
+        "title": "Lesson 3: Access Controls for Prompt Templates: Permission Sets and Activation",
+        "series": "sf-agentforce-specialist",
+        "lesson": 3,
+        "excerpt": "Learn how the two prompt template permissions and version activation govern who can author a template, who can run it, and which data a run may read. Covers requirement pe-2a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Prompt Builder",
+          "Permission Sets",
+          "Activation",
+          "Prompt Engineering"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-04-pe-2b-who-authors-vs-who-runs-sharing-permission-sets-an",
+        "title": "Lesson 4: Who Authors vs Who Runs: Sharing, Permission Sets, and Record Access",
+        "series": "sf-agentforce-specialist",
+        "lesson": 4,
+        "excerpt": "Learn why the same activated template can return different output for two users, and how record sharing, field-level security, and the author-versus-runner split shape every prompt run. Covers requirement pe-2b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "9 min read",
+        "tags": [
+          "Prompt Builder",
+          "Record Access",
+          "Field-Level Security",
+          "Permission Sets"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-05-pe-3a-prompt-template-types-what-field-generation-flex-a",
+        "title": "Lesson 5: Prompt Template Types: What Field Generation, Flex, and the Standard Types Bind",
+        "series": "sf-agentforce-specialist",
+        "lesson": 5,
+        "excerpt": "Learn how to read a requirement and choose the prompt template type in Prompt Builder that fits it, from Field Generation and Flex to Sales Email and Record Summary, so the binding, the entry points and the output shape all match the job. Covers requirement pe-3a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Template Types",
+          "Field Generation",
+          "Flex"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-06-pe-3b-choosing-a-template-type-from-the-requirement-bind",
+        "title": "Lesson 6: Choosing a Template Type from the Requirement: Bindings and Wrong-Type Traps",
+        "series": "sf-agentforce-specialist",
+        "lesson": 6,
+        "excerpt": "Learn how to choose a prompt template type from a business requirement by reading the output destination first and the object breadth second, so the binding, the entry point and the wrong-type traps all resolve on the exam. Covers requirement pe-3b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Template Types",
+          "Bindings",
+          "Exam Traps"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-07-pe-4a-grounding-techniques-what-grounds-a-prompt-and-whe",
+        "title": "Lesson 7: Grounding Techniques: What Grounds a Prompt and Where It Lives",
+        "series": "sf-agentforce-specialist",
+        "lesson": 7,
+        "excerpt": "Learn how to ground a prompt template so the model answers from your data, and how to choose among merge fields, Flow and Apex resources, Data 360 retrievers and the Agentforce Data Library for a given scenario. Covers requirement pe-4a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Prompt Builder",
+          "Grounding",
+          "Retrieval",
+          "Data 360"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-08-pe-4b-choosing-and-failing-at-grounding-scenarios-trade",
+        "title": "Lesson 8: Choosing and Failing at Grounding: Scenarios, Trade-offs, and Failure Modes",
+        "series": "sf-agentforce-specialist",
+        "lesson": 8,
+        "excerpt": "Learn how to pick the right grounding technique for a scenario, weigh the trade-offs between merge fields, Flow, Apex, retrievers and data libraries, and recognize the stale, missing and over-broad grounding failures. Covers requirement pe-4b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "10 min read",
+        "tags": [
+          "Prompt Builder",
+          "Grounding",
+          "Retrieval",
+          "Failure Modes"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-09-pe-5a-creating-activating-and-executing-prompt-templates",
+        "title": "Lesson 9: Creating, Activating, and Executing Prompt Templates",
+        "series": "sf-agentforce-specialist",
+        "lesson": 9,
+        "excerpt": "Learn how to create, test, activate, and invoke a prompt template in Prompt Builder, from choosing a type and grounding it with merge fields to exposing it as an invocable action. Covers requirement pe-5a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Templates",
+          "Agentforce",
+          "Activation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-10-pe-5b-prompt-template-lifecycle-activation-versions-and",
+        "title": "Lesson 10: Prompt Template Lifecycle: Activation, Versions, and Invocation",
+        "series": "sf-agentforce-specialist",
+        "lesson": 10,
+        "excerpt": "Learn how prompt templates move between versions in Prompt Builder: how activation gates availability, why an active version is immutable, and how every invocation surface runs the active version. Covers requirement pe-5b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Templates",
+          "Activation",
+          "Versioning"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-11-pe-6a-writing-effective-prompts-structure-specificity-an",
+        "title": "Lesson 11: Writing Effective Prompts: Structure, Specificity, and Output Shape",
+        "series": "sf-agentforce-specialist",
+        "lesson": 11,
+        "excerpt": "Learn the prompt-writing practices that change output quality in Prompt Builder, from stating the task and supplying context to naming the output shape and iterating against real data. Covers requirement pe-6a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Writing",
+          "Context",
+          "Output Format"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-12-pe-6b-advanced-prompt-writing-techniques-that-help-and-a",
+        "title": "Lesson 12: Advanced Prompt Writing: Techniques That Help and Anti-Patterns That Fail",
+        "series": "sf-agentforce-specialist",
+        "lesson": 12,
+        "excerpt": "Learn the advanced prompt-writing techniques that move output quality in Prompt Builder, including structured sections, explicit output shapes, paired constraints, and the anti-patterns that quietly fail. Covers requirement pe-6b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Prompt Builder",
+          "Prompt Writing",
+          "Constraints",
+          "Anti-Patterns"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-13-pe-7a-the-einstein-trust-layer-the-security-and-privacy",
+        "title": "Lesson 13: The Einstein Trust Layer: The Security and Privacy Features Around Every Prompt",
+        "series": "sf-agentforce-specialist",
+        "lesson": 13,
+        "excerpt": "Learn how to name and place the six security and privacy features that wrap every Agentforce prompt before it reaches an external model, and how each one changes what an admin can promise a security reviewer. Covers requirement pe-7a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Einstein Trust Layer",
+          "Data Masking",
+          "Prompt Defense",
+          "Toxicity Scoring"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-14-pe-7b-the-trust-boundary-on-a-request-what-is-masked-wha",
+        "title": "Lesson 14: The Trust Boundary on a Request: What Is Masked, What Is Retained, and What an Admin Governs",
+        "series": "sf-agentforce-specialist",
+        "lesson": 14,
+        "excerpt": "Learn how to draw the trust boundary on a single request: what masking changes, what the provider retains, what demasking restores, and which settings an admin owns to keep the seam governed. Covers requirement pe-7b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Einstein Trust Layer",
+          "Data Masking",
+          "Zero Data Retention",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-15-pe-8a-managing-model-access-provider-toggles-hiding-conf",
+        "title": "Lesson 15: Managing Model Access: Provider Toggles, Hiding Configurations, and the Agentforce Model Option",
+        "series": "sf-agentforce-specialist",
+        "lesson": 15,
+        "excerpt": "Learn how to keep specific models out of reach by separating provider access from configuration visibility, and how the org level reasoning model option governs every agent. Covers requirement pe-8a in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Model Providers",
+          "Prompt Builder",
+          "Einstein Setup",
+          "Agentforce Model"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-16-pe-8b-when-model-access-is-withdrawn-admin-controls-auth",
+        "title": "Lesson 16: When Model Access Is Withdrawn: Admin Controls, Author Impact, and Existing Templates",
+        "series": "sf-agentforce-specialist",
+        "lesson": 16,
+        "excerpt": "Learn how a withdrawn model reaches the people who built on it: the override order for reasoning, why prompt templates keep their own model, and the sequence that keeps a governance change from taking an agent down. Covers requirement pe-8b in the Prompt Engineering domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "11 min read",
+        "tags": [
+          "Model Access",
+          "Agent Script",
+          "Prompt Builder",
+          "Governance"
+        ],
+        "status": "published"
+      }
+    ],
+    "totalLessons": 16,
+    "curriculumLessons": 61
+  },
+  {
     "slug": "sf-agentforce-sales-consultant",
     "name": "Salesforce Agentforce Sales Consultant",
     "description": "Prep course for the Salesforce Certified Agentforce Sales Consultant certification. Covers the sales lifecycle, consulting and implementation strategies, practical Agentforce Sales expertise across the Lead to Opportunity to Quote to Close process, data management for sales solutions, and the predictive and generative AI features available in Agentforce Sales.",
@@ -10917,21 +11200,283 @@ export const learnSeries: LearningSeries[] = [
     ],
     "totalLessons": 20,
     "curriculumLessons": 20
-  },
-  {
-    "slug": "sf-agentforce-specialist",
-    "name": "Salesforce Agentforce Specialist",
-    "description": "Prep course for the Salesforce Certified Agentforce Specialist certification. Covers prompt engineering for Agentforce, Data 360 fundamentals, AI agent design and reasoning, testing and deployment, governance and observability, and multi-agent orchestration. Built to the Spring '26 exam blueprint, including the MCP and A2A surfaces the Trailhead prep trail does not cover.",
-    "gradient": "from-sky-500 to-indigo-700",
-    "examKind": "certification-prep",
-    "lessons": [],
-    "totalLessons": 0,
-    "curriculumLessons": 61
   }
 ];
 
 /** Flat list of every lesson, NEWEST FIRST (for sitemap, nav, flat lookups). */
 export const learnLessons: LearnLesson[] = [
+  {
+    "slug": "day-01-pe-1a-when-to-reach-for-prompt-builder-scope-fit-and-how",
+    "title": "Lesson 1: When to Reach for Prompt Builder: Scope, Fit, and How This Course Maps to the Exam",
+    "series": "sf-agentforce-specialist",
+    "lesson": 1,
+    "excerpt": "Learn how to read a business requirement and decide when a prompt template is the right tool, turning generated, record-grounded text into a reusable, governed asset instead of a one-off chat prompt. Covers requirement pe-1a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Engineering",
+      "Agentforce Specialist",
+      "Exam Blueprint"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-02-pe-1b-the-decision-boundary-in-practice-when-a-prompt-te",
+    "title": "Lesson 2: The Decision Boundary in Practice: When a Prompt Template Is the Wrong Tool",
+    "series": "sf-agentforce-specialist",
+    "lesson": 2,
+    "excerpt": "Learn how to draw the line between generated text and computed truth, so you know when a prompt template is the wrong tool and a formula, a Flow, or a report is the right one. Covers requirement pe-1b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Engineering",
+      "Flow",
+      "Exam Scenarios"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-03-pe-2a-access-controls-for-prompt-templates-permission-se",
+    "title": "Lesson 3: Access Controls for Prompt Templates: Permission Sets and Activation",
+    "series": "sf-agentforce-specialist",
+    "lesson": 3,
+    "excerpt": "Learn how the two prompt template permissions and version activation govern who can author a template, who can run it, and which data a run may read. Covers requirement pe-2a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "9 min read",
+    "tags": [
+      "Prompt Builder",
+      "Permission Sets",
+      "Activation",
+      "Prompt Engineering"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-04-pe-2b-who-authors-vs-who-runs-sharing-permission-sets-an",
+    "title": "Lesson 4: Who Authors vs Who Runs: Sharing, Permission Sets, and Record Access",
+    "series": "sf-agentforce-specialist",
+    "lesson": 4,
+    "excerpt": "Learn why the same activated template can return different output for two users, and how record sharing, field-level security, and the author-versus-runner split shape every prompt run. Covers requirement pe-2b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "9 min read",
+    "tags": [
+      "Prompt Builder",
+      "Record Access",
+      "Field-Level Security",
+      "Permission Sets"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-05-pe-3a-prompt-template-types-what-field-generation-flex-a",
+    "title": "Lesson 5: Prompt Template Types: What Field Generation, Flex, and the Standard Types Bind",
+    "series": "sf-agentforce-specialist",
+    "lesson": 5,
+    "excerpt": "Learn how to read a requirement and choose the prompt template type in Prompt Builder that fits it, from Field Generation and Flex to Sales Email and Record Summary, so the binding, the entry points and the output shape all match the job. Covers requirement pe-3a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Template Types",
+      "Field Generation",
+      "Flex"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-06-pe-3b-choosing-a-template-type-from-the-requirement-bind",
+    "title": "Lesson 6: Choosing a Template Type from the Requirement: Bindings and Wrong-Type Traps",
+    "series": "sf-agentforce-specialist",
+    "lesson": 6,
+    "excerpt": "Learn how to choose a prompt template type from a business requirement by reading the output destination first and the object breadth second, so the binding, the entry point and the wrong-type traps all resolve on the exam. Covers requirement pe-3b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Template Types",
+      "Bindings",
+      "Exam Traps"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-07-pe-4a-grounding-techniques-what-grounds-a-prompt-and-whe",
+    "title": "Lesson 7: Grounding Techniques: What Grounds a Prompt and Where It Lives",
+    "series": "sf-agentforce-specialist",
+    "lesson": 7,
+    "excerpt": "Learn how to ground a prompt template so the model answers from your data, and how to choose among merge fields, Flow and Apex resources, Data 360 retrievers and the Agentforce Data Library for a given scenario. Covers requirement pe-4a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "Prompt Builder",
+      "Grounding",
+      "Retrieval",
+      "Data 360"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-08-pe-4b-choosing-and-failing-at-grounding-scenarios-trade",
+    "title": "Lesson 8: Choosing and Failing at Grounding: Scenarios, Trade-offs, and Failure Modes",
+    "series": "sf-agentforce-specialist",
+    "lesson": 8,
+    "excerpt": "Learn how to pick the right grounding technique for a scenario, weigh the trade-offs between merge fields, Flow, Apex, retrievers and data libraries, and recognize the stale, missing and over-broad grounding failures. Covers requirement pe-4b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "10 min read",
+    "tags": [
+      "Prompt Builder",
+      "Grounding",
+      "Retrieval",
+      "Failure Modes"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-09-pe-5a-creating-activating-and-executing-prompt-templates",
+    "title": "Lesson 9: Creating, Activating, and Executing Prompt Templates",
+    "series": "sf-agentforce-specialist",
+    "lesson": 9,
+    "excerpt": "Learn how to create, test, activate, and invoke a prompt template in Prompt Builder, from choosing a type and grounding it with merge fields to exposing it as an invocable action. Covers requirement pe-5a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Templates",
+      "Agentforce",
+      "Activation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-10-pe-5b-prompt-template-lifecycle-activation-versions-and",
+    "title": "Lesson 10: Prompt Template Lifecycle: Activation, Versions, and Invocation",
+    "series": "sf-agentforce-specialist",
+    "lesson": 10,
+    "excerpt": "Learn how prompt templates move between versions in Prompt Builder: how activation gates availability, why an active version is immutable, and how every invocation surface runs the active version. Covers requirement pe-5b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Templates",
+      "Activation",
+      "Versioning"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-11-pe-6a-writing-effective-prompts-structure-specificity-an",
+    "title": "Lesson 11: Writing Effective Prompts: Structure, Specificity, and Output Shape",
+    "series": "sf-agentforce-specialist",
+    "lesson": 11,
+    "excerpt": "Learn the prompt-writing practices that change output quality in Prompt Builder, from stating the task and supplying context to naming the output shape and iterating against real data. Covers requirement pe-6a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Writing",
+      "Context",
+      "Output Format"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-12-pe-6b-advanced-prompt-writing-techniques-that-help-and-a",
+    "title": "Lesson 12: Advanced Prompt Writing: Techniques That Help and Anti-Patterns That Fail",
+    "series": "sf-agentforce-specialist",
+    "lesson": 12,
+    "excerpt": "Learn the advanced prompt-writing techniques that move output quality in Prompt Builder, including structured sections, explicit output shapes, paired constraints, and the anti-patterns that quietly fail. Covers requirement pe-6b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Prompt Builder",
+      "Prompt Writing",
+      "Constraints",
+      "Anti-Patterns"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-13-pe-7a-the-einstein-trust-layer-the-security-and-privacy",
+    "title": "Lesson 13: The Einstein Trust Layer: The Security and Privacy Features Around Every Prompt",
+    "series": "sf-agentforce-specialist",
+    "lesson": 13,
+    "excerpt": "Learn how to name and place the six security and privacy features that wrap every Agentforce prompt before it reaches an external model, and how each one changes what an admin can promise a security reviewer. Covers requirement pe-7a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Einstein Trust Layer",
+      "Data Masking",
+      "Prompt Defense",
+      "Toxicity Scoring"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-14-pe-7b-the-trust-boundary-on-a-request-what-is-masked-wha",
+    "title": "Lesson 14: The Trust Boundary on a Request: What Is Masked, What Is Retained, and What an Admin Governs",
+    "series": "sf-agentforce-specialist",
+    "lesson": 14,
+    "excerpt": "Learn how to draw the trust boundary on a single request: what masking changes, what the provider retains, what demasking restores, and which settings an admin owns to keep the seam governed. Covers requirement pe-7b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Einstein Trust Layer",
+      "Data Masking",
+      "Zero Data Retention",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-15-pe-8a-managing-model-access-provider-toggles-hiding-conf",
+    "title": "Lesson 15: Managing Model Access: Provider Toggles, Hiding Configurations, and the Agentforce Model Option",
+    "series": "sf-agentforce-specialist",
+    "lesson": 15,
+    "excerpt": "Learn how to keep specific models out of reach by separating provider access from configuration visibility, and how the org level reasoning model option governs every agent. Covers requirement pe-8a in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Model Providers",
+      "Prompt Builder",
+      "Einstein Setup",
+      "Agentforce Model"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-16-pe-8b-when-model-access-is-withdrawn-admin-controls-auth",
+    "title": "Lesson 16: When Model Access Is Withdrawn: Admin Controls, Author Impact, and Existing Templates",
+    "series": "sf-agentforce-specialist",
+    "lesson": 16,
+    "excerpt": "Learn how a withdrawn model reaches the people who built on it: the override order for reasoning, why prompt templates keep their own model, and the sequence that keeps a governance change from taking an agent down. Covers requirement pe-8b in the Prompt Engineering domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "11 min read",
+    "tags": [
+      "Model Access",
+      "Agent Script",
+      "Prompt Builder",
+      "Governance"
+    ],
+    "status": "published"
+  },
   {
     "slug": "day-01-sl-1a-mapping-business-requirements-and-kpis-to-agentfor",
     "title": "Lesson 1: Mapping Business Requirements and KPIs to Agentforce Sales Capabilities",
