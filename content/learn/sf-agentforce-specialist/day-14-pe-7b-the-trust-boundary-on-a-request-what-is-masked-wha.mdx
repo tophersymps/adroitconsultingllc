@@ -6,7 +6,7 @@ lesson: 14
 excerpt: "Learn how to draw the trust boundary on a single request: what masking changes, what the provider retains, what demasking restores, and which settings an admin owns to keep the seam governed. Covers requirement pe-7b in the Prompt Engineering domain."
 date: "November 24, 2026"
 author: "Adroit Consulting"
-readTime: "11 min read"
+readTime: "21 min read"
 tags: [Einstein Trust Layer, Data Masking, Zero Data Retention, Governance]
 ---
 
@@ -16,7 +16,7 @@ A consultant joined a financial services org two weeks before go live and promis
 
 The cause is that the Trust Layer is a boundary, and a boundary is only as clear as the line you draw on it. Teams describe the layer in slogans and never trace a single request across the seam between the Salesforce gateway and the external model. Without that trace, nobody can say which values are masked, which are withheld, which are restored, and which settings the admin left at their default.
 
-This lesson traces one request from the user turn to the response, marks the seam, and then works the precision points that decide the exam answers: what masking actually touches, what demasking restores, what zero data retention really covers, and which controls sit with the admin. The objective matches day thirteen, identify the security and privacy features of the Trust Layer, taken now at the level where governance decisions are made.
+This lesson traces one request from the user turn to the response, marks the seam, and then works the precision points that decide the exam answers: what masking actually touches, what demasking restores, what is retained and where, what zero data retention really covers, and which controls sit with the admin. The objective matches day thirteen, identify the security and privacy features of the Trust Layer, taken now at the level where governance decisions are made.
 
 ## Deep Dive
 
@@ -26,35 +26,69 @@ A request begins as a user turn inside your org. The agent or prompt template as
 
 Name that seam once and most governance questions become answerable. Ask where the data is and you answer with a side; ask what protects it and you answer with the control that governs that side. Governing the layer is governing what happens on each side of the seam.
 
+What makes the seam a useful mental model is that it is the only place where your org stops being in control. On the org side, Salesforce applies your sharing model, your field-level security, and your masking rules. Across it, the platform relies on a contractual agreement with the provider and on transport encryption. So when someone asks what guards a value, split the question: which side is the value on when the risk applies, and what control lives on that side.
+
 ### Masking fires on rules, not on everything
 
 What is masked is a precision point. Masking runs on the prompt text before it crosses the seam, and it fires on what matches a rule: a regular expression shape with supporting context, or a value sitting in a field you classified with Shield Platform Encryption or Data Classification [^1]. It is not blanket encryption of everything in the prompt. A value the model genuinely needs can cross in the clear if it matches no pattern and sits in no classified field, which is exactly why you control what must and must not be masked.
+
+Consider what that means for a requirement. If the business says never send contact names and company names to the model, that requirement is met partly by pattern-based detection, which is trained to catch values with no fixed shape, such as names of people and companies [^1]. If the business says never send a value held in a particular field, the cleaner control is to classify that field, because field-based masking reads the classification metadata and extends your existing data classification to the model [^1]. The two mechanisms are complementary, and a mature org uses both.
 
 The agent caveat returns here and changes the design. Because data masking for large language models is disabled for agents, an agent prompt is not masked at this boundary at all [^2]. With an agent you rely on grounding permissions and never placing a raw sensitive value in the prompt. The masking you configured for embedded features does not protect an agent conversation.
 
 ### Demasking restores the value the model never saw
 
-Demasking is the half of masking people forget. The layer does not throw the real values away when it substitutes placeholders. It temporarily stores the relationship between the original entity and its placeholder, lets the model work on the placeholder, and then uses that stored mapping to put the real value back into the response before the user sees it. The user still reads their own account number or name while the model only ever saw a token.
+Demasking is the half of masking people forget. The layer does not throw the real values away when it substitutes placeholders. It temporarily stores the relationship between the original entity and its placeholder, lets the model work on the placeholder, and then uses that stored mapping to put the real value back into the response before the user sees it [^1]. The user still reads their own account number or name while the model only ever saw a token.
 
 This is why masking is a boundary control rather than a redaction the user experiences. It also explains why the mapping is held somewhere, and why that holding is temporary. If a question frames masking as permanently hiding data from the user, the answer is the opposite: the user sees the real value, and only the model sees the placeholder.
+
+The word temporarily carries weight on the exam. The mapping exists only long enough to demask the returned response, and the prompt text that the audit trail stores keeps both the masked form and the hydrated form, so the protection the model experienced and the data your org can still read are both recorded. A governance answer that says the placeholder mapping is retained forever, or that demasking is optional, has misread the mechanism.
 
 ### Zero data retention names the partner, not every model
 
 Zero data retention is an agreement between Salesforce and the external partner providers, and it names providers such as OpenAI and Azure OpenAI [^3]. For a model routed through that external partner, it means the provider does not retain the prompt or response and does not train on it. It is not a switch you flip for one agent, and it is not universal across every model in your org.
 
-The scope is where the exam lives. A model that runs inside the Salesforce boundary, such as a Bedrock-hosted Anthropic model kept within the Salesforce network, is governed by that arrangement rather than the external partner agreement. A model you connected yourself through a bring your own model path is governed by the contract you signed with that provider, not the platform's partner terms. So whether zero data retention applies to a given model is a question about routing, not a yes you can assume.
+The scope is where the exam lives, and the platform describes it as three hosting tiers. Models built or fine-tuned by Salesforce are hosted inside the Salesforce trust boundary. External models built and maintained by third-party providers such as OpenAI sit in a shared trust boundary and are the ones covered by the zero data retention policy. Models that you build and maintain are hosted on your own infrastructure and are governed by the contract you signed with that provider [^3]. The gateway governs interactions with the different providers on your behalf, but it does not change which agreement applies to which model.
+
+So whether zero data retention applies to a given model is a question about routing, not a yes you can assume. A model that runs inside the Salesforce boundary, such as a Bedrock-hosted Anthropic model kept within the Salesforce network, is governed by that arrangement rather than the external partner agreement. A model you connected yourself through a bring your own model path is governed by the contract you signed with that provider, not the platform's partner terms.
 
 ### The admin owns the policy, the builder consumes it
 
 The governance checkpoints an admin owns are concrete. Turn Einstein on in Einstein Setup. Configure the data masking rules, including the classified fields that feed field-based detection [^1]. Turn on generative AI data collection and storage and install the report package, or the audit trail is not captured and every later audit question has no evidence [^4]. Manage model provider access so only approved vendors are reachable, and decide whether to restrict routing to in-region requests.
 
-The division of labor is the point. The admin sets the policy and the builder consumes it, so a governance gap is almost always an admin setting that was never turned on rather than a model that misbehaved.
+The division of labor is the point. The admin sets the policy and the builder consumes it, so a governance gap is almost always an admin setting that was never turned on rather than a model that misbehaved. When you are handed a broken promise about masking or retention, the first place to look is the settings page for the setting that was never enabled, not the model.
+
+Keep the builder's latitude in view too. Because you can select what must and must not be masked, the admin does not decide every value; the admin enables the mechanism and sets the rules, and the builder is responsible for not placing a raw sensitive value where no rule reaches it. A governance plan that stops at the admin's toggles and ignores prompt design is incomplete, because a value that matches no rule and sits in no classified field still crosses if someone typed it into the instruction text.
 
 ### Three failure modes at the boundary
 
 Hold three failure modes and you can answer any boundary question. First, assuming masking protects an agent: it is disabled for agents, so an agent prompt carrying a raw value sends that value. Second, assuming zero data retention means your org stores nothing: the external provider retains nothing, but Salesforce stores prompts, responses, and trust signals in Data 360 for the audit trail [^4]. Third, assuming grounding bypasses security: retrieval runs as the running user, so sharing rules and field-level security still decide what can be grounded [^5].
 
-Read every boundary scenario the same way. Ask where the data is, which side of the seam it sits on, and which agreement or control applies there.
+Read every boundary scenario the same way. Ask where the data is, which side of the seam it sits on, and which agreement or control applies there. The three failure modes are just three ways of skipping one of those three questions.
+
+### What is retained, and where the record actually lands
+
+The retained copy is the concrete answer to what your org keeps after a request, and it is worth naming field by field. The audit record stores the hydrated prompt text before masking and the final masked prompt text that went to the model, the retrieved grounding data, the model response text, and the final unmasked response text, alongside request metadata, the org ID, the region, the language, a response safety score, and the toxicity scores [^6]. So the org keeps both the version the provider saw, masked, and the version a human can read, unmasked.
+
+Where it lands matters as much as what it contains. The data is stored in the default data space of your Data 360 instance, and enabling it requires Data 360 to be provisioned and Einstein to be on. The system provisions the data model in a few minutes, and collected data appears in Data Cloud within 24 hours and then refreshes hourly [^7]. That timing is a governance fact, not a footnote: a promise of a real-time audit view is a promise the retention model does not make.
+
+One caution closes the retained-data picture. Stored audit data can contain personally identifying information and other sensitive content, because it includes the unmasked response text. Access to it is governed by data space and by permissions, so you scope the audit data space by audience and never expose the unmasked view to a user who should not read a customer's data. Retention protects the model; it does not remove your obligation to govern the stored record [^7].
+
+### Two plausible answers, one boundary: an embedded feature versus an agent
+
+A scenario that hands you two plausible answers usually turns on the surface. Suppose a requirement says that customer social security numbers must never reach an external model. One option says to configure data masking so the numbers are replaced with placeholders. Another says to keep the value out of the prompt through grounding permissions and prompt design. Both sound defensible, and the exam wants the one that matches the surface.
+
+Resolve it by naming the surface first. If the feature is embedded, such as Einstein Service Replies or Einstein Work Summaries, masking is available and configurable, so the first option is the right control and you can point at the masking rule and the masked prompt text in the audit trail. If the feature is an agent, masking for the large language model is disabled, so the first option cannot be what protects the value, and the second option is the answer.
+
+The wrong answer is the one that names the stronger-sounding control without checking the surface, because masking is the feature built for this exact problem and it is the one that does not run for an agent. The exam is testing whether you know the boundary is surface-dependent, not whether you can recite a feature name.
+
+### A worked scenario: the risk committee asks which numbers cross
+
+The requirement arrives as a committee question with a fixed deadline. The committee asks exactly which values leave the org for a given agent conversation, and it wants a list, not a slogan. The consultant has two days.
+
+Reason it in order. Start with grounding: the prompt can only contain data the running user is entitled to see, so the list starts with the fields the agent's design actually merges for that user, bounded by sharing rules and field-level security. Then apply the agent fact: because masking is disabled for agents, none of those values is replaced at the boundary, so every one of them crosses in the clear. Then name what governs the crossing: the zero data retention policy applies only if the conversation routes to an external partner model, and TLS protects it in transit. Finally, name the evidence: the audit trail, if it was enabled before the conversation, holds the hydrated prompt, the retrieved data, and the response.
+
+The wrong answer is to hand the committee a claim that masking covers the agent, because that is the one control this scenario rules out. The correct answer is a list derived from grounding permissions, a statement that the values cross unmasked, the agreement that covers the model the conversation routes to, and the audit data that proves it. The committee wanted the trace, and the trace is the seam plus the surface.
 
 ## Exam Traps
 
@@ -62,14 +96,16 @@ Three misconceptions carry the marks. The first is believing data masking protec
 
 ## What a consultant should walk away with
 
-Trace one request and mark the seam. On the org side, grounding runs as the running user and masking fires on rules. Across the seam, the partner agreement and TLS govern. On the way back, toxicity scoring runs, demasking restores the real values, and the audit trail records everything. Remember that masking is disabled for agents, that zero data retention binds the provider and not your org's storage, and that a governance gap is usually an admin setting left off rather than a model that misbehaved.
+Trace one request and mark the seam. On the org side, grounding runs as the running user and masking fires on rules. Across the seam, the partner agreement and TLS govern. On the way back, toxicity scoring runs, demasking restores the real values, and the audit trail records everything, including both the masked and unmasked prompt text. Remember that masking is disabled for agents, that zero data retention binds the provider and not your org's storage, and that a governance gap is usually an admin setting left off rather than a model that misbehaved.
 
 ## What's next
 
 Lesson 15 - Managing Model Access: Provider Toggles, Hiding Configurations, and the Agentforce Model Option (pe-8a)
 
-[^1]: Salesforce, "Large Language Model Data Masking" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_mask_data.htm&language=en&type=5)
+[^1]: Salesforce, "Large Language Model Data Masking" (https://help.salesforce.com/s/articleView?id=sf.generative_ai_mask_data.htm&language=en_US&type=5)
 [^2]: Salesforce, "Data Masking Limitations in Agentforce" (https://help.salesforce.com/s/articleView?id=ai.agent_trust_data_masking.htm&language=en_US)
 [^3]: Salesforce, "Einstein Trust Layer: Designed for Trust" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_arch.htm&language=en_US&type=5)
 [^4]: Salesforce, "Einstein Audit and Feedback Data" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_feedback.htm&language=en_US&type=5)
 [^5]: Salesforce, "Einstein Trust Layer" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_layer.htm&language=en_US&type=5)
+[^6]: Salesforce, "About Generative AI Audit and Feedback Data" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_feedback_about.htm&language=en_US&type=5)
+[^7]: Salesforce, "Set Up Einstein Generative AI Data Collection and Storage" (https://help.salesforce.com/s/articleView?id=sf.generative_ai_feedback_enable.htm&language=en_US&type=5)

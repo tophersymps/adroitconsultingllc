@@ -6,7 +6,7 @@ lesson: 4
 excerpt: "Learn why the same activated template can return different output for two users, and how record sharing, field-level security, and the author-versus-runner split shape every prompt run. Covers requirement pe-2b in the Prompt Engineering domain."
 date: "November 24, 2026"
 author: "Adroit Consulting"
-readTime: "9 min read"
+readTime: "19 min read"
 tags: [Prompt Builder, Record Access, Field-Level Security, Permission Sets]
 ---
 
@@ -16,7 +16,7 @@ A manager authors and activates a case summary template, runs the preview, and i
 
 The seam between the authoring role and the run role is where this objective lives. A user with Manage Prompt Templates can edit what a template says but has no automatic audience; a user with Execute Prompt Templates can run what is published but cannot change it. On a small team the same person does both and the seam never shows. On a governed org the two roles separate, and the data each runner can reach decides what their run actually produces. Requirement pe-2b sits in the Prompt Engineering domain at 20 percent of the exam, and it tests the combinations, not the vocabulary.
 
-This lesson drills that seam: the independence of the two rights, why record and field access travel with the runner, the risk surface when grounding runs through a Flow or an Apex action, the preview-passes-production-fails failure, and how to read the scenario questions by naming which role is in play.
+This lesson drills that seam: the independence of the two rights, why record and field access travel with the runner, the risk surface when grounding runs through a Flow or an Apex action, the preview-passes-production-fails failure, and how to read the scenario questions by naming which role is in play. Every failure in this objective comes from a single assumption, that one right implies the other or that the template decides what a run can see, so the whole lesson is about breaking that assumption.
 
 ## Deep Dive
 
@@ -24,13 +24,13 @@ This lesson drills that seam: the independence of the two rights, why record and
 
 Day three named the controls; now the seam between them. The authoring right and the run right are independent, and every failure mode in this objective comes from assuming one implies the other. A user with Manage Prompt Templates can edit what a template says but has no automatic audience; a user with Execute Prompt Templates can run what is published but cannot change it.
 
-Read every scenario by asking who authors, who runs, and whether the two see the same data [^1]. Those three questions resolve almost every stem in this objective, because the scenario is almost always a mismatch on one of them. The roles can be held by the same person, and often are on a small team, but the platform treats them as separate capabilities.
+Read every scenario by asking who authors, who runs, and whether the two see the same data [^1]. Those three questions resolve almost every stem in this objective, because the scenario is almost always a mismatch on one of them. The roles can be held by the same person, and often are on a small team, but the platform treats them as separate capabilities, so an answer that assumes the author and the runner are the same user is already off the rails.
 
 ### Record and field access travel with the runner
 
 The first divergence is data access. A prompt template grounds merge data under the executing user's security: the org-wide defaults, the sharing rules, the role hierarchy, and field-level security all decide what that user's run can read [^2]. So the same activated template can produce a full summary for a manager and a thinner one for a rep with less record access, and neither is a bug.
 
-Record access and field access travel with the runner, not with the template. If a requirement says every rep must see the same grounding regardless of their record access, that requirement asks you to change the runner's access or to filter the data before it is grounded, not to change the template. The template is fixed metadata, and it is the same object for everyone who runs it, which is exactly why two runs can differ without the template differing.
+Record access and field access travel with the runner, not with the template. If a requirement says every rep must see the same grounding regardless of their record access, that requirement asks you to change the runner's access or to filter the data before it is grounded, not to change the template. The template is fixed metadata, and it is the same object for everyone who runs it, which is exactly why two runs can differ while the template does not.
 
 ### The Flow and Apex risk surface
 
@@ -42,13 +42,13 @@ The documented fix runs the other way too: if a template returns data a user sho
 
 The failure mode that the exam loves is preview passing and production failing. A manager authors and activates a template, and Preview runs with the manager's own access, so it looks complete. An end user then runs the same activated template and gets a summary missing the exact field the prompt centers on, or an error, because that user cannot read the record or the field.
 
-The template was never wrong; the access was. The lesson is to test a template as a representative runner, not as the author, and to confirm that every grounding resource resolves for the lowest-access user expected to run it [^2]. A preview that only ever runs as the author tests the author's access, not the feature.
+The template was never wrong; the access was. The lesson is to test a template as a representative runner, not as the author, and to confirm that every grounding resource resolves for the lowest-access user expected to run it [^2]. A preview that only ever runs as the author tests the author's access, not the feature, and it is the most common reason a template that looked finished fails on the first day it is used.
 
 ### Over-privileging never fixes a functional gap
 
-A second failure is over-privileging to make a problem disappear. When a rep cannot run a template, the tempting shortcut is to grant Customize Application, which carries prompt permissions but also opens a broad slice of Setup. The correct grant is the narrow one: Prompt Template User for run access, Prompt Template Manager for the people who author.
+A second failure is over-privileging to make a problem disappear. When a rep cannot run a template, the tempting shortcut is to grant Customize Application, which carries prompt permissions but also opens a broad slice of Setup. The correct grant is the narrow one: Prompt Template User for run access, Prompt Template Manager for the people who author [^1].
 
-This is the same principle the whole platform teaches, that a permission set should grant the smallest set of permissions the job needs, and an answer that widens access to fix a functional gap is wrong on the exam and in an org. If a rep cannot run a template, diagnose the actual cause, whether a missing permission or an inactive version, rather than handing out a wide administrative permission.
+This is the same principle the whole platform teaches, that a permission set should grant the smallest set of permissions the job needs, and an answer that widens access to fix a functional gap is wrong on the exam and in an org. If a rep cannot run a template, diagnose the actual cause, whether a missing permission or an inactive version, rather than handing out a wide administrative permission that quietly changes everything else that user can do.
 
 ### Keep the mechanism straight
 
@@ -62,13 +62,39 @@ Here is how to read the scenario questions. If a user runs a template but sees l
 
 If an author's preview looks complete but users get less, you tested as the wrong user. If grounding through a Flow or Apex exposes data the runner should not see, your resource needs a filter. Name which of the two roles the scenario is about and the answer falls out.
 
+### Grounding through a resource runs under that resource's context
+
+Merge fields are the safe default: they are filtered by the executing user's access, so the template cannot read what the runner could not [^2]. A Flow or an Apex resource is different, and this is the detail the exam probes. When a template is grounded through a Flow or an Apex action, that action runs under its own context, and it can surface data the runner could not otherwise open [^3]. The template's promise of inherited access does not extend to code you wrote.
+
+That is not a reason to avoid Flow or Apex grounding; it is a reason to design it. The documented pattern is to add a Flow or an Apex action that filters records before the data is grounded, so the resource itself enforces who sees what. If a template returns data a user should not see, or omits data they should, the fix belongs in the resource rather than in the prompt wording. Granular enforcement at the resource is your job, and the platform gives you the tool to do it.
+
+### A worked scenario: the case summary that shrank for reps
+
+A manager authors and activates a Case Summary template that centers on the Internal Notes field, previews it, and it reads perfectly. The service team reports the summary comes back thin, and one rep gets an error.
+
+Read the two roles. The manager authored and previewed as themselves, and the preview ran with the manager's own access, so it showed everything the manager can see. The reps have less access: some cannot read Internal Notes, and one cannot open the specific case. Because merge data is filtered by the executing user's field-level security and sharing, the template resolved to a thinner prompt for those runners, and for the rep who could not open the case, a grounding resource failed [^2]. The template never changed; the access did.
+
+Now the wrong answer. Adding the missing field text into the instructions does not help, because the field was never the problem, and neither does re-running the preview as the manager, which will look fine again. The correct fixes are to test as a representative runner, to confirm every grounding resource resolves for the lowest-access user expected to run the template, and, if the requirement truly needs the notes for everyone, to adjust the runners' access or filter the data before it is grounded. Naming the role in play, here the runner's record and field access, is what points at the right fix.
+
+### Design the authoring group and the running group on purpose
+
+The failure modes in this objective almost all come from an org that never decided who authors and who runs. When the two groups are left implicit, the first person who needs a template authors it, the first person who cannot run it is granted a wide permission, and the access sprawls. A deliberate design names a small authoring group that holds Manage Prompt Templates and a broader running group that holds Execute Prompt Templates and invokes the activated template from a record page, an agent action, or a Flow [^6]. It reviews both groups as the template set grows [^1].
+
+The design also has to line up with the data. If the running group is broad, the template has to ground on data that group can see, or the runs will vary and some will fail. If the template needs data only a narrower group can read, then the running group should be narrow too, or the grounding should be filtered before it reaches the prompt. Author group, run group, and the data each group can reach are three decisions that have to agree, and a requirement that sounds like it is only about permissions is often about all three.
+
+### Where a record-access fix ends and a template fix begins
+
+When a run produces the wrong data, the instinct is to edit the template, and it is usually the wrong instinct. If a runner sees less than expected, the cause is that runner's record or field access, and the template is behaving correctly by inheriting it [^2]. Editing the prompt cannot grant the missing access, and rewriting the instructions to work around a missing field only hides the real gap.
+
+The line is this: a template fix changes what the prompt says, and an access fix changes what a runner can read. If the requirement is that everyone sees the same grounding, it is an access or a filtering requirement rather than a prompt requirement. If the requirement is that the wording changes, that is a template fix. Keep the two apart and the scenario questions resolve on the first read, because the stem is always describing one of them, never both at once.
+
 ## Exam Traps
 
 Three traps dominate this objective. The first is believing the template decides what data a run sees, when the executing user's sharing and field-level security decide it, so identical runs can differ per user even though the template is the same for everyone. The second is believing Preview is a valid user test, when Preview runs with the author's access, so a template that looks complete there can return less for a lower-access runner. The third is believing Customize Application is a safe way to grant prompt access, when it grants the permissions but opens broad Setup access, so the narrow Prompt Template User or Prompt Template Manager set is the correct grant.
 
 ## What a consultant should walk away with
 
-Name the role before you answer. If the scenario is about authoring, the permission is Manage Prompt Templates; if it is about running, it is Execute Prompt Templates; if it is about output that differs per user, it is the runner's record and field access, not the template. Test as a representative runner rather than as the author, review any Flow or Apex grounding resource for what it can surface, and fix functional gaps with the narrow grant rather than a wide permission. The template is the same for everyone; the runner's access is what makes two runs differ.
+Name the role before you answer. If the scenario is about authoring, the permission is Manage Prompt Templates; if it is about running, it is Execute Prompt Templates; if it is about output that differs per user, it is the runner's record and field access, not the template. Test as a representative runner rather than as the author, review any Flow or Apex grounding resource for what it can surface, and fix functional gaps with the narrow grant rather than a wide permission. Design the authoring and running groups on purpose, and keep an access fix and a template fix on their own sides of the line. The template is the same for everyone; the runner's access is what makes two runs differ.
 
 ## What's next
 
@@ -78,4 +104,5 @@ Lesson 5 - Prompt Template Types: What Field Generation, Flex, and the Standard 
 [^2]: Salesforce, "Troubleshoot Prompt Builder" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_troubleshoot.htm&language=en_US&type=5)
 [^3]: Salesforce, "Ground Prompt Templates with Salesforce Resources" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_ground_template.htm&language=en_US&type=5)
 [^4]: Salesforce, "Einstein Trust Layer" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_trust_layer.htm&language=en_US&type=5)
-[^5]: Salesforce, "Manage Prompt Templates" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_manage_prompt_templates.htm&language=en_US&type=5)
+[^5]: Salesforce, "Activate and Deactivate Prompt Templates" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_activate_deactivate_templates.htm&language=en_US&type=5)
+[^6]: Salesforce, "Flow Core Action: Prompt Template Actions" (https://help.salesforce.com/s/articleView?id=platform.flow_ref_elements_actions_generate_prompt_response.htm&language=en_US&type=5)

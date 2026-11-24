@@ -22,7 +22,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to read a business requirement and decide when a prompt template is the right tool, turning generated, record-grounded text into a reusable, governed asset instead of a one-off chat prompt. Covers requirement pe-1a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "10 min read",
+        "readTime": "23 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Engineering",
@@ -39,7 +39,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to draw the line between generated text and computed truth, so you know when a prompt template is the wrong tool and a formula, a Flow, or a report is the right one. Covers requirement pe-1b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "10 min read",
+        "readTime": "20 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Engineering",
@@ -56,7 +56,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how the two prompt template permissions and version activation govern who can author a template, who can run it, and which data a run may read. Covers requirement pe-2a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "9 min read",
+        "readTime": "19 min read",
         "tags": [
           "Prompt Builder",
           "Permission Sets",
@@ -73,7 +73,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn why the same activated template can return different output for two users, and how record sharing, field-level security, and the author-versus-runner split shape every prompt run. Covers requirement pe-2b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "9 min read",
+        "readTime": "19 min read",
         "tags": [
           "Prompt Builder",
           "Record Access",
@@ -90,7 +90,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to read a requirement and choose the prompt template type in Prompt Builder that fits it, from Field Generation and Flex to Sales Email and Record Summary, so the binding, the entry points and the output shape all match the job. Covers requirement pe-3a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "10 min read",
+        "readTime": "20 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Template Types",
@@ -107,7 +107,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to choose a prompt template type from a business requirement by reading the output destination first and the object breadth second, so the binding, the entry point and the wrong-type traps all resolve on the exam. Covers requirement pe-3b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "10 min read",
+        "readTime": "19 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Template Types",
@@ -124,7 +124,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to ground a prompt template so the model answers from your data, and how to choose among merge fields, Flow and Apex resources, Data 360 retrievers and the Agentforce Data Library for a given scenario. Covers requirement pe-4a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "10 min read",
+        "readTime": "21 min read",
         "tags": [
           "Prompt Builder",
           "Grounding",
@@ -141,7 +141,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to pick the right grounding technique for a scenario, weigh the trade-offs between merge fields, Flow, Apex, retrievers and data libraries, and recognize the stale, missing and over-broad grounding failures. Covers requirement pe-4b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "10 min read",
+        "readTime": "19 min read",
         "tags": [
           "Prompt Builder",
           "Grounding",
@@ -158,7 +158,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to create, test, activate, and invoke a prompt template in Prompt Builder, from choosing a type and grounding it with merge fields to exposing it as an invocable action. Covers requirement pe-5a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "22 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Templates",
@@ -175,7 +175,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how prompt templates move between versions in Prompt Builder: how activation gates availability, why an active version is immutable, and how every invocation surface runs the active version. Covers requirement pe-5b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "20 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Templates",
@@ -192,7 +192,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn the prompt-writing practices that change output quality in Prompt Builder, from stating the task and supplying context to naming the output shape and iterating against real data. Covers requirement pe-6a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "19 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Writing",
@@ -209,7 +209,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn the advanced prompt-writing techniques that move output quality in Prompt Builder, including structured sections, explicit output shapes, paired constraints, and the anti-patterns that quietly fail. Covers requirement pe-6b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "19 min read",
         "tags": [
           "Prompt Builder",
           "Prompt Writing",
@@ -226,7 +226,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to name and place the six security and privacy features that wrap every Agentforce prompt before it reaches an external model, and how each one changes what an admin can promise a security reviewer. Covers requirement pe-7a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "20 min read",
         "tags": [
           "Einstein Trust Layer",
           "Data Masking",
@@ -243,7 +243,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to draw the trust boundary on a single request: what masking changes, what the provider retains, what demasking restores, and which settings an admin owns to keep the seam governed. Covers requirement pe-7b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "21 min read",
         "tags": [
           "Einstein Trust Layer",
           "Data Masking",
@@ -260,7 +260,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how to keep specific models out of reach by separating provider access from configuration visibility, and how the org level reasoning model option governs every agent. Covers requirement pe-8a in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "20 min read",
         "tags": [
           "Model Providers",
           "Prompt Builder",
@@ -277,7 +277,7 @@ export const learnSeries: LearningSeries[] = [
         "excerpt": "Learn how a withdrawn model reaches the people who built on it: the override order for reasoning, why prompt templates keep their own model, and the sequence that keeps a governance change from taking an agent down. Covers requirement pe-8b in the Prompt Engineering domain.",
         "date": "November 24, 2026",
         "author": "Adroit Consulting",
-        "readTime": "11 min read",
+        "readTime": "19 min read",
         "tags": [
           "Model Access",
           "Agent Script",
@@ -11213,7 +11213,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to read a business requirement and decide when a prompt template is the right tool, turning generated, record-grounded text into a reusable, governed asset instead of a one-off chat prompt. Covers requirement pe-1a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "10 min read",
+    "readTime": "23 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Engineering",
@@ -11230,7 +11230,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to draw the line between generated text and computed truth, so you know when a prompt template is the wrong tool and a formula, a Flow, or a report is the right one. Covers requirement pe-1b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "10 min read",
+    "readTime": "20 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Engineering",
@@ -11247,7 +11247,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how the two prompt template permissions and version activation govern who can author a template, who can run it, and which data a run may read. Covers requirement pe-2a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "9 min read",
+    "readTime": "19 min read",
     "tags": [
       "Prompt Builder",
       "Permission Sets",
@@ -11264,7 +11264,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn why the same activated template can return different output for two users, and how record sharing, field-level security, and the author-versus-runner split shape every prompt run. Covers requirement pe-2b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "9 min read",
+    "readTime": "19 min read",
     "tags": [
       "Prompt Builder",
       "Record Access",
@@ -11281,7 +11281,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to read a requirement and choose the prompt template type in Prompt Builder that fits it, from Field Generation and Flex to Sales Email and Record Summary, so the binding, the entry points and the output shape all match the job. Covers requirement pe-3a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "10 min read",
+    "readTime": "20 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Template Types",
@@ -11298,7 +11298,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to choose a prompt template type from a business requirement by reading the output destination first and the object breadth second, so the binding, the entry point and the wrong-type traps all resolve on the exam. Covers requirement pe-3b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "10 min read",
+    "readTime": "19 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Template Types",
@@ -11315,7 +11315,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to ground a prompt template so the model answers from your data, and how to choose among merge fields, Flow and Apex resources, Data 360 retrievers and the Agentforce Data Library for a given scenario. Covers requirement pe-4a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "10 min read",
+    "readTime": "21 min read",
     "tags": [
       "Prompt Builder",
       "Grounding",
@@ -11332,7 +11332,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to pick the right grounding technique for a scenario, weigh the trade-offs between merge fields, Flow, Apex, retrievers and data libraries, and recognize the stale, missing and over-broad grounding failures. Covers requirement pe-4b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "10 min read",
+    "readTime": "19 min read",
     "tags": [
       "Prompt Builder",
       "Grounding",
@@ -11349,7 +11349,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to create, test, activate, and invoke a prompt template in Prompt Builder, from choosing a type and grounding it with merge fields to exposing it as an invocable action. Covers requirement pe-5a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "22 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Templates",
@@ -11366,7 +11366,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how prompt templates move between versions in Prompt Builder: how activation gates availability, why an active version is immutable, and how every invocation surface runs the active version. Covers requirement pe-5b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "20 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Templates",
@@ -11383,7 +11383,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn the prompt-writing practices that change output quality in Prompt Builder, from stating the task and supplying context to naming the output shape and iterating against real data. Covers requirement pe-6a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "19 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Writing",
@@ -11400,7 +11400,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn the advanced prompt-writing techniques that move output quality in Prompt Builder, including structured sections, explicit output shapes, paired constraints, and the anti-patterns that quietly fail. Covers requirement pe-6b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "19 min read",
     "tags": [
       "Prompt Builder",
       "Prompt Writing",
@@ -11417,7 +11417,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to name and place the six security and privacy features that wrap every Agentforce prompt before it reaches an external model, and how each one changes what an admin can promise a security reviewer. Covers requirement pe-7a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "20 min read",
     "tags": [
       "Einstein Trust Layer",
       "Data Masking",
@@ -11434,7 +11434,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to draw the trust boundary on a single request: what masking changes, what the provider retains, what demasking restores, and which settings an admin owns to keep the seam governed. Covers requirement pe-7b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "21 min read",
     "tags": [
       "Einstein Trust Layer",
       "Data Masking",
@@ -11451,7 +11451,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how to keep specific models out of reach by separating provider access from configuration visibility, and how the org level reasoning model option governs every agent. Covers requirement pe-8a in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "20 min read",
     "tags": [
       "Model Providers",
       "Prompt Builder",
@@ -11468,7 +11468,7 @@ export const learnLessons: LearnLesson[] = [
     "excerpt": "Learn how a withdrawn model reaches the people who built on it: the override order for reasoning, why prompt templates keep their own model, and the sequence that keeps a governance change from taking an agent down. Covers requirement pe-8b in the Prompt Engineering domain.",
     "date": "November 24, 2026",
     "author": "Adroit Consulting",
-    "readTime": "11 min read",
+    "readTime": "19 min read",
     "tags": [
       "Model Access",
       "Agent Script",

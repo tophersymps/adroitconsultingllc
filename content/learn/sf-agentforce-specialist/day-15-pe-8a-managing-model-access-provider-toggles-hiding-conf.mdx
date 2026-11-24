@@ -6,7 +6,7 @@ lesson: 15
 excerpt: "Learn how to keep specific models out of reach by separating provider access from configuration visibility, and how the org level reasoning model option governs every agent. Covers requirement pe-8a in the Prompt Engineering domain."
 date: "November 24, 2026"
 author: "Adroit Consulting"
-readTime: "11 min read"
+readTime: "20 min read"
 tags: [Model Providers, Prompt Builder, Einstein Setup, Agentforce Model]
 ---
 
@@ -26,11 +26,15 @@ Managing model access gets clear once you separate three levers, because most wr
 
 Keep the scopes straight and the scenario answers fall out. Provider access is a hard, org wide block. Hiding is a soft block that only removes a model from the author's list. The model option is not a block at all, it chooses the default the reasoning engine runs on. When a question asks how to stop a specific model, the verb tells you which lever is in play: to block, to hide, or to switch.
 
+The reason the scopes matter so much is that they fail differently. A mistake with the provider toggle stops every component that references that vendor, across agents, templates, and APIs, all at once. A mistake with hiding is visible and cheap, because it only changes what appears in a pick list. A mistake with the model option moves what every agent reasons with. Rank the three by blast radius and you have a decision rule: use the narrowest lever that satisfies the requirement.
+
 ### The provider toggle is a hard, org-wide block
 
 Provider access is managed in Einstein Setup. From Setup, search for Einstein Setup, turn Einstein on if it is not already on, then scroll to Configure Model Providers and selectively turn providers on or off [^2]. Providers are usually enabled by default, so an admin is normally switching some off rather than on.
 
 When you turn a provider off, its models stop working across agents, prompt templates, APIs, and other generative AI features that reference them, and the platform warns you before the change that affected components will stop running. For Amazon Bedrock specifically, only the Anthropic and Amazon model families are affected by that toggle. The change is not instant: it can take up to ten minutes for model provider disablement to take effect, so re-check rather than assume.
+
+The ten minute lag has a practical consequence the exam likes. If you toggle a provider off and immediately test the affected template, the template can still answer, which tempts you to conclude the toggle did nothing and that you must have used the wrong lever. Wait for the change to land before you judge it. The platform warned you the components would stop; the warning is accurate, it is just not immediate.
 
 ### Hiding a configuration is the narrow, soft block
 
@@ -38,17 +42,23 @@ Hiding a configuration is the narrow control. In AI Models, formerly Einstein St
 
 Hiding does not disable the provider and does not stop a template that already uses the model. It removes the model from being newly selected. The classic use is suspending a new or newly connected model until your team finishes testing it, then showing it again when you are ready. To show it, you choose the same Hide Model action to toggle the visibility back. This is the lever to reach for when the requirement is author choice rather than a hard block.
 
+One permission detail sharpens the picture. The View this model link in a template's settings panel opens the AI Models page for the selected model, and users need the Data Cloud Admin permissions to see and use that link; without them, they cannot reach the model configuration inside AI Models [^7]. So hiding is an admin action, and the deeper model configuration is gated behind a broader permission than the authoring right itself.
+
 ### The Agentforce model option sets the reasoning engine default
 
 The Agentforce model option is the org default for the reasoning engine, and it lives in a different place again. From Setup, in Quick Find enter Audit, Analytics, and Monitoring, open Einstein Audit, Analytics, and Monitoring Setup, and choose an option in the section that selects the model for Agentforce. The setting applies to all Agentforce agents in the org [^4].
 
-The recommended choice is the Salesforce Default option, a managed mix of trusted models optimized for accuracy, trust, and performance. Other options exist, including an AWS hosted option and a Google Gemini option, and if you pick one you update custom agent actions to the matching model for consistency. Because this setting governs the reasoning engine for every agent rather than one pick list, changing it is an org wide decision, not a per author convenience.
+The recommended choice is the Salesforce Default option, a managed mix of trusted models optimized for accuracy, trust, and performance. The Help documentation is specific about what that mix runs on: agents created in the new Agentforce Builder use GPT-4.1, and agents created in the legacy Agentforce Builder use GPT-4o [^4]. Other options exist, including an AWS hosted option and a Google Gemini option, and if you pick one you update custom agent actions to the matching model for consistency.
+
+Because this setting governs the reasoning engine for every agent rather than one pick list, changing it is an org wide decision, not a per author convenience. Per agent and per subagent overrides are a separate mechanism that lives in Agent Script, so the model option is the floor the whole org stands on, not the whole story of which model any one agent reasons with [^5].
 
 ### Beta models, in-region routing, and bring your own model extend the set
 
 Two more surfaces extend what you can manage. Beta generative models are not on by default. An admin turns them on in Einstein Setup, after which they appear in AI Models like any managed model. Einstein Setup also offers a setting to enable in-region model requests only, which restricts routing to in-region endpoints for teams with data residency requirements.
 
-Beyond the managed catalog, a bring your own model path lets an admin connect an external OpenAI, Azure, Vertex, or Bedrock model using their own credentials, and an open connector lets you connect a custom built model [^3]. That means the set of models in an org is not a fixed list, which is exactly why governance is about controls rather than about memorizing vendor names. Know the levers, not the catalog.
+Beyond the managed catalog, a bring your own model path lets an admin connect an external OpenAI, Azure, Vertex, or Bedrock model using their own credentials, and an open connector lets you connect a custom built model [^3]. The full catalog of supported models, including which vendors and versions are offered as Salesforce managed models, is published in the model support documentation [^6]. That means the set of models in an org is not a fixed list, which is exactly why governance is about controls rather than about memorizing vendor names. Know the levers, not the catalog.
+
+The bring your own path also changes which zero data retention promise applies. A Salesforce managed model is covered by the platform's arrangements, while a model you connected yourself is governed by the contract you signed with that provider. So before you tell a security team that a given model is covered, confirm which hosting arrangement that model sits under.
 
 ### Stopping a model means choosing the lever and verifying it took
 
@@ -56,13 +66,39 @@ The prevention question has a short answer once the levers are clear. To stop a 
 
 Whichever you pick, verify the result rather than trusting the toggle. Confirm the author no longer sees the model, and give a provider change its ten minutes before you call it done. The exam rewards the answer that names the right lever and confirms the outcome, not the answer that flips a switch and moves on.
 
+There is also a sequencing rule that follows from the scopes. Before you take a hard action like turning off a provider, inventory what references the vendor, because the hard action stops those components. The soft action, hiding, needs no inventory because it does not stop anything already running. Choose the lever by the requirement, then sequence the work by the lever's blast radius.
+
+### A worked scenario: pausing one model without taking down a vendor
+
+The requirement arrives as a legal hold. Legal says a newly connected model must not be used until it clears review, but the team that connected it has three working templates already built on it and wants them left running. The admin must keep the model out of everyone's hands while not disturbing the templates that already work.
+
+Reason it from the scope. The requirement is about new selection, not about stopping existing work, so the target is the author's pick list, not the whole vendor. That points at hiding the configuration in AI Models, which removes the model from new selection while a template that already uses it continues to run as before. Legal gets its hold for new builds, and the connected templates keep working, which is exactly the balance the requirement asked for.
+
+The wrong answer is the provider toggle, because it is the control that sounds like a block and blocks far more than the request. Turning the vendor off stops every component that references that vendor's models, including the three templates the team wants to keep, and it can take up to ten minutes to land, so the admin would take production down to satisfy a hold that hiding would have met without any downtime. The scenario is testing whether you read that the requirement is new selection, not all use.
+
+### Two plausible answers: the author's pick list versus the running engine
+
+A scenario that offers two controls usually turns on a scope difference, and the common pair here is hiding a configuration against changing the Agentforce model option. Suppose a requirement says a particular model must no longer be chosen for new prompt templates, and separately that agents in this org should reason with a different model going forward. Each sentence names a different lever.
+
+Resolve the first sentence with hiding. It is about what an author can select in Prompt Builder, so the control is Model Visibility in AI Models, which removes the configuration from the pick list while leaving templates that already use it alone. Resolve the second sentence with the model option, which is the org default the reasoning engine uses and applies to all agents. The two sentences are not two ways to do one thing; they are two requirements pointing at two levers with two scopes.
+
+The wrong answer collapses them into one action, in either direction. Hiding a configuration does nothing to the model the reasoning engine runs on, so it cannot satisfy the second sentence. Changing the model option does nothing to an author's pick list, so it cannot satisfy the first. The exam is checking whether you can tell a selection control from a runtime default, which is the same distinction that separates the third lever from the first two.
+
+### Where each lever lives, and what proves the change took
+
+Anchor each lever to a concrete place so the click path is not a guess. Provider access lives in Einstein Setup under Configure Model Providers [^2]. Configuration visibility lives in AI Models, in the Model Library, on each configuration's Configured Models tab, surfaced in the Model Visibility column [^1]. The Agentforce model option lives in Setup under Audit, Analytics, and Monitoring, on the Einstein Audit, Analytics, and Monitoring Setup page, in the section that selects the model for Agentforce [^4].
+
+Know what proof looks like for each. After hiding, the author who opens the model list no longer sees the configuration, and the Model Visibility column reads Hidden with the Not Available marker if you look from the admin side. After a provider toggle, the affected components stop running, which is visible but delayed by up to ten minutes. After a model option change, the reasoning engine for the org's agents follows the new default.
+
+The habit to carry into the exam is setting the control and then confirming it, because two of the three levers change something you cannot see on the settings page. A hidden model is proved by an author's missing pick list entry. A disabled provider is proved by a component that no longer runs. Only the model option is proved on its own page, and even there the proof is which model an agent actually reasons with next.
+
 ## Exam Traps
 
 Three misconceptions recur. The first is believing hiding a configuration and disabling a provider are the same control, when hiding removes a model from Prompt Builder selection while the provider toggle blocks the vendor's models org wide across agents, templates, and APIs. The second is believing turning off a provider takes effect immediately, when it can take up to ten minutes for model provider disablement to take effect, so a re-check right after the toggle can mislead you. The third is believing the Agentforce model option is set per agent, when the option in Einstein Audit, Analytics, and Monitoring Setup applies to all agents in the org while per agent and per subagent overrides live in Agent Script.
 
 ## What a consultant should walk away with
 
-Three levers, three scopes: the provider toggle blocks a vendor org wide, hiding a configuration removes a model from the author's list, and the model option sets the reasoning engine default. Match the lever to the requirement before you touch anything, so a request to pause one model does not become an org wide outage. Then verify the change took, because a provider change can lag by up to ten minutes.
+Three levers, three scopes: the provider toggle blocks a vendor org wide, hiding a configuration removes a model from the author's list, and the model option sets the reasoning engine default. Match the lever to the requirement before you touch anything, so a request to pause one model does not become an org wide outage. Then verify the change took, because a provider change can lag by up to ten minutes and the two softer levers change something only an author or a running agent reveals.
 
 ## What's next
 
@@ -71,4 +107,7 @@ Lesson 16 - When Model Access Is Withdrawn: Admin Controls, Author Impact, and E
 [^1]: Salesforce, "Manage Large Language Model (LLM) Access by Hiding Configurations" (https://help.salesforce.com/s/articleView?id=data.c360_a_ai_mm_show_hide_models.htm&language=en_US)
 [^2]: Salesforce, "Manage Model Provider Access" (https://help.salesforce.com/s/articleView?language=en_US&id=ai.generative_ai_model_provider.htm&type=5)
 [^3]: Salesforce, "Supported Models" (https://developer.salesforce.com/docs/ai/agentforce/guide/supported-models.html)
-[^4]: Salesforce, "Choosing an AI Model for a Subagent" (https://help.salesforce.com/s/articleView?id=ai.agent_subagents_model.htm&language=en_US&type=5)
+[^4]: Salesforce, "Select Agentforce Model Option" (https://help.salesforce.com/s/articleView?id=ai.agent_setup_select_model_provider.htm&language=en_US&type=5)
+[^5]: Salesforce, "Choosing an AI Model for a Subagent" (https://help.salesforce.com/s/articleView?id=ai.agent_subagents_model.htm&language=en_US&type=5)
+[^6]: Salesforce, "Large Language Model Support" (https://help.salesforce.com/s/articleView?id=sf.generative_ai_large_language_model_support.htm&language=en_US&type=5)
+[^7]: Salesforce, "Change LLM Configurations in Prompt Templates" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_changing_llm_configurations.htm&language=en_US&type=5)

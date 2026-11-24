@@ -6,7 +6,7 @@ lesson: 10
 excerpt: "Learn how prompt templates move between versions in Prompt Builder: how activation gates availability, why an active version is immutable, and how every invocation surface runs the active version. Covers requirement pe-5b in the Prompt Engineering domain."
 date: "November 24, 2026"
 author: "Adroit Consulting"
-readTime: "11 min read"
+readTime: "20 min read"
 tags: [Prompt Builder, Prompt Templates, Activation, Versioning]
 ---
 
@@ -16,7 +16,7 @@ A contractor standardizes a support org on one prompt template, then improves it
 
 The cause is that activation, not saving, is what publishes a template. The surfaces that consume a template resolve against its active version, so a version you are drafting is invisible until you activate it. Saving changes your workspace. Activating changes what your users get.
 
-This lesson takes the lifecycle half of requirement pe-5b in the Prompt Engineering domain: how a template moves between versions, why an active version is immutable, what happens to a running template when you edit it, how versions deploy, and how each consuming surface points at the active version.
+This lesson takes the lifecycle half of requirement pe-5b in the Prompt Engineering domain: how a template moves between versions, why an active version is immutable, what happens to a running template when you edit it, how versions deploy to another org, and how each consuming surface points at the active version. Read it as a state machine, because every question on this objective is really a question about which state a template is in and which transition moves it out.
 
 ## Deep Dive
 
@@ -24,13 +24,25 @@ This lesson takes the lifecycle half of requirement pe-5b in the Prompt Engineer
 
 Activation is the first thing to get straight. It does not change the template's content, it decides which version is available to the surfaces that consume the template. Only one version of a template can be active at a time, and if no version is active the template is unavailable [^1]. When a template is in use, you cannot deactivate the active version unless another version is already active, so the system never leaves a consumer with nothing to call.
 
-That is a deliberate design choice, not a quirk. The active version is a single, agreed-upon answer to the question of what this template says right now, and giving it that uniqueness is what makes an activated template safe to build automation against.
+That is a deliberate design choice, not a quirk. The active version is a single, agreed-upon answer to the question of what this template says right now, and giving it that uniqueness is what makes an activated template safe to build automation against. A Flow that calls the template by name is trusting that one version, not a draft the author happens to be editing.
+
+Hold the split between content and availability, because it resolves most of the traps. Rewriting the prompt is a content change and it happens in a version. Publishing that change is an availability change and it happens through activation. The two are separate operations on separate objects, and a scenario that asks why a wording fix did not reach users is asking about availability, not content.
 
 ### Version movement is a small set of exact operations
 
 The version operations are few and you should be able to name them exactly. The first time you save, the template becomes Version 1. Clicking Save edits the current version in place, as long as that version is still a draft. Clicking Save As offers two choices: Save as a New Version keeps the same template name and adds an incremental version, while Save as a New Template creates a separate template with its own name and API name [^2].
 
-The version number is part of the workspace URL, so any version is addressable. When more than one version exists, the version control at the top of the workspace becomes a dropdown that lists each version, when it was created, and which one is active, and you can select any version to work from. That dropdown is your map of the template's history.
+The version number is part of the workspace URL, so any version is addressable, which means you can link a colleague straight to the draft you want reviewed [^2]. When more than one version exists, the version control at the top of the workspace becomes a dropdown that lists each version, when it was created, and which one is active, and you can select any version to work from. That dropdown is your map of the template's history.
+
+Read the operations as a vocabulary. Save and Save As change content. Activate and Deactivate change availability. Save as a New Template changes identity, because it produces a different asset rather than a new version of the same one. Keep those apart and the exam's editing questions stop being ambiguous.
+
+### The template is a state machine with two states and four transitions
+
+A version is always in one of two states, and the transitions between them are the whole lifecycle. The states are Draft, which Prompt Builder shows as Inactive, and Published, which it shows as Active [^3]. Nothing else is a state; deactivation does not create a third one, it simply returns a version to the draft state by making it no longer the active version.
+
+The transitions are four. Save writes content into the current draft and changes no state. Save As for a new version creates a fresh draft beside the live one. Activate promotes a draft to published and makes it the active version. Deactivate demotes the active version, but only when another version is already active, because the platform will not leave the template with no active version [^1].
+
+Two gates sit on those transitions. The first is the immutability gate: a version that has ever been published cannot go back to being edited, so from Published there is no transition to an editable draft, only a copy forward to a new one. The second is the single-active gate: activating a new version implicitly takes the previous active version out of service, because only one version holds the Active state at a time. Name those two gates and you can answer the objective's scenario questions by tracking state rather than by recalling screens.
 
 ### Activation freezes a version, so you never edit the live one in place
 
@@ -38,23 +50,47 @@ The immutability rule is the detail most people miss. Activating a version makes
 
 This is why the disciplined workflow is to draft a new version beside the active one, test the new version against real data, and activate it only when it is ready, instead of trying to patch the version that is already running. The rule is a safety feature. An immutable active version is a version that cannot drift under the automation built on it, and any change to what users see is a deliberate activation you chose to make.
 
+The corollary catches people: deactivating a version does not unfreeze it. Once a version has been active, it stays read-only forever, even after you take it out of service [^2]. So a template that has been live even once is, from then on, edited only by copying forward to a new version, never by reopening the published one.
+
 ### What a running template does when you edit it
 
 The immutability rule answers the question of what happens to a running template that is edited. The running surfaces resolve against the active version, so a new version you are drafting is invisible to them until you activate it. If you edit a draft version, nothing the users see changes. If you want to change what users see, you save a new version and activate it, which flips the available version in one deliberate step.
 
 The active version never changes under a user mid-conversation. It changes only at the moment you activate a different version. Editing the live template is therefore a version switch, never an in-place edit. This is the mental model that resolves the exam's scenario questions, because the answer is always about which version is active, not about how the prompt was worded.
 
+So when a colleague says they fixed the prompt and the users still get the old text, the diagnosis is instant. They edited a draft, or they edited a copy, and they never activated the new version. The fix is the missing transition, not a re-save and not a redeploy. Activation is the only lever that moves what a consumer receives.
+
+### Save versus Save As decides a new version or a new template
+
+The one comparison this objective rewards is Save as a New Version against Save as a New Template, because the two look similar and produce very different objects. Save as a New Version keeps the same template name, the same API name, and the same activation history, and it adds one incremental version to the existing asset. Save as a New Template produces a separate asset with a new name and a new API name, so it has its own version history and its own activation state [^2].
+
+The choice turns on identity, not on effort. If the change is a revision of the same prompt that consumers already call by name, you want a new version, because every existing Flow and agent action keeps pointing at the same asset and will pick up the new active version. If the change is a genuinely different prompt that should live beside the first, you want a new template, because it needs its own name for consumers to reference.
+
+Choose wrongly and the cost is concrete. Save as a New Template when you meant a version, and every consumer that pointed at the old name now runs the old prompt, so your fix reaches nobody until someone rewires the callers. Save as a New Version when you meant a separate prompt, and two unrelated prompts share one name, one history, and one activation lever, so activating either one displaces the other. Name the identity the caller depends on, and the operation follows.
+
 ### Deployment follows from the same rules
 
 In metadata terms a template version has a status of Published, which shows as Active in Prompt Builder, or Draft, which shows as Inactive. A setting controls whether only the active version is deployed. When that setting is on, inactive versions are skipped and a template with no active version fails the deployment [^3].
 
-Because published versions are immutable, a redeploy that targets a version already present updates the content only if that version is still a draft, and otherwise changes only the activation status. With the setting off, templates deploy but arrive inactive and must be activated in the target org, unless the deploy-activate setting is enabled to carry activation across [^3]. The practical takeaway for a promotion is blunt: know whether activation travels with the deploy, or plan a post-deploy activation step, because a template that lands inactive is a template nothing can call.
+Because published versions are immutable, a redeploy that targets a version already present updates the content only if that version is still a draft, and otherwise changes only the activation status. With the setting off, templates deploy but arrive inactive and must be activated in the target org, unless the deploy-activate setting is enabled to carry activation across [^3]. So a promotion is never just a metadata move; it is a metadata move plus a decision about whether the Active state travels with it.
+
+The practical takeaway for a promotion is blunt: know whether activation travels with the deploy, or plan a post-deploy activation step, because a template that lands inactive is a template nothing can call. And because inactive versions can be skipped, a deploy that carries a template with no active version can fail outright, which turns a routine release into a blocked pipeline.
+
+### Worked scenario: the edit that never reached the floor
+
+A contractor standardizes a support org on one prompt template, then improves it. The wording is tighter and a colleague test-runs it happily. They click Save and tell the team the rollout is done. Nothing changes for anyone. What went wrong, and what is the correct fix?
+
+Reason from the state machine. The contractor edited content, which is a Save, and Save only writes the current draft. If the improvement landed on a new draft version and was never activated, the active version is still the old one, so every consumer keeps resolving the old text. The colleague's happy test run proves the new draft is good; it says nothing about which version is live.
+
+Now the wrong answers. The tempting fix is to click Save again, or to redeploy, but neither publishes a version. Another tempting fix is to have the users refresh or clear a cache, which invents a mechanism the platform does not use here. The correct move is the missing transition: activate the improved version so it becomes the active one. That single activation is what changes what the floor receives, because the callers were always pointing at the active version.
 
 ### Invocation closes the loop, and the active version always wins
 
 The invocation mechanics are worth naming for each surface. From Flow you add an Actions element, filter by the Prompt Template category, and pass the associated record as a related entity. From an agent you add a Prompt Template reference action, bind the inputs and outputs, and mark at least one output to show in conversation [^4]. From Agent Script the target is generatePromptResponse:// followed by the developer name, inputs are referenced as Input: plus the api name, and the output is promptResponse [^5].
 
-Because every one of these points at the template by name, the version that runs is always the active version, which is why activation is the real control surface. You can build the automation, bind every input and output, and still control what it produces entirely through which version you have activated.
+Because every one of these points at the template by name, the version that runs is always the active version, which is why activation is the real control surface [^6]. You can build the automation, bind every input and output, and still control what it produces entirely through which version you have activated.
+
+That is the closing idea of the lesson. The callers are fixed and versionless; the template is the thing that changes and the active version is the knob. So the answer to what users will see is never a fact about the Flow or the agent. It is always a fact about which version of the template is active at the moment the action runs.
 
 ## Exam Traps
 
@@ -73,3 +109,4 @@ Lesson 11 - Writing Effective Prompts: Structure, Specificity, and Output Shape 
 [^3]: Salesforce, "Salesforce CLI Considerations for Prompt Templates" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_considerations_cli.htm&type=5)
 [^4]: Salesforce, "Step 5: Implement the Prompt Template in Your Agent" (https://developer.salesforce.com/docs/ai/ground-agentforce-on-website/guide/aes-implement-prompt-template-in-agent.html)
 [^5]: Salesforce, "PromptTemplateActions" (https://developer.salesforce.com/sample-apps/agent-script-recipes/action-configuration/prompt-template-actions)
+[^6]: Salesforce, "Prompt Builder Key Concepts" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_key_concepts.htm&type=5)
