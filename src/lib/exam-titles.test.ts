@@ -92,10 +92,10 @@ function forbiddenTerms(kind: ExamKind): string[] {
 const ROWS = examSeries();
 
 describe("exam.json titles — one test per series", () => {
-  it("sees all 14 series, split 8 course-completion / 6 certification-prep", () => {
-    expect(ROWS.map((row) => row.slug)).toHaveLength(14);
+  it("sees all 15 series, split 8 course-completion / 7 certification-prep", () => {
+    expect(ROWS.map((row) => row.slug)).toHaveLength(15);
     expect(ROWS.filter((row) => row.kind === "course-completion")).toHaveLength(8);
-    expect(ROWS.filter((row) => row.kind === "certification-prep")).toHaveLength(6);
+    expect(ROWS.filter((row) => row.kind === "certification-prep")).toHaveLength(7);
   });
 
   it.each(ROWS)("$slug has a non-empty title", ({ slug, title }) => {

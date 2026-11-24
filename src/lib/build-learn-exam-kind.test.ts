@@ -91,8 +91,8 @@ describe("build-learn examKind validation", () => {
     expect(generated).toContain('"examKind": "certification-prep"');
   });
 
-  it("ships examKind on all 14 series, matching the waves.md §3.0 classification", () => {
-    expect(learnSeries).toHaveLength(14);
+  it("ships examKind on all 15 series, matching the waves.md §3.0 classification", () => {
+    expect(learnSeries).toHaveLength(15);
     for (const s of learnSeries) {
       expect(EXAM_KINDS).toContain(s.examKind);
     }
@@ -105,6 +105,7 @@ describe("build-learn examKind validation", () => {
       "salesforce-data-architect",
       "salesforce-sharing-visibility-architect",
       "sf-agentforce-sales-consultant",
+      "sf-agentforce-specialist",
       "sf-data360-consultant",
       "sf-omni-consultant",
     ]);
@@ -130,7 +131,7 @@ describe("build-learn examKind validation", () => {
       .readdirSync(learnDir, { withFileTypes: true })
       .filter((e) => e.isDirectory())
       .map((e) => e.name);
-    expect(dirs).toHaveLength(14);
+    expect(dirs).toHaveLength(15);
     for (const slug of dirs) {
       const cfg = JSON.parse(
         fs.readFileSync(path.join(learnDir, slug, "series.json"), "utf-8"),
