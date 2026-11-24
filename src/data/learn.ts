@@ -830,9 +830,230 @@ export const learnSeries: LearningSeries[] = [
           "Release Gate"
         ],
         "status": "published"
+      },
+      {
+        "slug": "day-49-td-3a-deploying-an-agent-from-sandbox-to-production-meta",
+        "title": "Lesson 49: Deploying an Agent from Sandbox to Production: Metadata, Dependencies, and Activation",
+        "series": "sf-agentforce-specialist",
+        "lesson": 49,
+        "excerpt": "Learn how an Agentforce agent moves from sandbox to production as metadata, the dependency order that keeps its actions working, and the activation and agent-user steps a green deploy skips. Covers requirement td-3a in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying an agent from sandbox to production.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Deployment",
+          "Sandboxes",
+          "Agent Metadata",
+          "Activation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-50-td-3b-agent-promotion-failure-modes-what-breaks-only-in",
+        "title": "Lesson 50: Agent Promotion Failure Modes: What Breaks Only in Production",
+        "series": "sf-agentforce-specialist",
+        "lesson": 50,
+        "excerpt": "Learn why the worst agent promotion failures appear only in production: the agent user, org-scoped sharing rules, external connections, channel plumbing, and version drift that a sandbox never exercises. Covers requirement td-3b in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying an agent from sandbox to production.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Deployment",
+          "Failure Modes",
+          "Agent User",
+          "Production"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-51-td-4a-what-an-agent-template-is-and-how-template-promoti",
+        "title": "Lesson 51: What an Agent Template Is, and How Template Promotion Differs from Agent Promotion",
+        "series": "sf-agentforce-specialist",
+        "lesson": 51,
+        "excerpt": "Learn what an agent template is, why it is the deployable unit when the agent cannot be packaged, and how template promotion ends in instantiation rather than activation. Covers requirement td-4a in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying a template from sandbox to production.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent Templates",
+          "Deployment",
+          "Agent Types",
+          "Packaging"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-52-td-4b-reusing-or-rebuilding-a-template-what-travels-what",
+        "title": "Lesson 52: Reusing or Rebuilding a Template: What Travels, What Does Not, and How to Decide",
+        "series": "sf-agentforce-specialist",
+        "lesson": 52,
+        "excerpt": "Learn how to decide between reusing and rebuilding an agent template: what travels as the portable core, what org-scoped pieces you must recreate, and when divergence wins. Covers requirement td-4b in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying a template from sandbox to production.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Agent Templates",
+          "Reuse",
+          "Rebuild",
+          "Deployment"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-53-go-1a-managing-a-live-agent-versions-activation-and-the",
+        "title": "Lesson 53: Managing a Live Agent: Versions, Activation, and the Change Gate",
+        "series": "sf-agentforce-specialist",
+        "lesson": 53,
+        "excerpt": "Learn how an Agentforce agent moves from an editable draft to a frozen committed version and then an active release, and why commit is the mandatory gate before activation. Covers requirement go-1a, \\\"Explain the process for managing and monitoring agents.\\\", in the Governance and Observability domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "21 min read",
+        "tags": [
+          "Agent Governance",
+          "Agent Versioning",
+          "Release Control",
+          "Agentforce Builder"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-54-go-1b-monitoring-a-live-agent-what-the-operator-sees-and",
+        "title": "Lesson 54: Monitoring a Live Agent: What the Operator Sees and When to Escalate",
+        "series": "sf-agentforce-specialist",
+        "lesson": 54,
+        "excerpt": "Learn how an operator watches a live Agentforce agent: the session tracing that has to be on first, the Interaction Summary and Trace views, the alert thresholds that page the team, and the two meanings of escalation. Covers requirement go-1b, \\\"Explain the process for managing and monitoring agents.\\\", in the Governance and Observability domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent Monitoring",
+          "Session Tracing",
+          "Observability",
+          "Escalation"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-55-go-2a-reading-agent-analytics-the-metrics-that-matter",
+        "title": "Lesson 55: Reading Agent Analytics: The Metrics That Matter",
+        "series": "sf-agentforce-specialist",
+        "lesson": 55,
+        "excerpt": "Learn how to read the Agent Analytics dimensions: the exact effectiveness rate definitions, the Session Outcome classification, the Quality Scores from a separate evaluator, the supporting Health and Trust metrics, and Performance Insights. Covers requirement go-2a, \\\"Explain agent analytics and agent optimization.\\\", in the Governance and Observability domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "19 min read",
+        "tags": [
+          "Agent Analytics",
+          "Deflection Rate",
+          "Quality Scores",
+          "Observability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-56-go-2b-diagnosing-a-quality-regression-from-session-data",
+        "title": "Lesson 56: Diagnosing a Quality Regression from Session Data",
+        "series": "sf-agentforce-specialist",
+        "lesson": 56,
+        "excerpt": "Learn how to prove an Agentforce agent regression exists against the prior period, localize it with Performance Insights, read the failure from the trace step type, and reproduce the case before changing anything. Covers requirement go-2b, \\\"Explain agent analytics and agent optimization.\\\", in the Governance and Observability domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent Analytics",
+          "Quality Regression",
+          "Session Trace",
+          "Root Cause"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-57-go-2c-the-optimization-loop-turning-analytics-into-promp",
+        "title": "Lesson 57: The Optimization Loop: Turning Analytics into Prompt, Topic, and Action Changes",
+        "series": "sf-agentforce-specialist",
+        "lesson": 57,
+        "excerpt": "Learn how to read Agent Analytics, localize a regression in Performance Insights, and pick the right of three levers, instructions, topics, or actions, from the session trace. Covers requirement go-2c in the Governance and Observability domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Agent Analytics",
+          "Agent Optimization",
+          "Performance Insights",
+          "Observability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-58-ma-1a-multi-agent-architecture-orchestrators-subagents-a",
+        "title": "Lesson 58: Multi-Agent Architecture: Orchestrators, Subagents, and the Configuration Path",
+        "series": "sf-agentforce-specialist",
+        "lesson": 58,
+        "excerpt": "Learn how an orchestrator agent connects specialist agents as connected subagents in Agentforce Builder, how each connected subagent's description governs routing, and which single-agent walls justify the split. Covers requirement ma-1a in the Multi-Agent Orchestration domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Multi-Agent Orchestration",
+          "SOMA",
+          "Orchestrator Agent",
+          "Agentforce Builder"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-59-ma-1b-multi-agent-or-single-agent-choosing-the-architect",
+        "title": "Lesson 59: Multi-Agent or Single Agent: Choosing the Architecture and Counting the Cost",
+        "series": "sf-agentforce-specialist",
+        "lesson": 59,
+        "excerpt": "Learn the single-versus-multi-agent decision rule and the four costs, latency, per-turn consumption, observability, and governance surface, that a split spends to buy scalability and control across boundaries and domains. Covers requirement ma-1b in the Multi-Agent Orchestration domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "Multi-Agent Orchestration",
+          "Architecture Decision",
+          "Latency",
+          "Governance"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-60-ma-2a-open-standards-for-multi-agent-the-purpose-of-mcp",
+        "title": "Lesson 60: Open Standards for Multi-Agent: The Purpose of MCP and A2A",
+        "series": "sf-agentforce-specialist",
+        "lesson": 60,
+        "excerpt": "Learn what MCP and A2A are each for, how to tell a remote tool from a remote agent, and how the protocols sit in an Agentforce architecture in both directions. Covers requirement ma-2a in the Multi-Agent Orchestration domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "MCP",
+          "A2A",
+          "Open Standards",
+          "Interoperability"
+        ],
+        "status": "published"
+      },
+      {
+        "slug": "day-61-ma-2b-mcp-and-a2a-on-the-wire-tools-context-and-peer-del",
+        "title": "Lesson 61: MCP and A2A on the Wire: Tools, Context, and Peer Delegation",
+        "series": "sf-agentforce-specialist",
+        "lesson": 61,
+        "excerpt": "Learn what MCP and A2A actually carry on the wire, where each sits in an Agentforce architecture, and the costs that decide which edge a requirement belongs on. Covers requirement ma-2b in the Multi-Agent Orchestration domain.",
+        "date": "November 24, 2026",
+        "author": "Adroit Consulting",
+        "readTime": "20 min read",
+        "tags": [
+          "MCP",
+          "A2A",
+          "Agent Card",
+          "Interoperability"
+        ],
+        "status": "published"
       }
     ],
-    "totalLessons": 48,
+    "totalLessons": 61,
     "curriculumLessons": 61
   },
   {
@@ -12564,6 +12785,227 @@ export const learnLessons: LearnLesson[] = [
       "Pass Lines",
       "Regressions",
       "Release Gate"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-49-td-3a-deploying-an-agent-from-sandbox-to-production-meta",
+    "title": "Lesson 49: Deploying an Agent from Sandbox to Production: Metadata, Dependencies, and Activation",
+    "series": "sf-agentforce-specialist",
+    "lesson": 49,
+    "excerpt": "Learn how an Agentforce agent moves from sandbox to production as metadata, the dependency order that keeps its actions working, and the activation and agent-user steps a green deploy skips. Covers requirement td-3a in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying an agent from sandbox to production.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Deployment",
+      "Sandboxes",
+      "Agent Metadata",
+      "Activation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-50-td-3b-agent-promotion-failure-modes-what-breaks-only-in",
+    "title": "Lesson 50: Agent Promotion Failure Modes: What Breaks Only in Production",
+    "series": "sf-agentforce-specialist",
+    "lesson": 50,
+    "excerpt": "Learn why the worst agent promotion failures appear only in production: the agent user, org-scoped sharing rules, external connections, channel plumbing, and version drift that a sandbox never exercises. Covers requirement td-3b in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying an agent from sandbox to production.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Deployment",
+      "Failure Modes",
+      "Agent User",
+      "Production"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-51-td-4a-what-an-agent-template-is-and-how-template-promoti",
+    "title": "Lesson 51: What an Agent Template Is, and How Template Promotion Differs from Agent Promotion",
+    "series": "sf-agentforce-specialist",
+    "lesson": 51,
+    "excerpt": "Learn what an agent template is, why it is the deployable unit when the agent cannot be packaged, and how template promotion ends in instantiation rather than activation. Covers requirement td-4a in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying a template from sandbox to production.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent Templates",
+      "Deployment",
+      "Agent Types",
+      "Packaging"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-52-td-4b-reusing-or-rebuilding-a-template-what-travels-what",
+    "title": "Lesson 52: Reusing or Rebuilding a Template: What Travels, What Does Not, and How to Decide",
+    "series": "sf-agentforce-specialist",
+    "lesson": 52,
+    "excerpt": "Learn how to decide between reusing and rebuilding an agent template: what travels as the portable core, what org-scoped pieces you must recreate, and when divergence wins. Covers requirement td-4b in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying a template from sandbox to production.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Agent Templates",
+      "Reuse",
+      "Rebuild",
+      "Deployment"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-53-go-1a-managing-a-live-agent-versions-activation-and-the",
+    "title": "Lesson 53: Managing a Live Agent: Versions, Activation, and the Change Gate",
+    "series": "sf-agentforce-specialist",
+    "lesson": 53,
+    "excerpt": "Learn how an Agentforce agent moves from an editable draft to a frozen committed version and then an active release, and why commit is the mandatory gate before activation. Covers requirement go-1a, \\\"Explain the process for managing and monitoring agents.\\\", in the Governance and Observability domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "21 min read",
+    "tags": [
+      "Agent Governance",
+      "Agent Versioning",
+      "Release Control",
+      "Agentforce Builder"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-54-go-1b-monitoring-a-live-agent-what-the-operator-sees-and",
+    "title": "Lesson 54: Monitoring a Live Agent: What the Operator Sees and When to Escalate",
+    "series": "sf-agentforce-specialist",
+    "lesson": 54,
+    "excerpt": "Learn how an operator watches a live Agentforce agent: the session tracing that has to be on first, the Interaction Summary and Trace views, the alert thresholds that page the team, and the two meanings of escalation. Covers requirement go-1b, \\\"Explain the process for managing and monitoring agents.\\\", in the Governance and Observability domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent Monitoring",
+      "Session Tracing",
+      "Observability",
+      "Escalation"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-55-go-2a-reading-agent-analytics-the-metrics-that-matter",
+    "title": "Lesson 55: Reading Agent Analytics: The Metrics That Matter",
+    "series": "sf-agentforce-specialist",
+    "lesson": 55,
+    "excerpt": "Learn how to read the Agent Analytics dimensions: the exact effectiveness rate definitions, the Session Outcome classification, the Quality Scores from a separate evaluator, the supporting Health and Trust metrics, and Performance Insights. Covers requirement go-2a, \\\"Explain agent analytics and agent optimization.\\\", in the Governance and Observability domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "19 min read",
+    "tags": [
+      "Agent Analytics",
+      "Deflection Rate",
+      "Quality Scores",
+      "Observability"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-56-go-2b-diagnosing-a-quality-regression-from-session-data",
+    "title": "Lesson 56: Diagnosing a Quality Regression from Session Data",
+    "series": "sf-agentforce-specialist",
+    "lesson": 56,
+    "excerpt": "Learn how to prove an Agentforce agent regression exists against the prior period, localize it with Performance Insights, read the failure from the trace step type, and reproduce the case before changing anything. Covers requirement go-2b, \\\"Explain agent analytics and agent optimization.\\\", in the Governance and Observability domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent Analytics",
+      "Quality Regression",
+      "Session Trace",
+      "Root Cause"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-57-go-2c-the-optimization-loop-turning-analytics-into-promp",
+    "title": "Lesson 57: The Optimization Loop: Turning Analytics into Prompt, Topic, and Action Changes",
+    "series": "sf-agentforce-specialist",
+    "lesson": 57,
+    "excerpt": "Learn how to read Agent Analytics, localize a regression in Performance Insights, and pick the right of three levers, instructions, topics, or actions, from the session trace. Covers requirement go-2c in the Governance and Observability domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Agent Analytics",
+      "Agent Optimization",
+      "Performance Insights",
+      "Observability"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-58-ma-1a-multi-agent-architecture-orchestrators-subagents-a",
+    "title": "Lesson 58: Multi-Agent Architecture: Orchestrators, Subagents, and the Configuration Path",
+    "series": "sf-agentforce-specialist",
+    "lesson": 58,
+    "excerpt": "Learn how an orchestrator agent connects specialist agents as connected subagents in Agentforce Builder, how each connected subagent's description governs routing, and which single-agent walls justify the split. Covers requirement ma-1a in the Multi-Agent Orchestration domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Multi-Agent Orchestration",
+      "SOMA",
+      "Orchestrator Agent",
+      "Agentforce Builder"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-59-ma-1b-multi-agent-or-single-agent-choosing-the-architect",
+    "title": "Lesson 59: Multi-Agent or Single Agent: Choosing the Architecture and Counting the Cost",
+    "series": "sf-agentforce-specialist",
+    "lesson": 59,
+    "excerpt": "Learn the single-versus-multi-agent decision rule and the four costs, latency, per-turn consumption, observability, and governance surface, that a split spends to buy scalability and control across boundaries and domains. Covers requirement ma-1b in the Multi-Agent Orchestration domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "Multi-Agent Orchestration",
+      "Architecture Decision",
+      "Latency",
+      "Governance"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-60-ma-2a-open-standards-for-multi-agent-the-purpose-of-mcp",
+    "title": "Lesson 60: Open Standards for Multi-Agent: The Purpose of MCP and A2A",
+    "series": "sf-agentforce-specialist",
+    "lesson": 60,
+    "excerpt": "Learn what MCP and A2A are each for, how to tell a remote tool from a remote agent, and how the protocols sit in an Agentforce architecture in both directions. Covers requirement ma-2a in the Multi-Agent Orchestration domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "MCP",
+      "A2A",
+      "Open Standards",
+      "Interoperability"
+    ],
+    "status": "published"
+  },
+  {
+    "slug": "day-61-ma-2b-mcp-and-a2a-on-the-wire-tools-context-and-peer-del",
+    "title": "Lesson 61: MCP and A2A on the Wire: Tools, Context, and Peer Delegation",
+    "series": "sf-agentforce-specialist",
+    "lesson": 61,
+    "excerpt": "Learn what MCP and A2A actually carry on the wire, where each sits in an Agentforce architecture, and the costs that decide which edge a requirement belongs on. Covers requirement ma-2b in the Multi-Agent Orchestration domain.",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "readTime": "20 min read",
+    "tags": [
+      "MCP",
+      "A2A",
+      "Agent Card",
+      "Interoperability"
     ],
     "status": "published"
   },

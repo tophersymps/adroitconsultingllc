@@ -1,0 +1,102 @@
+---
+title: "Lesson 53: Managing a Live Agent: Versions, Activation, and the Change Gate"
+slug: day-53-go-1a-managing-a-live-agent-versions-activation-and-the
+series: sf-agentforce-specialist
+lesson: 53
+excerpt: "Learn how an Agentforce agent moves from an editable draft to a frozen committed version and then an active release, and why commit is the mandatory gate before activation. Covers requirement go-1a, \"Explain the process for managing and monitoring agents.\", in the Governance and Observability domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Agent Governance, Agent Versioning, Release Control, Agentforce Builder]
+---
+
+# Lesson 53: Managing a Live Agent: Versions, Activation, and the Change Gate
+
+An admin opened a live service agent on a Friday afternoon, fixed a typo in one instruction, clicked Save, and went home satisfied. On Monday a customer typed the exact phrase the typo had broken, and the agent made the same mistake it had made all weekend. The admin had watched the builder accept the edit and had every reason to believe the fix was shipped. Nothing they typed ever reached a customer, because the agent people actually talk to is a frozen committed version, and the edit they made only touched a draft that nobody activated.
+
+The first idea in this lesson is therefore a correction to an instinct. A live agent is not a file you edit in place. It is a committed version that has been activated, and the editing surface you open sits beside it as a draft. Salesforce separates the act of building from the act of releasing on purpose, and the separation is enforced by two steps, commit and activate, that stand between every edit and every customer the agent will meet.
+
+This lesson serves requirement go-1a, "Explain the process for managing and monitoring agents.", in the Governance and Observability domain at ten percent of the exam, and it is material the Agentblazer prep trails do not cover in a dedicated module. It takes apart the version model behind a live agent, the immutability that commit creates, the review controls that sit over a release, the two permissions that decide who can change a live agent, and the narrow difference between deactivation as an incident tool and activation as the routine path. After it, you can describe exactly what has to happen between an edit and the change a customer sees, and name the step teams most often skip.
+
+## Deep Dive
+
+### A live agent is a committed version, not a file you edit in place
+
+When you open an agent in Agentforce Builder, you are working on a draft, and every save writes to that draft. A draft cannot be activated, so nothing you are editing is reachable by a customer or an employee until you complete two more steps. You commit the version, which saves a snapshot of the agent to metadata and prepares it for use outside the builder, and then you activate it. The platform is explicit that a version must be committed before it can be activated, so commit is not a formality you can skip.[^1]
+
+Activation is the step that makes the agent live, and it carries a rule that governs everything else in this lesson: only one version of an agent can be active at a time, so activating a version automatically deactivates whatever was active before it.[^3] There is no state in which two versions answer the same conversation, and there is no partial release where half of the traffic runs the old instructions and half runs the new ones. The swap is complete and it is instantaneous at the moment you click Activate.
+
+In Agentforce Builder the version dropdown in the header is how you choose which version you are viewing or editing, so a team managing several versions moves between a stable committed one and a new draft without losing the thread.[^1] Switching the dropdown changes what you are working on, never what is live, and that distinction is what keeps a builder session safe to explore in.
+
+That single-active-version rule is the spine of the whole management model, and it is what most exam questions about managing a live agent turn on. It gives you a clean mental picture: a queue of committed versions, exactly one of them live, and a draft you can always work in without disturbing the live one. Every other control, from rollback to review, is a consequence of that one rule, so if you keep only one fact from this lesson, keep this one.
+
+### Committing is the freeze, and the freeze is the governance point
+
+After you commit a version, you can no longer edit it. That is the design, not a limitation, because it means the artifact your users run is immutable: whatever a customer experiences today is a fixed snapshot, not something that shifted while you were looking the other way. To change anything you create another version, edit the new draft, commit that, and activate it, and the previous committed version remains on the shelf untouched.[^1]
+
+The freeze is what makes rollback real rather than aspirational. Your previous committed version still exists in full, so if a new version regresses in production, re-activating the earlier one is a recovery path you can take in seconds instead of a rebuild you take in days. Teams that treat versions as disposable lose this safety net; teams that commit deliberately, one change at a time, keep a chain of known-good states they can return to.
+
+The draft record is what lets you work inside a version without losing your way. The Draft History panel shows when each draft of a version was saved and who made the edits, and it lets you compare the current version line by line against a saved draft, restore a specific change, or restore the whole draft.[^1] So the immutability applies to committed versions, while your in-progress work stays editable and recoverable until the moment you commit. The boundary between the two is the commit action, and knowing where that boundary sits is what separates a controlled change from an accidental one.
+
+### Compare Agent Versions is the control a reviewer works from
+
+Version comparison is the control that lets a second person review a release before it goes live. Compare Agent Versions diffs multiple versions of an agent and lets you copy an improvement from one version into another, accepting or declining each change individually or all of them at once.[^2] To compare and merge agent versions, a user needs the Manage AI Agents permission plus whatever permissions their agent type requires, so the review right is a real, granted right and not something anyone with a login can exercise.[^2]
+
+Keep the two comparison tools apart, because they answer different questions. Compare Agent Versions works across committed versions and is where a reviewer weighs one release against another. Draft History works inside a single version's draft and is where an author recovers an edit they regret. A release review uses the first, and a working session uses the second.
+
+The value of copying a specific change rather than merging everything is control. An author may have made three good improvements and one risky experiment in the same draft, and a reviewer who accepts changes individually can keep the three and decline the experiment, while a reviewer who merges all at once cannot separate them.
+
+The reason this is a governance control rather than a convenience is the frozen active version underneath it. Because the live version cannot move while you are reviewing it, a reviewer is never chasing a target that changed between the diff and the decision. The reviewer sees what moved, decides what is wanted, and copies only that, and the thing they are comparing against stays exactly where it was while the decision is made.
+
+### Who can change a live agent reduces to two permissions
+
+The governance question, who is allowed to change a live agent, collapses into two responsibilities rather than a long list. Building and editing an agent runs on the Agentforce authoring permissions that are granted through permission sets, and releasing it runs on the commit and activate actions. Managing AI agents, including comparing and merging versions, is gated by the Manage AI Agents permission together with the permissions the specific agent type demands.[^2]
+
+Separating build from release is the operating pattern that matters in a governed org. An author works in a draft all day, shaping instructions and actions, and never touches production. A reviewer, holding the release right, commits and activates after the change has cleared testing. Since only one version can be active at a time, the answer to who can change a live agent is really two answers: who can commit, and who can activate.
+
+Treat activation as a release action with the same weight you give a production deployment, and not as one more editing click inside the builder. That framing is what keeps the two roles separate, because the moment activation is treated as casual, the build-time freedom of a draft leaks into the live experience and the freeze that commit was supposed to create stops protecting anything.
+
+On a regulated org this split is also an audit answer. When someone asks who released the version a customer complained about, the answer is the reviewer who committed and activated it rather than the author who drafted it, and the Draft History panel supplies the name and the time of each edit along the way.[^1]
+
+### Deactivate is an incident tool, not a maintenance step
+
+Deactivation removes the agent from service and ends its open interactions.[^3] That is exactly what you want when a launch has gone badly, when a compliance question needs the agent taken down now, or when an underlying service is failing in a way the agent cannot ride out. It is the emergency brake, and like an emergency brake it is loud and disruptive on purpose.
+
+The routine path never touches it. To change a live agent you keep the current version in service, build the next version as a draft beside it, test that draft, commit it, and then activate it, which retires the old version automatically because only one can be active.[^3] The agent the users see stays live the whole time you are building the replacement, and the swap happens in one deliberate step at the end. The legacy builder follows the same pattern of keeping the active version serving while you work a separate draft, so the surface of the builder differs but the rule does not.
+
+The documented trap is reaching for Deactivate to make a small edit. Deactivation drops the agent out of service and closes in-flight conversations, so using it as a quick way to get a clean slate means real users lose the agent for the duration of your change.[^3] The correct move for a small edit is the same as for a large one: a new draft, tested, committed, and activated, with the live version untouched until the replacement is ready.
+
+### Two gates sit between building and going live
+
+Between a finished idea and a live change stand two controls, and both come from work covered in the deployment days. The first is the Testing Center gate. Before you commit, you run the change through a test set so a change is scored against a suite rather than one conversation, because a single exchange can pass by luck while a suite catches the case you did not imagine.[^4]
+
+The second gate is commit itself, and it is mandatory rather than optional. A version has to be committed before it can be activated, so the act of committing is the moment a draft becomes a candidate for production.[^1] Put the three controls together and you have the safety story of a live agent: an active version that is frozen, a rule that only one version is live at a time, and a tested commit standing before any activation.
+
+Then there is the loop back from operations. Everything you learn from monitoring arrives downstream of the platform's session tracing, because nothing in the observability toolchain has data until tracing is switched on.[^6] A finding from an operator is not a fix by itself; it is an input that becomes a new version and travels back through this same gate, tested and committed before it can go live, which is why the management picture and the monitoring picture are two halves of one cycle.[^5]
+
+### Worked example: closing a production regression through the gate
+
+Suppose a change to an order-status action ships on a Tuesday. By Thursday the operator notices that a slice of order-status conversations is escalating to a human, and the session data shows the action erroring for a subset of users. The instinct to open the live agent and patch the action is the wrong move, because the live version is frozen and cannot be edited in place anyway.
+
+The correct sequence mirrors the gate. The author creates a new version from the current committed one, so the live version keeps serving while the work happens. They edit the action binding in the new draft, watching the running user's permissions, since an action that fails for some users is often an access problem rather than a prompt problem. They run the affected cases through Testing Center against the new version, commit it once the suite passes, and then activate it, at which point the previous version retires automatically and remains available if the fix turns out to be wrong.
+
+If the new version somehow regresses worse, recovery is a single click: re-activate the earlier committed version and the live experience returns to the state it held before the change. That is the whole payoff of the model. The freeze gave you a known-good state to return to, the single-active-version rule gave you a clean swap, and the testing gate gave you evidence before the swap rather than after it.
+
+## Exam Traps
+
+Three misconceptions carry the marks here. The first is believing you can edit an agent that is live: the active version is a committed snapshot and cannot be edited, so to change behavior you create a new version, edit the draft, and activate that, and an answer that describes editing the live version in place has missed the freeze. The second is believing activation is additive, or that two versions can run together: only one version can be active at a time, and activating a new version deactivates the previous one automatically, so a scenario that expects a gradual rollout across two active versions is describing something the platform does not do. The third is believing you can activate a draft: a version must be committed before it can be activated, so commit is the mandatory release gate and save is not, and a scenario that reaches activation straight from an unsaved or uncommitted change has skipped the step the whole model is built around.
+
+## What a consultant should walk away with
+
+Treat a live agent as a committed, frozen version rather than a document you edit. Work in a draft, run the change through Testing Center, commit to freeze the snapshot, then activate to swap it live, and let the single-active-version rule retire the previous version for you. Keep the review controls straight: Compare Agent Versions weighs one committed version against another, while Draft History recovers edits inside a single draft. Separate the two rights, so an author builds and a reviewer commits and activates, and read activation as a production release rather than a casual click. Reach for Deactivate only when the agent has to come out of service now, never as a shortcut for a small edit, and remember that every finding monitoring produces re-enters this same gate as a new, tested, committed version.
+
+## What's next
+
+Lesson 54 - Monitoring a Live Agent: What the Operator Sees and When to Escalate (go-1b)
+
+[^1]: Salesforce, "Versioning and Editing Agents" (https://help.salesforce.com/s/articleView?id=ai.agent_versions_lifecycle.htm&language=en_US&type=5)
+[^2]: Salesforce, "Compare Agent Versions" (https://help.salesforce.com/s/articleView?id=ai.agent_versions_compare.htm&language=en_US&type=5)
+[^3]: Salesforce, "Activate or Deactivate Your Agent" (https://help.salesforce.com/s/articleView?id=ai.copilot_setup_activate_deactivate.htm&language=en_US&type=5)
+[^4]: Salesforce, "Agentforce Testing Center" (https://help.salesforce.com/s/articleView?id=ai.agent_testing_center.htm&language=en_US&type=5)
+[^5]: Salesforce, "Monitor and Optimize Your Agent" (https://help.salesforce.com/s/articleView?id=ai.agent_parent_monitor.htm&type=5)
+[^6]: Salesforce, "Agentforce Session Tracing" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_session_trace.htm&type=5)

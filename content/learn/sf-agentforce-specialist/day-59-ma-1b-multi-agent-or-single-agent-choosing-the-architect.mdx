@@ -1,0 +1,86 @@
+---
+title: "Lesson 59: Multi-Agent or Single Agent: Choosing the Architecture and Counting the Cost"
+slug: day-59-ma-1b-multi-agent-or-single-agent-choosing-the-architect
+series: sf-agentforce-specialist
+lesson: 59
+excerpt: "Learn the single-versus-multi-agent decision rule and the four costs, latency, per-turn consumption, observability, and governance surface, that a split spends to buy scalability and control across boundaries and domains. Covers requirement ma-1b in the Multi-Agent Orchestration domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Multi-Agent Orchestration, Architecture Decision, Latency, Governance]
+---
+
+# Lesson 59: Multi-Agent or Single Agent: Choosing the Architecture and Counting the Cost
+
+A delivery team splits a working service agent into an orchestrator and three specialists because a stakeholder liked the architecture diagram. Two weeks later the average interaction latency has roughly doubled, the monthly consumption line has climbed, and nobody can explain why a refund request reached the wrong specialist, because the answer crossed a router and three agents and the trace reads like a relay race. The build did what it was asked to do. The decision to ask for it was made on appearance rather than on evidence, and the cost landed on the customer's wait time.
+
+Splitting an agent is not free, and it is not free in ways that a feature comparison will not show you. The proposal lists what multi-agent adds, scalability and control across boundaries and domains, and quietly omits what it spends: latency, per-turn consumption, observability effort, and governance surface. The consultant who can itemise both columns decides the architecture question correctly. The consultant who can only recite the benefits reaches for orchestration when a single agent with more Subagents would have answered the requirement for a fraction of the operating cost.
+
+This lesson serves requirement ma-1b, "Given a scenario, determine whether a Multi Agent architecture is appropriate for scalability and control," in the Multi-Agent Orchestration domain, which carries 5 percent of the exam. It pairs with Lesson 58, which covered how the pieces fit together. Here the question is whether to build them at all. By the end you can start from the single-agent default, recognise the shape of a requirement that should stay single, name the three walls that genuinely earn a split, count the latency and per-turn cost of a split, explain why observability and governance get harder with every agent you add, and read a scenario for the fix rather than for the topic count.
+
+## Deep Dive
+
+### Start from the default: one agent with more Subagents
+
+Salesforce's own decision framework says to use a single agent when the business process is relatively straightforward, operates within a single domain, and needs unified data access across its Subagents.[^4] Adding a new capability to a single agent means adding or adjusting a Subagent and its Actions, which is a small, well-understood change. Standing up a second agent and an orchestrator is not. So the honest question in a scenario is not whether multi-agent is impressive, it is whether the single agent has actually hit a wall that a new Subagent and a new Action cannot clear. Most requests that arrive looking complex are a single agent with more topics.
+
+That default is not a limitation, it is the design position that keeps the system operable. A single agent gives you one reasoning loop, one conversation context, one trace to read, and one version to test. Every one of those is a cost that a split multiplies. So the burden of proof sits with the split, not with the simpler design, and a proposal that never states which wall it is answering has not met that burden. Salesforce's practitioner guidance frames the split the same way, as a move to make when workflows span multiple domains within a single Salesforce org while users still expect one unified conversational front door, and it recommends keeping connected subagents to no more than about seven per orchestrator.[^5]
+
+### The cases for staying single share a shape
+
+The cases where one agent with more topics and actions is the right answer share a shape: the data lives in one place, the security context is shared, and the domains are not so distinct that they demand different logic or different action sets. If sales and support both read the same account records and both call the same Flows, folding the support capability into the sales agent as a new Subagent is cheaper than a new agent and an orchestrator, and it keeps the shared data access unified. Deliberately adding Subagents and Actions to one agent also keeps one place to test and one place to version, which is exactly what a support team wants when the change is a new script, not a new business domain.
+
+This is the sentence to say back to a stakeholder: if both teams read the same records and call the same automation, they do not need their own agents, they need their own Subagents. A Subagent covers a domain inside one agent, so topic count is not a reason to split. A shared data boundary is the strongest signal that the answer is a single agent.
+
+### Splitting is earned by one of three walls
+
+Splitting is justified when one of the three single-agent walls is genuinely present, and the scenario will usually name it.[^4] A data boundary wall appears when the needed data, workflows, or permissions sit in a different org or a different system, and no amount of Subagent engineering reaches across it. Context overload is present when the instruction block has grown until action outputs and history crowd out the core rules, which you see as an agent that ignores instructions or conflates Subagents. Domain specialisation collapse is present when the agent applies the wrong logic to pick a Subagent because it is trying to be an expert in everything. A scenario that names one of these has earned the architectural change, and a scenario that names none of them has not.
+
+A wall is a requirement, and a requirement does not change because a diagram does. When you split, you are not removing the work, you are moving it into routing, versioning, and tracing, where it is harder to see and harder to own. That is why the three walls are strict: they are the cases where the alternative to the added cost is genuinely worse, and the cases that do not qualify are the ones where the added cost buys nothing.
+
+Notice how each wall forces the split rather than merely permitting it. A boundary the agent cannot cross, a context it cannot hold, and a routing decision it keeps getting wrong are all failures of the single-agent design at a specific point, not aesthetic preferences. When you hear one of those specific failures named, the split is the fix. When you hear anything else, the fix is smaller.
+
+### Latency and per-turn cost are the prices you pay
+
+Latency rises because each agent runs its own reasoning loop and orchestration adds a hop, so a request that a single agent resolved in one pass now passes through a router and one or more specialists before the user sees an answer. Cost per turn rises for the same reason: more agents means more model calls behind a single user message.[^4] Salesforce's consumption guidance is precise about where the credits land: subagent actions consume Flex credits in the orchestrator agent and in each connected subagent, and no additional cost is incurred simply for routing to a connected subagent or for synthesising its response.[^1] So the meter moves when the specialists do work, and a design with several specialists means several agents doing work behind one message.
+
+The timeouts make the shape of that cost concrete. An orchestrator agent has a bounded budget for its delegated work, and each connected subagent has a tighter one of its own, which is the platform telling you plainly that a chain of specialists is a chain of waits.[^2] Neither latency nor consumption appears in a feature list, so a proposal that claims multi-agent improves responsiveness has the trade backwards. Multi-agent buys scalability and control across boundaries and domain separation, and it spends latency and per-turn cost to get them. Say that sentence out loud in a design review and you will usually get a better architecture out of it.
+
+Make the trade concrete with a number a scenario can carry. Suppose a single-agent conversation resolves a request in one reasoning pass. Split that into an orchestrator and a specialist, and the same user message now involves the orchestrator's routing decision, the specialist's full reasoning loop, and, in supervisor mode, the orchestrator's synthesis pass. Several reasoning passes behind one message is the order of magnitude the customer feels as a longer wait, and it is the order of magnitude that shows up on the consumption report, because each pass is model work. No setting removes the extra passes, because they are what orchestration is. So when a scenario claims that a split will make the agent feel faster, the correct answer names the extra hop rather than the parallelism.
+
+### Observability gets harder with every hop you add
+
+There is a fourth cost that consultants under-plan, and it is observability. A single agent produces one reasoning trace you can read end to end. A multi-agent system produces a conversation that crosses a router and several specialists, so you have to follow a decision across agents to understand why the system answered as it did. The trace supports that investigation for multi-agent deployments, where you expand the step at which a subagent was invoked to drill into its nested steps, and the nested steps are where the real cause usually lives.[^6] Without that discipline, a routing mistake at the orchestrator and a reasoning mistake inside a specialist can look identical in the final answer while being different defects with different fixes.
+
+Budget for tracing that spans the orchestration, not just per-agent test sets. Testing Center can score each connected subagent in isolation, but the failure you will actually be paged about is the one that only appears when the orchestrator hands off to the wrong specialist or the handoff drops context. Salesforce's architecture guidance makes the same point at the design level: a single user action may spawn a chain of agents across organisational boundaries, each of which needs delegated authority to act, so the observable unit is the whole path rather than any one agent.[^3] A test set per agent will not catch that. You need evidence of the whole path, or you will ship a system you can operate only by guessing.
+
+### Governance surface grows with every agent you add
+
+The final cost is governance, and it grows arithmetically with the agent count. Each connected subagent is its own agent with its own version, its own activation state, its own permissions, its own Actions, and its own test coverage, and each one has to be created or upgraded and activated in the new Agentforce Builder before orchestration will use it.[^2] More agents means more objects to audit, more permission decisions to make, and more places for a stale version to be live. The orchestrator's description on each connected subagent becomes a governance artefact in its own right, because that description controls routing, and a description that drifts from what the subagent now does is a silent defect.[^1]
+
+The platform also puts hard edges around the design, and each edge is something the org is now responsible for. This release supports one level of delegation, so subagents cannot delegate to other connected subagents; variable mapping runs in one direction only, from the orchestrator to its connected subagents; and you cannot deactivate a connected subagent on its own.[^2] Those constraints are not obstacles to route around, they are the shape of the governance surface you are adding. Fewer agents means less surface to govern, and the same requirement met with one agent and a new Subagent is not a compromise, it is a smaller audit.
+
+Count the artefacts for a three-specialist split and the surface becomes visible. There is an orchestrator to version and activate, three specialists each with their own version, activation state, permissions, actions, and test set, three descriptions that control routing and must stay current, and the constraints of one-level delegation and one-way variable mapping to design within. Every one of those is a place where a change can be made in the wrong object, and every one is something a reviewer has to check before a release. A single agent with an added Subagent has one version, one activation, and one description block to keep consistent, which is the whole point of the default.
+
+### Match the fix to the wall, and let the boundary decide the tool
+
+Read a scenario for the fix rather than for the topic count. When the described system shares one data boundary and one domain, the correct answer is a single agent with an added Subagent, whatever the topic list looks like. When a wall is described, check whether it is genuinely architectural before you split: context overload can sometimes be relieved by tightening a Subagent's scope or trimming what the agent carries forward, in which case the fix is smaller instructions rather than a new agent. The one case that is never a single-agent fix is the boundary case, where the needed data or workflow lives in a different org or a different vendor, because in-org orchestration cannot cross that line at all. That is the case where you leave orchestration behind and reach for a protocol, which is the subject of the next two lessons.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing multi-agent always responds faster because work is parallelised. Each agent runs its own reasoning loop and orchestration adds a hop, so latency and cost per turn rise, and a claim that splitting improves responsiveness has the trade backwards. The second trap is believing a requirement should be split whenever it spans more than one topic. Subagents cover multiple domains inside one agent, so a split is justified by a data boundary, context overload, or routing precision collapse, not by topic count. The third trap is believing each added agent is cheap because the front door hides it. Every connected subagent is another agent to version, activate, permission, test, and trace, and the platform adds constraints such as one-level delegation and one-directional variable mapping, so orchestration adds governance surface even when the user sees one conversation.
+
+## What a consultant should walk away with
+
+Carry the two columns. In the benefit column, multi-agent buys scalability and control across boundaries and domains, and a unified front door for cross-domain tasks in one org. In the cost column, it spends latency because each agent reasons in its own loop and orchestration adds a hop, consumption because each specialist makes its own model calls, observability because the trace now spans agents, and governance because every agent is a version, a permission set, and a description to maintain. Start every scenario from the single-agent default, and only cross to orchestration when the requirement names a data boundary limit, context overload, or domain specialisation collapse. When the boundary is a different org or a different vendor, neither design answers it, and the answer moves to a protocol.
+
+## What's next
+
+Lesson 60 - Open Standards for Multi-Agent: The Purpose of MCP and A2A (ma-2a)
+
+[^1]: Salesforce, "Multi-Agent Orchestration," (https://help.salesforce.com/s/articleView?id=ai.agent_multi_orch.htm&language=en_US&type=5)
+[^2]: Salesforce, "Considerations and Limitations in Multi-Agent Solutions," (https://help.salesforce.com/s/articleView?id=ai.agent_multi_orch_consider.htm&language=en_US&type=5)
+[^3]: Salesforce, "Agentic Integration Patterns," (https://architect.salesforce.com/docs/architect/fundamentals/guide/agentic-integration-patterns)
+[^4]: Salesforce, "Agentforce Interoperability Guide," (https://www.salesforce.com/agentforce/resources/interoperability-guide/)
+[^5]: Salesforce, "What Is Multi-Agent Orchestration, and When To Build a Super Agent or a Single Agent," (https://admin.salesforce.com/blog/2026/what-is-soma-and-when-to-build-a-super-agent-or-a-single-agent)
+[^6]: Salesforce, "Observe Phase Observability Tools," (https://help.salesforce.com/s/articleView?id=ai.agentforce_observability_observe_phase_tools.htm&language=en_US&type=5)

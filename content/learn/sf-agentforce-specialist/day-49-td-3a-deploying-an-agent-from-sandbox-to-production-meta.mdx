@@ -1,0 +1,94 @@
+---
+title: "Lesson 49: Deploying an Agent from Sandbox to Production: Metadata, Dependencies, and Activation"
+slug: day-49-td-3a-deploying-an-agent-from-sandbox-to-production-meta
+series: sf-agentforce-specialist
+lesson: 49
+excerpt: "Learn how an Agentforce agent moves from sandbox to production as metadata, the dependency order that keeps its actions working, and the activation and agent-user steps a green deploy skips. Covers requirement td-3a in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying an agent from sandbox to production."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "21 min read"
+tags: [Deployment, Sandboxes, Agent Metadata, Activation]
+---
+
+# Lesson 49: Deploying an Agent from Sandbox to Production: Metadata, Dependencies, and Activation
+
+An implementation team runs its Agentforce service agent through a full pass in a Full sandbox on a Tuesday, the deploy to production returns a clean success on Friday, and by the following Monday a support lead is asking why the agent answers nothing. The metadata all landed. The agent even shows as present in the target org. What is missing is quieter: the flow behind the agent's main action arrived with an inactive version, the agent user was created but never granted view access to a custom field the prompt reads, and the agent itself was never activated, so every customer who reached the channel hit a wall the deployment report never mentioned.
+
+None of those failures are bad luck, and none of them live in the agent's logic. An Agentforce agent is metadata, so you promote it with the same machinery you use for any other customization, and that machinery moves a definition rather than a running system. What makes agent promotion examinable is the shape of that definition. It is a thin outermost shell that leans on a web of other metadata, from the flows and Apex classes and prompt templates its actions call to the objects and fields those actions touch, and every piece of that web has to land in the target org in an order that lets it resolve.
+
+This lesson serves requirement td-3a, the considerations for deploying an agent from sandbox to production, in the Testing, Deployment, and Maintenance domain, which carries ten percent of the exam. It walks through the metadata types an agent deploys as, the dependency order that keeps its actions working, the two mechanical rules that trip teams who treat a deploy as the finish line, and the agent user whose permissions decide what the agent can actually do. Read it as a reasoning frame, because that is how the exam uses it. Given a symptom that appears after go-live, name the piece of the promotion that was skipped.
+
+## Deep Dive
+
+### An agent is metadata, so you promote a definition and not a conversation
+
+An Agentforce agent is a declarative asset, and its top-level definition is stored under the metadata type AiAgentDefinition, which holds the agent-level settings that apply across every version, such as its type and its context variables.[^1] So you do not move an agent by copying anything you see on screen. You retrieve its metadata from the source org and deploy that metadata to the target, and the supported paths are the Salesforce CLI, a change set, or DevOps Center.[^8] The exam tests this as a boundary question: which parts of the running agent travel as metadata and which are configuration that lives beside it. A conversation is not an artifact you deploy, and a transcript is not one either. The definition is the artifact.
+
+Consider a small case to make it concrete. A service agent has four actions: an Apex action that looks up an order, a flow that creates a task, a prompt template that drafts a reply, and a standard action that ends the conversation. Each of those is its own metadata component, and the agent holds only the reference that says it may call them. Copy the agent and you have copied the plan to call four things; you have not copied the four things. That gap is where promotion gets interesting, and it is why the rest of this lesson is about the definition's dependencies rather than the definition itself.
+
+Say that plainly enough to defend it and the rest of the objective gets easier. The agent's reasoning, its subagents, its action set, and its messages are all expressed in metadata, so they are portable. The things that make an agent reachable and effective in a specific org, the user it runs as, the records it reads, and the channel it answers on, are not part of that definition and do not move with it. Every production surprise in this objective comes from confusing the portable definition with the org-scoped environment around it.
+
+### The deployable unit is a definition plus at least one version
+
+A definition by itself is not deployable. The agent's top-level definition, AiAgentDefinition, must already exist in the target org or be defined in the same deploy, and you deploy AiAgentDefinitionVersion to carry at least one agent version.[^3] The version is where the behavior lives: the settings, conversation variables, and messages, together with the planner and the subagents and actions it drives.[^2] Read those two requirements as one rule, because a first-time deploy has to satisfy both at once, and a version cannot land without its definition already present or arriving in the same package.[^3]
+
+The exam frames the version rule as a first-deploy trap in particular. The first time you deploy an agent to an org, you include the definition, not just a version, because a version cannot deploy unless its definition already exists in the target or is in the same deployment.[^4] A team that packages only a version and expects the definition to be waiting will watch the deploy fail for a reason that has nothing to do with the agent's content.
+
+Versions are addressed by a hash, which is worth knowing exactly because the exam and the CLI both use it. MyAgent#3 targets version three of an agent whose API name is MyAgent, and MyAgent#* targets every version at once.[^4] The reason the version, not just the definition, is the unit of work is that an agent changes over time, and a promotion has to state which version of that change is moving. When you need every version present in the target, the wildcard form is the one you reach for. When you want a single controlled release, you name the version explicitly.
+
+### Actions ride along when you ask for them
+
+The dependency that surprises people is the agent's actions. An agent references flows, Apex classes, and prompt templates as the things it can do, and those references have to resolve in the target, or the action fails at run time even though the agent metadata deployed cleanly. The good news in API version 68 is that you no longer hand-list that metadata. When you retrieve an agent, the tool automatically includes the correct versions of the flow, Apex, and prompt template metadata the agent uses, provided you retrieve with the flag that asks for the agent's dependencies.[^3]
+
+When the automatic pull is not available, which is any promotion on the earlier API version, you list the action metadata yourself and make sure to indicate the correct agent version, which is the manual step the newer types removed.[^4] That history matters for the exam because a question can describe an older org and expect you to know that the actions have to be named explicitly rather than assumed to travel.
+
+Two limits on that convenience are examinable. The automatic dependency pull covers the action metadata, not everything: you still specify any other metadata the agent needs, such as custom objects and custom fields, because those are not agent actions.[^3] And both orgs must be on the same API version for the newer types to work. If the sandbox runs the new metadata types and production still runs the earlier API version, you fall back to the previous metadata types until both orgs catch up.[^3] The wider fact underneath is that dependencies exist at all. An agent is the last item in a chain, so the chain has to be complete before the last item works.
+
+### Order the deploy so every dependency lands before the agent
+
+Once you accept the chain, the deploy order stops being a style choice. Deploy the things the agent depends on first: custom objects and fields, then the flows, Apex, and prompt templates its actions call, and finally the agent metadata itself.[^5] The reason is mechanical rather than aesthetic. If you deploy the agent first, its action references point at nothing, and some of them will fail to deploy at all because their target dependency is absent from the org.
+
+A practical way to hold the order is to read the agent as a dependency list before you deploy it. Every action the agent declares is a component the target must already have or receive in the same package, so the deploy plan writes itself once you have the action list in front of you. The order is not a matter of taste to be debated at the release meeting; it is the order the references require.
+
+The order has a second layer that is easy to miss, and it is the one that bit the team in the opening scene. When you deploy a flow, the flow's active version is what runs, and deploying the flow does not guarantee the right version is active. An inactive flow version is metadata that deployed successfully and still cannot be executed.[^5] So the ordering checklist is not finished when the components exist; it is finished when the components are in a state that can actually run. This is why the deployment checklist Salesforce publishes for the service agent puts a confirmation that all deployed flows have the correct version active into the post-deployment steps rather than treating it as an afterthought.[^5]
+
+### Activation and the agent user are the two steps a green deploy skips
+
+Two rules trip people who treat a successful deploy as the finish line. The first is activation. A successful deploy places the metadata, but the agent still has to be activated, because deployment makes the agent exist while activation makes it operational.[^5] After a deploy to production the checklist says to verify the agent is active, and a user cannot reach the agent until it is.[^7] A deployed agent that nobody activated is an asset, not a service.
+
+The second is the agent user. The agent runs as an agent user, and that user's profile, permission sets, and sharing access govern what the agent can read and change.[^6] You create the agent user in the target org, deploy or recreate the permission sets, and add those permission sets to the user.[^5] If the agent reads a custom contact field, the agent user needs view permission on that field, or the action fails at run time with the clean deploy already behind it.[^3] The permission model and the user record are configuration that lives beside the agent, not inside it, which is exactly why they do not travel with the definition.
+
+A third mechanical rule belongs here because it blocks the fix rather than the deploy. Once an agent is committed you cannot edit it, so to add the agent user to a committed agent you first create a new agent version and then add the user to that version.[^3] A team that tries to edit the committed agent in place will find the option missing, and the route out is a new version, not a workaround.
+
+### Keep source and target in step, or the next deploy is blocked
+
+The last consideration is drift. After you deploy, the agents in your source and target orgs must match, or future deployments are blocked. If someone creates a new version in the target org, a corresponding version has to be created in the source, because the deployment tooling treats a mismatched pair as a state it will not overwrite.[^3] This is the same discipline any metadata pipeline demands, applied to an asset that is unusually tempting to edit directly in production.
+
+Drift is an audit concern as much as a tooling one. When the two orgs diverge, no one can state which version is authoritative, and the next release has to reconcile a difference nobody wrote down. Keeping the versions in step is the cheapest form of governance you can practice on an agent, because it costs a matching version and prevents an unbounded surprise.
+
+### Test in the target before you call it done
+
+The deploy checklist ends with a step teams skip when the clock is short: test the agent in the target, in each channel it will serve, before you let customers near it.[^5] A green deploy and an activated agent together prove that the asset exists and can run. They do not prove that its actions resolve against production's data, that the agent user can read the records a prompt merges, or that the flow versions wired to it are the ones you meant. The point of testing after the deploy, rather than only before it, is that the environment the agent now runs in is not the environment you tested in.
+
+Run the checks that only make sense on the far side of the deploy: open the agent as the agent user would, confirm each action returns what the sandbox returned, and confirm the channel actually surfaces the agent. If something fails, the failure usually points at one of the pieces that does not travel, the agent user's permission, an inactive flow version, or a channel that was never published, rather than at the agent's logic. Reading a production failure back to that short list is the same skill the exam is testing when it hands you a symptom and asks for the cause.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a successful deploy makes the agent live, when deployment only places the metadata and the agent still has to be activated and its agent user assigned and permissioned, or the actions fail at run time for lack of access.[^5] The second is believing the agent carries its actions automatically in every API version: you have to retrieve with the dependency flag set to the agent version so the correct action versions travel, an agent built with Agent Script must include its authoring bundle as well, and a version cannot deploy in the same package as the matching legacy BotVersion.[^3][^4] The third is believing the source and target may drift after deployment, when once deployed the versions in both orgs must match and a new version in the target with no counterpart in the source blocks the very next deployment.[^3] Each trap is the same mistake wearing a different coat, which is trusting the deploy report instead of the state it never checked.
+
+## What a consultant should walk away with
+
+Treat the agent as the last item in a dependency chain and the deploy as the middle of the job, not the end. Deploy custom objects and fields, then the flows, Apex, and prompt templates, then the agent, and confirm the correct flow versions are active before you touch the agent itself. Retrieve the agent with its action dependencies so the correct versions travel, name the version you mean with the hash syntax, and hold both orgs on the same API version. Then finish the two steps a green deploy skips: activate the agent and create or permission its agent user for every object, field, and record its actions touch. Keep the source and target versions in step so the next promotion is routine rather than a rescue, test the agent on real records in each channel, and only then let customers near it.
+
+## What's next
+
+Lesson 50 - Agent Promotion Failure Modes: What Breaks Only in Production (td-3b)
+
+[^1]: Salesforce, "AiAgentDefinition" (https://developer.salesforce.com/docs/platform/api-metadata/references/meta-types/metadata-aiagentdefinition.html)
+[^2]: Salesforce, "AiAgentDefinitionVersion" (https://developer.salesforce.com/docs/platform/api-metadata/references/meta-types/metadata-aiagentdefinitionversion.html)
+[^3]: Salesforce, "Move an Agent to a New Org" (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-dx-deploy-metadata.html)
+[^4]: Salesforce, "Agentforce Metadata Types in Winter '27: Dive into AiAgentDefinition" (https://developer.salesforce.com/blogs/2026/11/agentforce-metadata-types-in-winter-27-dive-into-aiagentdefinition)
+[^5]: Salesforce, "Deploy an AI Service Agent to Staging or Production" (https://trailhead.salesforce.com/content/learn/modules/agentforce-deployment-quick-look/deploy-an-ai-agent-with-agentforce)
+[^6]: Salesforce, "Configure Service Agent Access" (https://help.salesforce.com/s/articleView?id=ai.agent_user.htm&language=en_US&type=5)
+[^7]: Salesforce, "Give Users Access to Agentforce (Default)" (https://help.salesforce.com/s/articleView?id=ai.copilot_setup_user_access.htm&language=en_US&type=5)
+[^8]: Salesforce, "Agentforce Frequently Asked Questions (FAQs)" (https://help.salesforce.com/s/articleView?id=005313925&language=en_US&type=1)

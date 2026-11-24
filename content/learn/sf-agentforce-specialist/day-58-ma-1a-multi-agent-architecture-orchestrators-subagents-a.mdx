@@ -1,0 +1,85 @@
+---
+title: "Lesson 58: Multi-Agent Architecture: Orchestrators, Subagents, and the Configuration Path"
+slug: day-58-ma-1a-multi-agent-architecture-orchestrators-subagents-a
+series: sf-agentforce-specialist
+lesson: 58
+excerpt: "Learn how an orchestrator agent connects specialist agents as connected subagents in Agentforce Builder, how each connected subagent's description governs routing, and which single-agent walls justify the split. Covers requirement ma-1a in the Multi-Agent Orchestration domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Multi-Agent Orchestration, SOMA, Orchestrator Agent, Agentforce Builder]
+---
+
+# Lesson 58: Multi-Agent Architecture: Orchestrators, Subagents, and the Configuration Path
+
+A solutions architect is handed a service agent that works and a request to add a field service use case. The instruction block is already two pages long, and someone has proposed "splitting the agent" as if the phrase described one action. It does not. Splitting can mean adding a Subagent inside the same reasoning loop, or standing up a whole second agent and connecting it to an orchestrator, and those are different builds with different costs. The architect who cannot name the difference picks the impressive one and pays for it later in latency, credit consumption, and a trace nobody can read end to end.
+
+The cause of that confusion is a naming collision. The platform renamed Topics to Subagents, and it also calls a connected agent a connected subagent, so two very different constructs now share a word. A Subagent is a domain block inside one agent. A connected subagent is an entirely separate agent, with its own reasoning loop, its own identity, and its own Subagents, that an orchestrator delegates to. Getting that distinction straight is the prerequisite for every scenario on this objective, because the correct architecture depends on which one the requirement actually needs.
+
+This lesson serves requirement ma-1a, "Given a scenario, determine whether a Multi Agent architecture is appropriate for scalability and control," in the Multi-Agent Orchestration domain, which carries 5 percent of the exam. By the end you can describe a single agent as a set of Subagents, name the three walls a single agent hits as scope grows, explain Single-Org Multi-Agent orchestration and the difference between a Subagent and a connected subagent, walk the Agentforce Builder path that connects them, state the two control facts that separate a governed design from a hopeful one, choose between handoff mode and supervisor mode, and hold the decision rule that a wall earns the split while tidiness never does.
+
+## Deep Dive
+
+### A single agent is a set of Subagents, and each one reasons on its own
+
+In current authoring an Agentforce agent is a set of Subagents, the construct Salesforce renamed from Topics, and each Subagent is scoped to one domain and carries its own Actions: Flows, Apex, prompts, and other callable steps. Every agent runs its own LLM reasoning loop, and the Atlas Reasoning Engine extends that loop with Agent Script, which adds explicit transitions and sequencing so behavior is deterministic where it needs to be.[^1] A single agent built this way can cover a lot of ground, and the exam reward goes to the consultant who can say exactly when it stops working rather than reaching for orchestration early.
+
+That last point is the discipline of this lesson. Multi-agent is not a promotion and a single agent is not a toy. A single agent with several well-scoped Subagents is the right answer to most multi-domain requirements, because it keeps one reasoning loop, one conversation context, and one place to test and version. Orchestration is what you reach for when a specific, nameable wall blocks that simpler design.
+
+### Salesforce names three walls that a single agent hits
+
+As scope grows, Salesforce describes three limits a single agent reaches, and a scenario question usually tests whether you can identify which one a described system has met.[^4] The first is a data boundary limit: data, workflows, and permissions living in different Salesforce orgs or different systems cannot be reached by one agent that lives in one org, and no amount of Subagent engineering crosses that boundary. The second is context overload: the reasoning engine's context fills with instructions, action outputs, and conversation history until it starts ignoring core rules or conflating Subagents. The third is domain specialisation collapse: an agent trying to be an expert in everything applies the wrong logic when invoking a specific Subagent, and the larger the instruction block, the worse the routing precision becomes.
+
+Read those three as diagnostics rather than concepts, because that is how they are used. A system that cannot see the data it needs has hit the first wall. A system that used to route correctly and now ignores its own rules as the instruction block grew has hit the second. A system that invokes the wrong Subagent even though every Subagent is correctly scoped has hit the third. Knowing which wall applies is what decides the architecture, and a scenario that names none of the three has not yet earned an architectural change.
+
+Put the three side by side in a service org, because the scenarios do. A team wants the agent to read order history that lives in a fulfillment system outside Salesforce: that is a data boundary limit, and no Subagent inside the current agent can open that door, so the answer is a protocol or a data integration rather than a rearrangement of the agent. A team keeps adding instructions until the agent starts dropping its tone rules under long conversations: that is context overload, and the fix may be to tighten a Subagent's scope or to stop carrying so much forward rather than to stand up a new agent. A team builds one agent to own billing, shipping, and refunds, and it starts routing refund questions to billing because the instruction block is enormous: that is domain specialisation collapse, and it is the wall that most often earns a genuine multi-agent split. Read a described symptom, name its wall, and the architecture decision follows.
+
+### SOMA is one front door with specialist agents behind it
+
+Multi-agent orchestration in a single org is what Salesforce calls SOMA, Single-Org Multi-Agent. Instead of the user managing several conversations, the org presents one unified conversational front door, a superagent or orchestrator agent that coordinates and delegates to specialist agents.[^4] Each specialist is a full agent with its own reasoning loop and its own scope, not a Subagent inside the orchestrator. The orchestrator routes work using the LLM reasoning of the Atlas engine, which reads the connected subagents' descriptions, or deterministic routing written in Agent Script, and the payoff is a single point of contact for cross-domain requests without the user juggling separate sessions.[^3] Salesforce describes SOMA as one unified conversational touchpoint in which a primary orchestrator coordinates and delegates to specialised agents so each task is handled by the agent best equipped for it.[^5]
+
+The construct to hold onto is that a connected subagent is a complete, independent agent with its own distinct expertise and identity, and it contains one or more Subagents of its own.[^1] That is what makes SOMA modular: a well-built specialist can be reused across many multi-agent solutions, because it is a whole agent rather than a block pasted into another agent's definition. Salesforce's guidance is to keep the count of connected subagents to roughly seven or fewer per orchestrator, because routing precision falls as the list of descriptions grows longer.[^3] A superagent with a dozen specialists is not a design win, it is a routing problem.
+
+### The connection is made in Agentforce Builder, and the description governs routing
+
+You build the connection in Agentforce Builder, the next-generation authoring surface that replaced the legacy builder. Open the agent that will orchestrate as a Draft, open the Explorer panel, click the plus icon, and choose Connect Agent as Subagent, then select one or more active specialist agents of a supported type and add them to the agent.[^1] You can only connect agents that are active, and only agents of supported types are offered, so an inactive agent cannot be wired in even if it exists in the org.[^2] Each connected subagent then gets its own Basic Information description, and that description is what governs the orchestrator's decision about when to delegate to it, which is why a vague or overlapping description produces unreliable routing. If the orchestrator uses the Agent Router, you add each connected subagent under Actions Available for Reasoning in Canvas view and reference it with the @ symbol inside Instructions.[^1]
+
+The builder also gives you a preview, and Testing Center gives you a scored test set, so you can prove that delegation behaves before users meet it. The orchestrator and the Agent Router both rely on the description to decide when to route, so write it as a sentence that states what the specialist handles and the condition under which the orchestrator should hand off. Then test the handoff with the utterances that should trigger it, because a description that reads well to a human can still fail to route, and a description that overlaps a second specialist can send work to the wrong one.
+
+Treat the description as a routing contract rather than a label. The orchestrator and the Agent Router both rely on it to decide when to hand work to a specialist, so a description that is vague, or that overlaps with another subagent's, or that has drifted from what the specialist now does, is a silent routing defect. This is also the reason multi-agent changes and Subagent changes are not equivalent: rewording a Subagent description changes nothing outside its own agent, while rewording a connected subagent's description changes how an orchestrator in another agent behaves.
+
+### Two control facts separate a governed design from a hopeful one
+
+Two facts decide the control questions on this objective. Only the orchestrator agent can escalate a conversation to a human, and connected subagents cannot, so human handoff is centralised at the front door rather than scattered across specialists.[^3] That single rule is the reason a support leader's "let the specialist hand off when it gets stuck" request is answered at the orchestrator, not inside each specialist. It also means the escalation policy is one policy to test and one policy to govern, rather than one per specialist.
+
+The second set of facts is about what the platform allows. The supported type combinations are constrained: an Agentforce Service Agent connects to Service Agents, an Agentforce Employee Agent connects to Employee Agents, and an Employee Agent can also connect to a Service Agent, but the caller-side combinations outside that set are not offered.[^2] This release also supports one level of delegation from an orchestrator to its connected subagents, and subagents cannot in turn delegate to other connected subagents, which keeps the graph a star rather than a chain.[^2] Before multi-agent will work, each agent must be on a version created and activated in the new Agentforce Builder, because agents built in the legacy builder have to be upgraded first.[^2] Wiring orchestration is therefore not only a build step, it is a migration and activation step for every specialist involved.
+
+There is a governance consequence hidden in that requirement. If a specialist is edited and a new version is not activated, the orchestrator keeps calling the last active version, so a team can believe an improvement shipped when the routing path never changed. Multi-agent turns activation into a routing concern rather than a release chore, and a checklist that treats activation as a formality will quietly serve stale behaviour behind a single front door.
+
+### Handoff mode and supervisor mode are the two routing patterns
+
+Agentforce multi-agent solutions route in one of two patterns, and the choice is an architecture decision rather than a preference.[^1] In handoff mode, which is the default, the orchestrator hands control to a connected subagent, and that subagent takes over the conversation by responding directly to the user. Handoff mode is faster for the user because it bypasses the orchestrator's response synthesis step, and it suits specialists that need to run a direct, end-to-end conversation, such as a billing or HR agent. In supervisor mode, the orchestrator stays responsible for the conversation: it delegates the request, takes back the subagent's result, synthesises it, and delivers the answer itself. Supervisor mode is the fit when the orchestrator has to combine results from more than one specialist before replying.
+
+The pattern you choose changes what the user sees and where the reasoning is visible. In handoff mode the specialist's answer appears in the main response area and the orchestrator never synthesises it. In supervisor mode the orchestrator is the single front door, and a multi-intent question can pull from several connected subagents before one synthesised reply goes back. That is the difference between a relay and a coordinator, and it is the first thing to decide when you design an agent-to-agent solution.
+
+### A wall earns the change, and tidiness never does
+
+The exam frames this objective as a judgement about scalability and control, so hold the decision rule in view. A unified front door across domains in one org, with cross-domain tasks that would otherwise force users into separate sessions, is the fit for multi-agent.[^4] A process that is straightforward, lives in a single domain, and shares one set of data access across its Subagents is a single agent, and that stays true even when the Subagents are numerous. Splitting is justified when the single agent has struck one of the three named walls, not when a diagram would look neater with boxes. Where the boundary is another org or another vendor, in-org SOMA does not reach it, and you are in protocol territory, which is the subject of the MCP and A2A lessons.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing a connected subagent is a Subagent inside the orchestrator. A connected subagent is a full agent with its own reasoning loop and its own scope, while a Subagent, formerly a Topic, is a domain block inside one agent, so an answer that treats the two as the same construct is wrong. The second trap is believing any agent can be connected as a subagent. Only active agents and only the supported type combinations are offered, so a scenario that connects an inactive agent, or that connects a Service Agent as the caller when only an Employee Agent may act as that caller, fails. The third trap is believing a connected subagent can escalate to a human. Only the orchestrator agent can escalate a conversation to a human, so an answer that places human handoff inside a subagent is wrong.
+
+## What a consultant should walk away with
+
+Carry three rules into the scenario questions. A Subagent is a domain block inside one agent, and a connected subagent is a whole agent that the orchestrator reasons about through its description, so never let the shared word fool you. Only the orchestrator escalates to a human, so handoff is one policy at the front door rather than a feature of each specialist. And reach for SOMA only when a single agent has hit a data boundary limit, context overload, or domain specialisation collapse, because a straightforward single-domain process with shared data access is a single agent with more Subagents, no matter how many topics it covers. When you do build the split, wire it in Agentforce Builder by connecting active, supported agents, write each connected subagent's description as a routing contract, and expect every specialist to be created or upgraded and activated in the new builder first.
+
+## What's next
+
+Lesson 59 - Multi-Agent or Single Agent: Choosing the Architecture and Counting the Cost (ma-1b)
+
+[^1]: Salesforce, "Multi-Agent Orchestration," (https://help.salesforce.com/s/articleView?id=ai.agent_multi_orch.htm&language=en_US&type=5)
+[^2]: Salesforce, "Considerations and Limitations in Multi-Agent Solutions," (https://help.salesforce.com/s/articleView?id=ai.agent_multi_orch_consider.htm&language=en_US&type=5)
+[^3]: Salesforce, "Agentic Integration Patterns," (https://architect.salesforce.com/docs/architect/fundamentals/guide/agentic-integration-patterns)
+[^4]: Salesforce, "Agentforce Interoperability Guide," (https://www.salesforce.com/agentforce/resources/interoperability-guide/)
+[^5]: Salesforce, "Learn about Agentforce SOMA (Single Org, Multi Agent) Orchestration and MCP," (https://help.salesforce.com/s/articleView?id=005317683&language=en_US&type=1)

@@ -1,0 +1,102 @@
+---
+title: "Lesson 54: Monitoring a Live Agent: What the Operator Sees and When to Escalate"
+slug: day-54-go-1b-monitoring-a-live-agent-what-the-operator-sees-and
+series: sf-agentforce-specialist
+lesson: 54
+excerpt: "Learn how an operator watches a live Agentforce agent: the session tracing that has to be on first, the Interaction Summary and Trace views, the alert thresholds that page the team, and the two meanings of escalation. Covers requirement go-1b, \"Explain the process for managing and monitoring agents.\", in the Governance and Observability domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Agent Monitoring, Session Tracing, Observability, Escalation]
+---
+
+# Lesson 54: Monitoring a Live Agent: What the Operator Sees and When to Escalate
+
+The day after a service agent went live, an operator opened the Optimization view, saw an empty intent list, and filed a bug titled launch produced no sessions. There was no bug. Sessions were streaming in fine, and the Trace view would have shown every one of them immediately. What the operator was reading was the analysis layer, which had not caught up yet, because intent generation and clustering run on their own schedule and a brand new agent starts below the line where clusters form. The monitoring was working; the operator had not learned which view fills when.
+
+That is the lesson underneath this objective. Monitoring a live agent is not one screen. It is a chain of views, each fed by a different stage of a pipeline, and each answering a different question about a conversation. Raw sessions and traces show up at once, while the insights that make sessions useful, the intents and quality scores, arrive through scheduled processing. An operator who knows which stage feeds which view stops chasing gaps that are simply timing.
+
+This lesson serves requirement go-1b, "Explain the process for managing and monitoring agents.", in the Governance and Observability domain at ten percent of the exam, and it is material the Agentblazer trails leave without a dedicated module. It covers the tracing you must switch on first, the two session views an operator reads, the timing of processed versus raw data, the alerts that turn monitoring into notification, the two meanings of escalation, and the constraints that decide what an operator is allowed to see. After it, you can describe what the operator sees at each stage, and when a quiet dashboard is expected rather than broken.
+
+## Deep Dive
+
+### No session tracing means there is nothing to observe
+
+Monitoring runs on data you have to switch on first, and this is the step teams forget. Agentforce Session Tracing captures every turn, reasoning step, action, and message for every agent session, combining data from different sources under a single session identifier so a whole conversation can be reconstructed start to finish.[^1] It lives in Setup, under the Einstein Audit, Analytics, and Monitoring area, and by default it is off, so on most orgs someone has to enable it deliberately.[^2]
+
+Nothing else in the observability toolchain has data until tracing is on. Audit and Feedback, the Trust Layer, and the retrieval quality metrics capture the model side of the conversation, but the session record is what makes a conversation inspectable at all.[^1] No tracing means no sessions, no intents, and no analytics, no matter how many other toggles were flipped, so treat enabling tracing as the first line of any monitoring plan rather than an afterthought added weeks after go-live.
+
+Two dependencies are worth naming so setup does not stall on them. Enabling session tracing depends on the Einstein Generative AI setup being in place and on a current standard data model, and switching tracing off stops collection and turns off the features that depend on it, so it is a real switch rather than a display toggle.[^2] Treat it as infrastructure that a go-live plan provisions in advance.
+
+Once tracing is collecting, the platform streams the data into the org's data model, where it can also be queried and reported on directly.[^1] That matters for the exam framing: the observability screens are one way to read the data, but they are built on a trace that exists independently, which is why a scenario asking for a custom slice of session data is answered by querying the model rather than by a screen.
+
+### The operator's session view is two tabs, not one
+
+At the session level the operator works in Agentforce Studio under Observe and Optimize. Agent Optimization opens at the Sessions and Intents page and lists individual sessions you can filter by modality, outcome, and intent.[^3] Selecting a session exposes two views that matter, and keeping them apart is the skill.
+
+The Interaction Summary is a structured breakdown of the selected intent, showing the subagents triggered, the actions triggered, the quality score, and the model-generated reasoning behind that score.[^3] It answers what the agent did and why it was judged that way. The Trace is the time-ordered record of every processing step with per-step timing and error text, so it answers how the run unfolded and where the time went.[^3]
+
+The order to read them is Summary first, then Trace. The summary gives you the shape of the interaction and a first hypothesis; the trace tests that hypothesis against the actual steps, showing intent handling, subagent routing, filters, retrievals, variable updates, and action execution in sequence.[^3] And the trace has one operational advantage that makes it the view to reach for when something is wrong right now: it is available immediately, including for sessions that are still being processed, so a fresh incident does not wait on the analysis pipeline.[^3]
+
+### Processed and raw data arrive on different clocks
+
+When the data appears matters, because operators who do not understand the timing conclude that a session vanished. Raw sessions land immediately, but the analysis that makes them useful arrives later. Processed sessions have passed through the optimization pipeline, which extracts and analyzes customer intents and assigns quality scores, and that work is scheduled rather than instant.[^4]
+
+The intent pipeline generates intents daily, and the clustering pipeline groups them and assigns tags roughly once a week. A cluster only forms when at least ten semantically similar intents match, and an intent that does not join a qualifying cluster stays untagged and does not appear in the session trace at all, even though the session plainly holds that intent.[^4] That last rule is the one that surprises people: the trace lists tagged intent instances, so a session with a real but untagged intent can look empty in that one view.
+
+An empty or thin intent list in the first days of a launch is therefore expected, not a defect. An agent that has just started takes time to accumulate enough sessions for the intent generator to work and enough matching intents for the cluster floor to be cleared, so early on you read the raw sessions and the traces, and you wait for the processed layer to fill.[^4] Knowing which stage feeds which view is what stops an operator from filing a bug against a pipeline that is simply running on schedule.
+
+### Monitoring is being told, not only looking
+
+Monitoring is not only looking, it is being told. Agent Health, reached from Agentforce Studio under Alerts, lets you create alerts and set thresholds so you are notified when agent activity breaches acceptable levels, which is what turns monitoring from a dashboard someone has to remember to open into an operation that pages the team before users open a case.[^5]
+
+The Health signals it watches are the operational stability metrics: agent interaction latency, session duration, and error rate. When you create an alert you pick a metric and an agent and set a threshold, and the system evaluates the metric against the recent window of data and sends an email notification when the threshold is breached, with the notification linking straight to the sessions that triggered it.[^5] So an alert does not just tell you a number moved; it hands you the traces to read.
+
+The cadence behind an alert is worth knowing when you tune one: the system evaluates most metrics on a short rolling window and re-checks the fastest-moving health metrics more frequently, and once an alert fires it pauses before it can notify again, which keeps a single incident from flooding an inbox.[^5] That pause is a feature, and it is why you tune thresholds rather than add a second alert on the same metric.
+
+The pairing that works in practice is the aggregate signal and the alert together. The Health tab in Agent Analytics gives you the trend, the line that shows whether a metric is drifting, and the alert gives you the trigger that fires when the drift becomes a breach. An operator who has only the trend catches problems late, and an operator who has only the alert sees a spike with no context, so the two belong in the same monitoring plan rather than as alternatives.[^5]
+
+### Escalation carries two meanings, and the exam uses both
+
+Escalation carries two meanings and the exam uses both, so keep them apart. Inside a conversation, escalation means the agent hands the user to a human or to another agent, and the Escalation Rate metric counts exactly those sessions. In operations, escalation means a human deciding to step into a live channel, which is a different act with a different instrument.
+
+For voice, the Agentforce tab in the Omni Supervisor console gives a supervisor a near real-time view of active calls with live transcripts, which is the surface for stepping into a conversation as it happens.[^8] That is operational escalation: a person watching live interactions and choosing to intervene. For chat and asynchronous channels there is no equivalent live console, so you watch the same session list, and you read it through the intent-processing lag rather than in real time.[^3]
+
+Hold the distinction because scenario questions lean on it. A question about escalation rate is testing whether you know the metric counts sessions the agent handed off. A question about a supervisor listening to calls is testing whether you know the operational meaning and can name the voice console as its home. Same word, two answers, and the scenario tells you which one it wants.
+
+A useful test in a scenario is to ask who is doing the escalating. If the subject is the agent deciding to hand off, you are in the metric's sense and the number is a rate. If the subject is a person deciding to enter a conversation, you are in the operational sense, and the home of that action is the supervisor console rather than a dashboard.
+
+### Two governance constraints bound what an operator may see
+
+Two governance details shape what an operator is allowed to see, and both are exam material. Monitor Agent Guardrails is a dedicated view under Observe and Optimize for instruction adherence and task resolution trends, and it is deliberately kept separate from the broader Analytics view so compliance and brand-safety teams can track guardrails without the performance noise mixed in.[^6] Instruction adherence measures how well an agent follows its subagent instructions, and task resolution measures how well it interprets the user's intent and resolves the task, so the guardrail view answers a governance question rather than a throughput one.[^6]
+
+The second constraint is privacy. Because session data is sensitive, personally identifiable information such as phone numbers, email addresses, and government identifiers that was retrieved from the session trace or Audit and Feedback is masked, and users see redactions instead of raw PII in observability apps, queries, reports, dashboards, and APIs.[^7] Monitoring does not hand an operator a raw PII firehose, and a question that assumes it does is testing whether you know it does not.
+
+### Worked example: from a latency alert to a finding
+
+Suppose an operator receives an alert that agent interaction latency breached its threshold. They open Agent Health and confirm the trend, then move to the Health dimension in Analytics to see whether the rise is across the whole agent or concentrated. If it is localized, the alert notification links them to the sessions that tripped the threshold, and they open a recent one.
+
+In the session, they read the Interaction Summary first, which shows which subagent and actions fired, then open the Trace and read the per-step timings. The trace is where the diagnosis becomes concrete: a single slow retrieval or a slow action shows as one long step among short ones, while a broad slowdown shows as every step stretched. The finding, whether it is a slow action or a heavy retrieval, is a specific, nameable cause rather than a general feeling that the agent is slow.
+
+That finding then leaves monitoring entirely and re-enters the change gate from lesson fifty-three as a new version: the operator hands the session and the identified step to whoever owns the agent, and the fix travels through a draft, a test, a commit, and an activation. Monitoring produces evidence; the change gate produces the change. Keeping those two roles separate is what stops an operator from editing a live agent to chase a signal they only half understand.
+
+## Exam Traps
+
+Three misconceptions dominate this objective. The first is believing every view is instant: raw sessions and the Trace are immediate, but processed insights such as intent clustering and quality scores arrive through scheduled pipelines, with intents generated daily and tagged weekly, so a thin processed view early in a launch is expected rather than missing data. The second is believing an untagged intent is a missing session: an intent that does not join a cluster of at least ten matching intents stays untagged and does not appear in the session trace even though the session contains it, so an apparently empty trace can still sit over a real conversation. The third is believing observability exposes raw customer data: PII retrieved from Session Trace or Audit and Feedback is masked, so operators see redactions rather than phone numbers, email addresses, or government identifiers, and a question that assumes an operator can read unmasked customer data has the privacy model backward.
+
+## What a consultant should walk away with
+
+Switch on Agentforce Session Tracing before anything else, because every other observability surface is downstream of it. Read the Interaction Summary for the structured what-and-why, then the Trace for the time-ordered how, and reach for the Trace first when an incident is live, since it is available even while a session is still processing. Expect the processed layer to fill on its own clock, with intents generated daily and clustered weekly above a floor of ten matching intents, and do not read an empty intent list as a defect early in a launch. Turn monitoring into notification with Agent Health alerts on latency, session duration, and error rate, and read each alert against the Health trend for context. Keep the two senses of escalation apart, read Monitor Agent Guardrails for adherence and task resolution, treat PII as masked as a matter of design, and route every finding back through the change gate as a tested, committed, activated version.
+
+## What's next
+
+Lesson 55 - Reading Agent Analytics: The Metrics That Matter (go-2a)
+
+[^1]: Salesforce, "Agentforce Session Tracing" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_session_trace.htm&type=5)
+[^2]: Salesforce, "Set Up Agentforce Session Tracing" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_session_trace_setup.htm&language=en_US&type=5)
+[^3]: Salesforce, "Analyze Data with Agent Optimization" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_optimize_use.htm&language=en_US&type=5)
+[^4]: Salesforce, "Use Intents in Agent Optimization" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_optimize_intent_use.htm&language=en_US&type=5)
+[^5]: Salesforce, "Manage Alerts for Agent Health Monitoring" (https://help.salesforce.com/s/articleView?id=ai.agent_monitor_health_alert.htm&language=en_US&type=5)
+[^6]: Salesforce, "Monitor Agent Guardrails" (https://help.salesforce.com/s/articleView?id=ai.agent_guardrails_monitor.htm&language=en_US&type=5)
+[^7]: Salesforce, "Monitor and Optimize Your Agent" (https://help.salesforce.com/s/articleView?id=ai.agent_parent_monitor.htm&type=5)
+[^8]: Salesforce, "Understand Agentforce Observability KPIs and Tools" (https://help.salesforce.com/s/articleView?id=ai.agentforce_understand_observability_kpis_and_tools.htm&language=en_US&type=5)

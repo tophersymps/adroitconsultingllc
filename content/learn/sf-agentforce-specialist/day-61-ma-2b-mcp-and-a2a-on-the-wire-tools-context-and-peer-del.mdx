@@ -1,0 +1,88 @@
+---
+title: "Lesson 61: MCP and A2A on the Wire: Tools, Context, and Peer Delegation"
+slug: day-61-ma-2b-mcp-and-a2a-on-the-wire-tools-context-and-peer-del
+series: sf-agentforce-specialist
+lesson: 61
+excerpt: "Learn what MCP and A2A actually carry on the wire, where each sits in an Agentforce architecture, and the costs that decide which edge a requirement belongs on. Covers requirement ma-2b in the Multi-Agent Orchestration domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [MCP, A2A, Agent Card, Interoperability]
+---
+
+# Lesson 61: MCP and A2A on the Wire: Tools, Context, and Peer Delegation
+
+An integration lead asks the harder follow-up question. She understands that MCP connects an agent to a tool and A2A connects it to another agent, and now she wants to know what each one actually carries across the wire and where each one sits in the architecture her team is about to build. A consultant who can only repeat the rule of thumb stalls here. A consultant who can describe a tool contract on one edge and an authenticated peer conversation on the other can draw the diagram on the whiteboard and defend every line of it.
+
+That second level of detail is the whole point of this lesson, and it is the part most learners never get. MCP and A2A are absent from the official Agentforce prep trail modules, and even a strong summary of their purpose leaves the wire-level questions unanswered: what a remote system publishes so an agent can use it, what a peer publishes so another agent can find and call it, and what each protocol costs when you put it into a live design. The exam tests the distinctions, and a customer conversation tests whether you can be specific.
+
+This lesson serves requirement ma-2b, "Explain the purpose of existing open standard multi-agent protocols such as MCP and A2A," in the Multi-Agent Orchestration domain, which carries 5 percent of the exam. It is the last lesson of the course, and it goes one layer below Lesson 60. By the end you can describe what MCP carries and where it sits on the tool edge of Agentforce, describe what A2A carries and where it sits on the peer edge, name the registration step that makes each connection governed rather than improvised, use exposure versus delegation as the deciding contrast, and weigh the cost each protocol adds.
+
+## Deep Dive
+
+### MCP carries a tool contract
+
+At the wire level, MCP carries a tool contract. The remote system exposes its capabilities as described, callable tools, and the agent discovers and invokes them without needing to know each system's native API or schema. A server advertises those assets as tools, prompts, and resources, and the agent treats a tool as a callable action it can reason over and select.[^1] That is why an MCP connection behaves like adding a capability: you register the server, its tools appear as actions the agent can invoke, and the agent never negotiates a bespoke transaction with each underlying system.
+
+Session lifecycle is often handled inside the MCP server rather than by the calling agent, so the agent interacts through a standard tool call while the plumbing stays on the server side. The practical consequence is that MCP is a request-and-result interface: the agent decides to call a tool, the tool performs its function, and a result comes back. The reasoning stays with the agent, and the remote system does not think about the task. Hold that shape, because A2A has a different one.
+
+Read a tool contract the way an agent does. The server publishes the tool's name and description and the shape of its inputs and outputs, and the agent selects among the available tools by matching the request to that description. Salesforce is emphatic that the name and description carry the selection: a vague or generic tool description causes the model to skip the tool and answer from its own capability even when the tool was the right choice, and the same holds for a tool whose description has drifted from what it now does.[^2] That is why a well-built MCP edge is less about transport and more about writing honest, specific tool metadata, because the metadata is the contract the agent actually reads.
+
+### A2A carries an Agent Card and a conversation
+
+A2A carries a different payload. Agents publish an Agent Card, a machine-readable description of their capabilities, and peers discover and invoke one another through it. The Agent Card is a JSON metadata document that describes the agent's identity, its capabilities and skills, its service endpoint, and how clients should authenticate and interact with it.[^5] Discovery is what makes A2A a peer protocol: the calling agent reads a card, decides whether that peer fits the task, and then delegates.
+
+The conversation that follows is richer than a function call. Salesforce describes the exchange as LLM-native, unstructured dialogue over OAuth 2.0 and HTTP/JSON, and the broader A2A design carries that dialogue over HTTP with streaming for incremental updates.[^5] The important behavioural difference is the task lifecycle: the calling agent decomposes the request, delegates domain-specific sub-tasks to peer agents, keeps the task lifecycle, and aggregates the results. That is exactly the behaviour a tool call does not give you, because a tool does not own the task and does not plan. A2A is where one agent hands a portion of the reasoning, not just a function, to another.
+
+Contrast the two lifecycles, because the difference decides scenarios. A tool call is stateless from the agent's point of view in the common case: it sends inputs, receives a result, and the server deals with whatever session state it needs. A delegated task in A2A is long-lived and stateful: it has an identifier, it moves through statuses, it can stream incremental updates, and it can run long enough that the peer sends a push notification when it finishes. The calling agent owns that lifecycle, which is why A2A is described as the protocol for decomposing a request and aggregating results rather than for making a single call. When a scenario says the remote side will spend time and report back progress, that is A2A's shape rather than MCP's.
+
+### MCP sits on the tool edge of an Agentforce architecture
+
+In an Agentforce architecture, MCP sits on the tool edge. The Agentforce MCP Client registers external MCP servers so builders can bring remote tools and data sources inside Agentforce through a tool contract rather than a bespoke integration.[^1] Salesforce documents ready-made MCP servers for exactly this purpose, including MuleSoft servers and an Anypoint Connector for MCP that connects LLM applications to your APIs, so an API that is not already MCP-enabled still reaches the agent through a wrapper rather than a hand-built connection.[^6] Where the remote system is not MCP-enabled, the wrapper is the translation layer, which is why a missing wrapper blocks the call.
+
+On the outward edge, a hosted or custom MCP server lets Agentforce itself be consumed as a tool by an MCP-compatible client, which positions the org as one capability inside someone else's workflow.[^2] Salesforce is specific that only Agentforce agents created with the new Agent Script Builder can be exposed this way, and that an agent or prompt template must be explicitly configured as a tool rather than being available automatically.[^2] So the tool edge cuts both ways, and both directions are configured rather than assumed.
+
+The wrapper detail is the one candidates miss. The Agentforce MCP client speaks MCP; it does not speak arbitrary REST. A non-MCP-enabled API therefore cannot be called directly by the agent, and the documented answer is to expose that API through a wrapper that presents it as an MCP server, which is the role MuleSoft plays with its connector and server offerings.[^6] So the design question at the tool edge is not only which tools to expose but whether each underlying system already speaks MCP, because any gap has to be filled by something before the agent can reach it. That gap is also where cost and governance land, since the wrapper becomes another component to secure, monitor, and maintain.
+
+### A2A sits on the peer edge, and registration is a governance gate
+
+A2A sits on the peer edge. Outbound A2A is the way for an Agentforce agent to collaborate with a third-party agent, and to enable it an administrator first registers the external agent, detailing its skills, capabilities, and transport protocols, after which the agent can be connected for secure cross-platform task delegation.[^3] Inbound A2A lets an external agent or orchestrator call an Agentforce agent as an expert. In a broker arrangement, an agent broker receives the inbound A2A task, evaluates the declared capabilities of the available internal agents against the task's requirements, and routes to the best fit, with failover to an equivalent agent if the primary target is unavailable, so the external caller never has to know which internal agent served it.[^4]
+
+The registration step is a governance gate rather than boilerplate. Registering an external agent means declaring what it can do and how to authenticate to it, and that declaration becomes the contract the orchestrator reasons over, in the same way a connected subagent's description governs in-org routing. A peer that is not registered cannot be discovered, and a peer whose declared capabilities drift from its behaviour is the same class of silent defect as a stale subagent description. The wire protocol is the transport; the registration is the control.
+
+Registration is where the two protocols behave most alike, and that similarity is the point. Whether the external thing is a tool or a peer, you declare it, review what it exposes, and authenticate to it before it becomes reachable, and only then does the orchestrator reason over it. The difference is what the declaration contains: a tool registration lists callable functions with their inputs and outputs, while a peer registration lists capabilities, skills, and transport protocols alongside the identity the call will be authenticated against.[^3] Both turn an external dependency into a governed endpoint, which is why an unregistered endpoint is not merely missing, it is unreachable by design.
+
+### Exposure versus delegation is the contrast to carry
+
+The contrast worth carrying into the exam is exposure versus delegation. MCP exposes tools and context: it gives the agent new hands, and the agent stays in charge of the reasoning. A2A delegates to a peer that reasons: it gives the agent a colleague, and the colleague owns part of the planning. A remote thing that simply does something is a tool and belongs on MCP, and a remote thing that thinks about the task is an agent and belongs on A2A.
+
+Use that contrast as a reading test on any scenario. When the scenario says the remote system owns part of the reasoning or the planning, the phrase points at A2A, and when it says the agent must reach an external function or data source, that points at MCP. The wire details support the same reading: a tool contract with callable signatures is MCP, and an Agent Card plus a task-management conversation is A2A. Answer by naming the payload, not the product.
+
+### Each protocol carries its own costs
+
+Each protocol carries its own costs, and both are cited as limitations. MCP's growth risk is tool explosion: register many servers and the agent's action surface balloons, which crowds the same reasoning context that overloads a single agent and makes tool selection harder. Salesforce lists MCP tool explosion as the biggest limitation of the MCP-client pattern.[^3] A2A's costs are trust, privacy, and capability registration overhead, because every peer is a security relationship you must establish and maintain, and every capability you expose or consume is something you must govern. Salesforce lists trust, privacy, and registration overhead as the biggest limitation of outbound A2A.[^3]
+
+Neither protocol is free, and choosing one because it is modern rather than because the remote thing is a tool or an agent is the mistake the exam is built to catch. The costs also tell you how to design: keep the MCP action surface deliberate rather than sprawling, and treat every A2A peer as a reviewed relationship with an owner.
+
+### Together they cover the ground in-org orchestration cannot
+
+Put together, the two protocols cover the ground that in-org orchestration cannot. A single org runs SOMA through connected subagents with no protocol needed, because the orchestrator and its specialists live in the same trust boundary and route through descriptions and Agent Script.[^3] When the thing you need is outside the org but is a capability, MCP reaches it as a tool. When the thing outside the org is a peer that should own part of the work, A2A reaches it as a collaborating agent. A mature design can use both at once, with an orchestrator that calls MCP tools for functions and A2A peers for reasoning, while keeping the in-org specialists behind connected subagents. Which edge a requirement lives on is the whole skill, and it is the question the Multi-Agent Orchestration domain keeps asking in different words.
+
+## Exam Traps
+
+Three traps dominate this objective. The first is believing MCP carries a task lifecycle that the calling agent manages. A2A is the protocol where the calling agent decomposes the request, delegates sub-tasks, and aggregates results, while MCP exposes callable tools and often hides the session lifecycle inside the server, so an answer that gives MCP the task-management role has the two swapped. The second trap is believing A2A is a rigid function call. A2A moves an Agent Card for discovery and carries an authenticated peer conversation, so an answer that describes it as a fixed tool signature is describing MCP instead. The third trap is believing a non-MCP-enabled API can be reached by an Agentforce agent with no wrapper. The Agentforce MCP Client needs MCP servers, and a non-MCP API is exposed as MCP tools through a wrapper such as the MuleSoft connector, so the missing wrapper blocks the call.
+
+## What a consultant should walk away with
+
+Carry the two payloads and the two edges. MCP carries a tool contract: a remote system publishes described tools, prompts, and resources, and the agent calls them as actions while keeping the reasoning. A2A carries an Agent Card and a peer conversation: a remote agent publishes its capabilities, is discovered, and is delegated part of the task lifecycle. Put MCP on the tool edge of Agentforce, inward through the MCP client and outward through a hosted MCP server, and put A2A on the peer edge, inbound and outbound, with registration as the governance gate for both. Then weigh the cost: MCP risks tool explosion, and A2A costs trust, privacy, and registration effort, so choose by what sits on the other side and govern every endpoint you add.
+
+## What's next
+
+You have reached the end of the course. This is the last lesson, so the next step is not another lesson: take the practice exam in this series to check your recall across all five domains, then book and sit the Salesforce Certified Agentforce Specialist exam. Sit it while the material is fresh, because the MCP and A2A lessons you just finished are the part the standard prep trail leaves out.
+
+[^1]: Salesforce, "MCP for Agentforce," (https://help.salesforce.com/s/articleView?id=ai.agent_mcp.htm&language=en_US&type=5)
+[^2]: Salesforce, "Agentforce | Build Custom MCP Servers," (https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/agentforce.html)
+[^3]: Salesforce, "Agentforce Interoperability Guide," (https://www.salesforce.com/agentforce/resources/interoperability-guide/)
+[^4]: Salesforce, "Agentic Integration Patterns," (https://architect.salesforce.com/docs/architect/fundamentals/guide/agentic-integration-patterns)
+[^5]: Salesforce, "Learn about Agentforce SOMA (Single Org, Multi Agent) Orchestration and MCP," (https://help.salesforce.com/s/articleView?id=005317683&language=en_US&type=1)
+[^6]: Salesforce, "MCP Solutions," (https://developer.salesforce.com/docs/ai/agentforce/guide/mcp.html)

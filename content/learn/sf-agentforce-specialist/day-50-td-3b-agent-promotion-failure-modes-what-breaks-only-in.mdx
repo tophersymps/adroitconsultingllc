@@ -1,0 +1,85 @@
+---
+title: "Lesson 50: Agent Promotion Failure Modes: What Breaks Only in Production"
+slug: day-50-td-3b-agent-promotion-failure-modes-what-breaks-only-in
+series: sf-agentforce-specialist
+lesson: 50
+excerpt: "Learn why the worst agent promotion failures appear only in production: the agent user, org-scoped sharing rules, external connections, channel plumbing, and version drift that a sandbox never exercises. Covers requirement td-3b in the Testing, Deployment, and Maintenance domain: Identify the considerations for deploying an agent from sandbox to production."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Deployment, Failure Modes, Agent User, Production]
+---
+
+# Lesson 50: Agent Promotion Failure Modes: What Breaks Only in Production
+
+A service agent passes its whole test suite in the sandbox with green results, goes live on a Thursday, and by Friday the channel metrics show that customers reach the agent and it answers nothing useful. Nothing in the agent's logic changed between the two orgs. What changed is that the agent user in production had none of the object permissions the sandbox copy inherited, a sharing rule that was loose in the sandbox hides the records the agent needs in production, and the external data vendor the agent calls was never reconnected because the sandbox's connection was already there. The deploy was clean. The environment was not the same.
+
+Every one of those failures shares a signature: it never appears in the sandbox, because production differs from the sandbox in ways that have nothing to do with the agent's logic. The agent user is a different record, the data is larger and differently shared, the external services are live, the authentication is real, and the audience is wider. The exam frames this as a reasoning task, and the reasoning is always the same move. Given a symptom that only shows after go-live, name the environment-specific cause, which is almost always something that does not travel with the agent metadata.
+
+This lesson serves requirement td-3b, the considerations for deploying an agent from sandbox to production, in the Testing, Deployment, and Maintenance domain, at ten percent of the exam. It organizes the production-only failures into five classes, an unresolved dependency, a broken security context, a missing external connection, missing channel plumbing, and version drift, and it ends with a diagnostic habit for reading the scenario questions. The spine of the whole lesson is one sentence: the definition is portable and the environment is not.
+
+## Deep Dive
+
+### The failures that matter never show in a sandbox
+
+The failures that define a hard promotion share a signature, and it is worth naming before the detail. They never appear in the sandbox, because production differs from the sandbox in ways that have nothing to do with the agent's logic.[^1] Read that list as the actual subject of the exam, because the scenario questions are framed as a symptom that appears only after go-live and the correct answer is almost always something that does not travel with the agent metadata.[^1] The skill being tested is knowing the boundary between what deploys and what must be rebuilt or reconnected.
+
+The definition is portable and the environment is not. That single sentence is the spine of this whole lesson, and every failure mode below is a specific instance of it. An agent that behaves perfectly in a Full sandbox can fail in production without a byte of its metadata changing, because what changed is the environment the same definition now runs inside. Hold that frame and the five classes below stop feeling like a list to memorize and start feeling like five ways of asking one question.
+
+Take one promotion and watch three boundaries fail at once. A team ships a service agent that researches an account, calls a vendor for firmographic data, writes a summary into a field, and posts the result to a web chat. In production the research action returns nothing because the agent user cannot read a custom Account field, the vendor call times out because the connection was never re-authenticated, and the chat never sees the agent because the Embedded Service Deployment was deployed but the web deployment was never published. Three symptoms, three different boundaries, and one unchanged agent definition. The scenario teaches the core lesson of this objective: a single promotion can fail for several independent environment reasons at the same time, and reading the symptoms as separate boundaries is faster than hunting for one root cause inside the agent.[^1]
+
+### An unresolved dependency fails only at run time
+
+If a referenced flow, Apex class, prompt template, or custom field did not land in production, the action fails at run time even though the agent metadata deployed cleanly.[^1] The deploy report only proves the metadata parsed and landed. It does not prove that an action can complete a task. This is the failure mode that follows directly from deploying the agent before its dependencies, or from deploying a flow but leaving the wrong version active: the agent's definition matches the sandbox exactly and its actions still cannot finish.
+
+There is a reason validation exists as a separate step, and it is the one dependable guard against this class. A validate run checks that the metadata will deploy, and it is where you catch a missing dependency before the window rather than after go-live.[^7] A dependency gap that slips past validation still shows up, but it shows up as a broken action in production, which is the most expensive place to find it. Order the deploy so dependencies precede the agent, confirm the active versions of the flows, and this class of failure mostly disappears. A useful test for this class is to ask whether the symptom names a single action. When a scenario says one action errors while the agent otherwise holds a conversation, the cause is almost always that action's dependency rather than the agent's reasoning.[^1]
+
+### The security context is the agent user, and the sandbox never tests it
+
+Every action runs as the running user, which for a customer-facing agent is the dedicated agent user, so the agent's reach is exactly the reach of that user's permissions.[^2] A missing object permission, a field-level security setting that hides a field, or a sharing rule that keeps a record out of view fails the action at run time, and none of it has anything to do with the agent's logic. The agent user's access is governed by its profile, permission sets, and sharing, and it needs at least the minimum object access for every object it touches through a flow, Apex, or prompt template.[^2]
+
+The exam loves this one because a test suite run in the sandbox gives false comfort. A suite passes in the sandbox, the same suite is rerun in production, and it fails, not because the agent changed but because the sandbox's sharing rules and data are not production's. The permission model that lets an action succeed in the sandbox is not evidence that it will succeed in production. The fix is to grant the agent user access to the objects, fields, and records the action actually touches and then confirm it against real records rather than sandbox records. Put a number on the discipline: the agent user starts with minimal access by design, so every object and field an action needs is a permission someone grants deliberately, and a single missing field permission does not degrade the agent so much as fail the one action that reads that field.[^2]
+
+### External connections are authenticated per org
+
+Connections to external services and data vendors are authenticated per org, so a connection established in the sandbox does not carry to production and has to be re-established and re-authenticated there.[^3] When an agent's action calls a vendor such as a data provider, the safe assumption is that the migration carries the definition and you reconnect the plug. The Prospecting agent's own documentation makes this explicit in its pre-launch checklist: re-establish and authenticate the connections to external data vendors in production before the agent is turned on.[^3]
+
+Treat this as a class rather than a single vendor. Any action whose target is a named credential, a connected app, or an external service endpoint is a connection with an authentication state, and that state is scoped to the org where it was created. The metadata can reference the connection; it cannot carry the credentials or the granted consent. So the reconnect step is not an edge case, it is a normal part of promoting any agent that reaches outside the org, and a scenario that mentions a vendor is usually pointing at this class. The failure signature is easy to spot once you know it: the action works in the sandbox and times out or errors on the call out in production, with the agent's logic unchanged in between.[^3]
+
+### Some agents cannot be promoted by metadata at all
+
+Here is the boundary case that surprises teams: some agents cannot be promoted by metadata at all.[^3] Agentforce Prospecting explicitly does not support deploying the agent with change sets or metadata across environments, because a metadata deploy can stop the agent from working correctly, and the documented guidance is to configure the agent in production to mirror the sandbox instead.[^3] The same limitation is stated more plainly for the generative AI Prospecting configuration: deploying Prospecting agents or agent changes through change sets or metadata is unsupported and can cause the newly deployed or updated agent to stop working, so those agents are created and updated in Setup or Agentforce Builder.[^4]
+
+The limitation is not unique to Prospecting. The SDR and Sales Coach agents cannot be deployed or retrieved using metadata methods either, which means they cannot be moved from one org to another at all, and the recommended approach for those is to create and configure them directly in the target org.[^6] Read the pattern rather than memorizing three product names. For a subset of agents, the supported promotion path is not a deploy, and the exam expects you to recognize the scenario and answer that the agent is built in the target org rather than shipped to it.
+
+### The channel plumbing lives outside the agent, and version drift forks the definition
+
+The fourth class is the channel and deployment plumbing, which lives partly outside the agent metadata. Embedded Service Deployments, Enhanced Chat, Omni-Channel flows, and trusted sites are separate configuration, so a deploy that carries the agent but not the plumbing produces an agent that is active and unreachable.[^5] The fix is to deploy or configure the channel functionality, then publish the web deployment in the target org, and then verify the agent actually appears where customers are.[^5] An agent that answers in the builder but is invisible on the website is usually a channel step that was never run, not a broken agent. Channel plumbing has its own signature: the agent answers perfectly when tested from the builder, because the builder does not go through the channel deployment at all, while the customer never sees that answer because the plumbing between the org and the website was configured in the sandbox and not in production.[^5]
+
+The fifth class is version drift across the two orgs. After deployment the source and target copies must match, so a new version created in production with no counterpart in the sandbox blocks the next deployment, and a team that edits production directly quietly forks the definition.[^1] Push the principle into the answer one more time: the agent definition is portable, the environment is not, so the same metadata can behave differently across orgs because the agent user, the records, the sharing rules, the data volume, the external connections, and the channel plumbing differ. The exam wants that sentence, applied to the specific symptom in the scenario.
+
+### Diagnose a production-only symptom from the boundary
+
+When a symptom appears only after go-live, resist the pull to reopen the agent's logic, because the logic is the one thing that did not change.[^1] Work the boundaries in order instead. Is the failed action's dependency present and is its flow version active, which is the dependency boundary. Can the agent user read the object, the field, and the records the action touched, which is the security boundary. Is the external service the action calls re-authenticated in this org, which is the connection boundary. And is the agent published on the channel customers are actually using, which is the channel boundary.[^3]
+
+Naming which boundary the symptom crosses is usually the whole answer. A scenario that says an action errors when it looks up a record is a security-boundary question. A scenario that says the agent works in the builder and not on the site is a channel-boundary question. A scenario that says a vendor call times out only in production is a connection-boundary question. The habit of routing the symptom to a boundary, rather than to the agent, is what turns a vague scenario into a single defensible answer. A common mistake in the scenario is to answer with the mechanism rather than the boundary: the exam wants the cause named plainly, such as the agent user lacking field access or the channel never being published, not a restatement that the environment differs.[^1][^3]
+
+## Exam Traps
+
+Three traps dominate the failure-mode questions. The first is believing a clean deploy means the agent can act, when the deploy moves metadata while the actions still run under the agent user and fail at run time if that user lacks object, field, or sharing access in production.[^2] The second is believing an external service connection follows the agent, when connections and vendor authentication are per org and must be re-established in production, and when some agents such as Agentforce Prospecting do not support change set or metadata deployment across environments at all.[^3] The third is believing behavior is identical across orgs once the versions match, when the definition travels but the agent user, the records, the sharing rules, the data volume, the external connections, and the channel plumbing do not.[^1] Each trap is the same confusion, mistaking the agent's portability for the environment's, and each is answered by naming the org-scoped piece the scenario forgot.
+
+## What a consultant should walk away with
+
+Assume the definition is portable and the environment is not, and build your go-live checklist from that assumption. Before you deploy, confirm the licenses and that Einstein, Agentforce, and Data 360 are enabled in the target, create the agent user as an integration user and grant it object, field, and sharing access for everything the agent touches, and re-establish any external service or vendor connections and test one action on a real record. Deploy dependencies first and the agent last, confirm the correct flow versions are active, and deploy or configure the channel plumbing and publish the web deployment. Then activate the agent, add its permission sets to the agent user, and run a small, specific set of real transactions before you enable it broadly. When a symptom appears only in production, do not look at the agent's logic first. Look at the four things that do not travel, which are the agent user, the connections, the channels, and the data.
+
+## What's next
+
+Lesson 51 - What an Agent Template Is, and How Template Promotion Differs from Agent Promotion (td-4a)
+
+[^1]: Salesforce, "Move an Agent to a New Org" (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-dx-deploy-metadata.html)
+[^2]: Salesforce, "Configure Service Agent Access" (https://help.salesforce.com/s/articleView?id=ai.agent_user.htm&language=en_US&type=5)
+[^3]: Salesforce, "Considerations for Using Agentforce Prospecting" (https://help.salesforce.com/s/articleView?id=sales.sales_agent_prospecting_considerations.htm&language=en_US&type=5)
+[^4]: Salesforce, "Generative AI Considerations for Agentforce Prospecting" (https://help.salesforce.com/s/articleView?id=sales.sales_agents_prospecting_gen_ai_considerations.htm&language=en_US&type=5)
+[^5]: Salesforce, "Deploy an AI Service Agent to Staging or Production" (https://trailhead.salesforce.com/content/learn/modules/agentforce-deployment-quick-look/deploy-an-ai-agent-with-agentforce)
+[^6]: Salesforce, "Metadata Deployment and Retrieval Limitations for SDR and Sales Coach Agents" (https://help.salesforce.com/s/articleView?id=005228853&language=en_US&type=1)
+[^7]: Salesforce, "Agentforce Frequently Asked Questions (FAQs)" (https://help.salesforce.com/s/articleView?id=005313925&language=en_US&type=1)

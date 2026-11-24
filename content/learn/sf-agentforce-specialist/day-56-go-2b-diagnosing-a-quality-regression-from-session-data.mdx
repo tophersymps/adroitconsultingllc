@@ -1,0 +1,102 @@
+---
+title: "Lesson 56: Diagnosing a Quality Regression from Session Data"
+slug: day-56-go-2b-diagnosing-a-quality-regression-from-session-data
+series: sf-agentforce-specialist
+lesson: 56
+excerpt: "Learn how to prove an Agentforce agent regression exists against the prior period, localize it with Performance Insights, read the failure from the trace step type, and reproduce the case before changing anything. Covers requirement go-2b, \"Explain agent analytics and agent optimization.\", in the Governance and Observability domain."
+date: "November 24, 2026"
+author: "Adroit Consulting"
+readTime: "20 min read"
+tags: [Agent Analytics, Quality Regression, Session Trace, Root Cause]
+---
+
+# Lesson 56: Diagnosing a Quality Regression from Session Data
+
+A support manager watched one conversation go badly, concluded the agent had gotten worse, and asked for the instructions to be rewritten. The rewrite went live, and two weeks later the metrics showed the agent was measurably worse than before, with a new failure on an intent that had been fine. The manager had reacted to a single session, skipped the aggregate that would have shown the agent was holding steady, and introduced a real regression while chasing an imaginary one.
+
+That sequence is the trap this lesson exists to close. A regression is a change, not a low value, and the two look identical if you only ever read one session. The discipline is to prove the change exists at the aggregate, localize it to a component, read the failure from the session data, and reproduce it before you touch anything, so that the fix you make is aimed at a cause you have actually seen rather than a feeling you cannot defend.
+
+This lesson serves requirement go-2b, "Explain agent analytics and agent optimization.", in the Governance and Observability domain at ten percent of the exam, and it is material the Agentblazer prep trails do not cover in a dedicated module. It covers the period-over-period comparison that proves a change, the Performance Insights breakdown that localizes it, the session views that confirm it, how to read a failure from the step type in the trace, the pipeline lag that explains an apparently missing session, and the reproduce-then-fix discipline that closes the loop. After it, you can move from a suspicious metric to a reproducible case to a specific change.
+
+## Deep Dive
+
+### A regression is a change, so prove one exists before you react
+
+A regression is a change, so the first move is to prove one exists rather than to react to a single value. In Agent Analytics, compare the metric against its prior period instead of reading it in isolation, which is why the dimension cards carry period-over-period change rather than a bare number.[^1] A Deflection Rate of forty percent is neither good nor bad on its own; a Deflection Rate that fell from fifty to forty is a finding, and one that has sat at forty for a month is a baseline.
+
+The second move is to name which dimension moved, because the dimension tells you where to look. If Deflection Rate fell, Effectiveness moved, so the question is about outcomes. If Error Rate rose, Health moved, so the question is about stability. If a Quality Score fell while the outcome rates held steady, then the retrieval or the answer changed while the routing did not, and you are looking at a knowledge or wording problem rather than a decision problem, because the outcome rates and the quality scores are built on different data sources and can move apart.[^2][^4]
+
+Naming the dimension before you touch a session keeps the diagnosis honest. The feeling that the agent got worse is not a finding you can act on, and acting on it is how the manager in the opening scene rewrote a working instruction. The period-over-period change and the dimension name are what turn a hunch into something with a location, and location is what a fix needs.
+
+### Localize with Performance Insights before you read a transcript
+
+Once you know a metric moved, narrow it with Performance Insights before you open any session. Breakdowns by subagent, intent, or action show which component carries the change, so if Escalation Rate rose but only for the returns intent, you have localized the problem without reading a single transcript.[^1] The platform documents the breakdown as the step to narrow a trend to a specific subagent or action before going to sessions.[^5] A breakdown that shows the change concentrated in one intent points at that intent's instructions, knowledge, or actions; a change spread across every intent points somewhere else entirely.
+
+The shape of the breakdown separates a local cause from a global one. If the whole agent moved together, suspect something that touches everything: an instruction rewrite, a knowledge source that changed underneath the agent, or an action that started failing for a broad set of sessions. If one component moved, suspect that component's own configuration. The breakdown does not name the cause, but it does cut the search space from every possible change to a short list.
+
+Spend the cheap aggregate queries first and the expensive transcript reading last, because transcript review does not scale and it tempts you to accept the first plausible story instead of the true one. Performance Insights is cheap and it runs over every session at once; reading traces is slow and it samples whatever you happen to open. The disciplined order is dimension, then breakdown, then session, and reversing it is how a diagnosis becomes an anecdote.[^1]
+
+### Then read sessions with a hypothesis, not a browse
+
+Only after you have a target do you go to the sessions, and you go with a hypothesis rather than a browse. In Agent Optimization, open Sessions and Intents and filter to the modality, outcome, and intent the trend points at.[^2] Use the Session Outcome column to separate deflected, escalated, abandoned, and ambiguous sessions, and start with the unresolved ones, since those carry the failure you are chasing.[^3]
+
+Within a session, read the Interaction Summary first for the structured view: which subagents and actions fired, and the quality score with its reasoning.[^2] Then open the Trace for the time-ordered steps.[^2] The order matters because the summary gives you a first hypothesis and the trace tests it, and the trace is where the failure becomes concrete, since it carries per-step timing and error text, so a failing action and a slow retrieval look different there even when they produce the same customer complaint.
+
+The filter is what keeps the reading bounded. Without an intent or outcome filter you are browsing, and browsing an observability tool is how you find an interesting story that has nothing to do with the metric you came to explain. A hypothesis turns the session list into a test: you are looking for a specific failure on a specific intent, and the presence or absence of it is information either way.
+
+It also protects the agent from you. A session review run without a hypothesis invites a confident rewrite of something that was working, which is how a diagnosis turns into a new regression, and the filter is the cheapest guard against that impulse.
+
+### Read the failure from the step type, because the step tells you the lever
+
+Read the failure from the step type, because the kind of step that broke tells you which lever to pull. An action that returns an error shows in the trace as an error step and drags Success Rate down, which points at the action itself, its inputs, or the running user's permissions rather than at the prompt.[^2] When an action fails only for some users, the running user's access is the first suspicion, not the wording.
+
+A retrieval that returns the wrong article shows as low Context Relevance and low Answer Faithfulness while the answer still reads well, which points at the knowledge source or the retriever rather than at the agent's phrasing.[^2] The answer being fluent is the tell: the model did its job with the wrong source, so rewriting the prompt would not help and might make things worse.
+
+A routing failure shows the wrong subagent selected in the Interaction Summary while the response text is fine, which points at the instructions or the topic scope rather than at knowledge or actions. Matching symptom to step before you change anything is what keeps the fix aligned with the cause, because each of these three failures lives in a different part of the agent and asks for a different change.
+
+A compact way to hold the mapping is by what each failure leaves intact. An action error leaves the routing and the words alone and breaks the outcome, a retrieval miss leaves the words fluent and corrupts the grounding, and a routing error leaves the words correct and sends them through the wrong path. Whichever of those three survived tells you which lever the fix belongs on.
+
+### The clustering floor explains a session that seems to be missing
+
+Watch the pipeline lag when a session you expect to find does not appear. A session from the intent you are investigating may hold an untagged intent: if its intent did not join a cluster of at least ten semantically similar intents, it stays untagged and is not shown in the session trace, even though the session exists and holds that intent.[^3] The trace lists tagged intent instances, so an untagged one is invisible there even though the conversation is real.
+
+Intents are generated daily and clustered roughly weekly, so the day you notice a regression is usually before the clustering has caught up to it.[^3] That timing means a filter that returns nothing can be a filter run too soon rather than a filter with no matches. When a search comes back empty, check the timeframe and the processing state before you conclude the sessions are gone, and remember that raw sessions are available immediately even while the intent analysis is still running.[^2]
+
+This is the same processing lag from the monitoring lesson, applied to diagnosis. The reason it belongs here is that a regression hunt happens against a moving analysis layer, so an operator has to know which parts of the picture are instant, the raw sessions and the traces, and which parts arrive on a schedule, the intents and the quality scores. Reading a scheduled layer as if it were live is what produces false findings in both directions, missing failures that have not clustered yet and inventing failures where the filter simply outran the pipeline.
+
+### Confirm the cause, then look for the amplifier
+
+Once you have a cause, reproduce it before you fix it. A regression usually has a trigger and an amplifier: the trigger is the change that broke it, and the amplifier is a condition that made it worse, such as a spike in a channel the agent handles poorly or a knowledge article that went stale. Reproduce the case in Agentforce Builder preview so the same intent fails on demand, because a case you can reproduce is a case you can fix and then prove fixed.[^6]
+
+Only after you have a reproducible case should you touch a prompt, a topic, or an action. Changing the agent before you can reproduce the failure means you cannot tell whether your change fixed it or whether the failure simply failed to reappear, and a non-deterministic agent will happily hide a bad fix behind a lucky run. The reproducible case is the test you run again afterward to confirm the change actually worked.
+
+Then the change itself travels the normal release path: edit a new draft version, run the affected cases through Testing Center, commit, and activate, exactly as the change gate in lesson fifty-three describes. The reproduction tells you what to change; the gate is how the change reaches production safely, with the previous committed version still available if the fix proves wrong.[^6]
+
+It helps to write the finding down in the order it was produced, because the record is what makes the fix reviewable. The dimension that moved, the breakdown that localized it, the session that confirmed it, the trace step that identified it, and the reproduction that proved it: each is a link in a chain, and a change that cites the chain is one a reviewer can check rather than take on faith.
+
+### Worked example: from a deflection dip to a reproducible case
+
+Suppose a Deflection Rate dips against the prior period. You confirm the change rather than a low value, since it fell from a higher baseline, and you name the dimension: Effectiveness. The Session Outcome stack shows Escalated rising with Abandonment flat, so sessions are handing off rather than dropping. You open Performance Insights and break Escalation Rate down by intent, and the rise is concentrated in a single intent, which localizes the problem without a transcript.
+
+You filter sessions to that intent and the escalated outcome, read the Interaction Summary on the first one, and see the expected subagent was selected, so routing is not the failure. The quality score is low, and the reasoner cites an answer that missed the request. You open the Trace and find the retrieval step returning an article that does not match the question, which is the low Context Relevance pattern: fluent answer, wrong source.
+
+The cause is a knowledge source, not the prompt. You reproduce the case in preview, watch the same intent retrieve the wrong article on demand, fix the source or the retriever filter, and run the affected cases through Testing Center. The suite passes, so you commit and activate the new version, and the previous version stands ready if the fix turns out wrong. Every step of the hunt is now evidence, and the change is one the next metric reading can confirm.
+
+## Exam Traps
+
+Three misconceptions dominate this objective. The first is believing a single low metric value is a regression: a regression is a change against the prior period, so read the period-over-period indicator before you investigate, and a number that has always been low is a baseline rather than a break. The second is believing a missing session is lost data: an intent that did not join a cluster of at least ten matching intents stays untagged and does not appear in the session trace even though the session exists, so check the timeframe and the processing state before concluding anything is gone. The third is believing every failure is a prompt problem: action errors, retrieval misses, and routing errors appear as distinct step types in the trace, and each one points at a different fix, so reaching for the prompt first is a guess dressed as a diagnosis.
+
+## What a consultant should walk away with
+
+Treat a regression as a change, prove it against the prior period, and name the dimension that moved before you open a session. Localize with Performance Insights by subagent, intent, or action first, because the cheap aggregate query beats the expensive transcript read every time, and a concentrated breakdown points at a local cause while a spread one points at something global. Then read sessions with a hypothesis, Interaction Summary first and Trace second, and read the failure from the step type, since an action error, a retrieval miss, and a routing error each live in a different part of the agent. Respect the clustering floor and the daily-and-weekly pipeline when a session seems missing, look for the trigger and the amplifier once you have a cause, reproduce the case in preview before you change anything, and send the fix through the same tested, committed, activated gate as any other change.
+
+## What's next
+
+Lesson 57 - The Optimization Loop: Turning Analytics into Prompt, Topic, and Action Changes (go-2c)
+
+[^1]: Salesforce, "Get Insights with Agent Analytics" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_agent_analytics_use.htm&language=en_US&type=5)
+[^2]: Salesforce, "Analyze Data with Agent Optimization" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_optimize_use.htm&language=en_US&type=5)
+[^3]: Salesforce, "Use Intents in Agent Optimization" (https://help.salesforce.com/s/articleView?id=ai.generative_ai_optimize_intent_use.htm&language=en_US&type=5)
+[^4]: Salesforce, "Observe Phase Observability Tools" (https://help.salesforce.com/s/articleView?id=ai.agentforce_observability_observe_phase_tools.htm&language=en_US&type=5)
+[^5]: Salesforce, "Understand Agentforce Observability KPIs and Tools" (https://help.salesforce.com/s/articleView?id=ai.agentforce_understand_observability_kpis_and_tools.htm&language=en_US&type=5)
+[^6]: Salesforce, "Versioning and Editing Agents" (https://help.salesforce.com/s/articleView?id=ai.agent_versions_lifecycle.htm&language=en_US&type=5)
