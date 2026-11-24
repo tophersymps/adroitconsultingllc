@@ -2,6 +2,30 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "vector-index-delete-vs-erasure-2026",
+    "title": "Deleted Is Not Erased: What a Vector Delete Really Does",
+    "excerpt": "A vector delete hides a record from results but often leaves the vector in the search graph and on disk. What a delete really removes, and how to make it stick.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 24, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "Vector Databases",
+      "RAG",
+      "Data Privacy",
+      "Compliance",
+      "AI Agents"
+    ],
+    "bannerImage": "/banners/vector-index-delete-vs-erasure-2026.webp",
+    "ogImage": "/banners/vector-index-delete-vs-erasure-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "salesforce-apex-callout-transaction-order-2026",
     "title": "The Callout Waits for a Commit That Apex Cannot Make",
     "excerpt": "Apex will not send an HTTP request while a DML write in the same transaction is still uncommitted. Every workaround moves that failure past the save.",

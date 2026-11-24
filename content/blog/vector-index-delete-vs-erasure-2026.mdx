@@ -1,0 +1,147 @@
+---
+title: "Deleted Is Not Erased: What a Vector Delete Really Does"
+slug: vector-index-delete-vs-erasure-2026
+excerpt: "A vector delete hides a record from results but often leaves the vector in the search graph and on disk. What a delete really removes, and how to make it stick."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 24, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [AI Infrastructure, Vector Databases, RAG, Data Privacy, Compliance, AI Agents]
+bannerImage: "/banners/vector-index-delete-vs-erasure-2026.webp"
+ogImage: "/banners/vector-index-delete-vs-erasure-2026-og.jpg"
+---
+
+An erasure request arrives on a Tuesday. A customer wants their record gone from the support assistant. You delete the row, call the vector store to remove the matching chunk ids, and get a clean 200 back.
+
+Two weeks later a colleague asks the assistant about that account. It answers with detail that should no longer exist.
+
+The delete did what its contract promised. It stopped those ids from coming back in results. It did not remove them.
+
+In an HNSW vector index a delete is a marker. The vector it points at stays where it was, in the search graph and in the file on disk. A background process reclaims it later, or never, and on a small or low-churn collection that process can sit idle indefinitely.
+
+<TLDR>
+
+- A vector delete hides a record; removing it physically is a separate background step.
+- A filtered search can hide a deleted id while the graph still scores its vector.
+- The raw index file keeps the vector; only key destruction or a rebuild erases it.
+
+</TLDR>
+
+## A delete is two steps, and the API only promises the first
+
+Every mainstream vector store answers a delete the same way. It confirms the request and makes the object unreachable.
+
+Qdrant implements deletion as a soft delete with a bitmask. It says the point becomes "immediately inaccessible via the API."[^1]
+
+Weaviate deletes an object by creating a tombstone. Its deployment FAQ answers the follow-up directly: resources do not free up immediately, because "the data removal and index cleanup occur as background processes."[^2]
+
+What reclaims the space is a maintenance job with a threshold, not your call.
+
+In Qdrant the vacuum optimizer rebuilds a segment only once deleted points pass `deleted_threshold`, a default of 0.2, and the segment holds at least 1,000 points.[^3]
+
+In Weaviate, tombstones clear on a cycle set by `cleanupIntervalSeconds`, a default of 300 seconds, capped per cycle because the cleanup is resource-intensive.[^4]
+
+Read those designs together and the failure mode is arithmetic. A collection where deletions are rare and spread thinly can sit below the reclaim threshold indefinitely. The data is absent from every query and present in every byte of the segment.
+
+PostgreSQL has the same shape. A deleted tuple "remains present until a VACUUM is done." A plain VACUUM keeps the space in the table instead of returning it to the operating system.[^5]
+
+Churn makes it worse: a delete is not the only thing that creates a tombstone. Qdrant notes that upserting a point with identical data still marks the old version deleted and inserts a new copy.[^1] Every re-index of unchanged content adds to the pile the vacuum optimizer is waiting on.
+
+![The two-step delete: the API marks a record hidden at once, while physical reclamation waits on a background threshold.](</diagrams/vector-index-delete-vs-erasure-2026/1-two-step-delete.png>)
+
+So the honest state after a successful delete is not "removed." It is "marked, pending reclaim."
+
+## Deleted from the results is not deleted from the graph
+
+A filtered search returns live records, but graph-based approximate search does not start from the filter. It starts at an entry point and walks the graph. The filter applies to what it may return.
+
+A deleted vector can still be visited and scored on the way.
+
+A September 2026 paper calls the split output safety versus traversal safety, and measures it.[^6] On Faiss's HNSW index, native filtering "leaves the number of distance computations unchanged relative to unfiltered search."
+
+At a 70 percent deletion rate, a trace-faithful replay detected deleted-vector scoring in all 100 audited queries. Inspecting hnswlib's `mark_deleted` path shows the same scoring-before-liveness pattern.[^6]
+
+That matters most where the filter is not guaranteed, which is everywhere an agent runs. A filter is a property of the query, not the index, so any caller that skips it gets the soft-deleted row back.
+
+Traditional retrieval code always passes the filter because you wrote the query. An agent does not always. A tool that issues its own vector search, or a raw query across a namespace, can arrive without the predicate the application always supplies. The index then behaves as designed and hands over a deleted record.
+
+The deleted nodes are not inert while they wait. Ghost Vectors found they "remain structurally active in the HNSW graph," degrading live search, and that removing them shifts query timing into a side channel.[^7]
+
+Output safety is a claim about the answer. Traversal safety is a claim about the process. An audit that checks only the answer will pass a system that is still scoring the data it says it removed.
+
+![Output safety versus traversal safety: a filter hides a deleted id from results, but the graph walk still visits and scores its vector.](</diagrams/vector-index-delete-vs-erasure-2026/2-output-vs-traversal.png>)
+
+## The raw index file is the copy nobody deletes
+
+The strongest version of this problem is not about queries at all.
+
+Ghost Vectors studied three HNSW implementations and found that each one updates metadata while leaving the vector physically intact.[^7] ChromaDB's `delete(ids=[...])` updates an SQLite metadata table and never touches the raw `index.bin`. FAISS's `IndexHNSWFlat` has no delete method at all, so vectors accumulate indefinitely. The authors call soft delete "a deliberate design trade-off, not a bug in implementation," and note that Weaviate and Pinecone follow the same shape.[^7]
+
+An attacker holding the index file bypasses every API control. The published threat model reads the raw HNSW binary, extracts soft-deleted vectors, and inverts them back to text with a pre-trained Vec2Text corrector, with no fine-tuning.
+
+On a Wikipedia biographical dataset the model recovered 25.5 percent of exact person names and 46.4 percent of locations. On a synthetic clinical dataset, 100 percent of age and gender markers and 49.9 percent of patient surnames. On image embeddings it reached 99 percent top-1 identity on faces and 100 percent tissue classification on histopathology patches.[^7]
+
+Reconstruction quality tracks the inversion model and stayed near zero on MIMIC-III. Physical persistence did not. The same vectors reconstruct from a backup snapshot at the same quality, so the exposure is indefinite, not a window.[^7]
+
+One deletion method changes the arithmetic instead of hiding the data. The same paper introduces Epoch Key Rotation: encrypt each vector with AES-256-CTR and discard the key on deletion.[^7] Recovered PII dropped to zero, the operation averaged about 0.005 milliseconds per record, and it emits an ECDSA-signed proof of the deletion event.
+
+The paper flags the caveat that belongs in any key-destruction design. A key deleted from SQLite stays recoverable from free pages, so the key store needs hardware isolation.[^7]
+
+A conventional delete removes a pointer. Erasure removes the ability to reconstruct, which is a different property and needs a different mechanism.
+
+![What survives on disk: inversion models reconstruct names, locations and biometric identity from soft-deleted vectors until the key protecting them is destroyed.](</diagrams/vector-index-delete-vs-erasure-2026/3-what-survives.png>)
+
+## Make the delete stick
+
+None of this is exotic to fix, but the fix is a design, not a setting.
+
+Start with identity. Give every chunk a deterministic id from the document id, its position, and a hash of its text: `doc_id#4#8f3c`. An edit that shortens a document now keeps the same ids for the chunks that survived. The vanished chunks become a computable set. That decision makes everything after it mechanical.
+
+Replace delete-then-insert with a set-based replace. Upsert the new chunk set, then delete exactly the ids no longer in it, read from a manifest kept outside the index:
+
+```python
+new = {chunk_id(doc_id, i, text) for i, text in enumerate(chunks)}
+index.upsert(ids=sorted(new), vectors=embed(chunks), namespace=ns)
+for batch in batches(sorted(manifest[doc_id] - new), 1000):
+    index.delete(ids=batch, namespace=ns)   # stale chunks, by explicit id
+manifest[doc_id] = new
+```
+
+For a whole-document delete, use a filter rather than a list: `index.delete(filter={"doc_id": {"$eq": doc_id}})`, or Qdrant's equivalent `FilterSelector`. Both are idempotent and re-runnable, which a retrying pipeline needs.
+
+Two limits to design around. Pinecone accepts up to 1,000 ids per request, charges deletes as write units, and is eventually consistent. A re-index is therefore not visible the instant the call returns.[^8]
+
+Keep a tombstone ledger outside the index: one row per deletion with the document id, its chunk ids, the timestamp, the reason, and a purge deadline. This is the record that survives a restore. A backup taken before the erasure will otherwise reinstate the data, and so will a rebuild from old snapshots.
+
+Then prove the delete with a canary rather than trusting the 200. Re-run the golden query after an erasure and assert the deleted text is absent from the assembled prompt, the way we [measure retrieval separately from generation](/field-notes/production-rag-retrieval-quality-2026).
+
+Finally, treat erasure as a deadline, because in the EU it is one. GDPR Article 17(1) requires erasure "without undue delay."[^9] Article 12(3) sets the outer edge at one month, extendable by two months where the requests are complex or numerous.[^9]
+
+The boundary of an erasure is the embedding, not the document. Tag each chunk with the subject identifiers it derives from at ingestion. Erasure then becomes a metadata query across known locations, not a hunt through a store that has no idea who anyone is.
+
+<KeyTakeaways>
+
+- A successful delete means marked, not removed; reclamation is a threshold-driven background step.
+- Filters hide a deleted id from results without removing it from the traversal or the file, so a caller that skips the filter gets it back.
+- Deterministic chunk ids, a set-based replace and a durable tombstone ledger turn erasure from a hope into a checkable operation.
+
+</KeyTakeaways>
+
+Three things to change, in order:
+
+1. Measure index lag. Timestamp every source change and the index commit that reflects it, and alert when the gap exceeds the freshness budget you published.
+2. Replace delete-then-insert with a set-based replace keyed on deterministic chunk ids, then reconcile stragglers with a scheduled sweep against the ledger.
+3. Prove erasure with a canary. Re-run the golden query after each erasure and assert the deleted text is absent from the assembled prompt. File that evidence where the compliance record lives.
+
+[^1]: Qdrant, "Frequently Asked Questions: General Topics" (bitmask soft deletes, indistinguishability from an existing point, upsert behavior). [qdrant.tech](https://qdrant.tech/documentation/faq/qdrant-fundamentals/)
+[^2]: Weaviate, "Deployment FAQs" (resources are not freed immediately after deleting objects). [docs.weaviate.io](https://docs.weaviate.io/deploy/faqs)
+[^3]: Qdrant, "Optimizer" (vacuum optimizer, `deleted_threshold` and `vacuum_min_vector_number`). [qdrant.tech](https://qdrant.tech/documentation/ops-optimization/optimizer/)
+[^4]: Weaviate, "Vector index" (tombstone cleanup parameters and `cleanupIntervalSeconds`). [docs.weaviate.io](https://docs.weaviate.io/weaviate/config-refs/indexing/vector-index)
+[^5]: PostgreSQL, "VACUUM" (deleted tuples remain present until a VACUUM is done). [postgresql.org](https://www.postgresql.org/docs/current/sql-vacuum.html)
+[^6]: Sean Culatana and Kang Li, "Beyond Private Training: The New Landscape of AI Privacy" (TSD-Audit; output safety versus traversal safety), arXiv:2609.19456, 16 September 2026. [arxiv.org](https://arxiv.org/abs/2609.19456)
+[^7]: Chandranil Chakraborttii, Jackeline García Alvarado, Sitora Abdulofizova and Shivanshu Dwivedi, "Ghost Vectors: Soft-Deleted Embeddings Remain Reconstructible in HNSW Vector Databases," arXiv:2606.18497, 16 June 2026. [arxiv.org](https://arxiv.org/abs/2606.18497)
+[^8]: Pinecone, "Delete data" (delete by id, filter or namespace; eventually consistent; deletes consume write units). [docs.pinecone.io](https://docs.pinecone.io/guides/data/delete-data)
+[^9]: Regulation (EU) 2016/679 (GDPR), Articles 12(3) and 17(1) (erasure without undue delay; one-month response window). [eur-lex.europa.eu](https://eur-lex.europa.eu/eli/reg/2016/679/oj/eng)
