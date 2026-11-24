@@ -40,10 +40,22 @@ export default async function MDXArticle({
   mdx,
   sources = "inline",
 }: MDXArticleProps) {
-  const [{ MDXRemote }, remarkGfm, Figure] = await Promise.all([
+  const [
+    { MDXRemote },
+    remarkGfm,
+    Figure,
+    { TLDR },
+    { KeyTakeaways },
+    { Callout },
+    { Steps, Step },
+  ] = await Promise.all([
     import("next-mdx-remote/rsc"),
     import("remark-gfm"),
     import("@/components/BlogPost/Figure"),
+    import("@/components/MDX/TLDR"),
+    import("@/components/MDX/KeyTakeaways"),
+    import("@/components/MDX/Callout"),
+    import("@/components/MDX/Steps"),
   ]);
 
   const options: MDXRemoteProps["options"] = {
@@ -59,7 +71,14 @@ export default async function MDXArticle({
   return (
     <MDXRemote
       source={mdx}
-      components={{ img: Figure.default }}
+      components={{
+        img: Figure.default,
+        TLDR,
+        KeyTakeaways,
+        Callout,
+        Steps,
+        Step,
+      }}
       options={options}
     />
   );
