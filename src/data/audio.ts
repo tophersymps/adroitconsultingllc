@@ -198,5 +198,6 @@ export const articleAudio: ArticleAudio[] = [
   { slug: "typescript-7-go-native-compiler", voice: "af_heart", storagePath: "blog/typescript-7-go-native-compiler/af_heart.mp3", timingsStoragePath: "blog/typescript-7-go-native-compiler/af_heart.timing.json" },
   { slug: "utilization-trap-capacity-planning-2026", voice: "af_heart", storagePath: "blog/utilization-trap-capacity-planning-2026/af_heart.mp3", timingsStoragePath: "blog/utilization-trap-capacity-planning-2026/af_heart.timing.json" },
   { slug: "ux-writing-content-design-2026", voice: "af_heart", storagePath: "blog/ux-writing-content-design-2026/af_heart.mp3", timingsStoragePath: "blog/ux-writing-content-design-2026/af_heart.timing.json" },
+  { slug: "vector-index-delete-vs-erasure-2026", voice: "af_heart", storagePath: "blog/vector-index-delete-vs-erasure-2026/af_heart.mp3", timingsStoragePath: "blog/vector-index-delete-vs-erasure-2026/af_heart.timing.json" },
   { slug: "visual-regression-testing-design-systems-2026", voice: "af_heart", storagePath: "blog/visual-regression-testing-design-systems-2026/af_heart.mp3", timingsStoragePath: "blog/visual-regression-testing-design-systems-2026/af_heart.timing.json" },
 ];
