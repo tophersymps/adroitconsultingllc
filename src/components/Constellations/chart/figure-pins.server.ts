@@ -5,10 +5,11 @@
  * ------------------------------------------------------
  * The editorial registry pins all fourteen authored courses to a constellation.
  * That registry used to live in `figure-assignment.ts`, which is a *client*
- * module: `/atlas/[series]` (SeriesStarChart) and `/profile` (FullSkySection)
- * both render the chart in the browser. So every stealth series slug — and the
- * constellation it owns — was compiled into a public chunk under
- * `.next/static`, readable with no session and no outage. CWE-200.
+ * module: the surfaces that draw a chart in the browser are `/profile` (via
+ * `FullSkySection`) and the env-gated Hubble Field lab (`/lab/hubble-field`).
+ * So every stealth series slug — and the constellation it owns — was compiled
+ * into a public chunk under `.next/static`, readable with no session and no
+ * outage. CWE-200.
  *
  * The doctrine, settled in t_af115dd1 §1:
  *

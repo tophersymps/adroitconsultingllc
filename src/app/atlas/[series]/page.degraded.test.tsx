@@ -143,9 +143,6 @@ vi.mock("@/components/Learn/SeriesSyllabus", () => ({
     </ul>
   ),
 }));
-vi.mock("@/components/Constellations/chart/SeriesStarChart", () => ({
-  default: () => <div />,
-}));
 
 import Page from "./page";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
