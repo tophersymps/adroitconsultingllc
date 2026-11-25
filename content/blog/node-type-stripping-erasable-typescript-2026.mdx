@@ -1,0 +1,160 @@
+---
+title: "Your TypeScript Runs on Node. Your Enums Do Not."
+slug: node-type-stripping-erasable-typescript-2026
+excerpt: "Node runs .ts files by erasing type syntax instead of compiling it. That moves the type check out of the runtime and rules out enums and runtime namespaces."
+category: "React & Web Dev"
+categoryColor: react
+categoryGradient: "from-emerald to-emerald-dark"
+date: "November 25, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "8 min read"
+tags: [TypeScript, Node.js, Tooling, Web Development, Build Pipelines]
+bannerImage: "/banners/node-type-stripping-erasable-typescript-2026.webp"
+ogImage: "/banners/node-type-stripping-erasable-typescript-2026-og.jpg"
+---
+
+The deploy goes green, the container starts, and the first request that touches a shared module dies on a line the compiler has accepted for years:
+
+```
+SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]:
+TypeScript enum is not supported in strip-only mode
+```
+
+That output came from Node 26.13.1, running a four-line file. Nothing in the build changed. What changed is who runs the code.
+
+Node has executed TypeScript files directly since 22.6, by default since 22.18 and 23.6, and stably since 24.12.[^3][^5] It does not compile them. It erases the type syntax, replaces it with whitespace, and runs what is left.[^1]
+
+No type check happens anywhere in that path. Node needs no configuration for it. The trade is that two things move at once: where the check happens, and which TypeScript you may write.
+
+<TLDR>
+
+- Node runs .ts by erasing type syntax, and it never type-checks.
+- Constructs that would have to generate JavaScript, such as an enum, are refused outright.
+- Node 26 removed the transform escape hatch, so erasable syntax is the only path left.
+
+</TLDR>
+
+## Erasing is not compiling
+
+The built-in support is deliberately narrow. Node will not read your `tsconfig.json`.[^1] Path aliases and downleveling to older JavaScript do not happen. The parser requires WebAssembly, and throws when it is unavailable.[^1] What happens instead is a text operation.
+
+Inline types become blank space, which keeps every line and column where you wrote it. That is why Node generates no source maps for stripped code. The file did not move, it only lost its annotations.[^1]
+
+The missing check is easy to demonstrate. This file contradicts its own annotation, and Node runs it without complaint:
+
+```ts
+const n: string = 5;   // tsc rejects this assignment
+console.log(n);        // node prints: 5
+```
+
+So a .ts file that runs is not evidence that it type-checks. It is evidence that its types could be deleted.
+
+![Type stripping replaces annotations with whitespace and hands the remainder to V8, so no type check sits on the runtime path.](</diagrams/node-type-stripping-erasable-typescript-2026/1-strip-vs-compile.png>)
+
+## Four constructs Node will not run, and what to use instead
+
+Anything that only adds type information survives. Annotations, interfaces, type aliases, generics, `satisfies`, `as` and `import type` are erased cleanly.
+
+What fails is any construct where TypeScript syntax has to produce JavaScript that was not in the source. The documentation names four, and each one fails with `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`.[^1][^2]
+
+- `enum` declarations, because an enum compiles to a lookup object.
+- `namespace` blocks that hold runtime code, because a value namespace compiles to a wrapper.
+- Parameter properties such as `constructor(private id: string)`, because the shorthand compiles to an assignment in the constructor body.
+- `import x = require("y")` and `export =`, the CommonJS interop aliases.
+
+I ran all of them against Node 26.13.1. The enum reports `TypeScript enum is not supported in strip-only mode`. The parameter property and the runtime namespace each get their own variant of the same error.
+
+The replacements are mechanical:
+
+```ts
+// before: an enum, refused in strip-only mode
+enum Status { Active = "active", Paused = "paused" }
+
+// after: a frozen object plus a union type derived from it
+const Status = { Active: "active", Paused: "paused" } as const;
+type Status = (typeof Status)[keyof typeof Status];
+
+// before: constructor(private id: string) {}
+class User {
+  id: string;
+  constructor(id: string) { this.id = id; }  // explicit field
+}
+```
+
+Two limits sit outside that list. Decorators raise a parser error.[^1] They are still a Stage 3 proposal, and Node does not transform them. `.tsx` files are not handled at all, so JSX still needs a bundler or a loader.[^1]
+
+![Four syntax families need code generation, and each row pairs the construct with the erasable replacement that works.](</diagrams/node-type-stripping-erasable-typescript-2026/2-erasable-or-not.png>)
+
+## The import rules you have to follow now
+
+Type stripping makes the `type` keyword load-bearing. When a module exports only types, a plain import is read as a value import. At runtime the module has no such export:
+
+```
+SyntaxError: The requested module './types.ts' does not provide an export named 'T'
+```
+
+Writing `import type` fixes it. TypeScript's `verbatimModuleSyntax` makes the compiler enforce the same distinction, so the mistake fails in CI instead of in production.[^7]
+
+Relative imports keep the extension you wrote. Node does not guess one for you, so a bare `./types` throws `ERR_MODULE_NOT_FOUND` even though the file exists.
+
+Node's own recommended settings pair `rewriteRelativeImportExtensions` with `module: nodenext`.[^1] You write `./types.ts`, and the compiler rewrites the extension in anything it emits. Path aliases are the other quiet loss.
+
+A `paths` mapping in `tsconfig.json` is not resolved at runtime, because Node never reads that file. The supported alternative is a subpath import in `package.json` that starts with `#`.[^1]
+
+One boundary matters before a library author trips over it. Node refuses to strip types inside `node_modules`, so packages still publish compiled JavaScript.[^1] That failure has its own code: `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`.[^2]
+
+![The import behaviours that change: typed exports need the type keyword, relative paths keep their extension, and alias maps are not read at all.](</diagrams/node-type-stripping-erasable-typescript-2026/3-imports.png>)
+
+## The type check is a pipeline stage now
+
+The check did not disappear, it moved. `tsc` used to do two jobs in one pass, checking and emitting. The runtime now handles execution by erasure, so the check needs its own stage, and its own schedule.
+
+The settings Node documents for this mode make the split explicit:[^1]
+
+```json
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "nodenext",
+    "noEmit": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true
+  }
+}
+```
+
+`erasableSyntaxOnly` does the heavy lifting. It is a TypeScript 5.8 flag.[^7] It reports exactly the constructs Node refuses, in the editor, before anyone runs the file.
+
+Without it, the first signal is a crashed process. A restart loop is a worse place to learn about an enum than a lint pane.
+
+Keep `tsc --noEmit` in CI as its own step. A green build that only bundles proves the code compiles for the bundler. That is a different question from whether the script you run with `node` will start. The two failures now have nothing to do with each other.
+
+The timing is what makes this urgent rather than theoretical. Node 26 removed `--experimental-transform-types` outright.[^4] The flag that used to run enums is gone; passing it now exits with `bad option`.
+
+Node 26 has been the Active LTS line since October.[^6] Node 24 and 22 are in maintenance. On the version most teams deploy, erasable syntax is not a style preference. It is the only syntax that runs.
+
+![The type check is now an editor and CI stage, while the runtime path erases and executes only what remains.](</diagrams/node-type-stripping-erasable-typescript-2026/4-where-the-check-lives.png>)
+
+<KeyTakeaways>
+
+- A .ts file that runs on Node proves its types were erasable, not that it type-checks.
+- Enums, runtime namespaces, parameter properties and import aliases are refused, and each has a one-line replacement.
+- Node 26 has no transform flag, so keep the check in CI with `erasableSyntaxOnly` and `verbatimModuleSyntax`.
+
+</KeyTakeaways>
+
+Three things to change, in order:
+
+1. Turn on `erasableSyntaxOnly` and `verbatimModuleSyntax`, then run `tsc --noEmit` as its own CI step so the constructs Node refuses fail before a runtime sees them.
+2. Replace enums with `as const` objects and a union type derived from the same object, and replace parameter properties with explicit fields and assignments.
+3. Keep relative imports extension-complete, and replace `tsconfig` path aliases with `package.json` subpath imports that begin with `#`. If your build also runs through a bundler, the compiler path is where you [watch the module graph](/field-notes/nextjs-bundle-import-graph-2026) instead.
+
+[^1]: Node.js, "Modules: TypeScript" (type stripping, erasable-only syntax, the recommended tsconfig, WebAssembly requirement, no tsconfig reads, node_modules refusal). [nodejs.org](https://nodejs.org/api/typescript.html)
+[^2]: Node.js, "Errors" (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, added v23.7.0 and v22.14.0; `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, added v22.6.0). [nodejs.org](https://nodejs.org/api/errors.html)
+[^3]: Node.js, "Node.js 24.12.0 (LTS)" (module: mark type stripping as stable, 10 December 2025). [nodejs.org](https://nodejs.org/en/blog/release/v24.12.0)
+[^4]: Node.js, "Node.js 26.0.0 (Current)" (module: remove --experimental-transform-types, 5 May 2026). [nodejs.org](https://nodejs.org/en/blog/release/v26.0.0)
+[^5]: Node.js, "Node.js 22.18.0 (LTS)" (type stripping enabled by default, experimental warning removed). [nodejs.org](https://nodejs.org/en/blog/release/v22.18.0)
+[^6]: Node.js, "Node.js Releases" (26 Active LTS, 24 and 22 Maintenance LTS). [nodejs.org](https://nodejs.org/en/about/previous-releases)
+[^7]: Microsoft, "Announcing TypeScript 5.8" (`erasableSyntaxOnly`; combine with `verbatimModuleSyntax`). [devblogs.microsoft.com](https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/)
