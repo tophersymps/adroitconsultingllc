@@ -4,7 +4,7 @@
  *
  * Workstream B replaced the hardcoded "Certification Prep" wording with one
  * label source (`src/lib/exam-labels.ts`) keyed by each series' `examKind`.
- * B3/B4/B5 each proved their own slice; this card proves the SEAM: for all 12
+ * B3/B4/B5 each proved their own slice; this card proves the SEAM: for all 15
  * series the app ships, every surface that can name the exam names the RIGHT
  * exam and never the other one.
  *
@@ -13,7 +13,7 @@
  *  - a series' `examKind` in `content/learn/<slug>/series.json` flipped, or
  *  - the copy table drifted from `api-contracts.md` §C.
  *
- * Surfaces covered (one `describe` each, each looping all 12 series):
+ * Surfaces covered (one `describe` each, each looping all 15 series):
  *  - series page: ExamCard, CheckCardList
  *  - exam page: ExamLocked (locked panel), ExamWidget (timed run), GuestCTA
  *    (guest exam / check / certificate tiers), exam-page <head> via
@@ -57,7 +57,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/Progress/MarkComplete", () => ({ default: () => null }));
 
-/* ── the 12 series, straight from the generated content dataset ────────── */
+/* ── the 15 series, straight from the generated content dataset ────────── */
 
 interface SeriesFixture {
   slug: string;
@@ -136,10 +136,10 @@ afterEach(() => {
 /* ── the matrix ────────────────────────────────────────────────────────── */
 
 describe("exam naming matrix — dataset shape", () => {
-  it("covers all 14 shipped series with the seeded kind split (8 course-completion, 6 certification-prep)", () => {
-    expect(SERIES).toHaveLength(14);
+  it("covers all 15 shipped series with the seeded kind split (8 course-completion, 7 certification-prep)", () => {
+    expect(SERIES).toHaveLength(15);
     expect(SERIES.filter((s) => s.kind === "course-completion")).toHaveLength(8);
-    expect(SERIES.filter((s) => s.kind === "certification-prep")).toHaveLength(6);
+    expect(SERIES.filter((s) => s.kind === "certification-prep")).toHaveLength(7);
     for (const s of SERIES) {
       expect(s.kind, `${s.slug} must declare examKind`).toMatch(/^(course-completion|certification-prep)$/);
       expect(s.questionCount, `${s.slug} must have an exam document`).toBeGreaterThan(0);
@@ -353,7 +353,7 @@ describe("chronicle — an exam completion event names the exam for every series
 /* ── the evidence table (printed once; pasted into the card metadata) ──── */
 
 describe("evidence table", () => {
-  it("prints series → rendered label for all 12 series", () => {
+  it("prints series → rendered label for all 15 series", () => {
     const rows = SERIES.map((f) => ({
       series: f.slug,
       kind: f.kind,
@@ -368,6 +368,6 @@ describe("evidence table", () => {
         ...rows.map((r) => `| ${r.series} | ${r.kind} | ${r.rendered} | ${r.card} | ${r.phrase} |`),
       ].join("\n"),
     );
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(15);
   });
 });
