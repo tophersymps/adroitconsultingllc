@@ -28,6 +28,8 @@ The search index is the structure that manages these vectors along with the sour
 
 Read the chain as three steps you can name in order: chunk, vectorize, store. Indexing is the vectorize-and-store half of that chain, and naming the half you are discussing is what keeps a diagnosis honest, because a problem with the vectors is not a problem with the chunks that produced them.
 
+![Indexing as a three-step chain: chunk the source content, vectorize each chunk with the embedding model, then store the vector in the index. Chunks are stored in chunk data model objects and embeddings in index data model objects as an array of floats, and both are held inside the search index. The store is a snapshot, so a later edit to the source is not reflected until the index is reprocessed.](</diagrams/day-23-df-2b-indexing-and-embedding-how-vectors-are-built-store/1-chunk-vectorize-store.png>)
+
 Why semantic proximity is the point deserves a beat of its own. A keyword index stores words, while a vector index stores meaning, so two support articles that describe the same escalation path in different words end up numerically close and both surface for a question phrased a third way. That is what lets retrieval answer a paraphrase, and it is the reason a model can ground an answer on content whose wording never matched the question.
 
 The cost of that power is that a vector is opaque. You cannot read an embedding the way you read a stored field, so you verify it by its effects, by whether the right chunks rank high for known questions, and by the source content standing behind it. That is why the next two lessons keep the index and the retriever separate: one holds the meaning, the other chooses which meaning to surface.
@@ -50,6 +52,8 @@ Vector search matches purely on embedding similarity, which is exactly what lets
 
 The combination matters because the two signals fail in opposite directions. Pure vector search can miss an exact identifier, while pure keyword search misses paraphrases. Hybrid leans on both, which is why it is the common default for grounding an agent on real content, and why the answer to which search type to pick is usually hybrid unless you have a specific reason to restrict matching to meaning alone.
 
+![Vector search compared with keyword search and hybrid search. Vector search matches embedding similarity and finds paraphrases, but it can miss a rare exact identifier. Keyword search matches literal tokens such as product names, error codes, regulation numbers, and account identifiers, but it misses paraphrases. Hybrid search combines both signals, and the documented website-grounding index uses Hybrid Search.](</diagrams/day-23-df-2b-indexing-and-embedding-how-vectors-are-built-store/2-search-type-comparison.png>)
+
 When you pick a search type, you are predicting how your users will phrase questions. If they type product names, error codes, regulation numbers, or account identifiers, hybrid protects those queries, because a literal token that embeds poorly still matches on keywords. If they ask in full sentences about concepts, vector matching carries most of the load and hybrid gives up very little. The documented grounding index defaults to hybrid precisely because real content and real questions mix both, and a system that only understood one of them would fail on half the traffic.
 
 ### An index goes stale when source and vectors disagree
@@ -62,6 +66,8 @@ The operational habit follows directly: reindex after material content changes r
 
 There are two ways to make an index stale, and exam questions blur them together. The obvious one is a source that changed, where the stored chunks quote text that no longer exists. The subtler one is the embedding model described above: even with the source untouched, a model change leaves every stored vector expressed in the old space, so the index is stale in relation to the query rather than to the content. Both have the same remedy, which is a rebuild, and recognizing that a model change is a staleness trigger, not a content change, is often what separates the right answer from a close one.
 
+![The two ways an index goes stale and the one remedy they share. Source content that is edited, retired, or replaced after the index was built leaves stored chunks quoting text that no longer exists, so the index is stale in relation to the content. An embedding model change leaves every stored vector in the old model's numeric space even though the source is untouched, so the index is stale in relation to the query. Both are fixed by a rebuild, which reprocesses the source into fresh chunks and fresh vectors.](</diagrams/day-23-df-2b-indexing-and-embedding-how-vectors-are-built-store/3-two-staleness-triggers.png>)
+
 ### You can verify what the index actually holds
 
 You can verify what an index contains, and the check turns a vague complaint into a specific finding. After an index finishes successfully, Data 360 lets you confirm that chunk records were created and that they match the source content you ingested [^3]. This is stored data, not a runtime guess, so it settles the question of whether the fault is even in retrieval.
@@ -70,7 +76,7 @@ The path is concrete: open Data Explorer, choose the data space, set the object 
 
 This verification step separates an indexing fault from a retriever fault, which is the whole point of inspecting the stored data rather than guessing at the runtime. If the chunks are present and correct, the index is likely healthy and the fault is downstream; if they are missing or wrong, everything after indexing is a distraction.
 
-Use the finding to route the fix. Zero chunks, or chunks that do not match the source, send you back to ingestion and chunking, where an empty connector or an unlucky field selection can starve the index before it is ever searched. Chunks that are present and faithful but still retrieve badly send you forward to the retriever's filters and returned fields, or to the search type, where the content is fine but the reading of it is wrong. The verification exists to pick a direction, not merely to assign blame.
+Use the finding to route the fix. Zero chunks, or chunks that do not match the source, send you back to ingestion and chunking, where an empty connector or an unlucky field selection can starve the index before it is ever searched. Chunks that are present and faithful but still retrieve badly send you forward to the retriever's filters and returned fields, or to the search type, where the content is fine but the reading of it is wrong. The verification exists to pick a direction, not to assign blame.
 
 ### Keep the four terms apart: chunk, embed, index, retrieve
 
