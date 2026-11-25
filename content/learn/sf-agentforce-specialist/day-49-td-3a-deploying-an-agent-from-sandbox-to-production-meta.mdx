@@ -18,6 +18,14 @@ None of those failures are bad luck, and none of them live in the agent's logic.
 
 This lesson serves requirement td-3a, the considerations for deploying an agent from sandbox to production, in the Testing, Deployment, and Maintenance domain, which carries ten percent of the exam. It walks through the metadata types an agent deploys as, the dependency order that keeps its actions working, the two mechanical rules that trip teams who treat a deploy as the finish line, and the agent user whose permissions decide what the agent can actually do. Read it as a reasoning frame, because that is how the exam uses it. Given a symptom that appears after go-live, name the piece of the promotion that was skipped.
 
+<TLDR>
+
+- An Agentforce agent is metadata, so you promote the definition, not the conversation or transcript
+- Deploy dependencies first: custom objects and fields, then flows, Apex, and prompt templates, then the agent metadata last
+- Finish the steps a green deploy skips: activate the agent and create or permission its agent user
+
+</TLDR>
+
 ## Deep Dive
 
 ### An agent is metadata, so you promote a definition and not a conversation
@@ -56,6 +64,15 @@ The order has a second layer that is easy to miss, and it is the one that bit th
 
 ![The deploy order runs from objects and fields through flows and Apex to the agent, then continues past a green deploy into activation, the agent user and testing](</diagrams/day-49-td-3a-deploying-an-agent-from-sandbox-to-production-meta/2-deploy-order-green-vs-skipped.png>)
 
+**Deploy in dependency order**
+
+| Order | Deploy |
+| --- | --- |
+| First | Custom objects and fields |
+| Second | Flows, Apex classes, and prompt templates |
+| Third | The agent metadata itself |
+| After deploy | Activate the agent and permission its agent user |
+
 ### Activation and the agent user are the two steps a green deploy skips
 
 Two rules trip people who treat a successful deploy as the finish line. The first is activation. A successful deploy places the metadata, but the agent still has to be activated, because deployment makes the agent exist while activation makes it operational.[^5] After a deploy to production the checklist says to verify the agent is active, and a user cannot reach the agent until it is.[^7] A deployed agent that nobody activated is an asset, not a service.
@@ -78,13 +95,66 @@ Run the checks that only make sense on the far side of the deploy: open the agen
 
 ![Metadata that travels with the deploy sits beside the org-scoped configuration that does not, mapped to the production symptom each skipped piece produces](</diagrams/day-49-td-3a-deploying-an-agent-from-sandbox-to-production-meta/3-what-travels-vs-what-stays.png>)
 
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Install or update Salesforce CLI">
+
+In a terminal, install or update Salesforce CLI with sf update, then authorize both orgs with sf org login web --alias `<alias>` and confirm Einstein, Agentforce, and Data 360 are enabled in each.
+
+</Step>
+
+<Step title="Create a Salesforce DX project">
+
+Create a Salesforce DX project with sf template generate project --name `<name>` --template standard --manifest to produce a package.xml manifest.
+
+</Step>
+
+<Step title="Declare the agent metadata">
+
+In the manifest, declare AiAgentDefinition and AiAgentDefinitionVersion, name the version as MyAgent#3 or `MyAgent#*` for all versions, and add any custom objects or fields the agent uses.
+
+</Step>
+
+<Step title="Retrieve the agent">
+
+Retrieve the agent with sf project retrieve start --metadata AiAgentDefinitionVersion:MyAgent#3 --root-type-with-dependencies AiAgentDefinitionVersion.
+
+</Step>
+
+<Step title="Replace the source username">
+
+Replace the source username with the target org's username in the retrieved draft agent, then create the agent user in the target org and deploy or prepare the permission sets.
+
+</Step>
+
+<Step title="Deploy with sf project deploy start --manifest">
+
+Deploy with sf project deploy start --manifest manifest/package.xml --root-type-with-dependencies AiAgentDefinitionVersion --target-org `<alias>`, then add the permission sets to the agent user, activate the agent, and publish any Embedded Service deployment.
+
+</Step>
+
+</Steps>
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three traps dominate this objective. The first is believing a successful deploy makes the agent live, when deployment only places the metadata and the agent still has to be activated and its agent user assigned and permissioned, or the actions fail at run time for lack of access.[^5] The second is believing the agent carries its actions automatically in every API version: you have to retrieve with the dependency flag set to the agent version so the correct action versions travel, an agent built with Agent Script must include its authoring bundle as well, and a version cannot deploy in the same package as the matching legacy BotVersion.[^3][^4] The third is believing the source and target may drift after deployment, when once deployed the versions in both orgs must match and a new version in the target with no counterpart in the source blocks the very next deployment.[^3] Each trap is the same mistake wearing a different coat, which is trusting the deploy report instead of the state it never checked.
 
+</Callout>
+
 ## What a consultant should walk away with
 
-Treat the agent as the last item in a dependency chain and the deploy as the middle of the job, not the end. Deploy custom objects and fields, then the flows, Apex, and prompt templates, then the agent, and confirm the correct flow versions are active before you touch the agent itself. Retrieve the agent with its action dependencies so the correct versions travel, name the version you mean with the hash syntax, and hold both orgs on the same API version. Then finish the two steps a green deploy skips: activate the agent and create or permission its agent user for every object, field, and record its actions touch. Keep the source and target versions in step so the next promotion is routine rather than a rescue, test the agent on real records in each channel, and only then let customers near it.
+<KeyTakeaways>
+
+- Treat the agent as the last item in a dependency chain, so deploy custom objects and fields, then flows, Apex, and templates, then the agent
+- A successful deploy only places the metadata, so activate the agent and assign its agent user the permissions its actions need
+- Retrieve with the root-type-with-dependencies flag set to the agent version so the correct action versions travel, including an authoring bundle
+- Keep the source and target versions in step, because a new version in the target with no counterpart in the source blocks the next deploy
+
+</KeyTakeaways>
 
 ## What's next
 
@@ -93,7 +163,7 @@ Lesson 50 - Agent Promotion Failure Modes: What Breaks Only in Production (td-3b
 [^1]: Salesforce, "AiAgentDefinition" (https://developer.salesforce.com/docs/platform/api-metadata/references/meta-types/metadata-aiagentdefinition.html)
 [^2]: Salesforce, "AiAgentDefinitionVersion" (https://developer.salesforce.com/docs/platform/api-metadata/references/meta-types/metadata-aiagentdefinitionversion.html)
 [^3]: Salesforce, "Move an Agent to a New Org" (https://developer.salesforce.com/docs/ai/agentforce/guide/agent-dx-deploy-metadata.html)
-[^4]: Salesforce, "Agentforce Metadata Types in Winter '27: Dive into AiAgentDefinition" (https://developer.salesforce.com/blogs/2026/11/agentforce-metadata-types-in-winter-27-dive-into-aiagentdefinition)
+[^4]: Salesforce, "Agentforce Metadata Types in Winter '27" (https://developer.salesforce.com/blogs/2026/11/agentforce-metadata-types-in-winter-27-dive-into-aiagentdefinition)
 [^5]: Salesforce, "Deploy an AI Service Agent to Staging or Production" (https://trailhead.salesforce.com/content/learn/modules/agentforce-deployment-quick-look/deploy-an-ai-agent-with-agentforce)
 [^6]: Salesforce, "Configure Service Agent Access" (https://help.salesforce.com/s/articleView?id=ai.agent_user.htm&language=en_US&type=5)
 [^7]: Salesforce, "Give Users Access to Agentforce (Default)" (https://help.salesforce.com/s/articleView?id=ai.copilot_setup_user_access.htm&language=en_US&type=5)

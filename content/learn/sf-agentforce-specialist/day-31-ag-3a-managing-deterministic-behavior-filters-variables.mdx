@@ -18,6 +18,14 @@ The lesson is that some behavior should not be negotiated with the model at all.
 
 This lesson serves requirement ag-3a, "Given a use case, manage deterministic behavior for the agent using mechanisms like filters, variables, and template expressions," in the AI Agents domain, at 35 percent. By the end you can describe what a filter actually removes, how a variable must be set to stay trustworthy, and how a template expression resolves before the model reads a word. The recurring idea is that determinism is not a property of the model; it is a property of everything the script does before the model runs.
 
+<TLDR>
+
+- Three mechanisms fix the agent's path: filters gate actions, variables hold state, template expressions render it
+- A filter removes an action entirely; a prompt only asks, and any false value closes the gate
+- Gating variables must be set in code, and template expressions render known facts before the model reads
+
+</TLDR>
+
 ## Deep Dive
 
 ### The chain: a variable holds a fact, a filter exposes it, an expression renders it
@@ -30,7 +38,6 @@ Read the same idea from the other direction and the design principle is that the
 
 ![One fact, three jobs: a variable holds the fact, a filter uses it to expose or hide an action or a subagent, and a template expression renders it into the words the reader or the model sees.](</diagrams/day-31-ag-3a-managing-deterministic-behavior-filters-variables/1-one-fact-three-jobs.png>)
 
-
 ### A filter removes the action; it does not ask the model politely
 
 A filter is a condition that includes or excludes something at run time, and in Agent Script the mechanism is conditional availability, written as an available when clause on an action or a subagent. When the condition is false, the action is removed from the list the model sees. This is not a hint. It is a platform gate, and the model cannot call what it cannot see.[^1]
@@ -42,7 +49,6 @@ The reason a gate beats a prompt is mechanical. A prompt line asking the model n
 One more nuance from the pattern guidance is that parentheses should be used when you nest and and or conditions, both to make the evaluation order explicit and to keep the script maintainable. A compound gate such as verified plus business hours is common, and the grouping matters when the condition grows, because the platform evaluates the expression as written and a mis-grouped condition can open a gate you meant to keep closed.[^4]
 
 ![Prompt instruction versus an available when clause: only the platform gate removes the action from the model's list, and any false value, including zero and the empty string, closes it.](</diagrams/day-31-ag-3a-managing-deterministic-behavior-filters-variables/2-gate-vs-request.png>)
-
 
 ### Any false value closes the gate, including zero and the empty string
 
@@ -72,7 +78,6 @@ Put the two mechanisms side by side in a decision. Ask where the value comes fro
 
 ![Choosing where a variable gets its value: a model-filled slot token, a code-set directive, or a platform-linked declaration, and why a gating variable needs the deterministic code path.](</diagrams/day-31-ag-3a-managing-deterministic-behavior-filters-variables/3-value-source-decision.png>)
 
-
 ### A template expression renders a known value into the words
 
 A template expression resolves a variable or a resource into content, and it is written with braces and a leading exclamation, for example a reference to a promotion product variable or to an action such as the one that creates a case. It works inside a prompt instruction so the model receives the resolved value rather than a placeholder. This is the merge-field mechanism of the agent: the script computes or captures a fact, and the prompt renders it.[^2]
@@ -89,13 +94,66 @@ So by the time the model reads anything, the filters have opened or closed, the 
 
 The order is also why the three mechanisms compose rather than compete. A variable set in before_reasoning is available to a filter evaluated in the same parse, and that filter's result shapes which prompt lines survive to be assembled with their template expressions resolved. Because the sequence is top to bottom within the parse, a fact established early is usable by everything after it, and a fact established late is not usable by what came before. When a gate opens a parse too early or too late, the fix is often the position of the set rather than the condition itself.
 
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Open Agentforce and then Agentforce Studio">
+
+In Setup, open Agentforce and then Agentforce Studio, and open the agent in Agentforce Builder.
+
+</Step>
+
+<Step title="Declare each session variable">
+
+In the variables block, declare each session variable with a type, a default value, and a clear description so its state is known.
+
+</Step>
+
+<Step title="Set gating variables deterministically">
+
+In Script view, set gating variables deterministically in before_reasoning or with a run and set sequence in the reasoning block, not from a prompt line.
+
+</Step>
+
+<Step title="Add an available when clause">
+
+Add an available when clause to each action or subagent the gate should control.
+
+</Step>
+
+<Step title="Use a template expression">
+
+In the prompt instructions, use a template expression with braces and the exclamation to render a variable value into the reply.
+
+</Step>
+
+<Step title="Run Simulate and check the Variables tab">
+
+Run Simulate and check the Variables tab to confirm each gate opened only after its variable was set by code.
+
+</Step>
+
+</Steps>
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three misconceptions carry the marks. The first is believing a prompt instruction can enforce a gate, when only an available when condition removes an action from the model's tool list and asking politely is a suggestion the model may not follow. The second is believing the model should set the variable behind a gate, when a gate variable with no deterministic set path opens and closes as randomly as the model, so it must be set in code. The third is believing a non-true value fails to suppress a gated action, when any false value, including None, False, zero, or an empty string, suppresses it, so an empty default correctly hides the action until the variable is populated.
 
+</Callout>
+
 ## What a consultant should walk away with
 
-Keep the chain in front of you: a variable holds the fact, a filter uses it to expose or hide, and a template expression renders it, and the same fact runs through all three. When a requirement is about whether the model may act now, write an available when clause and remember that any false value, including zero and the empty string, closes the gate; when it is about whether the agent remembers and branches, declare a typed variable and give every gating or branching variable a deterministic set path in before_reasoning or a run and set sequence, never a model-filled slot; and when it is about how a fact appears in the reply, render it with a template expression instead of asking the model to produce it. Then hold the ordering fact that makes it all work: logic resolves before the model reads anything, so determinism is what the script does first, not what the model chooses later.
+<KeyTakeaways>
+
+- A variable holds a fact, a filter exposes or hides an action with it, and a template expression renders it
+- Only an available when clause removes an action from the model's tool list; a prompt instruction is a suggestion the model may ignore
+- Set every gating and branching variable in code, in before_reasoning or a run and set sequence, never from a model-filled slot
+- Any false value, including None, False, zero, or an empty string, closes the gate, so an empty default correctly hides its action
+
+</KeyTakeaways>
 
 ## What's next
 

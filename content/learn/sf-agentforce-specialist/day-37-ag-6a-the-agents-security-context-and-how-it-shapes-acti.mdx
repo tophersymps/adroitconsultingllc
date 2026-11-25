@@ -18,6 +18,14 @@ That failure is the whole subject of this objective, and it is the one consultan
 
 This lesson serves requirement ag-6a, "Explain the security context in which the agent is actually running, and how it impacts agent action execution," in the AI Agents domain, which carries 35 percent of the exam and is the heaviest domain on the blueprint. The objective is less about a single setting than about a chain of authority. By the end you can name the running user for any agent type, explain how the standard Salesforce controls enforce access through that identity, show how an action's own execution context layers on top of it, and place the Einstein Trust Layer at the boundary where it belongs. Lesson 38 takes the same requirement from the debugging side, tracing a live failure to the exact gate that caused it.
 
+<TLDR>
+
+- An agent acts under a running user, and that identity sets the ceiling of what any action can reach
+- Agent type fixes the running user: employees run as the logged-in person, service agents as a dedicated agent user
+- Standard Salesforce controls enforce access through that identity, and the Einstein Trust Layer governs model traffic, not records
+
+</TLDR>
+
 ## Deep Dive
 
 ### The agent acts as an identity, not as the platform
@@ -38,6 +46,14 @@ Before you deploy, map each agent to its running user, because only then do you 
 
 ![Agent type decides whose identity runs the action: employee agents run as the logged-in user, service agents as a dedicated agent user, and specialized agents as their own system-level user](</diagrams/day-37-ag-6a-the-agents-security-context-and-how-it-shapes-acti/2-agent-type-to-running-user.png>)
 
+**Agent type and its running user**
+
+| Agent type | Running user |
+| --- | --- |
+| Employee agent | The logged-in user |
+| Service agent | A dedicated agent user |
+| Service agent with verification | The signed-in site user |
+| Specialized agent | Its own system-level user |
 
 ### The running user's controls are what actually enforce access at run time
 
@@ -54,7 +70,6 @@ The action's own execution context layers on top of the running user, and this i
 Apex behaves similarly: a class can run with or without sharing, and it can run in user mode to enforce the caller's permissions or in system mode to bypass them. The running user sets the ceiling, and the action's context decides how much of that ceiling applies. Two ideas, two levers, and the exam tests the seam between them rather than either one alone.
 
 ![The authority chain for one agent action: agent type, running user identity, standard Salesforce controls, action execution context, and what the action can reach](</diagrams/day-37-ag-6a-the-agents-security-context-and-how-it-shapes-acti/1-authority-chain.png>)
-
 
 That layering explains a class of surprising behavior. A Flow that runs in system context without sharing might let a low-access user reach a record they should not see, which looks like the agent ignoring security when in fact the action is overreaching relative to the user. The mirror case is just as real: a Flow set to enforce the running user's access, or Apex running in user mode, can fail where a system-context version would succeed, which looks like a permissions bug when it is a context choice.
 
@@ -84,16 +99,68 @@ That order matters because it moves from the broadest cause to the narrowest, an
 
 ![Read the chain in order when an action misbehaves: identity, object permission, field access, record sharing, then the action's own run context, each with its matching symptom](</diagrams/day-37-ag-6a-the-agents-security-context-and-how-it-shapes-acti/3-diagnostic-order.png>)
 
-
 Hold the two ideas apart as you read scenarios: who the agent is, and what the action does with that identity. The exam rarely asks you to recite a permission set name; it asks you to trace an action to the identity and context that gate it, and to say where the boundary sits. Practice stating that boundary in one sentence, and the scenario answers become mechanical.
+
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Open Agentforce Studio">
+
+In Setup, open Agentforce Studio, then Agentforce Agents, and open the agent to review its agent type, which determines whether it runs as the logged-in user or as a dedicated agent user.
+
+</Step>
+
+<Step title="Open the agent user">
+
+In Setup under Users, open the agent user for a service or dedicated agent and inspect its profile, role, permission sets, and field-level security so you know the access the agent will actually have.
+
+</Step>
+
+<Step title="Grant least-privilege object access">
+
+Grant the agent user only the object permissions and field access the agent's jobs require, following least privilege rather than copying an administrator's access.
+
+</Step>
+
+<Step title="Open the underlying Flow">
+
+For each action, open the underlying Flow, Apex class, or prompt template and check its run context, confirming whether it runs in system context or as the user.
+
+</Step>
+
+<Step title="Confirm the org-wide defaults">
+
+Confirm that organization-wide defaults and sharing rules expose the records the agent must reach to the running user, since the agent cannot exceed that identity's access.
+
+</Step>
+
+<Step title="Review the Einstein Trust Layer settings">
+
+In Setup under Einstein, review the Einstein Trust Layer settings that apply at inference time, and remember that record access is enforced by the running user, not by the Trust Layer.
+
+</Step>
+
+</Steps>
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 Three misconceptions carry the marks. The first is believing the agent bypasses Salesforce permissions, when an agent acts under its running user and respects licenses, object permissions, field-level security, organization-wide defaults, and sharing, so it can never do more than that identity may do. The second is believing the Einstein Trust Layer enforces record access, when the Trust Layer governs model traffic with injection filtering, toxicity checks, and audit logging, and record-level access is enforced by the running user's permissions and sharing. The third is believing an agent that works in the builder will work in production, when the builder runs under your identity while the live agent runs as the agent user or the employee, so missing agent-user permissions cause production failures that never appear while you build.
+
+</Callout>
 
 ## What a consultant should walk away with
 
-Name the running user before you name a permission set, because the identity sets the ceiling and least privilege follows from it. Map every agent to its running user by type: an employee agent runs as the logged-in person, a service agent runs as its dedicated agent user unless credential-based verification switches it to the signed-in site user, and a specialized agent may run as its own system-level user. Enforce access through the standard controls, because licenses, object permissions, field-level security, organization-wide defaults, and sharing rules all apply through that identity and the agent cannot exceed them. Read each action's own execution context, since a Flow or Apex can run in system context or as the user and either widen or narrow what the running user could reach. Grant the narrowest permissions the job needs and remove the rest, test under the production identity rather than your administrator login, and keep the Einstein Trust Layer at the model-traffic boundary while the running user owns the data boundary.
+<KeyTakeaways>
+
+- Name the running user before you name a permission set: an employee agent runs as the logged-in person, a service agent as its dedicated agent user.
+- The agent respects licenses, object permissions, field-level security, organization-wide defaults, and sharing, so it can never exceed its running user.
+- The Einstein Trust Layer is a model-traffic boundary, not a data boundary: the running user's permissions and sharing keep sensitive records out of reach.
+- The builder runs under your identity while production runs as the agent user or employee, so missing permissions fail only in production.
+
+</KeyTakeaways>
 
 ## What's next
 

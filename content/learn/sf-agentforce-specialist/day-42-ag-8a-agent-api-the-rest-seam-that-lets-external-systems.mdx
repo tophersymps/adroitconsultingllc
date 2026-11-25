@@ -18,6 +18,14 @@ Agent API is served from a fixed platform host, not from your org's instance. Th
 
 This lesson covers what Agent API exposes, how an external system starts and continues a session, and what the authentication and session choices decide about whether the API is the right seam at all. It serves requirement ag-8a, "Given a scenario, identify when it's appropriate to use Agent API," in the AI Agents domain, which carries 35 percent of the exam. By the end you can state the base URL and the path from memory, walk the session lifecycle, set the running identity field correctly, and name the cases where a native channel or a Flow callout is the better answer.
 
+<TLDR>
+
+- Agent API is the fixed platform door a program knocks on, not a chat surface for a human
+- The base URL is always api.salesforce.com, and the instance endpoint travels inside the session payload
+- bypassUser decides whose access governs, and starting context must ride in the start session call
+
+</TLDR>
+
 ## Deep Dive
 
 ### Agent API is the door a program knocks on, not a chat widget
@@ -36,7 +44,6 @@ The practical consequence is portability. Because the host is fixed, the same in
 
 ![Two requests compared: pointing at the My Domain instance returns an HTML error page, while the fixed api.salesforce.com host returns a session id and carries the org endpoint in the start session payload](</diagrams/day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems/1-base-url-split.png>)
 
-
 ### A session has a lifecycle: start, message, end, and feedback
 
 The surface is built around a session lifecycle, and the exam expects you to know the phases. You start a session by posting to the agents endpoint with the agent's id, and the response returns a session id you reuse for the conversation.[^5] You send a message to the session, synchronously or as a stream. You end the session when the conversation is done. You can also submit feedback on a message, keyed by a feedback id and a rating, and that feedback is stored in Data 360.[^1]
@@ -46,7 +53,6 @@ The five endpoints are start session, send message synchronous, send message str
 The lifecycle framing is load bearing because a session is billable, stateful, and time bound. The API has a 120 second timeout, and a call that exceeds it returns an HTTP 500.[^3] So the caller treats each call as bounded work: open the session, take the turns it needs, and close it. Leaving a session open and opening a fresh session per message break the model in two opposite ways, one by holding a resource the org is paying for and one by discarding the context the agent would otherwise carry between turns.
 
 ![The four-step session lifecycle: start with the agent id, send a message against the session id, end the session, then submit feedback stored in Data 360, with a bearer token on every call and a 120 second timeout](</diagrams/day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems/2-session-lifecycle.png>)
-
 
 ### Authentication starts before the first call
 
@@ -72,6 +78,16 @@ Treat the variables array as write once at the session boundary. Many agent vari
 
 This is the seam where an external system injects the CRM context the agent will reason over. If the agent needs to know the account, the entitlement, or the prior interaction before it answers, the caller sets those variables in the start session call. A caller that tries to set context after the session has started finds that the read only variables are already fixed, and the agent reasons from less than the caller intended. Pass the starting context with the session, and the first message carries only the question.
 
+**Start session fields and what they decide**
+
+| Field | What it decides |
+| --- | --- |
+| instanceConfig.endpoint | which Salesforce org the session belongs to |
+| bypassUser | whether the agent user or the token user governs |
+| variables | the context and custom agent variables at start |
+| externalSessionKey | tracing the conversation in the agent event logs |
+| featureSupport | synchronous or streaming message handling |
+
 ### When Agent API is the right seam, and when it is not
 
 The closing fact is when Agent API is the right tool at all. Reach for it when an external system, a service, or another org needs to invoke the agent programmatically and receive its structured response as part of a larger workflow. Do not reach for it when a human is chatting through a native Salesforce channel that already handles authentication, identity propagation, rate limiting, and abuse protection, because there you would be rebuilding protections the channel gives you for free.
@@ -80,16 +96,68 @@ And do not reach for it when the caller is already inside Salesforce and an AI A
 
 ![A decision tree for choosing the seam: a caller inside Salesforce uses an AI Agent action in Flow, a human on a native channel uses the channel, and a system outside Salesforce uses Agent API, where client credentials set bypassUser true](</diagrams/day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems/3-seam-decision.png>)
 
-
 One product-state caveat belongs here as a fact rather than a rule. Agent API is not supported for agents of the retired Agentforce (Default) type, so a scoping conversation that lands on the default needs the migration to an Employee agent before any API plan makes sense.[^3] Keep that in view when you are asked to expose an existing agent and the existing agent turns out to be the retired default.
+
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Create the app">
+
+In Setup, create the app that represents the integration in your org and note its consumer key and secret, because the caller needs credentials before it can request a token.
+
+</Step>
+
+<Step title="Generate an access token">
+
+Generate an access token for the integration using the OAuth flow that matches the caller, and confirm the token is a bearer value the API expects.
+
+</Step>
+
+<Step title="Find the agent's id on the agent">
+
+Find the agent's id on the agent details page, where the id is the value at the end of the page URL, so the session call can target the right agent.
+
+</Step>
+
+<Step title="Call the start session endpoint">
+
+Call the start session endpoint with externalSessionKey, instanceConfig.endpoint, featureSupport, and the variables you want set, and record the returned session id.
+
+</Step>
+
+<Step title="Call the send message endpoint">
+
+Call the send message endpoint on the session id with the message payload, and read the response and any structured output the agent's actions produced.
+
+</Step>
+
+<Step title="Call the end session endpoint">
+
+Call the end session endpoint when the conversation is complete, and submit feedback on a message when the integration collects a rating.
+
+</Step>
+
+</Steps>
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 Three traps dominate this objective. The first is believing the Agent API base URL is your instance URL. It is always api.salesforce.com, and the instance endpoint belongs inside the start session payload instead, which is why a request to the instance host returns an HTML error page rather than JSON. The second is believing bypassUser can be ignored: set it true when the integration uses the client credentials flow so the session runs as the agent user, and leave it false when the token's user should govern, because a wrong value makes the agent answer as the wrong identity. The third is believing context variables can be changed freely after the session starts: most are read only once the session begins, so pass the starting context in the start session call and let the first message carry only the question. Each trap turns on a single field or path, which is why the exam keeps reaching for them.
+
+</Callout>
 
 ## What a consultant should walk away with
 
-Fix the base URL at api.salesforce.com and put the agent endpoints under the /einstein/ai-agent/v1 path, then pass your org's instance endpoint inside the session payload rather than using it as the address. Walk the lifecycle in order: start a session with the agent id and an externalSessionKey, send messages against the returned session id, end the session when the conversation is done, and submit feedback keyed by a feedback id when the integration collects a rating. Authenticate with an external client app before the first call, set a Run As user with API Only access, and send the resulting bearer token on every request. Set the running identity field to true for a client credentials integration so the session uses the agent user, and leave it false when a token carrying a specific person should govern. Set the context variables the reasoning needs at session start, because the read only ones will not move afterward. Then make the final call on the seam: a system outside Salesforce is Agent API, a human on a native channel is the channel, and a caller already inside Salesforce is a Flow callout.
+<KeyTakeaways>
+
+- Agent API is the right seam when a system outside Salesforce must invoke the agent and read its structured response as workflow data.
+- Fix the base URL at api.salesforce.com with the /einstein/ai-agent/v1 path, and pass the org instance endpoint inside the session.
+- Set bypassUser true for a client credentials integration so the session runs as the agent user, and false when a token's user should govern.
+- Pass the starting context variables in the start session call, because most are read only once the session begins.
+
+</KeyTakeaways>
 
 ## What's next
 

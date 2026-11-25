@@ -18,6 +18,14 @@ What the team needed was code, not emphasis. The fix is to move the validation i
 
 This lesson serves requirement ag-1b, in the AI Agents domain, which carries 35 percent of the exam. It is the second lesson of the domain and it names the ceiling of the first: having learned the building blocks, you now learn what they cannot do, because a candidate who knows only what Agent Script can express will over-promise. By the end you will be able to describe the three stages from script to execution, explain the parse as the real unit of execution, state what hybrid reasoning resolves first, name what Agent Script cannot express, and recognize the drift, gate, and loop failure modes by their signatures.
 
+<TLDR>
+
+- Understand that the authored Agent Script is compiled into an Agent Graph the Atlas Reasoning Engine executes
+- Treat the parse, not the user turn, as the unit of execution, so before_reasoning runs on every pass
+- Learn what Agent Script cannot express and the drift, gate, and loop failure modes that follow
+
+</TLDR>
+
 ## Deep Dive
 
 ### The agent you author is not the artifact that runs
@@ -76,15 +84,77 @@ There are two reliable ways to break the loop, and both give the gate a determin
 
 The second failure concerns the displayable exit. When an action is marked displayable, the engine exits the reasoning loop the moment the model surfaces that output, so after_reasoning never runs and any logic placed there is skipped. The fix is the same principle applied one step forward: put logic that must execute into the before_reasoning block of the next subagent rather than the after_reasoning block of the current one. The reasoning loop is not a place to park a guaranteed step, because a displayable action can end it early.
 
+**Failure modes with trigger and fix**
+
+| Failure mode | Trigger | Fix |
+| --- | --- | --- |
+| Drift | A prompt line tells the model to always run it | Move it to before_reasoning or gate the action |
+| Model-set gate | The available when variable is set by the model | Give the gate variable a deterministic set path |
+| Action loop | Gate stays open with no instruction to stop | Close the gate or add a has_run flag |
+| Displayable exit | A displayable action surfaces and ends the loop | Move the logic to the next subagent's before_reasoning |
+
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Open Agentforce and then Agentforce Studio">
+
+In Setup, open Agentforce and then Agentforce Studio, and open the agent in Agentforce Builder.
+
+</Step>
+
+<Step title="Add a before_reasoning block">
+
+In Script view, add a before_reasoning block and place there the run directives that must execute on every parse, such as validation and context hydration.
+
+</Step>
+
+<Step title="Gate once-per-session work">
+
+Guard once-per-session work with a flag: run the initialization action only when the flag is false, then set the flag true.
+
+</Step>
+
+<Step title="Add an available when clause">
+
+Add an available when clause to each gated action and give the controlling variable a deterministic set path in the logic instructions.
+
+</Step>
+
+<Step title="Break any possible action loop">
+
+Break any possible action loop by closing the gate variable or adding a has_run flag after the action executes.
+
+</Step>
+
+<Step title="Run Simulate first">
+
+Run Simulate first, then Live Test, and open Interaction Details, Trace, and the Variables tab to confirm which path the engine actually took.
+
+</Step>
+
+</Steps>
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three traps dominate this objective. The first is believing a prompt instruction is a guarantee. It is not: a natural-language line is a suggestion the model may skip, while a run directive in before_reasoning is code that executes unconditionally, so a behavior that must always happen belongs in logic or a gate rather than in forceful wording. The second trap is believing before_reasoning runs once per session. It runs at the start of every parse, including after each tool call and each new user turn, so unguarded side effects repeat, counters reflect parse count, and once-per-session work needs an explicit flag. The third trap is believing after_reasoning always runs. It does not: when an action is marked displayable, the engine exits the reasoning loop as soon as the model surfaces that output, so after_reasoning is skipped and any logic there is lost.
 
 ![Four failure modes and their fixes: drift from a prompt line that is only a suggestion, a gate variable the model sets, an action loop that never closes its gate, and a displayable action that ends the loop before after_reasoning runs.](</diagrams/day-28-ag-1b-what-agent-script-cannot-express-execution-model-a/3-failure-modes.png>)
 
+</Callout>
+
 ## What a consultant should walk away with
 
-Remember that the script you author is compiled into an Agent Graph that the Atlas Reasoning Engine executes, so you debug at the authoring layer and read the trace at run time. Treat the parse, not the user turn, as the unit of execution, which is why before_reasoning runs on every pass and why once-per-session work needs a guard flag. Expect the engine to resolve logic first and assemble the prompt second, so a step that must happen belongs in a logic line or a deterministic block rather than a prompt sentence. Remember the ceiling: Agent Script orchestrates, it does not compute, it cannot fine-tune the model, it cannot guarantee a prompt instruction is obeyed, and it cannot leave the reasoning runtime. When you need a rule enforced, gate the action with available when, give the gate variable a deterministic set path, break any possible loop by closing the gate or adding a has_run flag, and put guaranteed logic in the next subagent's before_reasoning rather than the current one's after_reasoning.
+<KeyTakeaways>
+
+- A prompt instruction is a suggestion the model may skip; anything you must enforce belongs in logic, a guard, or a gate
+- The parse, not the user turn, is the unit of execution, so before_reasoning runs every pass and once-per-session work needs a guard flag
+- Never let the model set an available when gate variable; it needs a deterministic set path in the logic instructions
+- An action marked displayable exits the reasoning loop early, so after_reasoning is skipped; put guaranteed logic in the next subagent's before_reasoning
+
+</KeyTakeaways>
 
 ## What's next
 

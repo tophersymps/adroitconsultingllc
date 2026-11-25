@@ -18,6 +18,14 @@ The prompt was never the problem. The article that held the correct fee had been
 
 This lesson serves requirement df-2d, in the Data 360 Fundamentals domain, which carries 20 percent of the exam, and the objective asks you to explain foundational concepts of Data 360 such as chunking, indexing, and retrievers. The exam tests those three as a sequence, not as isolated facts, because the skill being paid for is the ability to say which stage of the path produced a bad answer. By the end you will be able to split the mechanism into a setup phase and a run-time phase, name every hop from the user's question to the grounded response, describe exactly what the model receives at the final hop, and walk the path in order to find the first point that does not hold.
 
+<TLDR>
+
+- Grounding splits into setup and run time, and only the setup phase can explain a missing or stale answer
+- The model receives instructions, the query, and the top chunks fused into one prompt, not a live lookup
+- Walk the hops in order and fix the first that fails; a prompt rewrite cannot repair an empty index
+
+</TLDR>
+
 ## Deep Dive
 
 ### Setup and run time are two different problems
@@ -72,6 +80,16 @@ The exam leans on the ordering here. A scenario will describe a bad answer and a
 
 Take the stale-fee failure and run it through the hop list to watch the method work. The answer is not missing from the source, so it is not an ingestion fault. The model received a chunk, so indexing did produce records. The chunk it received described the old rate, which means the stored vectors are older than the source, so this is an indexing fault fixed by reprocessing the index. The retriever was active and returning passage text, so it is cleared. Each hop is cleared or convicted in one move, and the fix lands where the fault is instead of where the symptom shows.
 
+**Failure modes by hop and their tell**
+
+| Hop | Failure | Tell |
+| --- | --- | --- |
+| Ingestion | Connector pulled nothing | Index is empty |
+| Chunking | Answer split or buried | Passage incomplete or diluted |
+| Indexing | Vectors stale or model mismatch | Confident but outdated answer |
+| Retriever | Inactive or over-tight filter | Nothing returned or answer excluded |
+| Model | Disregards good context | Answers from general knowledge |
+
 ### Citations close the loop, and the agent layer adds one more hop
 
 In the agent runtime flow the path gains one more step after generation. The response is reviewed against the prompt instructions before the end user sees it, and when citations are configured the answer can show where the grounded passages came from.[^3] That review step is the platform checking that the reply it is about to send is grounded in what was retrieved and consistent with the subagent's scope, rather than a check the team has to build.
@@ -80,13 +98,66 @@ The citation path is also why the retriever's fields-to-return matter more than 
 
 Treat an uncitable correct answer as half a grounded answer in any support or sales context. The customer cannot verify it, and the builder cannot audit it, which means the same defect can recur silently. When a scenario says the answer must be verifiable or traceable, the requirement is pointing at citations, and citations are a retriever and index configuration choice rather than a phrasing choice.
 
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Ingest the unstructured content">
+
+In Data 360, ingest the unstructured content through a connector so a data stream and the data model objects exist.
+
+</Step>
+
+<Step title="Create the search index">
+
+Create the search index with a chunking and vectorization strategy so the content is chunked and stored as vectors.
+
+</Step>
+
+<Step title="Create at least one retriever pointing at">
+
+Create at least one retriever pointing at that index and activate it.
+
+</Step>
+
+<Step title="Open the prompt template">
+
+In Prompt Builder, open the prompt template and insert the retriever as a resource so the template is grounded.
+
+</Step>
+
+<Step title="Use the Answer Questions">
+
+For an agent, use the Answer Questions with Knowledge action to run the template and invoke the retriever with a dynamic query.
+
+</Step>
+
+<Step title="Run the prompt or agent">
+
+Run the prompt or agent and confirm the response cites the retrieved source.
+
+</Step>
+
+</Steps>
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three traps recur in this objective. The first is believing the model fetches its own grounding at answer time. It does not: the retriever pulls the chunks before generation, and the prompt template fuses them into the prompt, so grounding is context prepended to the prompt rather than a model action the model decides to take. The second trap is believing a broken run-time flow can be fixed by editing the prompt instructions. It cannot, because if ingestion, chunking, indexing, or the retriever is at fault, no instruction wording restores content that never reached the index, and the prompt sits at the last hop rather than the first. The third trap is believing the query and the stored content are embedded separately. They are not: both are run through the same embedding model, and that shared model is precisely what makes the similarity search meaningful, so a query embedded by a different model than the corpus returns noise dressed up as results.
 
+</Callout>
+
 ## What a consultant should walk away with
 
-Split every grounding question into setup and run time before you answer it. Setup ingests, chunks, vectorizes, stores, and creates a retriever; run time takes the query through the same embedding model, searches the index, augments the prompt with the top chunks, generates a response, and can cite the sources. Remember that the model receives instructions, query, and chunks fused into one prompt, so a weak answer is usually a weak retrieved set rather than a weak instruction. When something goes wrong, do not guess and do not start rewriting the prompt: walk the hops in order, check the chunk records and the retriever settings, and fix the first hop that fails to hold. Name the phase, name the hop, and the fix names itself.
+<KeyTakeaways>
+
+- Grounding is context prepended to the prompt, not a model action: the retriever pulls the chunks before generation and the template fuses them in
+- A broken runtime flow cannot be fixed by editing the prompt; if ingestion, chunking, indexing, or the retriever failed, no wording restores missing content
+- The query and the stored content run through the same embedding model, and that shared model is what makes the similarity search meaningful
+- Name the phase and the hop before prescribing a fix; a weak answer is usually a weak retrieved set rather than a weak instruction
+
+</KeyTakeaways>
 
 ## What's next
 

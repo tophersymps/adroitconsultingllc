@@ -18,6 +18,14 @@ That gap defines this lesson. The scenario, an action that passes every test in 
 
 This lesson serves requirement ag-6b, the same objective as Lesson 37, taken now from the failure side: given a broken action, explain which part of the security context caused it. It sits in the AI Agents domain at 35 percent. By the end you can separate the running user from the execution context, walk a failure through each gate it can hit, and state exactly where the Einstein Trust Layer does and does not protect data. Lesson 37 named the running user; this lesson turns that name into a debugging method.
 
+<TLDR>
+
+- Separate the running user from the action's execution context: the builder hides one identity and production exposes the other
+- Walk a failure through its gates: object permission errors, field-level security blanks, sharing gaps, then a narrower run context
+- Trust Layer masking is not applied for agents, so the running user's permissions and sharing are the only record-level boundary
+
+</TLDR>
+
 ## Deep Dive
 
 ### The builder hides a second identity, and that is the whole bug
@@ -47,6 +55,15 @@ Match the symptom to the gate. A blank field is a field-level security problem, 
 ![Four symptoms mapped to their gates: error to object permission, blank field to field-level security, missing record to sharing, and failure after a grant to run context.](</diagrams/day-38-ag-6b-running-user-permissions-action-execution-context/2-symptom-gate.png>)
 
 This gate list is also the checklist the exam scenarios are built from. When a question describes an action that returns nothing for one user and a value for another, the answer is field-level security or sharing. When it describes an error, the answer is object permission. When it describes an action that works for one user it should not, the answer is an overreaching execution context, not a missing one.
+
+**Symptoms and the gate to check**
+
+| Symptom | Gate to check |
+| --- | --- |
+| Outright error | Object permission |
+| Blank field or wrong answer | Field-level security |
+| Missing record | Sharing and organization-wide default |
+| Fails after a grant | Flow or Apex run context |
 
 ### The Trust Layer boundary, and why overloading it fails
 
@@ -82,13 +99,66 @@ This order is also the order the builder-versus-production gap appears in. The b
 
 State the diagnosis as a boundary sentence and you cannot go wrong: the agent runs as this identity, that identity can or cannot do this, and the action executes in this context, which widens or narrows the result. Name the boundary and the remedy, and the exam answer is complete.
 
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Open Agentforce Studio">
+
+In Setup, open Agentforce Studio, then Agentforce Agents, open the failing agent, and note its agent type so you know whether it runs as the logged-in user or as a dedicated agent user.
+
+</Step>
+
+<Step title="Open the agent user">
+
+In Setup under Users, open the agent user and inspect its object permissions, then open each relevant object's Field-Level Security for that user to find fields the action reads or writes but the user cannot access.
+
+</Step>
+
+<Step title="Open Sharing Settings">
+
+In Setup under Security, open Sharing Settings and confirm the organization-wide default and any sharing rules expose the action's target records to the running user.
+
+</Step>
+
+<Step title="Open the action's underlying Flow">
+
+Open the action's underlying Flow and check its run context, then open any Apex class and confirm whether it runs with or without sharing and whether it runs in user mode.
+
+</Step>
+
+<Step title="Reproduce the failure">
+
+Reproduce the failure by testing the agent under the production identity rather than under an administrator, so the builder-versus-production gap is visible before go-live.
+
+</Step>
+
+<Step title="Review the Einstein Trust Layer settings">
+
+In Setup under Einstein, review the Einstein Trust Layer settings, and record that record-level access is enforced by the running user and action context, not by the Trust Layer.
+
+</Step>
+
+</Steps>
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three misconceptions carry the marks. The first is believing a system-context action widens the running user's access safely, when a Flow in system context or Apex without sharing can reach records the running user cannot, so an action that succeeds for one user may be overreaching rather than configured correctly. The second is believing the Trust Layer stops the agent from reading sensitive records, when the Trust Layer governs model traffic and its data masking is not applied for agents, so the running user's permissions and sharing are the only record-level boundary. The third is believing the builder is a fair test of production security, when the builder runs under your identity, so an action that works there proves nothing about whether the agent user can run it in production.
 
+</Callout>
+
 ## What a consultant should walk away with
 
-Read every action as two questions: whose identity runs it, and in what context does it execute. Name the running user first, because the builder hides it and production exposes it. Then walk the gates in order, checking object permission for errors, field-level security for blanks, and sharing for missing records, and only then check whether the Flow or Apex run context is narrower than the action needs. Keep the agent user tight, because it speaks for every conversation at once and the record-level boundary is exactly as generous as its grants. Put the Einstein Trust Layer at the model-traffic boundary and keep the running user at the data boundary, remembering that masking is not applied for agents. When an action leaves the platform, move the boundary to the external system's authorization and the integration user you provision, and state each boundary explicitly so the remedy is obvious.
+<KeyTakeaways>
+
+- Read every action as two questions: whose identity runs it, and in what context it executes, since a system context can cross the running user's ceiling.
+- Walk the gates in order, checking object permission for errors, field-level security for blanks, and sharing for missing records.
+- Keep the agent user tight, because it speaks for every conversation at once and the record-level boundary is exactly as generous as its grants.
+- When an action leaves the platform, move the boundary to the external system's authorization and the integration user you provision.
+
+</KeyTakeaways>
 
 ## What's next
 

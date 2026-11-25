@@ -18,6 +18,14 @@ The cause is a configuration decision made long before the user typed anything. 
 
 This lesson serves requirement df-2a in the Data 360 Fundamentals domain, at 20 percent of the exam, and it is one of the lessons the official exam guide names by name when it lists chunking, indexing, and retrievers as foundational concepts. You will learn why chunking exists, what chunk size, overlap, and title prepending each do to answer quality, and why a chunk size cannot be chosen without looking at the embedding model that will vectorize it.
 
+<TLDR>
+
+- Chunking splits a source into self-contained passages before embedding, and the boundaries decide what reaches the model
+- Chunk size is a two-way trade: too large averages ideas, too small strips the context an answer needs
+- Overlap, title prepending, and the embedding model each shape a chunk; set the size and the model together
+
+</TLDR>
+
 ## Deep Dive
 
 ### A context window is what forces the split
@@ -86,6 +94,15 @@ There is a practical order to those two decisions. Read the content first to dec
 
 ![Four search index settings decided in order: strategy and max tokens, overlap for ideas that cross a boundary, title prepending with its silent drop when the prepended value reaches the token limit, and the embedding model whose supported sequence length must cover the chunk size.](</diagrams/day-22-df-2a-chunking-why-documents-are-split-and-what-the-size/3-four-settings-in-order.png>)
 
+**Four index settings and what each trades off**
+
+| Setting | What it does | Trade or failure |
+| --- | --- | --- |
+| Chunk size | Sets the passage granularity | Too large averages ideas; too small strips context |
+| Overlap | Repeats a chunk tail at the next head | Buys boundary safety; costs storage |
+| Title prepending | Attaches a label such as the page Title | Over-limit value drops the record silently |
+| Embedding model | Turns each chunk into a vector | Must cover the chunk size or quality drops |
+
 ### Chunking runs per file type and bounds everything downstream
 
 A search index commonly ingests more than one kind of document, so chunking is configurable per file type. The workflow lets you remove file extensions you do not want and then set the strategy and token limits per extension, so a dense PDF can be chunked differently from clean HTML [^1]. That granularity matters when a single index serves several sources with different shapes.
@@ -94,13 +111,66 @@ Read chunking as a boundary on what the rest of the pipeline can do. The retriev
 
 This is the line to hold for the exam. Chunking decides what units exist; embedding turns each unit into a vector; the index stores and searches them; the retriever queries the index. Every later layer is downstream of the split, which is why the exam guide names chunking first when it lists the retrieval concepts.
 
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="Select the Search Index tab">
+
+In the Data Cloud app, select the Search Index tab.
+
+</Step>
+
+<Step title="Click New and select Advanced Setup">
+
+Click New and select Advanced Setup, then choose Hybrid Search as the Search Type.
+
+</Step>
+
+<Step title="Select Source Object">
+
+Under Select Source Object, pick the data space and connector, then click Next to reach Parsing.
+
+</Step>
+
+<Step title="Select the Default Parser">
+
+On Parsing, select the Default Parser and No Pre-Processing.
+
+</Step>
+
+<Step title="Select Files to Chunk">
+
+On Select Files to Chunk, remove unneeded file extensions, then per extension set Chunking Strategy, Max Tokens, Overlap tokens, and Prepend fields to each chunk.
+
+</Step>
+
+<Step title="Choose the embedding model">
+
+Choose the Vectorization Strategy embedding model that supports your chunk size, then save the index.
+
+</Step>
+
+</Steps>
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three traps dominate this objective. The first is believing a chunk is a fixed-size slice of characters. Chunking breaks content into meaningful passages such as paragraphs or sections, so an answer that describes it as an arbitrary byte or character cut has misread the mechanism. The second is believing more overlap is always safer. Overlap protects an idea that straddles a boundary, but in the documented well-structured example it is set to 0 tokens because it otherwise adds duplicate text and index bloat, so overlap is a trade rather than a safety default. The third is believing chunk size is independent of the embedding model. The chunk must fit the model's supported sequence length, which is why the 1,200-token chunk pairs with a model built for that size, and choosing one without the other is a configuration error.
 
+</Callout>
+
 ## What a consultant should walk away with
 
-Chunking decides what units exist, and every retriever downstream can only return the chunks that chunking already created, so treat the split as the first and most consequential decision in the pipeline. Choose a chunk size large enough to keep a rule with its exception and small enough to match a single question, and set a limit you can justify from the content shape rather than a number you memorized. Add overlap only when long ideas run across natural boundaries, prepend a title when a fragment needs an identity, and pair the chunk size with an embedding model whose supported sequence length covers it. When answers come back half-formed, look at the chunk boundaries before you look at the prompt.
+<KeyTakeaways>
+
+- A chunk is a meaningful passage such as a paragraph or section, not a fixed-size slice of characters or an arbitrary byte cut
+- Overlap protects an idea that straddles a boundary but costs storage; in the documented well-structured example it is set to 0 tokens
+- Chunk size must fit the embedding model's supported sequence length, which is why the 1,200-token chunk pairs with a model built for it
+- Chunking decides what units exist, so no retriever setting downstream can repair a bad split that separated a rule from its exception
+
+</KeyTakeaways>
 
 ## What's next
 
