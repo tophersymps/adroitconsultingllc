@@ -62,6 +62,7 @@ export const FIGURE_PINS_ALL: Readonly<Record<string, string>> = {
   "sf-omni-consultant": "Gemini",
   "sf-data360-consultant": "Orion",
   "sf-agentforce-sales-consultant": "Leo",
+  "sf-agentforce-specialist": "Aquila",
 };
 
 /**

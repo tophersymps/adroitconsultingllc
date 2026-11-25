@@ -577,8 +577,8 @@ describe("published projection vs full registry", () => {
     }
   });
 
-  it("keeps the full registry complete — 14 pins over every authored course", () => {
-    expect(Object.keys(FIGURE_PINS_ALL)).toHaveLength(14);
+  it("keeps the full registry complete — 15 pins over every authored course", () => {
+    expect(Object.keys(FIGURE_PINS_ALL)).toHaveLength(15);
     for (const [slug] of REAL_COURSES) {
       expect(FIGURE_PINS_ALL[slug], `${slug} is unpinned in the registry`).toBeTypeOf(
         "string",
@@ -591,7 +591,7 @@ describe("published projection vs full registry", () => {
    * courses resolves through the default (published) map, with no server data
    * and no size-match stealing a pinned figure.
    */
-  it("draws the eleven launched courses on the released figures", () => {
+  it("draws the twelve launched courses on the released figures", () => {
     const figures = buildChartFigures({
       stats: {
         streakDays: 0,
@@ -608,6 +608,7 @@ describe("published projection vs full registry", () => {
     });
     expect(figures.map((f) => f.figureName).sort()).toEqual(
       [
+        "Aquila",
         "Auriga",
         "Centaurus",
         "Cetus",
