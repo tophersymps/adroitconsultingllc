@@ -28,6 +28,8 @@ It is common to see a library that looks perfectly healthy return nothing becaus
 
 The discipline this produces is a single habit: name the running user first, then check the grants. Before you touch any setting, confirm which user the request actually runs as, because an admin testing in their own session will always hold more than the end user does. Only once you have the running user in hand does checking the permissions make sense, and only then does the fix become obvious.
 
+![How permission layers gate one retrieval request: the Data Cloud User permission opens the retriever and the data space, and the Prompt Template User permission opens the hydrated prompt and the model call. A missing grant returns an empty answer with no error.](</diagrams/day-20-df-1d-access-control-and-permission-propagation-for-retr/1-two-permission-gates.png>)
+
 ### Data space scope is a hard boundary
 
 Data space scope is a hard boundary rather than a preference. Agentforce Data Library operations are supported only in the default data space; there is no setting that enables a non-default data space, and a request that targets one fails [^1]. This is not a configuration you can widen by granting more permission; the feature itself is scoped to the default space.
@@ -56,6 +58,8 @@ Because the setup user is not automatically the running user, a successful build
 
 Keep the two permission sets straight as well, because they are easy to confuse by name. The Data Cloud User permission governs reach into Data 360 and the retriever; the Prompt Template User permission governs the template and the model call. Both are required for a request to return an answer, and they are granted separately, so a scenario that supplies one and not the other is describing a retrieval that fails at the second gate. Reading the scenario for which grant is present and which is missing is usually all the question is testing.
 
+![The builder's permissions beside the running user's permissions. Setting a library up needs Data 360 enabled, the Data Cloud Architect permission, System Administrator, and Manage Data Libraries. Using one needs the Data Cloud User permission with the default data space, the Prompt Template User permission, and object and field access on the source.](</diagrams/day-20-df-1d-access-control-and-permission-propagation-for-retr/2-builder-vs-runner.png>)
+
 ### External users need a step internal users never see
 
 External users need a step internal users never see, and it is the single most common Community retrieval failure. When Salesforce indexes a document library it creates data model objects in Data 360 [^6]. Internal platform users are covered automatically by Salesforce's All Data Access ruleset policy, but external Community users are not [^6]. Without an extra step, an external user reaches an agent that retrieves nothing.
@@ -65,6 +69,8 @@ The extra step is a classification tag on the library's data model objects. You 
 The reason this failure is so persistent is that it is invisible if you only test as an internal admin. An admin holds the All Data Access coverage and never hits the gap, so the library looks complete from every internal seat. Tagging the objects for external visibility is the step that closes the gap, and remembering that external audiences need their own classification keeps a Community rollout from shipping dark.
 
 The tag choice is a deliberate security decision, not a formality. Portal or Public classifies the object as reachable by authenticated external users or by anyone, and data without a tag stays inaccessible to users who are not explicitly granted access. Tagging too widely exposes content to audiences you did not intend; tagging too narrowly leaves the retriever dark. Because Data 360 is secure by default, the safe failure is the narrower tag, so start restrictive and widen only when a real external user is blocked from content that should be visible.
+
+![Internal platform users covered automatically by the All Data Access ruleset policy, beside external Community users who are denied by default and need the library's data model objects tagged ExternalData.Visibility.Portal or ExternalData.Visibility.Public before the agent can retrieve anything.](</diagrams/day-20-df-1d-access-control-and-permission-propagation-for-retr/3-internal-vs-external.png>)
 
 ### The published error reference makes propagation concrete
 
@@ -85,6 +91,8 @@ Running the check in order is what makes it fast. If the user is not in the defa
 The check also doubles as an onboarding template. When you add a person to a team that uses a library, the four layers are exactly what you provision: the default data space, the two permissions, and the object and field access on the source. Confirming each layer before the user ever runs a query turns the most common retrieval failure into a step that simply cannot be skipped.
 
 Keep the four layers in the same order every time, because the order is what makes the check decisive. Access to the default data space comes first, since a user outside it cannot retrieve regardless of any other grant. The Data Cloud User permission comes next, then the Prompt Template User permission, and only then the object and field access on the source, with external visibility tags when the audience is outside the org. Walking the layers in sequence stops you at the first broken gate, and the first broken gate is always the real cause.
+
+![The four-layer check run in order: access to the default data space, then the Data Cloud User permission, then the Prompt Template User permission, then object and field permissions on the source with external-visibility tags when the audience sits outside the org. Stop at the first broken gate.](</diagrams/day-20-df-1d-access-control-and-permission-propagation-for-retr/4-four-layer-check.png>)
 
 ## Exam Traps
 

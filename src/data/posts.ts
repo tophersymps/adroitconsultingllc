@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "node-type-stripping-erasable-typescript-2026",
+    "title": "Your TypeScript Runs on Node. Your Enums Do Not.",
+    "excerpt": "Node runs .ts files by erasing type syntax instead of compiling it. That moves the type check out of the runtime and rules out enums and runtime namespaces.",
+    "category": "React & Web Dev",
+    "categoryColor": "react",
+    "categoryGradient": "from-emerald to-emerald-dark",
+    "date": "November 25, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "8 min read",
+    "featured": false,
+    "tags": [
+      "TypeScript",
+      "Node.js",
+      "Tooling",
+      "Web Development",
+      "Build Pipelines"
+    ],
+    "bannerImage": "/banners/node-type-stripping-erasable-typescript-2026.webp",
+    "ogImage": "/banners/node-type-stripping-erasable-typescript-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "vector-index-delete-vs-erasure-2026",
     "title": "Deleted Is Not Erased: What a Vector Delete Really Does",
     "excerpt": "A vector delete hides a record from results but often leaves the vector in the search graph and on disk. What a delete really removes, and how to make it stick.",

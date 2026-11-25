@@ -26,6 +26,8 @@ The pipeline moves through three stages, and only the first is yours to touch.[^
 
 The Agent Graph is the intermediate representation between your readable script and the running agent, and its structure is optimized for the state machine that consumes it rather than for the person who authored the script. You debug at the authoring layer and you read the trace at run time, and you never hand-edit the graph. That separation is deliberate: it lets the platform enforce deterministic behavior independently of how the script was written, which is the reason a rule you place correctly is honored even though you cannot see the machinery that honors it.
 
+![The three stages from script to running agent: you author Agent Script in Agentforce Builder, the compiler builds the Agent Graph, and the Atlas Reasoning Engine executes it.](</diagrams/day-28-ag-1b-what-agent-script-cannot-express-execution-model-a/1-three-stages.png>)
+
 Hold this as the frame for the rest of the lesson. Every failure mode that follows is a mismatch between what you intended in the script and what the compiled plan actually enforced. When you debug an agent, you are not reading a prompt that ran; you are reading evidence about which nodes the engine traversed, which is why the trace and the variables view matter more than re-reading the instructions.
 
 ### The unit of execution is the parse, not the user turn
@@ -33,6 +35,8 @@ Hold this as the frame for the rest of the lesson. Every failure mode that follo
 The real unit of execution is not the user turn, it is the parse: one complete pass through a subagent's three lifecycle zones. This is the fact that most changes how people reason about an agent, because a turn and a parse are not the same thing and the difference explains most surprises. The three zones are before_reasoning, which runs at the start of every parse before the model sees anything, with no model involvement. The reasoning zone mixes deterministic resolution with any prompt calls. And after_reasoning runs after the model has responded, again with no model involvement unless a displayable action exits the loop early.[^1]
 
 A parse begins on first entry into the subagent, again after every tool call returns, and again on every new user turn inside that subagent. That means one user turn can trigger several parses: once on entry, then once after each action completes. The consequence is concrete. Work placed in before_reasoning runs more than once per turn in a multi-action flow, so a counter incremented there reflects parse count rather than turn count, and an action with side effects, such as a record write or an external call, repeats unless re-execution is genuinely acceptable.
+
+![A parse is one pass through before_reasoning, the reasoning zone, and after_reasoning, and one user turn triggers several parses, once on entry and again after every tool call returns.](</diagrams/day-28-ag-1b-what-agent-script-cannot-express-execution-model-a/2-parse-lifecycle.png>)
 
 Practical consequences follow from the parse count, and they are the ones a consultant feels. A counter incremented in before_reasoning tracks how many times the subagent parsed, not how many messages the user sent, so a budget or an audit tally built on it will overcount in any flow that calls actions. An idempotency check placed there fires again after every tool call, which is fine only if re-running it is harmless. Read before_reasoning as a block that runs often, and reserve it for work that is safe to repeat.
 
@@ -75,6 +79,8 @@ The second failure concerns the displayable exit. When an action is marked displ
 ## Exam Traps
 
 Three traps dominate this objective. The first is believing a prompt instruction is a guarantee. It is not: a natural-language line is a suggestion the model may skip, while a run directive in before_reasoning is code that executes unconditionally, so a behavior that must always happen belongs in logic or a gate rather than in forceful wording. The second trap is believing before_reasoning runs once per session. It runs at the start of every parse, including after each tool call and each new user turn, so unguarded side effects repeat, counters reflect parse count, and once-per-session work needs an explicit flag. The third trap is believing after_reasoning always runs. It does not: when an action is marked displayable, the engine exits the reasoning loop as soon as the model surfaces that output, so after_reasoning is skipped and any logic there is lost.
+
+![Four failure modes and their fixes: drift from a prompt line that is only a suggestion, a gate variable the model sets, an action loop that never closes its gate, and a displayable action that ends the loop before after_reasoning runs.](</diagrams/day-28-ag-1b-what-agent-script-cannot-express-execution-model-a/3-failure-modes.png>)
 
 ## What a consultant should walk away with
 

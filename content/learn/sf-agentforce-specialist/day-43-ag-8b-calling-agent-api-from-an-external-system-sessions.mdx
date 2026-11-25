@@ -52,6 +52,9 @@ Agent API itself is the synchronous interface, so this asynchronous pattern is i
 
 The exam tests this by describing a caller with a tight timeout and a task the agent needs time to complete. The answer is not to raise the timeout. It is to front the call with a wrapper that acknowledges and calls back. Middleware earns its place here and only here, because for a fast request response call the direct synchronous pattern is enough and a wrapper is needless complexity.
 
+![Three session patterns compared: single turn synchronous runs authenticate, create session, send one message, read the structured output and close inside one HTTP call; multi turn reuses one session id across turns; an asynchronous wrapper acknowledges and calls back when reasoning outlasts the caller's timeout](</diagrams/day-43-ag-8b-calling-agent-api-from-an-external-system-sessions/1-session-patterns.png>)
+
+
 ### Pick the OAuth flow from the identity that must cross the boundary
 
 Identity is where an integration most often goes wrong, so plan it before you write a call. For a system that connects to an agent as itself, the client credentials flow gives a dedicated integration identity, and the token represents one shared service identity, so those credentials must stay server side and never be exposed in a browser. This is the flow the get started guide sets up, using an external client app with a Run As user that has at least API Only access.[^2]
@@ -59,6 +62,9 @@ Identity is where an integration most often goes wrong, so plan it before you wr
 When the integration must carry a specific person's context across the hop, an OAuth 2.0 token exchange flow presents the user's existing identity provider token to Salesforce, which maps it to a Salesforce user and issues a Salesforce access token, so the person's identity carries forward instead of collapsing into a shared account. The guide supports any flow that provides a JWT based access token, and the external client app settings include issuing JWT based access tokens for named users, which is how a headless internal user's context is carried.[^2]
 
 The decision rule is the identity that must survive the hop. A service acting as itself uses client credentials, and the token is one shared identity that must never reach a browser. A person's identity that must govern the session uses a flow that carries it, such as token exchange, so each caller runs as themselves. Getting this wrong is how every customer sees the same account summary, which is the failure the introduction described.
+
+![Choosing the OAuth flow by identity: client credentials gives one shared service identity for a service acting as itself, kept server side, while token exchange presents a person's identity provider token so Salesforce maps it to a Salesforce user and issues a Salesforce access token](</diagrams/day-43-ag-8b-calling-agent-api-from-an-external-system-sessions/2-oauth-identity.png>)
+
 
 ### Session context and observability: variables at creation, externalSessionKey for tracing
 
@@ -73,6 +79,9 @@ Remember that the session is a real, billable slip of state: you open it, you ta
 Then decide whether Agent API is the right seam at all, because the exam is really testing that judgment. Use it when a system outside Salesforce must invoke the agent programmatically, especially when it needs the structured output to drive downstream logic, or when it must pass a specific user's identity through to Salesforce. Do not use it to replace a native chat channel for human conversations, because the native channel handles channel authentication, identity propagation, rate limiting, and abuse protection for you while Agent API leaves those duties to your host application.
 
 Do not use it for a caller already inside Salesforce either, where an AI Agent action invoked from Flow reaches the same agent under the running user with no external token. And when the caller is an MCP compatible client, the MCP path manages the session lifecycle so the caller makes a tool call rather than building an integration by hand. The pattern to carry into the exam is two questions plus an identity check: where the caller sits, whether it is a human or a system, and whose identity must cross the boundary.
+
+![Is Agent API the right seam: a caller already inside Salesforce uses an AI Agent action from Flow, a human on a native channel uses the channel, an MCP compatible client uses the MCP path, and only a system outside Salesforce uses Agent API](</diagrams/day-43-ag-8b-calling-agent-api-from-an-external-system-sessions/3-seam-decision.png>)
+
 
 ## Exam Traps
 

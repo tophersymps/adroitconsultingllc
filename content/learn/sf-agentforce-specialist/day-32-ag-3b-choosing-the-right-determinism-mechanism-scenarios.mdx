@@ -28,6 +28,8 @@ The reason to name the job first is that the exam options are constructed to pun
 
 The four jobs are not arbitrary; they map to the four things a deterministic script can change about a turn. It can change what exists for the model to use, a filter. It can change what the agent knows, a variable. It can change what the output says, a template expression. And it can change the order in which work happens, logic with run and a conditional. Ask which of those four the requirement is changing, and you have the job.
 
+![Determinism jobs mapped to mechanisms: gate an action with an available when filter, remember a fact with a variable, shape a message with a template expression, and sequence and branch with logic](</diagrams/day-32-ag-3b-choosing-the-right-determinism-mechanism-scenarios/1-job-to-mechanism-map.png>)
+
 ### Scenario one: gate a sensitive action with a filter
 
 Picture a banking agent that transfers money, and the transfer must be impossible until the account details, the amount, and the balance are all validated. The mechanism is a filter: an available when clause on the transfer action, keyed to a validation variable. The script sets that variable false by default and flips it true only when every check clears, and any earlier failed check sets it back to false. Until then the action is absent from the tool list, so no amount of conversational pressure can trigger it.[^1]
@@ -35,6 +37,8 @@ Picture a banking agent that transfers money, and the transfer must be impossibl
 The documentation walks exactly this case: the transfer action carries available when on a validation variable, the amount is checked against a configured limit, and the balance is checked with a guard clause before the transfer can run. The tempting wrong answers are to reword the prompt to say not yet, which the model may ignore, or to store a note in a variable without gating the action, which leaves the action callable. The gate is the only mechanism that makes the action physically unavailable.[^1]
 
 The gate also has to close behind itself, and that is where a subtle failure lives. If the available when condition stays satisfied after the action runs and the instructions do not tell the model to stop, the action remains available on the next parse and the model can call it again, which produces an action loop. The two reliable fixes are to set the gate variable to a closed state as part of the action's post-execution logic, or to use a separate has-run boolean that closes the gate after first execution. Either way the gate is given a deterministic closed state.
+
+![Gate lifecycle for the transfer action: the validation variable starts false so the action is absent from the tool list, opens when every check clears, and must be set closed or it loops](</diagrams/day-32-ag-3b-choosing-the-right-determinism-mechanism-scenarios/2-gate-lifecycle.png>)
 
 Notice that the gate is paired with a variable, and that is not a weakness of the mechanism. A filter decides whether the action exists; the variable decides what the filter evaluates. Choosing a filter does not mean the answer has no variable, it means the job the scenario names is the gate, and the variable is the supporting state the gate reads.
 
@@ -71,6 +75,8 @@ Two more misfires are subtler because each mechanism is present but pointed at t
 A useful discipline is to write the requirement as a single sentence with the job as the verb. The agent must not transfer until validation passes is a gate. The agent must not re-ask for the verified id is a memory. The reply must name the determined product is a message. The agent must validate, then fetch, then choose a path is a sequence. One sentence, one job, one mechanism, and the scenario answer falls out of the sentence you wrote.
 
 There is a pattern under all the traps: each one hands a deterministic job to the model. Gating by wording, remembering by context, setting a gate variable from the model, producing a known value by generation, sequencing by prompt, and recalling a threshold by memory are all the same mistake in different clothes. The correction is always to move the job back to the mechanism that runs before the model, and the reason is always the same: what the model may or may not do is not a rule, it is a tendency.
+
+![Six recurring traps that hand a deterministic job to the model, each paired with the mechanism that should hold it, from available when for a gate to a run directive for a sequence](</diagrams/day-32-ag-3b-choosing-the-right-determinism-mechanism-scenarios/3-wrong-mechanism-traps.png>)
 
 ### Closing the loop: prove the path came from code, not the model
 

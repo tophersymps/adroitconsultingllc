@@ -34,6 +34,9 @@ The reference documents the start session call as a POST to https://api.salesfor
 
 The practical consequence is portability. Because the host is fixed, the same integration code can point at a sandbox or a production org by changing only the instance endpoint inside the session payload. That design is why the instance endpoint is a session field and not a base URL, and why the exam treats the two as separate facts. Memorise the base host and the path cold, and treat the instance endpoint as session data rather than as part of the address.
 
+![Two requests compared: pointing at the My Domain instance returns an HTML error page, while the fixed api.salesforce.com host returns a session id and carries the org endpoint in the start session payload](</diagrams/day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems/1-base-url-split.png>)
+
+
 ### A session has a lifecycle: start, message, end, and feedback
 
 The surface is built around a session lifecycle, and the exam expects you to know the phases. You start a session by posting to the agents endpoint with the agent's id, and the response returns a session id you reuse for the conversation.[^5] You send a message to the session, synchronously or as a stream. You end the session when the conversation is done. You can also submit feedback on a message, keyed by a feedback id and a rating, and that feedback is stored in Data 360.[^1]
@@ -41,6 +44,9 @@ The surface is built around a session lifecycle, and the exam expects you to kno
 The five endpoints are start session, send message synchronous, send message streaming, end session, and submit feedback.[^1] The message and feedback endpoints carry the session id in the path, while the start session endpoint carries the agent id. The agent id is the eighteen character id at the end of the agent details page URL in Setup.[^4] Every call carries a bearer token in the Authorization header, and the streaming send message endpoint additionally expects an Accept header of text/event-stream because its response is a server sent event stream.
 
 The lifecycle framing is load bearing because a session is billable, stateful, and time bound. The API has a 120 second timeout, and a call that exceeds it returns an HTTP 500.[^3] So the caller treats each call as bounded work: open the session, take the turns it needs, and close it. Leaving a session open and opening a fresh session per message break the model in two opposite ways, one by holding a resource the org is paying for and one by discarding the context the agent would otherwise carry between turns.
+
+![The four-step session lifecycle: start with the agent id, send a message against the session id, end the session, then submit feedback stored in Data 360, with a bearer token on every call and a 120 second timeout](</diagrams/day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems/2-session-lifecycle.png>)
+
 
 ### Authentication starts before the first call
 
@@ -71,6 +77,9 @@ This is the seam where an external system injects the CRM context the agent will
 The closing fact is when Agent API is the right tool at all. Reach for it when an external system, a service, or another org needs to invoke the agent programmatically and receive its structured response as part of a larger workflow. Do not reach for it when a human is chatting through a native Salesforce channel that already handles authentication, identity propagation, rate limiting, and abuse protection, because there you would be rebuilding protections the channel gives you for free.
 
 And do not reach for it when the caller is already inside Salesforce and an AI Agent action in Flow would do, because then the agent runs under the running user with no external token to obtain and no session object to manage. The judgment reduces to a small set of questions: is the caller outside Salesforce, and is it a human or a system. A system outside Salesforce is Agent API. A human on a native channel is the channel. A caller inside Salesforce is a Flow callout, and a caller that is an MCP client has its own path that manages sessions.
+
+![A decision tree for choosing the seam: a caller inside Salesforce uses an AI Agent action in Flow, a human on a native channel uses the channel, and a system outside Salesforce uses Agent API, where client credentials set bypassUser true](</diagrams/day-42-ag-8a-agent-api-the-rest-seam-that-lets-external-systems/3-seam-decision.png>)
+
 
 One product-state caveat belongs here as a fact rather than a rule. Agent API is not supported for agents of the retired Agentforce (Default) type, so a scoping conversation that lands on the default needs the migration to an Employee agent before any API plan makes sense.[^3] Keep that in view when you are asked to expose an existing agent and the existing agent turns out to be the retired default.
 
