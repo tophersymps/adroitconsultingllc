@@ -32,6 +32,7 @@ import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 import type { CheckProgress } from "@/shared/contracts";
 import {
   accessSeam,
@@ -67,7 +68,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const exam = getCertExam(series);
   const s = getSeriesBySlug(series);
   if (!exam || !s) return {};
-  if (!isPubliclyLaunchedSeries(series)) {
+  // LOW (t_91a3e30b, CWE-200): metadata runs BEFORE the page's notFound(), so an
+  // unpublished ("stealth") series must never name itself in the 404 head.
+  // The head follows the SAME disclosure authority as /atlas/[series]: the DB
+  // decides whenever it is readable (`mayDiscloseSeriesLive`), so a course
+  // launched from /admin is crawlable without a `PUBLICLY_LAUNCHED_SERIES`
+  // edit; on a credential outage it fails closed to the static mirror, which
+  // keeps a launched series' real head. t_df70d017 / ADR-001.
+  if (!(await mayDiscloseSeriesLive(series))) {
     return buildMetadata({
       title: "Exam | Adroit Learn",
       description: "Timed assessments for Adroit Learn courses.",

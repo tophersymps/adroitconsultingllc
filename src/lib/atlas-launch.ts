@@ -32,13 +32,32 @@
  * four-slug mirror, so the crawler-visible surfaces silently dropped it. That
  * drift is structural, not a matter of discipline.
  *
- * `PUBLICLY_LAUNCHED_SERIES` is therefore consumed on exactly TWO paths:
+ * `PUBLICLY_LAUNCHED_SERIES` is consumed on exactly THREE paths:
  *
  *   1. the FAIL-CLOSED fallback used only when the `courses` row cannot be
  *      read (credential outage) — the degraded contract every `/atlas` route
- *      and the sitemap use; and
+ *      uses for its EXISTENCE gate, the `null` branch of `mayDiscloseSeries`,
+ *      `learn-visibility`, and the sitemap; and
  *   2. `publicPins()` (`figure-pins.server.ts`), which derives the client chart
- *      map from it.
+ *      map from it; and
+ *   3. `/atlas/[series]/preview`'s `generateMetadata` (t_91a3e30b CWE-200) —
+ *      the ONE remaining DIRECT head consumer, because that head is
+ *      `noindex, nofollow` on both branches and so gains nothing from the DB
+ *      verdict.
+ *
+ * The assessment heads (`/atlas/[series]/exam`, `/atlas/[series]/certificate`,
+ * `/atlas/[series]/check/[n]`) are NOT a consumer: since t_df70d017 they answer
+ * their disclosure question with `mayDiscloseSeriesLive` (the DB seam), exactly
+ * like `/atlas/[series]` and `/atlas/[series]/[slug]`, and reach this list only
+ * indirectly through the `null` (credential-outage) branch of
+ * `mayDiscloseSeries`. Their `degraded && !isPubliclyLaunchedSeries(...)`
+ * existence gates DO read this list — that is path 1.
+ *
+ * Consequence: a course launch no longer requires a mirror entry for its exam /
+ * certificate / check heads to be crawlable (the DB discloses it). Adding a
+ * slug here is needed only for the outage fallback and for its client chart
+ * pin, so do it in the same PR as the seeded `courses` row (or the pin will be
+ * missing).
  *
  * It is explicitly NOT load-bearing for healthy-path disclosure. A stale
  * mirror can no longer hide a live, non-stealth course; the disclosure verdict
@@ -46,11 +65,6 @@
  * `src/lib/atlas-launch.test.ts` pins both directions so a stealth series
  * cannot be added here and a seeded launch cannot silently 404 during an
  * outage.
- *
- * WHEN A NEW COURSE LAUNCHES: on the healthy path, nothing is required — the
- * DB already discloses it. Adding its `series_slug` here is only needed for
- * the outage fallback and for its client chart pin, so do it in the same PR as
- * the seeded `courses` row (or the pin will be missing).
  *
  * Residual risk (documented in CHANGELOG): a course row created at RUNTIME
  * (admin backend, no migration) is not mirrored here, so it 404s for the
@@ -81,8 +95,9 @@ const PUBLICLY_LAUNCHED = new Set<string>(PUBLICLY_LAUNCHED_SERIES);
  * for an access decision — only to choose HOW to fail when the seam already
  * said it could not decide.
  *
- * Consumed as the outage fallback and as the source of `publicPins()`; NOT the
- * healthy-path disclosure rule (t_47183b5b).
+ * Consumed as the outage fallback, as the source of `publicPins()`, and as the
+ * `/atlas/[series]/preview` 404-head guard (the one direct head consumer); NOT
+ * the healthy-path disclosure rule (t_47183b5b, t_df70d017).
  */
 export function isPubliclyLaunchedSeries(slug: string): boolean {
   return PUBLICLY_LAUNCHED.has(slug);
