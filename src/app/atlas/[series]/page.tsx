@@ -20,6 +20,7 @@ import QuizStats from "@/components/Progress/QuizStats";
 import CertReadiness from "@/components/Progress/CertReadiness";
 import ExamCard from "@/components/Progress/ExamCard";
 import { getCertExam, getKnowledgeChecks, getQuizForLesson } from "@/lib/quiz";
+import { getCramSheet } from "@/lib/cram-sheets";
 import { CERT_EXAM_MINUTES, CERT_EXAM_PASS_PCT } from "@/lib/exam-config";
 import { accessSeam, getAccessUserId, getCourseRowBySlug } from "@/lib/access";
 import { getCatalogForUserV2, prerequisitesMet } from "@/lib/catalog";
@@ -163,6 +164,9 @@ export default async function SeriesPage({ params }: Props) {
   // the R2-5 degraded path (no DB involved) — the card keeps its kind-correct
   // label when the tiers route is unavailable (US-012).
   const certExam = hasTiers ? getCertExam(series) : null;
+  // Free/public revision surface. Not tied to `hasTiers`: a course with a cram
+  // sheet should link it even if its assessment tiers are still landing.
+  const cramSheet = getCramSheet(series);
   const examQuestionCount = certExam?.questions.length ?? 0;
   const lessonQuizzes: Record<string, { quizName: string; total: number }> = {};
   for (const l of baseLessons) {
@@ -403,6 +407,28 @@ export default async function SeriesPage({ params }: Props) {
             passPct={CERT_EXAM_PASS_PCT}
             minutes={CERT_EXAM_MINUTES}
           />
+        )}
+
+        {/* Cram sheet — deliberately OUTSIDE the tier gate above: the sheet is
+            free and public, so it is a marketing surface rather than a tier. */}
+        {cramSheet && (
+          <div className="max-w-[1120px] mx-auto px-6 pb-8">
+            <Link
+              href={`/atlas/${series}/cram`}
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-card-soft)] px-6 py-4 transition-colors hover:border-[var(--accent)]"
+            >
+              <span className="font-mono text-[12px] font-bold uppercase tracking-[0.1em] text-[var(--accent)]">
+                Cram sheet
+              </span>
+              <span className="font-bold text-[var(--ink-strong)]">
+                Every objective on one page
+              </span>
+              <span className="text-sm text-[var(--ink-muted)]">
+                The deciding rule and the trap for each of the {cramSheet.objectives.length}{" "}
+                objectives, for the night before the exam.
+              </span>
+            </Link>
+          </div>
         )}
 
         <script
