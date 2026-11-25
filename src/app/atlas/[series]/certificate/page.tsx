@@ -36,6 +36,7 @@ import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 import {
   buildCertificateEligibility,
   certificateCompletionDate,
@@ -77,7 +78,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!s) return {};
   // LOW (t_91a3e30b, CWE-200): generateMetadata runs BEFORE notFound(), so a
   // stealth series used to name itself in the 404 document head.
-  if (!isPubliclyLaunchedSeries(series)) {
+  // The head follows the SAME disclosure authority as /atlas/[series]
+  // (`mayDiscloseSeriesLive`): the DB decides whenever it is readable, and a
+  // credential outage falls back to the static launch mirror. t_df70d017 /
+  // ADR-001. The `degraded` EXISTENCE gate below still reads the mirror.
+  if (!(await mayDiscloseSeriesLive(series))) {
     return buildMetadata({
       title: "Completion Record | Adroit Learn",
       description: "Course completion records for Adroit Learn courses.",

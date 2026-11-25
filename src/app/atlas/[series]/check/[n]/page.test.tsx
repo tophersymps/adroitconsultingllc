@@ -48,15 +48,24 @@ vi.mock("@/lib/quiz", () => ({
   getKnowledgeChecks: mocks.getKnowledgeChecks,
 }));
 
-vi.mock("@/lib/seo", () => ({
-  buildMetadata: (p: unknown) => p,
-}));
+vi.mock("@/lib/seo", async (importOriginal) => {
+  // The REAL `buildMetadata` runs so the disclosure tests below assert the
+  // `robots` verdict rather than a stubbed pass-through.
+  const actual = await importOriginal<typeof import("@/lib/seo")>();
+  return { ...actual };
+});
 
-vi.mock("@/lib/access", () => ({
-  accessSeam: { decideCourseAccess: mocks.decideCourseAccess },
-  getAccessUserId: mocks.getAccessUserId,
-  getCourseRowBySlug: mocks.getCourseRowBySlug,
-}));
+vi.mock("@/lib/access", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/access")>();
+  return {
+    accessSeam: { decideCourseAccess: mocks.decideCourseAccess },
+    getAccessUserId: mocks.getAccessUserId,
+    getCourseRowBySlug: mocks.getCourseRowBySlug,
+    // t_df70d017: the disclosure predicate consumes the REAL stealth rule
+    // (`isGuestVisibleCourse`) through `atlas-disclosure`.
+    isGuestVisibleCourse: actual.isGuestVisibleCourse,
+  };
+});
 
 vi.mock("@/lib/paywall", () => ({
   buildPaywallView: (args: { series: { slug: string } }) => ({
@@ -99,8 +108,9 @@ vi.mock("@/components/Progress/QuizWidget", () => ({
 }));
 vi.mock("@/components/Progress/GuestCTA", () => ({ default: () => <div /> }));
 
-import Page from "./page";
+import Page, { generateMetadata } from "./page";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 
 const seriesInfo = (slug: string, name: string) => ({
   slug,
@@ -238,5 +248,89 @@ describe("/atlas/[series]/check/[n] — continue after a pass (A7)", () => {
 
     expect(quizProps().continueHref).toBeUndefined();
     expect(quizProps().continueLabel).toBeUndefined();
+  });
+});
+
+/**
+ * Disclosure head (t_df70d017 / ADR-001).
+ *
+ * The check head used to answer its `noindex` question from the hand-maintained
+ * `PUBLICLY_LAUNCHED_SERIES` mirror, so a course launched from `/admin` stayed
+ * uncrawlable until a human edited the mirror. It now uses the same DB
+ * disclosure seam as `/atlas/[series]`, failing closed to the mirror only on a
+ * credential outage. Metadata runs BEFORE the page's `notFound()`, so this head
+ * is also the t_91a3e30b CWE-200 guard: a stealth series must not name itself.
+ */
+describe("/atlas/[series]/check/[n] — disclosure head follows the DB seam (t_df70d017)", () => {
+  const meta = (series: string, n = "1") =>
+    generateMetadata({ params: Promise.resolve({ series, n }) });
+
+  it("indexes a DB-live series that is ABSENT from the static mirror", async () => {
+    // The `sf-agentforce-specialist` defect class: live in the DB, never added
+    // to the mirror, so its head stayed `noindex` until a human mirror PR.
+    mocks.getSeriesBySlug.mockReturnValue(seriesInfo("new-course", "Brand New Course"));
+    mocks.getCourseRowBySlug.mockResolvedValue({
+      status: "live",
+      access_model: "sub-or-one-time",
+    });
+
+    const m = (await meta("new-course")) as { title: string; robots: unknown };
+
+    expect(m.robots).toEqual({ index: true, follow: true });
+    expect(m.title).toBe("SECRET_CHECK_TITLE | Adroit Learn");
+    // Proof the real head did not come from the mirror.
+    expect(isPubliclyLaunchedSeries("new-course")).toBe(false);
+  });
+
+  it("never names a stealth (live + granted) series", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      seriesInfo("hermes-consultant", "Hermes Consultant Track"),
+    );
+    mocks.getCourseRowBySlug.mockResolvedValue({
+      status: "live",
+      access_model: "granted",
+    });
+
+    const m = (await meta("hermes-consultant")) as { title: string; robots: unknown };
+
+    expect(m.title).toBe("Knowledge Check | Adroit Learn");
+    expect(m.robots).toEqual({ index: false, follow: false });
+    expect(JSON.stringify(m)).not.toContain("SECRET_CHECK_TITLE");
+  });
+
+  it("gives a series with no courses row the generic noindex head", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(seriesInfo("ghost-series", "Ghost Series"));
+    mocks.getCourseRowBySlug.mockResolvedValue(null);
+
+    const m = (await meta("ghost-series")) as { title: string; robots: unknown };
+
+    expect(m.title).toBe("Knowledge Check | Adroit Learn");
+    expect(m.robots).toEqual({ index: false, follow: false });
+    expect(JSON.stringify(m)).not.toContain("SECRET_CHECK_TITLE");
+  });
+
+  it("falls back to the static mirror on a credential outage — both directions", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      seriesInfo("omni-studio-cert", "OmniStudio Developer Certification"),
+    );
+    mocks.getCourseRowBySlug.mockRejectedValue(
+      new DbTokenUnavailableError("/token/anonymous"),
+    );
+
+    const launched = (await meta("omni-studio-cert")) as { title: string; robots: unknown };
+    expect(launched.title).toBe("SECRET_CHECK_TITLE | Adroit Learn");
+    expect(launched.robots).toEqual({ index: true, follow: true });
+
+    mocks.getSeriesBySlug.mockReturnValue(seriesInfo("new-course", "Brand New Course"));
+
+    const offline = (await meta("new-course")) as { title: string; robots: unknown };
+    expect(offline.title).toBe("Knowledge Check | Adroit Learn");
+    expect(offline.robots).toEqual({ index: false, follow: false });
+  });
+
+  it("returns an empty head when the check does not exist", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(seriesInfo("omni-studio-cert", "OmniStudio"));
+    mocks.getKnowledgeCheck.mockReturnValue(null);
+    expect(await meta("omni-studio-cert", "9")).toEqual({});
   });
 });

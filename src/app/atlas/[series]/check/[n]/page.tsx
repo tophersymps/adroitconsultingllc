@@ -25,6 +25,7 @@ import { buildMetadata } from "@/lib/seo";
 import { getSupabaseServerClient } from "@/lib/db/server";
 import { isDbTokenUnavailable } from "@/lib/db/degraded-client";
 import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
+import { mayDiscloseSeriesLive } from "@/lib/atlas-disclosure";
 import {
   accessSeam,
   getAccessUserId,
@@ -56,7 +57,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const check = getKnowledgeCheck(series, parseInt(n, 10));
   const s = getSeriesBySlug(series);
   if (!check || !s) return {};
-  if (!isPubliclyLaunchedSeries(series)) {
+  // Disclosure head (t_df70d017 / ADR-001): the DB is the disclosure authority
+  // whenever it is readable, exactly as on /atlas/[series]; a credential outage
+  // fails closed to the static launch mirror. Metadata runs BEFORE the page's
+  // notFound(), so this is also the t_91a3e30b CWE-200 guard against naming a
+  // stealth series in a 404 head.
+  if (!(await mayDiscloseSeriesLive(series))) {
     return buildMetadata({
       title: "Knowledge Check | Adroit Learn",
       description: "Knowledge checks for Adroit Learn courses.",

@@ -71,11 +71,17 @@ vi.mock("@/lib/certificate", () => ({
   formatCertDate: (d: string) => d,
 }));
 
-vi.mock("@/lib/access", () => ({
-  accessSeam: { decideCourseAccess: mocks.decideCourseAccess },
-  getAccessUserId: mocks.getAccessUserId,
-  getCourseRowBySlug: mocks.getCourseRowBySlug,
-}));
+vi.mock("@/lib/access", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/access")>();
+  return {
+    accessSeam: { decideCourseAccess: mocks.decideCourseAccess },
+    getAccessUserId: mocks.getAccessUserId,
+    getCourseRowBySlug: mocks.getCourseRowBySlug,
+    // t_df70d017: the disclosure predicate consumes the REAL stealth rule
+    // (`isGuestVisibleCourse`) through `atlas-disclosure`.
+    isGuestVisibleCourse: actual.isGuestVisibleCourse,
+  };
+});
 
 vi.mock("@/lib/db/server", () => ({
   getSupabaseServerClient: () => ({
@@ -90,9 +96,12 @@ vi.mock("@/lib/db/server", () => ({
   }),
 }));
 
-vi.mock("@/lib/seo", () => ({
-  buildMetadata: (p: { title: string; description: string; path: string }) => ({ title: p.title, description: p.description }),
-}));
+vi.mock("@/lib/seo", async (importOriginal) => {
+  // The REAL `buildMetadata` runs so the disclosure tests below assert the
+  // `robots` verdict rather than a stubbed pass-through.
+  const actual = await importOriginal<typeof import("@/lib/seo")>();
+  return { ...actual };
+});
 
 vi.mock("@/components/Header", () => ({ default: () => <header data-testid="header" /> }));
 vi.mock("@/components/Footer", () => ({ default: () => <footer data-testid="footer" /> }));
@@ -115,6 +124,7 @@ vi.mock("@/components/Constellations/CertificateCelebration", () => ({
 import Page, { generateMetadata } from "./page";
 import { DEGRADED_PAYWALL_MESSAGE } from "@/components/Catalog/Paywall";
 import { DbTokenUnavailableError } from "@/lib/db/degraded-client";
+import { isPubliclyLaunchedSeries } from "@/lib/atlas-launch";
 
 const series = (over: Record<string, unknown> = {}) => ({
   slug: "agentic-ai",
@@ -277,6 +287,15 @@ describe("/atlas/[series]/certificate — SEO head is kind-aware (B4)", () => {
   const meta = (slug: string) =>
     generateMetadata({ params: Promise.resolve({ series: slug }) });
 
+  beforeEach(() => {
+    // t_df70d017: the head now asks the DB disclosure seam, so the series under
+    // test must resolve as a live, non-stealth row for the real head to be emitted.
+    mocks.getCourseRowBySlug.mockResolvedValue({
+      status: "live",
+      access_model: "sub-or-one-time",
+    });
+  });
+
   it("uses the course-completion labels for a course-completion series", async () => {
     mocks.getSeriesBySlug.mockReturnValue(
       series({ slug: "agentic-ai", name: "Agentic AI", examKind: "course-completion" }),
@@ -330,5 +349,95 @@ describe("/atlas/[series]/certificate — SEO head is kind-aware (B4)", () => {
   it("returns an empty head for an unknown series", async () => {
     mocks.getSeriesBySlug.mockReturnValue(undefined);
     expect(await meta("no-such-series")).toEqual({});
+  });
+});
+
+/**
+ * Disclosure head (t_df70d017 / ADR-001).
+ *
+ * The certificate head used to answer its `noindex` question from the
+ * hand-maintained `PUBLICLY_LAUNCHED_SERIES` mirror; it now uses the same DB
+ * disclosure seam as `/atlas/[series]`, failing closed to the mirror only on a
+ * credential outage.
+ */
+describe("/atlas/[series]/certificate — disclosure head follows the DB seam (t_df70d017)", () => {
+  const meta = (slug: string) =>
+    generateMetadata({ params: Promise.resolve({ series: slug }) });
+
+  it("indexes a DB-live series that is ABSENT from the static mirror", async () => {
+    // The `sf-agentforce-specialist` defect class: live in the DB, never added
+    // to the mirror, so its head stayed `noindex` until a human mirror PR.
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "new-course", name: "Brand New Course" }),
+    );
+    mocks.getCertExam.mockReturnValue({ questions: [{ id: "q1" }] });
+    mocks.getCourseRowBySlug.mockResolvedValue({
+      status: "live",
+      access_model: "sub-or-one-time",
+    });
+
+    const m = (await meta("new-course")) as { title: string; robots: unknown };
+
+    expect(m.robots).toEqual({ index: true, follow: true });
+    expect(m.title).toBe(
+      "Certificate of Completion | Brand New Course | Adroit Learn",
+    );
+    // Proof the real head did not come from the mirror.
+    expect(isPubliclyLaunchedSeries("new-course")).toBe(false);
+  });
+
+  it("never names a stealth (live + granted) series", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "hermes-consultant", name: "Hermes Consultant Track" }),
+    );
+    mocks.getCertExam.mockReturnValue(null);
+    mocks.getCourseRowBySlug.mockResolvedValue({
+      status: "live",
+      access_model: "granted",
+    });
+
+    const m = (await meta("hermes-consultant")) as { title: string; robots: unknown };
+
+    expect(m.title).toBe("Completion Record | Adroit Learn");
+    expect(m.robots).toEqual({ index: false, follow: false });
+    expect(JSON.stringify(m)).not.toContain("Hermes Consultant Track");
+  });
+
+  it("gives a series with no courses row the generic noindex head", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "ghost-series", name: "Ghost Series" }),
+    );
+    mocks.getCertExam.mockReturnValue(null);
+    mocks.getCourseRowBySlug.mockResolvedValue(null);
+
+    const m = (await meta("ghost-series")) as { title: string; robots: unknown };
+
+    expect(m.title).toBe("Completion Record | Adroit Learn");
+    expect(m.robots).toEqual({ index: false, follow: false });
+    expect(JSON.stringify(m)).not.toContain("Ghost Series");
+  });
+
+  it("falls back to the static mirror on a credential outage — both directions", async () => {
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "omni-studio-cert", name: "OmniStudio Developer Certification" }),
+    );
+    mocks.getCertExam.mockReturnValue({ questions: [{ id: "q1" }] });
+    mocks.getCourseRowBySlug.mockRejectedValue(
+      new DbTokenUnavailableError("/token/anonymous"),
+    );
+
+    const launched = (await meta("omni-studio-cert")) as { title: string; robots: unknown };
+    expect(launched.title).toBe(
+      "Certificate of Completion | OmniStudio Developer Certification | Adroit Learn",
+    );
+    expect(launched.robots).toEqual({ index: true, follow: true });
+
+    mocks.getSeriesBySlug.mockReturnValue(
+      series({ slug: "new-course", name: "Brand New Course" }),
+    );
+
+    const offline = (await meta("new-course")) as { title: string; robots: unknown };
+    expect(offline.title).toBe("Completion Record | Adroit Learn");
+    expect(offline.robots).toEqual({ index: false, follow: false });
   });
 });
