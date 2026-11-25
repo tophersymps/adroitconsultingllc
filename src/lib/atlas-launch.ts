@@ -68,6 +68,7 @@ export const PUBLICLY_LAUNCHED_SERIES = [
   "salesforce-data-architect",
   "salesforce-sharing-visibility-architect",
   "sf-agentforce-sales-consultant",
+  "sf-agentforce-specialist",
   "sf-data360-consultant",
   "sf-omni-consultant",
 ] as const;
