@@ -645,9 +645,42 @@ async function main() {
     const [fm] = parseFrontmatter(raw);
     fmCache[s] = fm || {};
   }
-  if (slugOnly) slugs = slugOnly.split(",").map((s) => s.trim());
+
+  /*
+   * A draft is NOT a blog article. parseFrontmatter above mirrors build-posts.js,
+   * which DROPS every `status: draft` file from src/data/posts.ts -- so a draft has
+   * no public route, and src/lib/audio.test.ts asserts that every registry slug maps
+   * to a real published post. This path used to select drafts: the audio backfill ran
+   * against a `status: draft` scratch page, registered it in audio.ts, pushed, and
+   * left main red on every subsequent push (2026-11-24, caught only because that test
+   * encodes the boundary). Filtered on EVERY automatic selection path, and an explicit
+   * --slug naming a draft is refused rather than quietly emitting an entry no public
+   * surface can serve.
+   */
+  const isDraft = (s) => Boolean(fmCache[s]) && fmCache[s].status === "draft";
+  const drafts = slugs.filter(isDraft).sort();
+  if (drafts.length) {
+    console.log(
+      `Skip ${drafts.length} draft article(s) (status: draft is never narrated): ` +
+        drafts.join(", "),
+    );
+  }
+  slugs = slugs.filter((s) => !isDraft(s));
+
+  if (slugOnly) {
+    slugs = slugOnly.split(",").map((s) => s.trim());
+    const refused = slugs.filter(isDraft);
+    if (refused.length) {
+      console.error(
+        `Refusing a draft slug: ${refused.join(", ")}. A \`status: draft\` article ` +
+          `is absent from src/data/posts.ts, so an audio entry for it breaks ` +
+          `src/lib/audio.test.ts and can never be served. Clear \`status: draft\` first.`,
+      );
+      process.exit(2);
+    }
+  }
   if (recentN) slugs = sortByDateDesc(slugs, fmCache).slice(0, parseInt(recentN, 10));
-  if (backfill && !slugOnly) slugs = allSlugs(); // --backfill alone targets every blog article
+  if (backfill && !slugOnly) slugs = allSlugs().filter((s) => !isDraft(s)); // --backfill alone targets every published article
 
   /*
    * NEVER lose state. The union is seeded from whatever src/data/audio.ts
