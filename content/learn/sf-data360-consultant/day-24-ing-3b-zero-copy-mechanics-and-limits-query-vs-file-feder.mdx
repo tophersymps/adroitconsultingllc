@@ -18,6 +18,15 @@ Requirement ing-3b sits in the Data Source Connection and Ingestion domain, wort
 
 You will cover the bilateral setup, query federation's push outward, file federation's move inward, acceleration as the cache between them, the three freshness behaviors the exam tests, and the guarantees federation does not give you.
 
+<TLDR>
+
+- Where query compute runs is the first question: query federation uses the external engine, file federation uses Data 360's own
+- Acceleration caches a query federation copy on an interval from fifteen minutes to seven days, lowering latency but not freshness
+- A zero copy integration is bilateral, so a connection can save while queries still fail on the external side
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### A zero copy integration is bilateral, so setup on one side is only half the work
@@ -80,8 +89,50 @@ Three specific gaps are worth knowing. There is no persisted copy to fall back o
 
 There is a fourth gap the exam likes, tied to audit. Federation cannot stand in for retention when an audit needs the exact rows a process consumed. A live query returns rows and forgets them, so if a regulator wants to know which records a decision used, federation alone will not produce them. When retention is the requirement, the rows have to be landed. Live federation retains nothing once the workflow finishes, so the next workflow queries the source again, and the record of what the earlier workflow saw is gone.
 
-## Config Walkthrough
+### The build sequence in six steps
 
+<Steps>
+
+<Step title="In Data 360 Setup">
+
+In Data 360 Setup, open Connections and create the connection to the external system, choosing query federation or file federation based on what the source supports and where you want the query compute to run.
+
+</Step>
+
+<Step title="Supply the external system details such as the database name">
+
+Supply the external system details such as the database name, connection URL, and credentials, and confirm the external administrator has granted the read access or accepted the share required for queries to succeed.
+
+</Step>
+
+<Step title="Create a data stream from the connection and note the defaul">
+
+Create a data stream from the connection and note the default behavior: Data 360 federates the data when it is requested at runtime, a mode called live query, with zero data persisted.
+
+</Step>
+
+<Step title="If the connection is query federation">
+
+If the connection is query federation, decide at stream creation whether to enable acceleration, which caches the data in a data lake object, and set the refresh frequency to the freshness the business will accept.
+
+</Step>
+
+<Step title="Confirm the external data lake object contains no rows">
+
+Confirm the external data lake object contains no rows, then map it to the data model object used by your insight, segment, or agent action.
+
+</Step>
+
+<Step title="Validate latency and freshness by querying the federated obj">
+
+Validate latency and freshness by querying the federated object, changing a row in the source, and re-querying to compare live results against the cache refresh interval when acceleration is on.
+
+</Step>
+
+</Steps>
+
+
+## Config Walkthrough
 Wire up a federated integration and prove its behavior in six steps.
 
 1. In Data 360 Setup, open Connections and create the connection to the external system, choosing query federation or file federation based on what the source supports and where you want the query compute to run.
@@ -98,6 +149,8 @@ Wire up a federated integration and prove its behavior in six steps.
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 Three traps dominate this objective.
 
 First, choosing file federation for a source whose data is not in a supported open table format. File federation requires that format, so when it is absent query federation is the only option available. If a scenario names a proprietary warehouse format and file federation, it has asked you to spot the mismatch.
@@ -106,12 +159,24 @@ Second, enabling acceleration and then promising real time freshness. A cached o
 
 Third, planning only the Data 360 half of the setup. The external system must also grant read access or accept a share, and outbound sharing will not appear until the receiving account accepts the share. An answer that stops at the Data 360 connection, with no mention of the far side, has skipped the bilateral requirement.
 
-## Decision rules to take away
+</Callout>
+
+
+## What a consultant should walk away with
+
+<KeyTakeaways>
+
+- Ask where query compute runs first: query federation pays the external system's performance, concurrency, and cost as part of the Data 360 runtime
+- File federation runs compute inside Data 360 against external storage, so it needs a supported open table format and moves the compute bill inward
+- Acceleration changes only latency and freshness, caching a copy in a data lake object on an interval from fifteen minutes to seven days
+- Plan both sides of the boundary, and know the gaps: no persisted copy, no cheap transforms, schema drift, and no audit retention
+
+</KeyTakeaways>
+
 
 Ask where the query compute runs before anything else. Query federation runs it in the external system, so external performance, concurrency, and cost become part of the Data 360 runtime. File federation runs it inside Data 360 against external storage, so it needs a supported open table format and moves the compute bill inward. Acceleration does not change the direction of the query; it changes only latency and freshness, caching a copy in a data lake object on an interval from fifteen minutes to seven days. Expect three freshness behaviors, not one: live query is as fresh as the source, an accelerated query is as fresh as the last cache load, and file federation is live but pays scan cost every time. Plan both sides of the boundary, because a connection can save while the queries still fail. And know the gaps: no persisted copy to fall back on, no cheap repeated transforms, schema drift breaks federated mappings too, and no retention for an audit that needs the exact rows a process consumed.
 
 ## What's next
-
 Next is Lesson 25 - Choosing and Governing Collaboration: Data Shares, Cross-Boundary Permissions, and When to Ingest (ing-3c). It moves from the mechanics of federation to the governance around it, covering how data shares are set up and controlled across a boundary, what permissions have to travel with the data, and how to decide when a requirement that looked federated should be ingested instead.
 
 [^1]: Salesforce Help, "Compare Data Federation Methods," (https://help.salesforce.com/s/articleView?id=data.c260_a_data_federation_compare_methods.htm&language=en_US&type=5)

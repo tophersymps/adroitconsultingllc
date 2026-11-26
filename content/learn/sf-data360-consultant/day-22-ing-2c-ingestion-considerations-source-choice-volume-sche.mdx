@@ -18,6 +18,15 @@ That is the failure this lesson exists to prevent. Requirement ing-2c, part of t
 
 You will work through five decisions here: which ingestion path a use case should take, how volume and cadence shape the refresh, why schema drift breaks a stream quietly, how to read the run history and retrigger correctly, and what deletes and reprocessing actually mean. Each decision maps to one of the three questions at the end of the lesson.
 
+<TLDR>
+
+- Ingestion is deliberate choices: pick the pattern from how data moves and the connector from the requirement
+- Bulk carries large periodic loads, streaming carries near real time micro-batches, and one Ingestion API stream can take both
+- Schema drift is the most common silent failure, and Refresh Now is a rerun, not a repair
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Choosing an ingestion path starts from the use case, not from the tool
@@ -84,8 +93,50 @@ Two more considerations decide whether a stream survives production. The first i
 
 The second is ownership and promotion. Validate new connections in a sandbox before production cutover, so credentials, permissions, and network routes are proven before they carry real load. When a production refresh does fail, the cause is almost always one of four things: credentials that rotated or expired, permissions that were not granted, schema drift at the source, or a network route that no longer reaches the source. Keep a short list of who owns each stream and who owns its source credentials, because the first question in any failure review is who can change the thing that broke.
 
-## Config Walkthrough
+### The build sequence in six steps
 
+<Steps>
+
+<Step title="In Data 360">
+
+In Data 360, open the Data Streams tab and create the data stream with the connector that matches the use case: CRM direct or bundle, Ingestion API, SFTP or cloud storage, or a federated or zero copy source.
+
+</Step>
+
+<Step title="Set the refresh mode and schedule to match how often the sou">
+
+Set the refresh mode and schedule to match how often the source actually changes, and use the bulk pattern for large periodic loads or the streaming pattern for near real-time micro-batches.
+
+</Step>
+
+<Step title="Validate the connection in a sandbox first">
+
+Validate the connection in a sandbox first, then open the data stream record page and review Refresh History to confirm the runs completed.
+
+</Step>
+
+<Step title="If a run fails">
+
+If a run fails, correct the cause, such as a changed source schema or a mapping data type mismatch, then click Refresh Now to rerun the data stream.
+
+</Step>
+
+<Step title="After a source schema change">
+
+After a source schema change, reopen the data stream and confirm the columns and the DLO to DMO field mappings still match, adjusting compatibility where needed.
+
+</Step>
+
+<Step title="For the Ingestion API connector">
+
+For the Ingestion API connector, check the connector status page to confirm the connector is healthy before escalating.
+
+</Step>
+
+</Steps>
+
+
+## Config Walkthrough
 Stand up and harden a stream in six steps.
 
 1. Open the Data Streams tab in Data 360 and create the data stream with the connector that matches the use case: a CRM direct stream or a data bundle for Salesforce objects, the Ingestion API for programmatic events, SFTP or a cloud storage connector for scheduled file drops, or a federated or zero copy source when the data must stay put.
@@ -102,6 +153,8 @@ Stand up and harden a stream in six steps.
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 Three traps dominate this objective, and each one has a tell.
 
 First, retrying blindly after a failure. Refresh Now reruns the data stream, but a run that failed because of schema drift or a mapping mismatch will fail again until the cause is fixed. When a scenario shows the same failure repeating after a rerun, the answer is to fix the cause, not to rerun harder.
@@ -110,14 +163,26 @@ Second, treating reprocessing of a few recent rows as data loss. Incremental ref
 
 Third, assuming a source schema change is harmless. A new or retyped column can break a DLO to DMO mapping because the field data types must be compatible. An answer that leaves the mapping untouched, or that switches to full refresh hoping to dodge the type problem, does not address the incompatibility that is actually stopping the run.
 
-## Decision rules to take away
+</Callout>
+
+
+## What a consultant should walk away with
+
+<KeyTakeaways>
+
+- Pick the pattern from the movement: bulk for large periodic loads and streaming for near real time micro-batches, and one Ingestion API stream carries both
+- Match the refresh schedule to how often the source changes, since refreshing more often adds cost without making the data fresher
+- After any source schema change, reopen the stream and confirm the DLO to DMO mapping, because the field data types must stay compatible
+- Diagnose from Refresh History, fix the cause, then Refresh Now, because a rerun of a schema or mapping failure will fail again
+
+</KeyTakeaways>
+
 
 Ingestion is a set of decisions, and the consultant who walks away with these rules will answer the objective questions and, more usefully, run a real pipeline.
 
 Pick the pattern from the movement: bulk for large periodic loads, streaming for near real time micro batches, and one Ingestion API stream can carry both. Pick the connector from the requirement: a CRM stream or data bundle, a file connector, the Ingestion API, or a federated source. Match the schedule to how often the source changes, and never refresh more often than that without a freshness reason. After any source schema change, reopen the stream and confirm the DLO to DMO mappings before trusting a run, because the field data types must stay compatible. Diagnose from Refresh History, fix the cause, then Refresh Now. Flag deletes at the source or use a delete file, and read a small amount of boundary reprocessing as expected behavior. Know which data space a stream lands in, validate in a sandbox, and keep the owner of every stream and its credentials on a short list.
 
 ## What's next
-
 Next is Lesson 23 - Data Collaboration in Data 360: What Zero Copy Means and Which Sources Support It (ing-3a). It picks up the one ingestion path this lesson only gestured at, the one where the data never moves, and explains what Zero Copy means across systems and which sources and connector types support it.
 
 [^1]: Salesforce Developers, "Ingestion API," (https://developer.salesforce.com/docs/data/data-cloud-int/guide/c360-a-ingestion-api.html)

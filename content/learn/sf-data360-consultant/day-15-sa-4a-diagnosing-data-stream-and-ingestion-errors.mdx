@@ -16,6 +16,15 @@ A dashboard reports ten thousand fewer customers than the source system, and the
 
 This lesson covers objective sa-4a, part of the Data 360 Setup and Administration domain, worth 13% of the Salesforce Certified Data 360 Consultant exam. The objective asks you to use tooling to diagnose and troubleshoot common issues, focused on reading refresh history, decoding common ingestion error codes, and using problem record DLOs. We cover where ingestion health lives on a stream, the CRM errors that point at objects and permissions, the SFTP errors that map to file size and scheduling, the zero copy timeouts that come from volume, problem records as the quarantine for bad rows, and the judgment call about which errors need action at all.
 
+<TLDR>
+
+- Ingestion health lives on the data stream: read Last Run Status, Refresh History, and the error code before changing anything
+- CRM errors point at the connected org's objects and permissions; SFTP errors map to file size and scheduling
+- Zero copy timeouts mean volume, and Problem Records capture bad rows instead of dropping them
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Ingestion health lives on the data stream
@@ -78,8 +87,50 @@ The intermittent-error guidance is explicit in the product documentation. Occasi
 
 The staging-bucket case is the one that looks like a product defect and is not one. If a field keeps producing errors after you removed it from the source file, the field can still be present in the staging bucket, and removing it from the file is not enough to clear it. The documented remedy is to follow the ingestion API steps: get the stream's jobs, delete them to clear the staging bucket, then create a new ingestion job with a clean schema.[^6] A consultant who understands that the staging layer has its own state will fix this in minutes, while a consultant who edits the source file repeatedly will watch the same error return.
 
-## Config Walkthrough
+### The build sequence in six steps
 
+<Steps>
+
+<Step title="Open the data stream and read Last Run Status; if it is Erro">
+
+Open the data stream and read Last Run Status; if it is Error or Failure, open the Refresh History tab.
+
+</Step>
+
+<Step title="In the Status column">
+
+In the Status column, click the error icon to open Error Details and note the error code, such as STREAM_JOB_STATUS_FAILURE or INVALID_FIELD.
+
+</Step>
+
+<Step title="Click Download Log to read the full exception">
+
+Click Download Log to read the full exception, which names the object or field at fault.
+
+</Step>
+
+<Step title="For CRM errors">
+
+For CRM errors, open the connected org's Object Manager, confirm the object and field exist, and confirm the connector permission set still has Read, View All Records, and View All Fields.
+
+</Step>
+
+<Step title="For problem records">
+
+For problem records, open the Data Stream Fields tab to find the Problem Records DLO name, check the failed count in Refresh History, then query the DLO in Data Explorer or Query Editor.
+
+</Step>
+
+<Step title="To reset a stuck field">
+
+To reset a stuck field, follow the documented ingestion API steps: get the stream's jobs, delete them to clear the staging bucket, then create a new ingestion job with a clean schema.
+
+</Step>
+
+</Steps>
+
+
+## Config Walkthrough
 Six steps move from a red stream to a routed fix.
 
 1. Open the data stream and read Last Run Status; if it is Error or Failure, open the Refresh History tab. This is always the first surface, because it names the cycle and the mode that failed.
@@ -96,6 +147,8 @@ Six steps move from a red stream to a routed fix.
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 Three traps dominate this objective.
 
 First, adding more permissions when the real problem is volume or scheduling. STREAM_JOB_STATUS_FAILURE and STREAM_JOB_STATUS_CANCELLED are about file size and overlapping jobs, not access, and zero copy timeouts are about the GB and row ceilings, not permission. The permission reflex is strong because a large share of Data 360 problems are permission problems, but on these codes it is wasted motion. Read the code, then route to the right class: access, size, scheduling, or volume.
@@ -104,12 +157,22 @@ Second, treating an INVALID_FIELD error as a product defect. It almost always me
 
 Third, chasing every transient error or ignoring refresh history retention. Isolated one-time errors followed by successes need no action, and refresh history is kept only a limited time, so the discipline is to investigate patterns and to capture logs early rather than reacting to noise or relying on a panel that has already aged out. A candidate who treats a one-time error as an incident, or who waits a week to open Refresh History, gets both halves of this trap wrong.
 
+</Callout>
+
+
 ## What a consultant should walk away with
 
-Read the error code before changing anything: failure, cancelled, and invalid field each point at a different fix, and so do the zero copy timeouts. Route by class. CRM errors point at the connected org's objects and the connector permission set, so confirm the object and field exist and that Read, View All Records, and View All Fields are still granted. SFTP errors map to file size, overlapping jobs, zip handling, and concurrent connection limits, so check the 4.5 GB and 500 MB ceilings, one job per stream, merged files, and staggered schedules. Zero copy timeouts mean volume, so reduce what each cycle pulls against the documented GB and row ceilings. When rows go missing, inspect the Problem Records DLO via Data Explorer and group by error code. And judge before you act: an isolated one-time error that is followed by clean runs needs nothing, while a rising Problem Records count is a pattern worth a fix.
+<KeyTakeaways>
+
+- Read the error code before changing anything, and route by class: access, size, scheduling, or volume each point at a different fix
+- CRM errors point at the connected org's objects and connector permission set, so confirm the object and field exist and access is granted
+- SFTP errors map to file size, overlapping jobs, zip handling, and connection limits; zero copy timeouts mean volume, so reduce what each cycle pulls
+- When rows go missing, inspect the Problem Records DLO via Data Explorer and group by error code; judge before you act on each error
+
+</KeyTakeaways>
+
 
 ## What's next
-
 Lesson 16 - Monitoring and Investigation Tooling Across Data 360 (sa-4b). You can now read a single stream's health and decode its errors. Lesson 16 widens the lens to the monitoring and investigation surfaces across Data 360, so a consultant can watch an entire implementation rather than one stream at a time and investigate an issue across the components that feed it.
 
 [^1]: Salesforce Help, "Troubleshoot Data Stream Errors," (https://help.salesforce.com/s/articleView?id=data.c360_a_troubleshoot_data_stream_errors.htm&language=en_US&type=5)

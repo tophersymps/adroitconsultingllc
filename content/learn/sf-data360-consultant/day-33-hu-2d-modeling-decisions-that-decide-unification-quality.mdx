@@ -16,6 +16,15 @@ A retailer builds a flagship audience for a campaign and the count comes back ab
 
 This lesson is about the modeling decisions that produce that outcome, and how to prevent it. Requirement hu-2d sits in the Harmonization and Unification domain, worth 17% of the Salesforce Certified Data 360 Consultant exam, and its text covers the decisions that determine unification quality: primary keys, normalization, timestamps and record currency, multi currency and locale, and how a bad model surfaces as bad segments. The exam tests judgment here, because none of these failures throw an error at mapping time; they show up later, as a number that is wrong.
 
+<TLDR>
+
+- Most bad segments are really bad keys: primary key, Individual ID, and normalization decide unification quality
+- Map timestamps for freshness and store currency with amounts, or most recent logic and aggregates go silently wrong
+- When an audience count looks off, fix the model and re run identity resolution rather than patching the segment
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Primary keys are the first decision that decides unification quality
@@ -84,8 +93,50 @@ The reliable fix is to correct the model and re run through identity resolution,
 
 A short worked example shows how far downstream the symptom lands. Three sources feed Individual, and one trims leading zeros. The ruleset runs, two profiles per duplicated person appear, and a segment that should count one hundred people counts a hundred and twelve. The segment definition is correct, the ruleset is correct, and the model is wrong. The fix is a mapping change on the source that trims the zeros, followed by a ruleset re run, not a filter on the segment that tries to collapse the duplicates after the fact.
 
-## Config walkthrough: hardening the model before it reaches unification
+### The build sequence in six steps
 
+<Steps>
+
+<Step title="On the Data Model screen">
+
+On the Data Model screen, open each Data Model Object and confirm it has a primary key field defined and mapped to a source column that is unique per record.
+
+</Step>
+
+<Step title="In the stream mapping step">
+
+In the stream mapping step, map Individual ID and any parent keys from source columns that are consistently formatted across every source that feeds the model.
+
+</Step>
+
+<Step title="Add field transformations during mapping to normalize text c">
+
+Add field transformations during mapping to normalize text case, trim whitespace, and standardize date and phone formats before the values reach the Data Model Object.
+
+</Step>
+
+<Step title="Map the source created and last-modified timestamps so Data ">
+
+Map the source created and last-modified timestamps so Data 360 can keep the most recent attribute value and order engagement events correctly.
+
+</Step>
+
+<Step title="For monetary fields">
+
+For monetary fields, map or store a currency alongside the amount, and confirm that date and time fields resolve to a consistent time zone.
+
+</Step>
+
+<Step title="After a refresh">
+
+After a refresh, spot check a Data Model Object for duplicate or null keys, then build a small segment to confirm the expected individuals are included before publishing any audience.
+
+</Step>
+
+</Steps>
+
+
+## Config walkthrough: hardening the model before it reaches unification
 1. On the Data Model screen, open each Data Model Object and confirm it has a primary key field defined and mapped to a source column that is unique per record, non null, and stable.
 2. In the stream mapping step, map Individual ID and any parent keys from source columns that are consistently formatted across every source that feeds the model, and add key qualifier fields where several sources share an identifier.[^6]
 3. Add field transformations during mapping to normalize text case, trim whitespace, and standardize date and phone formats before the values reach the Data Model Object.
@@ -95,6 +146,8 @@ A short worked example shows how far downstream the symptom lands. Three sources
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 Three traps dominate this objective.
 
 First, treating a source row id as a good primary key without checking uniqueness. This lets duplicates or collisions into the model and corrupts identity resolution downstream. A key that is unique on the day you look is not the same as a key that is unique by contract, so confirm uniqueness rather than assuming it.
@@ -103,12 +156,22 @@ Second, skipping normalization at mapping time and fixing data later in each seg
 
 Third, ignoring timestamps and currency or locale. Without them, most recent values and monetary aggregates are silently wrong, and the failure only appears later as off counts in a segment. The protection is timestamps mapped for freshness, and a currency field stored with amounts, plus a verified date format and a consistent time zone.
 
-## The decision rules to carry out
+</Callout>
 
-Decide the primary key first, and make it unique, non null, and stable. Populate and format Individual ID consistently across every source before it reaches identity resolution. Normalize formats at or before mapping, because that is the only place the fix is reproducible. Map timestamps for freshness, store currency alongside amounts, and verify date formats and time zones. Then, when an audience looks wrong, fix the model and re run unification rather than patching the segment.
+
+## What a consultant should walk away with
+
+<KeyTakeaways>
+
+- Decide the primary key first: it must be unique per record, never null, and stable, because identity resolution and consolidation build everything on it
+- Populate and format Individual ID consistently across every source before it reaches identity resolution, or small differences defeat matching silently
+- Normalize formats at or before mapping, because that is the only place the correction is applied once and inherited by every consumer
+- Map timestamps for freshness, store currency alongside amounts, and verify date formats and time zones, then fix the model rather than the segment
+
+</KeyTakeaways>
+
 
 ## What's next
-
 Lesson 34 - What Data Enhancement Means After Unification and the Insight Calculator Family (en-1a)
 
 [^1]: Salesforce Help, "Data Types in Data 360," (https://help.salesforce.com/s/articleView?id=data.c360_a_data_types.htm&language=en_US&type=5)
