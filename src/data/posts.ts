@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "lwr-publish-is-the-deployment-2026",
+    "title": "In LWR, Publish Is the Deployment",
+    "excerpt": "Lightning Web Runtime freezes a site's framework and static UI into a CDN layer at publish. That choice sets the speed, the redirects, and what cannot follow.",
+    "category": "Salesforce",
+    "categoryColor": "sf",
+    "categoryGradient": "from-sky to-sky-dark",
+    "date": "November 26, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "9 min read",
+    "featured": false,
+    "tags": [
+      "Salesforce",
+      "Experience Cloud",
+      "LWR",
+      "Aura",
+      "Site Architecture"
+    ],
+    "bannerImage": "/banners/lwr-publish-is-the-deployment-2026.webp",
+    "ogImage": "/banners/lwr-publish-is-the-deployment-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "node-type-stripping-erasable-typescript-2026",
     "title": "Your TypeScript Runs on Node. Your Enums Do Not.",
     "excerpt": "Node runs .ts files by erasing type syntax instead of compiling it. That moves the type check out of the runtime and rules out enums and runtime namespaces.",

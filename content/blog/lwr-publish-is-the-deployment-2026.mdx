@@ -1,0 +1,107 @@
+---
+title: "In LWR, Publish Is the Deployment"
+slug: lwr-publish-is-the-deployment-2026
+excerpt: "Lightning Web Runtime freezes a site's framework and static UI into a CDN layer at publish. That choice sets the speed, the redirects, and what cannot follow."
+category: "Salesforce"
+categoryColor: sf
+categoryGradient: "from-sky to-sky-dark"
+date: "November 26, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "9 min read"
+tags: [Salesforce, "Experience Cloud", LWR, Aura, "Site Architecture"]
+bannerImage: "/banners/lwr-publish-is-the-deployment-2026.webp"
+ogImage: "/banners/lwr-publish-is-the-deployment-2026-og.jpg"
+---
+
+A consultant ships a one-line fix to a Flexcard on a customer portal. Experience Builder shows the new card. The customer reloads and sees the old one.
+
+Nothing stale is sitting in the customer's browser. The site is serving the version it built the last time someone pressed Publish.
+
+Lightning Web Runtime does not fetch component definitions at runtime.[^3] That is the whole explanation, and it is not a bug in the fix. It is the runtime behaving as designed.
+
+It is also the fastest way to see what you chose when you chose LWR. The choice is bigger than a template. It sets where your pages are assembled, which components can live on them, and what the next migration costs.
+
+<TLDR>
+
+- LWR freezes a site's framework and static UI into a CDN-cached layer at publish, then loads live data on demand.
+- That design buys the speed and adds a publish step: component and definition changes wait for the next publish.
+- The same runtime fixes your component model, your content model, your embedding options, and your URL shape.
+
+</TLDR>
+
+## The build moves to publish time
+
+An LWR site loads in two layers. The static layer holds the framework and the UI. When you publish, Salesforce places that layer on a content delivery network. The dynamic layer handles live data, and it runs only when a screen needs it.[^3]
+
+The product documentation describes the same behaviour. It calls the mechanism publish-time freezing and HTTP caching.[^1] State it plainly: the page structure and the component definitions are computed once, at publish, and handed to every visitor. Only the data is fetched per visit.
+
+Aura sites are assembled differently. Salesforce's migration guidance contrasts the two template families. LWR templates use general components and data binding to reach a goal "faster and more dynamically". Aura templates carry specific components for specific site functions.[^2]
+
+So the first thing LWR changes is not the look. It is when the work happens. A change to a component, an Omniscript, or a Flexcard waits for a republish. The runtime never refetches those definitions.[^3] Support for Omniscripts and Flexcards on LWR ships with the Spring '26 release, and as of the cited post it was already GA in preview sandboxes.[^3] The LWC Omniscript Designer flags the sites still waiting on a publish, which tells you how easy that step is to forget.[^3]
+
+For a delivery team, publish becomes a release step. A hotfix you can describe in one sentence still needs the same button.
+
+![LWR splits a site into a static layer published to a CDN and a dynamic layer that fetches live data on demand.](</diagrams/lwr-publish-is-the-deployment-2026/1-two-layers.png>)
+
+## What the runtime decides, and how to choose
+
+The runtime is not a skin you swap later. It settles three things at once, and each one is a build decision made early.
+
+The component model comes first. LWR sites are built with the Lightning Web Components programming model, from the Build Your Own (LWR) or Microsite (LWR) templates.[^1] Custom Aura components have no home on that model. Each one has to be rebuilt as an LWC.[^2]
+
+The content model is second. An LWR site has no CMS components. To show Salesforce CMS content you use data binding instead.[^2]
+
+Embedding is third. Lightning Out and Lightning Components for Visualforce both require Lightning Locker. Lightning Out is not supported when Lightning Web Security is enabled.[^4] That matters, because enabling LWS is an org-wide switch. It affects every Lightning component until you turn it off, and the Locker API version setting has no effect on it.[^4]
+
+Put those together and the decision rule writes itself. A new public site goes on LWR, because that is where the performance features live.[^1] An authenticated portal that leans on Aura-only components, Visualforce, or Lightning Out is a rebuild, not an upgrade.
+
+![The runtime sets the component model, the content model, the embedding options, and the URL shape before the first page is built.](</diagrams/lwr-publish-is-the-deployment-2026/2-runtime-decides.png>)
+
+## The migration is a checklist, not a toggle
+
+Salesforce documents the move as a list of considerations. It opens by saying that migrating "requires considerable planning".[^2] Work through that list and the shape of the project is clear. This is a re-platform with a page-level port, not a setting.
+
+Custom Aura components become LWCs. The guidance points authors at slots, responsive properties, and custom property editors. It also suggests data binding wherever a wire or an Apex controller was doing the work.[^2]
+
+Pages get rebuilt too. Reuse the same base URL for an object page or a custom page, so redirects stay simple later. Replace Aura page layouts with flexible page layouts.[^2]
+
+Access is where the migration breaks quietly. Creating an LWR site creates a new guest user automatically. You then carry over the profile permissions, permission set assignments, and guest sharing rules the Aura guest relied on.[^2] Test that work from outside, as the guest rather than the admin who built it. It is the same discipline that catches record-visibility mistakes elsewhere.[^5]
+
+Presentation needs its own pass. Aura CSS overrides do not carry over, and there is no site-level CSS editor for LWR. The design tokens differ too, so styling hooks have to be remapped.[^2] File assets referenced as `/file-asset/<name>` must move to `/sfsites/c/file-asset/<name>`.[^2] Topics become custom objects, with permissions and guest sharing rules of their own.[^2]
+
+If personalization is on the roadmap, there is a prerequisite to know now. The Data 360 connection applies only to enhanced LWR sites. That is the platform LWR sites have run on since Winter '23.[^1] The connection itself, and the profile it produces, is the subject of our [personalization pattern](/field-notes/experience-cloud-data-cloud-personalization-pattern).
+
+![What carries over and what gets rebuilt: components, pages, guest access, CSS, file references, and topics.](</diagrams/lwr-publish-is-the-deployment-2026/3-carry-vs-rebuild.png>)
+
+## The cutover, and when to stay on Aura
+
+Cut over in daylight, with both sites running. Create the LWR site without the `/s` segment, and keep the Aura site live while you build. Test on the generated `my.site.com` domain before the custom domain moves.[^2][^3]
+
+SEO lives in that window. Sitemaps and snapshots are generated on the `my.site.com` domain, so you can verify them before the switch. The standard redirect set then handles the rest: `/s` to `/`, `/s/sitemap.xml` to `/sitemap.xml`, one-level pages, Knowledge articles, and object detail pages.[^2] External URL redirects are not supported, so route those through a Visualforce page.[^2]
+
+Two smaller differences are easy to miss. In LWR the locale sits in the path rather than a query parameter. Visualforce pages are served from a generated path made of the site path plus "vforcesite".[^2] If the old site still holds content you cannot render in LWR yet, keep it at `/archive` and serve the new site on the custom domain.[^2]
+
+Aura still runs. Salesforce's own authors note that Aura-based sites "still support your flows and hold your work".[^3] The judgement here is about trajectory, not about a switch that turns off. LWR is the runtime the documentation leads with, and the migration guide is the path off Aura.[^1][^2] Staying on Aura means paying for the older assembly model. That should be a decision, not a default.
+
+![The cutover sequence: build in parallel, verify on the site domain, redirect the old paths, then move the custom domain.](</diagrams/lwr-publish-is-the-deployment-2026/4-cutover.png>)
+
+<KeyTakeaways>
+
+- LWR computes the page at publish and serves it from a CDN, so a component or definition change waits for a republish.
+- The runtime fixes your component model, your content model, your embedding options, and your URL shape, so it belongs in the early architecture decisions.
+- The migration is a documented checklist: rebuild components and pages, recreate guest access, remap CSS and file paths, and plan the redirects.
+
+</KeyTakeaways>
+
+Three things to do, in order:
+
+1. Decide the runtime before the design. If the site is new and public-facing, default to LWR. If it depends on Aura-only components or Lightning Out, scope a rebuild rather than a switch.
+2. Treat publish as a release step. Add it to the change process for component, Omniscript, and Flexcard edits, so a fix is not called live until it is published.
+3. Plan the cutover as a redirect project. Reuse base URLs, build the redirect map, test on `my.site.com`, and keep Aura at `/archive` for anything that cannot render yet.
+
+[^1]: Salesforce Developers, "What Are LWR Sites for Experience Cloud?" (publish-time freezing and HTTP caching, custom URL paths without `/s`, the Build Your Own and Microsite templates, the Lightning Web Components programming model, and the enhanced sites and content platform from Winter '23). [developer.salesforce.com](https://developer.salesforce.com/docs/platform/exp-cloud-lwr/guide/intro-overview.html)
+[^2]: Salesforce Help, "Considerations Before You Migrate an Aura Site to Lightning Web Runtime (LWR)" (the migration checklist: templates, custom Aura components to LWC, page layouts, guest user and sharing carry-over, CSS and design tokens, file asset paths, CMS data binding, topics, sitemaps and snapshots, the redirect set, multilingual paths, and Visualforce URLs). [help.salesforce.com](https://help.salesforce.com/s/articleView?id=experience.exp_cloud_migrate_lwr_considerations.htm&language=en_US&type=5)
+[^3]: Dhairya Kedia and M R Rakesh Thampi, "Create Faster, Lighter Experience Cloud Sites with Omnistudio Components and LWR" (the static layer published to a CDN, the dynamic layer for live data, the republish requirement for Omniscript and Flexcard changes, the designer flag for pending publishes, and the note that Aura-based sites still support your flows). Salesforce Developers, January 27, 2026. [developer.salesforce.com](https://developer.salesforce.com/blogs/2026/01/create-faster-lighter-experience-cloud-sites-with-omnistudio-components-and-lwr)
+[^4]: Salesforce Developers, "How Lightning Web Security (LWS) Compares to Lightning Locker" (Lightning Out and Lightning Components for Visualforce require Lightning Locker; Lightning Out is not supported when LWS is enabled; enabling LWS affects all Lightning components in an org until it is disabled; the Locker API version setting has no effect on LWS). [developer.salesforce.com](https://developer.salesforce.com/docs/platform/lightning-components-security/guide/get-started-compare-lws-locker.html)
+[^5]: Adroit Consulting, "Half Your Salesforce Stack Is Not Code" (testing a site as its guest user from outside, and the four-layer Experience Cloud security stack). [adroit.io](/field-notes/salesforce-stack-testing-2026)
