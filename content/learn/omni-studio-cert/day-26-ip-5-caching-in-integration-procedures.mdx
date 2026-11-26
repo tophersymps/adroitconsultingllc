@@ -14,6 +14,15 @@ The fastest work an Integration Procedure does is the work it never has to do. E
 
 Requirement IP-5 asks you to determine and configure caching mechanisms within IPs to maximize performance. [^1] It is a design skill more than a click-through one. The two caching types, Org Cache and Session Cache, the Time To Live value, and the granularity decision (cache the whole procedure or just one block of steps) are all tools. The exam checks whether you know which tool fits which job, and it does that through three claims you need to be able to defend. First, an IP avoids re-fetching the same reference data on every run by configuring caching with a sensible Time To Live. Second, the data that belongs in a cache is stable, expensive reference data such as catalogs and rates, not volatile values and not one user's private session data. Third, when users see outdated data after the source changes, the cause is cache configuration, specifically a Time To Live or scope that is wrong or an invalidation step that never ran. Every section below teaches toward those three claims.
 
+<TLDR>
+
+- Caching stores a result so later requests with the same input get the stored copy instead of re-running the work
+- Org Cache is shared across all users; Session Cache is private per user and lives only for that login session
+- Time To Live is a freshness dial matched to how often the source changes; cache only stable, shared data
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### What OmniStudio actually caches
@@ -80,8 +89,38 @@ The data that fails the test is the data the traps warn about. Volatile values, 
 
 ![A decision flow for what belongs in the cache: stable, expensive, shared data is cached, while volatile, user-specific, or sensitive data is not](</diagrams/day-26-ip-5-caching-in-integration-procedures/4-cache-decision.png>)
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Identify expensive">
+
+Identify expensive, stable actions (external lookups, big extracts).
+
+</Step>
+
+<Step title="Enable caching on the action/IP with appropriate scope and T">
+
+Enable caching on the action/IP with appropriate scope and TTL.
+
+</Step>
+
+<Step title="Verify keys uniquely identify cached results.">
+
+Verify keys uniquely identify cached results.
+
+</Step>
+
+<Step title="Plan invalidation for when source data changes.">
+
+Plan invalidation for when source data changes.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Put the model to work with a concrete procedure. Say you run a service that serves a product catalog plus a set of shipping rates to a customer-facing flow. The catalog changes weekly; the rates change monthly; both are identical for every user. Caching both well means two decisions, not one, because they change on different schedules.
 
 1. **Identify the expensive, stable actions.** Open the IP in the Integration Procedure Designer and trace which actions do heavy work: external lookups, large Data Mapper Extract operations, transforms over many records. These are the candidates. For the catalog service, the expensive steps are the extract that pulls the full product list and the callout or lookup that resolves shipping rates. Both are stable across users.
@@ -100,6 +139,8 @@ Put the model to work with a concrete procedure. Say you run a service that serv
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Caching volatile data.** A cache stores a snapshot, and a volatile value is out of date the instant it is stored. Random values, live counters, and anything that changes on every read are the wrong fit for a cache. A cache hit on volatile data is a guaranteed wrong answer, which is why the design rule says cache stable data and never volatile values. [^2]
 
 - **Too-long TTL on frequently changing data.** Users see stale results because the TTL outlived the data's relevance. The catalog that changes every hour but rides a 48-hour org TTL will serve yesterday's prices all day. The fix is not a bigger cache; it is a shorter TTL matched to how often the source changes, or active invalidation when the source updates. [^3][^4]
@@ -108,20 +149,31 @@ Put the model to work with a concrete procedure. Say you run a service that serv
 
 - **Treating invalidation as optional.** TTL handles aging; it does not handle the moment the source changes and the old copy is now wrong. Without an explicit invalidation step, users keep getting stale data until the TTL finally expires. On the exam, "users see outdated data after reference data changes" is a config symptom first and a code bug second, and the diagnosis begins with the cache's TTL, scope, and whether anything cleared it. [^4]
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Cache stable, expensive, shared data, and keep three dials in mind for everything else. Freshness is the Time To Live, so match it to how often the source changes. Safety is the scope and the keys, so keep user-specific and sensitive data out of the shared org cache and confirm keys uniquely identify each stored result. When users report stale data, check the cache first: a TTL that is too long, an org cache holding user-specific data, or an invalidation that never ran explains most of the field reports you will ever debug. [^2][^4]
 
 ## Try It
-
 Open the Integration Procedure Designer in a sandbox and build the catalog service described above: an input that accepts a small list of lookup names, a Data Mapper Extract Action that pulls matching records, and a Response Action that returns them. In the Procedure Configuration set the Salesforce Platform Cache Type to Org Cache and a Time To Live of a few minutes. Activate the version. Open the Preview, edit the input JSON, and set `ignoreCache` to false. [^6] Execute once to populate the cache, then execute a second time with the same input and watch the performance metrics fall and the cached-response marker appear. Then change the input values and run again: you should see a fresh execution, which proves the cached result was keyed to the input, not served blindly. Finally, clear the cache from the Developer Console, run once more, and confirm the first run is slow again because the cache was empty. That exercise turns TTL, scope, and invalidation from reading into muscle memory. [^4]
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Cache stable, expensive, shared reference data like catalogs and rates, and keep volatile values and user-specific data out of the shared org cache
+- Use Org Cache for non-sensitive data every user shares and Session Cache for personalized, permission-dependent data that must stay private to a session
+- Set Time To Live to how often the source changes: a long TTL on frequently changing data serves users stale results
+- Invalidation is active, not optional: clear the cache when the source changes, because TTL alone leaves users on stale data until it expires
+
+</KeyTakeaways>
+
+
+## What's Next
 Caching made a procedure fast by letting it skip work it had already done, but it did nothing for the procedure that fails partway through and leaves its work half done. Lesson 27, Exception Handling: Try/Catch and Rollback (IP-6), is the next requirement in the Integration Procedures domain, and it teaches how to contain failures inside a procedure, catch them where they happen, and decide when a failed step should roll back the work that already ran. Caching decides what a procedure reuses; exception handling decides what it does when something goes wrong, and the two together are how a production Integration Procedure stays both fast and reliable.
 
 ## Related Requirements
-
 - IP Design: Server-Side Orchestration (earlier lesson)
 - IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP (earlier lesson)
 - Chainable Integration Procedures, lesson 25 of 46 (IP-4)
@@ -130,7 +182,6 @@ Caching made a procedure fast by letting it skip work it had already done, but i
 - Integration Procedure Best Practices, a later lesson in this series
 
 ## References
-
 [^1]: [Improve Performance by Using Caching, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_cache_for_dataraptors_and_integration_procedures_54751.htm&type=5)
 [^2]: [Cache for OmniStudio Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_cache_for_dataraptors_and_integration_procedures_1.htm&type=5)
 [^3]: [Configure Top-Level Caching for an Integration Procedure, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_configure_top_level_caching_for_an_integration_procedure_54929.htm&language=en_US&type=5)

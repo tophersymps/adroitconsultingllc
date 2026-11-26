@@ -14,6 +14,15 @@ The Integration Procedure is a machine that does work, but none of that work mat
 
 Requirement IP-7 reads: configure the Response Action to return specific data. [^1] Plain words, but they carry a rigour you need to hear. The Response Action does not just say "return something." It deliberately defines which specific data goes back, in which structure, on success and on failure. The exam tests three claims built on that idea, and it expects you to defend them. First, what an IP returns to its caller is defined by the Response Action's configured output, not by the IP's name, not by its first action, and not by some HTTP action. Second, success and error shapes should stay consistent so that the same caller can handle both outcomes the same way. Third, an IP with no Response Action gives its callers no defined output at all, which is a broken contract. Every section below teaches toward those three claims, because they are the exam's way of checking that you understand the output contract and not just where the Response Action sits in the palette.
 
+<TLDR>
+
+- The Response Action defines what an Integration Procedure returns: not the IP's name, its first action, or an HTTP action
+- Only what you explicitly map into the response is returned, an allowlist that keeps the payload clean, small, and safe
+- Keep success and error shapes consistent so one caller handles both, and test the shape before wiring any consumer
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### The Response Action is the only way an IP speaks
@@ -72,8 +81,38 @@ The last discipline in this requirement is sequencing: test the response contrac
 
 So the rule is: lock the shape before you consume it. Run the response through the Preview with representative success input, then with failure input, confirm both come back as you designed them, then and only then wire the FlexCard data source, the OmniScript Integration Procedure Action, or the API consumer. This is the same "test before you wire" instinct you apply to axioms and to chained procedures, applied to the last step in the path. [^1]
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Add a Response Action as the final action.">
+
+Add a Response Action as the final action.
+
+</Step>
+
+<Step title="Map the output JSON: data paths to include.">
+
+Map the output JSON: data paths to include.
+
+</Step>
+
+<Step title="Add an error branch returning a consistent error shape.">
+
+Add an error branch returning a consistent error shape.
+
+</Step>
+
+<Step title="Test with sample inputs; verify the response in the test too">
+
+Test with sample inputs; verify the response in the test tool.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Work through a concrete build. You are writing an IP that looks up a customer's account by an account number and returns a small set of fields plus a computed balance, with a clean error when the account is not found. This exercises exactly the four numbered steps the requirement calls for.
 
 1. **Add a Response Action as the final action.** In the Integration Procedure Designer Structure panel, drag a Response Action into the structure as the last step so the procedure ends by returning its output. [^1] Open its properties. Decide on your trimming strategy first: you want to return specific data, so plan to use Additional Output combined with Return Only Additional Output, not the coarse Return Full Data JSON, for the default path. [^1]
@@ -86,6 +125,8 @@ Work through a concrete build. You are writing an IP that looks up a customer's 
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **No Response Action at all.** The most direct failure this requirement warns about, and it answers quiz question three. If an IP has no Response Action, the callers receive no defined output, and the IP fails to deliver its contract. [^1] Nothing is returned by default, it does not magically return everything, and it does not echo the first input. The IP ends and no payload is defined for the caller, which is a broken contract. Any IP you hand to a consumer needs its Response Action. [^1]
 
 - **Inconsistent success and error shapes.** If success returns a tidy object but failure returns an unstructured dump, the caller cannot reliably handle failures, because it has no stable path to bind the error to. [^3] This is quiz question two: keep success and error shapes consistent so FlexCards and OmniScripts can handle both reliably. Design a single wrapper that carries either the result or a coded error, and return it on both routes. [^1][^3]
@@ -96,20 +137,31 @@ Work through a concrete build. You are writing an IP that looks up a customer's 
 
 - **Setting StatusCode to a body value instead of an HTTP value.** The Response Headers StatusCode key expects a valid HTTP response value, not a payload field. [^1] Putting a business string there, or expecting the header to be set by a merge field that contains a message, produces an invalid transport result. Use StatusCode for the HTTP code and keep the human-readable message in the body. [^1]
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Hold one phrase in front of you: the Response Action is the IP's API. [^1] When you see a question about what an IP returns, the answer always routes back to the Response Action, which maps the output contract and nothing else. When you see a scenario where success and failure must be handled by one caller, the fix is a consistent shape on both routes so the UI can react to success and failure alike. [^3] When you see an IP with no Response Action, callers have no defined output and the contract is broken. [^1] And when you are configuring one, be deliberate: map only what the caller needs, use the Return Only Additional Output allowlist to keep the payload clean, small, and safe, add a consistent error branch with an optional StatusCode override, and test the whole shape in the Preview before you wire a FlexCard or OmniScript to it. Map it deliberately, keep the shapes consistent, and test before wiring consumers. Those instincts answer every question in this requirement, because they are the whole discipline of the output contract. [^1][^2][^3]
 
 ## Try It
-
 Open the Integration Procedure Designer in a sandbox. Name the IP `LookupAccountByNumber` and give it an input of an account number. Add a Data Mapper Extract that reads the Account object by that number and returns a small set of fields, say Name, Status, and BillingStreet. Then add a Response Action as the final step. In its properties, use Additional Output to map the account's Name, Status, and a nested `billing:street` value using colon-delimited keys, enable Return Only Additional Output, and confirm Return Full Data JSON stays off. Run it in the Preview with a valid account number and read the returned JSON. Confirm it contains exactly the mapped fields and nothing else. [^1][^2] Now build the failure route. For the case where the extract finds no matching account, make the flow return the same wrapper structure with an outcome of `error`, a code such as `ACCOUNT_NOT_FOUND`, and a readable message, and if you want to check transport-level signalling, add a Response Headers key named StatusCode with value 404. Run the failure case in the Preview and confirm the structured error comes back in the same shape as success. [^1][^3] Then, as the final experiment, create a throwaway IP with no Response Action, run it, and observe that the caller receives no defined output. That empty result is the whole reason IP-7 exists, and it is the lesson that makes the contract real. [^1]
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Configure the Response Action's output deliberately, because it alone defines what a caller receives, and an IP with no Response Action returns nothing
+- Use Additional Output with Return Only Additional Output for a tight allowlist, and never enable it with Return Full Data JSON at once
+- Return the same wrapper on success and failure so a FlexCard or OmniScript handles both with one piece of binding logic
+- Put the HTTP status code in a Response Headers key named StatusCode, keeping the human-readable message in the body
+
+</KeyTakeaways>
+
+
+## What's Next
 This lesson was about the last step of an IP, the Response Action that fixes the shape of everything a caller receives. A clean output contract is only as good as the procedure that produces it, and that raises a broader question: across a real integration workload, how do you assemble all of it, input, actions, error handling, caching, chaining, and a verified response, into a procedure that is reliable and maintainable? That is the territory of the final requirement in the Integration Procedures domain. Lesson 29, Integration Procedure Best Practices, picks up there and turns the mechanics you have learned in lessons 22 through 28 into a set of design habits: how to plan an IP, how to avoid the common anti-patterns these requirements warn about, and how to review an existing procedure for the structural issues that cause runtime failures. After this lesson, your last two weeks of IP work get consolidated into the practical judgment the exam expects.
 
 ## Related Requirements
-
 - IP Design: Server-Side Orchestration, lesson 22 of 46 (IP-1)
 - IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP, lesson 23 of 46 (IP-2)
 - Exception Handling: Try/Catch & Rollback, lesson 27 of 46 (IP-6)
@@ -117,7 +169,6 @@ This lesson was about the last step of an IP, the Response Action that fixes the
 - Integration Procedure Best Practices, lesson 29 of 46 (IP-8)
 
 ## References
-
 [^1]: [Response Action for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_response_action_for_integration_procedures_54655.htm&type=5)
 [^2]: [Manipulate JSON with the Send/Response Transformations Properties, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_manipulate_json_with_the_send_response_transformations_properties_22367.htm&type=5)
 [^3]: [Handle Errors in Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_error_handling_in_integration_procedures_55179.htm&language=en_US&type=5)

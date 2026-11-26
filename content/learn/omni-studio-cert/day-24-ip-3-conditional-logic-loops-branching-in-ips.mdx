@@ -16,6 +16,15 @@ The good news is that all three tools evaluate against the same thing: the IP's 
 
 ![The three control tools: a condition gates one action or group, a loop iterates an array one item at a time, and a branch routes between alternative paths, all reading the IP's data JSON](</diagrams/day-24-ip-3-conditional-logic-loops-branching-in-ips/1-three-control-tools.png>)
 
+<TLDR>
+
+- Condition, loop, and branch all read the IP's data JSON, so keep the input shape clean and predictable.
+- An Execution Conditional Formula runs before the step: TRUE runs it, FALSE skips it, and no formula always runs.
+- A Loop Block iterates an array item by item; a Conditional Block as If Else routes between branches.
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Conditionals: gating an action on a data value
@@ -64,8 +73,38 @@ Every control construct in this lesson reads the same source: the IP's data JSON
 
 Because conditions, and loops, and branches all read the data JSON, the shape of that JSON genuinely determines how hard your IP is to write, and test. A normalized, and predictable input makes the control flow trivial to write, and easy to reason about. A messy input, nesting the same value at different depths, or leaving fields absent on some records, makes every condition a judgement call about which path to use and when, and every trap in this lesson easier to trip. The implication is: do your shaping as early as possible, preferably before the IP's control flow kicks in. Use a Data Mapper Transform, or a Set Values action, and normalize, and populate the input before you branch, and loop. Take an order payload that sometimes includes cash, check, or card, and sometimes omits the payment method. Before you build branches on `Payment:Method`, normalize it so `Payment:Method` always exists, and always holds one of the three known values, defaulting missing cases to something explicit. Then the branch formula is a plain equals comparison, and not a defensive null-handling expression. Similarly, turn the list you need to loop over into a flat array of the records you actually process, and their fields into named, present nodes, so your loops, and conditions read clean paths instead of zigzagging through variable structure. When the data is well shaped, the formula is readable, and the flow is testable, because there are a small number of known states, and each maps to an obvious branch. That is what the exam tip means: conditions, and loops read the IP's JSON; keep the input shape clean, and your logic becomes trivial.
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Add conditional gates on actions/groups (evaluate JSON paths">
+
+Add conditional gates on actions/groups (evaluate JSON paths).
+
+</Step>
+
+<Step title="Add loops over arrays (e.g.">
+
+Add loops over arrays (e.g., line items) with nested actions.
+
+</Step>
+
+<Step title="Define branches for distinct input states.">
+
+Define branches for distinct input states.
+
+</Step>
+
+<Step title="Test each path with representative inputs.">
+
+Test each path with representative inputs.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Building a controlled IP follows a consistent path. Walk through it in this order, with an order-processing IP as the running example.
 
 1. **Add conditional gates on actions, and groups.** Start with the gates you know you need. Look at each action, and ask whether it should always run, or only under a condition. In the order example, the credit-check API action runs only when the order amount exceeds your threshold, so set its Execution Conditional Formula to evaluate the amount JSON path against that bound. If a whole phase, say validate payment, should run only when a payment method is present, attach a condition to that Group instead of each action inside it. Keep single-step gates on the action, and phase gates on the group.
@@ -78,33 +117,45 @@ Building a controlled IP follows a consistent path. Walk through it in this orde
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **A condition on a null or absent JSON path is never true, the action is silently skipped.** This is the most dangerous trap in this requirement, because it fails quietly. If your Execution Conditional Formula references a node that does not exist in the data JSON at that point, or that holds a null, the comparison never evaluates to a usable TRUE, and the step is skipped without error. The flow completes, and the user gets a result, the missing work just does not happen. When you write a condition, confirm the path exists, and is populated, before it runs. Prefer input shapes where the values you condition on always exist, and are explicit, rather than conditions that depend on optional fields being present.
 
 - **Looping over an object instead of an array.** A Loop Block iterates an array, and only an array. Its Loop List property must point at a node that holds an array of data. If you point it at an object, or at a scalar, the iteration does not behave the way you expect, and the actions inside the block do not run once per real item. The input must arrive with the list you want as an array node, so the block can hand one element to each iteration. [^3] If your source data does not already hold that array, shape it into one with a Transform or Set Values action before the loop, rather than trying to loop over an object that happens to contain a list.
 
 - **No branch for the empty case, and downstream actions fail on empty arrays.** A loop that processes zero items is a real possible state, not an edge case you can ignore. If the `LineItems` array arrives empty, and your flow sends an empty list straight into a downstream action that expects records, the downstream action can fail, or produce a meaningless result. Design the empty case explicitly: branch, via a Conditional Block or a group condition, so that when the array is empty, the IP either skips the per-item work entirely, or defaults to an empty-result path, and does not push an empty array into a step that cannot handle one. Test the zero-item input as deliberately as you test the three-line-item input. The empty case is as much a designed path as every other branch, not an afterthought.
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Keep the three tools straight by the job each does, and you can answer the pattern-heavy questions in this domain at speed. A condition, an Execution Conditional Formula, gates one action or group: run this only when a data value holds. A loop, a Loop Block, iterates an array: run these actions once for every item. A branch, a Conditional Block, ideally an If Else block, chooses between alternative paths: route the flow by input state. All three read the IP's data JSON, so the surest way to make the pattern questions easy is to keep the JSON clean. When you see over a threshold, only when, skip if, think condition. When you see each item, iterate, process the list, think loop. When you see different handling for different inputs, route, alternative path, think branch. Point at the path that holds the value or array, and the right answer falls out.
 
 ## Try It
-
 Open the Integration Procedure Designer in a sandbox. Feed it a JSON input with an `Order` object holding an `Amount`, an `LineItems` array, and a `Payment:Method` value. Add a credit-check action gated by an Execution Conditional Formula on the amount, so it fires only over your threshold. Wrap per-line work in a Loop Block set to the `LineItems` array, something like an availability call or a write, so it runs once per item. Add a Conditional Block checked as an If Else block: routing the cash, check, and default, else branches off `Payment:Method`. Then run the IP four times: high amount with three line items, low amount with zero line items, cash, and card. Watch the JSON flow, and confirm the credit check fires in case one only, and the loop runs three times in case one, and zero times in case two, and that each payment value lands in exactly one branch. That exercise turns the three control tools from concepts you read into mechanics you can build, and as the habits you need to test every path.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- An Execution Conditional Formula evaluates before the step; a null or absent JSON path is never true and the action is silently skipped.
+- A Loop Block's Loop List must point at an array node, and each iteration receives one item so per-item actions run once per element.
+- A Conditional Block set as If Else gives each branch its own condition and runs exactly one, with a blank formula as the else.
+- Shape the input JSON before branching so conditions read clean paths, and design an explicit empty-case branch so downstream actions do not fail.
+
+</KeyTakeaways>
+
+
+## What's Next
 You have the actions, and the control flow that decides which run, and how often. Lesson 25 moves to how long-running Integration Procedures hand off work across Salesforce transactions: Chainable Integration Procedures (IP-4). That lesson builds on the Chain On Step property you saw on the common action contract in Lesson 23, and it is where a procedure that risks pushing past governor limits learns to chain its long-running steps across transactions instead of failing mid-run.
 
 ## Related Requirements
-
 - IP Design: Server-Side Orchestration (earlier lesson)
 - IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP (earlier lesson)
 - Chainable Integration Procedures, lesson 25 of 46 (IP-4)
 - Try/Catch Blocks, a later lesson in this series
 
 ## References
-
 [^1]: [Integration Procedure Actions, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedure_actions_50165.htm&type=5)
 [^2]: [Conditional Block, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_conditional_block.htm&language=en_US&type=5)
 [^3]: [Process Arrays Using Loop Blocks, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_process_arrays_using_loop_blocks.htm&type=5)

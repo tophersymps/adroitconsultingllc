@@ -14,6 +14,15 @@ Lessons 30 through 32 built the read side of the Data Mapper domain. Lesson 30 g
 
 Three facts about Load anchor the entire requirement, and each one maps to a quiz question. Load is the interface that creates or updates records from input JSON. Load links a child record to its parent through lookup or relationship mapping by Id or external ID, not through Apex triggers and not automatically. And Load prevents duplicate records on repeated integration runs through upsert semantics driven by external IDs. [^2] Hold onto those three and the DM-4 questions are nearly free.
 
+<TLDR>
+
+- Load is the Data Mapper interface that writes input JSON, XML, or custom data to one or more Salesforce objects.
+- The inbound JSON drives what gets written; relationship mapping links children to parents by lookup by Id or external ID.
+- External-ID upserts make Load idempotent on re-runs, and rollback-on-error keeps a multi-object write atomic.
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### What Load actually is, and where it sits in the data flow
@@ -76,8 +85,44 @@ The exam trap here is the failure path without rollback. If you configure a Load
 
 ![Two controls keep a multi-object write safe: external-ID upsert makes Load idempotent so a re-run updates instead of stacking duplicates, and rollback-on-error keeps a failed write atomic so a mid-run failure rolls back the whole write instead of leaving partial data](</diagrams/day-33-dm-4-load-interface-multi-object-writes/4-upsert-and-rollback.png>)
 
-## Configuration Walkthrough
+### The build sequence in five steps
 
+<Steps>
+
+<Step title="Create a Load Data Mapper.">
+
+Create a Load Data Mapper.
+
+</Step>
+
+<Step title="Map input JSON fields to sObject fields (per object).">
+
+Map input JSON fields to sObject fields (per object).
+
+</Step>
+
+<Step title="Configure lookup/relationship mapping (Id or external ID).">
+
+Configure lookup/relationship mapping (Id or external ID).
+
+</Step>
+
+<Step title="Choose operation: insert/update/delete (upsert via external ">
+
+Choose operation: insert/update/delete (upsert via external ID).
+
+</Step>
+
+<Step title="Test with sample input; verify records in the org.">
+
+Test with sample input; verify records in the org.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Build a Load on a concrete case: an integration that writes an Account and its Contacts in one call, keyed by external IDs so it is safe to re-run. Walk through the numbered steps.
 
 1. **Create a Load Data Mapper.** In the OmniStudio Data Mapper designer, create a new mapper and pick Load as the interface. [^2] Name it for what it writes, for example `UpsertAccountWithContacts`. Because this operation writes records to the org rather than reading them, Load is the correct interface, not Extract, Turbo Extract, or Transform. [^1][^2]
@@ -98,6 +143,8 @@ That is the full build, and the two steps worth re-reading are four and five. Re
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **No external ID mapping, so repeated runs create duplicates.** This is the trap the requirement is built around. A Load configured as a plain insert re-creates records every time it runs, so a nightly sync stacks copies. [^4] Map an external ID as the matching key to get upsert behavior, where re-runs update instead of insert. [^4] When a question describes preventing duplicates across integration runs, the answer is external-ID upsert. [^4]
 
 - **Wrong relationship mapping, so children are orphaned or mislinked.** Load resolves parent-child links through lookup mapping by Id or external ID, and it never invents the relationship for you. [^1][^4] Map the child's lookup to the wrong field or omit the key and children land with no parent or the wrong parent, both silently. [^2] Confirm the relationship key exists in the payload and test with a real payload before trusting the mapping. [^4]
@@ -110,22 +157,33 @@ That is the full build, and the two steps worth re-reading are four and five. Re
 
 - **Choosing a destructive or manual fix for duplicate avoidance.** "Delete everything first" and "manual cleanup" are not integration strategies. [^4] The idempotent answer is external-ID upsert, which reconciles re-runs instead of deleting and re-creating or asking a human to clean up. [^4]
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Compress DM-4 into a short chain: Load is write, input JSON drives it, external IDs make it idempotent, lookup mapping links children to parents, rollback keeps it atomic. [^1][^2][^4][^5] When a question asks which interface creates or updates records, the answer is Load. [^2] When it asks how a child finds its parent, the answer is lookup/relationship mapping by Id or external ID. [^4] When it asks how to stop duplicates on re-run, the answer is external-ID upsert. [^4] Load maps the payload onto Salesforce records, writes across objects, and the external ID is what keeps a repeated run honest.
 
 ## Try It
-
 Open the Data Mapper designer in a sandbox and build the `UpsertAccountWithContacts` Load from the walkthrough. Define an input JSON with an Account and a Contacts array, map the fields to both target objects, set the relationship mapping so each Contact resolves its Account by external ID, and choose the external-ID upsert operation. [^2][^4] Run it with a sample payload and verify the records in the org, then run the same payload again and confirm no duplicates appear, which proves the upsert is doing its job. [^2][^4]
 
 Now break it on purpose to feel the traps. First, remove the external ID from the mapping and re-run, watching the second run stack duplicate records. [^4] Then break the relationship mapping so a Contact cannot resolve its parent, and observe how the child lands without a parent rather than failing loudly. [^2] Finally, disable rollback and make one record in the payload fail, then check which subset of the write committed, to see the partial state rollback would have prevented. [^1][^5] Each deliberate break makes the correct configuration memorable, and each one is a quiz question you will not miss.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Load is the only interface that creates or updates records; Extract and Turbo Extract read, and Transform reshapes without touching the org.
+- You map each child's lookup field to its parent by Id or external ID; Load never invents the parent-child tie automatically.
+- Map an external ID as the matching key so Load upserts: a record that exists is updated, a new one is inserted.
+- Enable rollback-on-error so a failed multi-object write rolls back entirely instead of leaving partially committed records behind.
+
+</KeyTakeaways>
+
+
+## What's Next
 You have now covered the write side of the Data Mapper domain: Load takes an incoming JSON payload, maps it onto one or more objects, writes across them with upsert and rollback, and links children to parents by lookup. [^1][^2][^4][^5] Lesson 34 turns to the Transform Interface and Document Generation (DM-5), where a mapper reshapes input data into a required output structure without reading from or writing to the org, the intermediate step that prepares data for APIs, documents, and other consumers. [^1]
 
 ## Related Requirements
-
 - Data Mapper Fundamentals & Source/Target Types, lesson 30 of 46 (DM-1)
 - Extract Interface: Multi-Object, Filters & Parameters, lesson 31 of 46 (DM-2)
 - Turbo Extract Interface, lesson 32 of 46 (DM-3)
@@ -133,7 +191,6 @@ You have now covered the write side of the Data Mapper domain: Load takes an inc
 - Data Mapper Best Practices, lesson 37 of 46 (DM-8)
 
 ## References
-
 [^1]: [Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptors.htm&type=5)
 [^2]: [Omnistudio Data Mapper Load Overview (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_dataraptor_load_overview.htm&type=5)
 [^3]: [Use Formulas in Omnistudio Data Mappers (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_use_formulas_in_dataraptors.htm&type=5)
