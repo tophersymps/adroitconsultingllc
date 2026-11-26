@@ -14,6 +14,15 @@ Every Integration Procedure runs inside a transaction, and a transaction is a bo
 
 Requirement IP-4 is the answer to that failure mode. It asks you to implement chainable Integration Procedures to split long-running processes into multiple transactions. [^2] That one sentence is the entire shape of this lesson: chaining is the mechanism that turns one oversized transaction into several small ones, each with its own fresh budget of governor limits. The in-lesson quiz tests exactly this understanding, and the three questions map to three claims you need to be able to defend. First, when a long-running process exceeds synchronous transaction limits, the right pattern is chainable IPs that split the work into multiple transactions, not one giant synchronous IP, not a FlexCard, not Platform Cache alone. Second, what distinguishes a chainable IP's execution model is that each link runs asynchronously in its own transaction, not synchronously with everything else. Third, the scenario that best suits chaining is long-running multi-step processing that exceeds synchronous limits. Every section below teaches toward those three claims, because they are the exam's way of checking whether you actually understand the model and not just the button you click.
 
+<TLDR>
+
+- Chaining splits long-running Integration Procedures into multiple transactions, each with a fresh governor budget instead of one oversized synchronous transaction
+- Each link runs asynchronously in its own transaction with its own success or failure, and there is no shared rollback
+- The right answer is chaining only for long-running multi-step work that exceeds synchronous limits, not for a quick lookup
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### The problem: one transaction, one budget
@@ -82,8 +91,38 @@ That changes how you design every chainable procedure. Since you cannot rely on 
 
 ![Synchronous versus chainable execution: a synchronous IP shares one transaction and one rollback, so a failure anywhere rolls back all prior work, while a chainable IP runs each link in its own transaction that commits independently, so a failure in link three does not roll back links one and two.](</diagrams/day-25-ip-4-chainable-integration-procedures/2-sync-vs-chain.png>)
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Mark the IP as chainable in configuration.">
+
+Mark the IP as chainable in configuration.
+
+</Step>
+
+<Step title="Pass context (IDs">
+
+Pass context (IDs, payloads) to the next chainable IP.
+
+</Step>
+
+<Step title="Design each link to be independently idempotent where possib">
+
+Design each link to be independently idempotent where possible.
+
+</Step>
+
+<Step title="Add per-link error handling and logging.">
+
+Add per-link error handling and logging.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Configuring a chainable IP is a short sequence. Use the batch order import as the running example.
 
 1. **Mark the IP as chainable in configuration.** In the Omniscript (or parent IP) that calls the procedure, open the Integration Procedure Action properties and check **Chainable**. For a REST API call, set the `chainable` option to `true` instead. [^2][^3] For the heaviest loads, also check **Queueable** so the chainable step can start a queueable job with the larger async governor budget. [^2]
@@ -102,6 +141,8 @@ Configuring a chainable IP is a short sequence. Use the batch order import as th
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Chaining when a synchronous IP fits.** Chaining is a solution to a specific problem: work that exceeds the limits of one transaction. If your procedure completes comfortably inside a single transaction, chaining adds complexity, and the docs are explicit that breaking execution into chunks and saving interim results can reduce performance. [^2][^3] The exam presents chaining as the right answer only for long-running, multi-step processing. A single quick lookup, a card display, a simple formula: none of those need chaining, and quiz question 3 exists to check that you do not reach for it there.
 
 - **Assuming chainable links share one transaction or one rollback.** This is the trap behind quiz question 2. In a synchronous IP, all actions share a transaction and a rollback. In a chainable IP, each link runs asynchronously in its own transaction, with its own success and failure. [^2][^3] If link three fails, links one and two stay committed. Design for that reality: per-link error handling, idempotent links, and explicit decisions about what a failed link means for the rest of the chain.
@@ -112,20 +153,31 @@ Configuring a chainable IP is a short sequence. Use the batch order import as th
 
 ![Four exam traps to avoid: chaining when a synchronous IP fits, assuming chainable links share one rollback, leaving no error handling per link, and ignoring the caller context requirement.](</diagrams/day-25-ip-4-chainable-integration-procedures/4-exam-traps.png>)
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Limits and timeouts mean chain. When you see a long-running process, batch processing, multiple callouts, or a procedure that risks exceeding governor limits, think chaining. Remember the model sentence: each link is its own transaction, so design for per-link failure. And keep the three settings straight by their scope: Chainable enables the policy for the whole procedure, Queueable Chainable raises the budget by running links as asynchronous queueable jobs, and Chain On Step forces a specific action into its own transaction. [^2][^3] If a question asks why a chainable link that failed did not undo earlier work, the answer is transaction isolation: there is no shared rollback across links.
 
 ## Try It
-
 Open the Integration Procedure Designer in a sandbox and build a small chainable IP. Give it an input that lists a few hundred records, add a Data Mapper Extract action and a loop that writes the records, and add an HTTP action after a Data Mapper Post action so the uncommitted-work rule is in play. Enable Chainable on the calling action, set a deliberately low Chainable DML Statements Limit, and check Chain On Step on the Post action. Run the IP from the Preview with `chainable` set to `true` and watch where the transactions split. Then remove Chain On Step from the Post action and run again: you should hit the uncommitted-work error, which proves the setting was doing real work. Finally, lower the limit so chaining happens mid-loop and confirm the final response still contains the complete result. That exercise turns the three settings from reading into muscle memory, and it shows you the failure mode each one prevents.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Enable Chainable to split a long-running procedure across transactions, and add Queueable for the heaviest loads so links run as asynchronous jobs
+- Chain On Step runs one action in its own transaction; use it on heavy steps and to commit a write before an HTTP callout
+- Weigh chainable only for long-running multi-step processing: a synchronous procedure that fits one transaction runs simpler with one rollback
+- Because each link commits independently, give every link its own error handling and make it idempotent so a rerun does not duplicate work
+
+</KeyTakeaways>
+
+
+## What's Next
 Chaining solved the transaction-size problem by giving each link a fresh budget, but every link still does its own queries and callouts, and repeated work across a chain is expensive. Lesson 26, Caching in Integration Procedures (IP-5), is the next requirement in the Integration Procedures domain, and it teaches how to store and reuse results so a procedure does not re-fetch data it already has. Where chaining manages transaction size, caching manages repeat work, and the two together are how long-running procedures stay fast.
 
 ## Related Requirements
-
 - IP Design: Server-Side Orchestration (earlier lesson)
 - IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP (earlier lesson)
 - Caching in Integration Procedures, lesson 26 of 46 (IP-5)
@@ -133,7 +185,6 @@ Chaining solved the transaction-size problem by giving each link a fresh budget,
 - IP Error Handling, a later lesson in this series
 
 ## References
-
 [^1]: [Execution Governors and Limits, Salesforce Apex Developer Guide](https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/apex_gov_limits.htm)
 [^2]: [Manage Long-Running Integration Procedures, Trailhead](https://trailhead.salesforce.com/content/learn/modules/advanced-features-of-omnistudio-integration-procedures/manage-long-running-integration-procedures)
 [^3]: [Settings for Long-Running Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=sf.os_settings_for_long_running_integration_procedures.htm&type=5)

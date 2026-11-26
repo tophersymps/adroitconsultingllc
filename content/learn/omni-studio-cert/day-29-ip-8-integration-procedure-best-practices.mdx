@@ -16,6 +16,15 @@ Requirement IP-8 reads as a description, but it is a judgment test in disguise. 
 
 ![The five habits of a production-ready Integration Procedure: focused, contracted, cached, chained, and tested, plus reusing Data Mappers and keeping errors consistent and never silent](</diagrams/day-29-ip-8-integration-procedure-best-practices/1-five-habits.png>)
 
+<TLDR>
+
+- Best-practice Integration Procedures are focused, contracted, cached, chained, and tested, reusing Data Mappers and keeping errors consistent and never silent
+- Favor focused, well-named IPs over one massive procedure, and keep reusable data logic in Data Mappers that IPs call
+- Chain only when a process exceeds synchronous limits; keep short orchestrations synchronous and cache only stable, shared data
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Focused IPs: one logical operation, one procedure
@@ -86,8 +95,50 @@ The reason testing is a best practice and not a nice-to-have is the specific fai
 
 The discipline is to test each action, not just the final result. When you run an IP in the Preview and open the Action Debugger, you can inspect every step's input and output, confirm each produced what the next one expects, and catch a bad field reference or a dropped node at the step where it happened rather than as a confusing final failure. [^7] This is the "test before you wire consumers" instinct from the Response Action lesson, applied across the whole procedure. Run it on the success path, run it on the failure path, confirm both behave as designed, and only then activate the version and let OmniScripts, FlexCards, and APIs depend on it. [^2][^7]
 
-## Configuration Walkthrough
+### The build sequence in six steps
 
+<Steps>
+
+<Step title="Scope the procedure and define contracts">
+
+Scope the procedure to one logical operation, name it for what it does, and define its input and output contracts up front.
+
+</Step>
+
+<Step title="Reuse a Data Mapper">
+
+Reuse a Data Mapper for the data operation so the shared logic stays single-sourced instead of duplicated inline.
+
+</Step>
+
+<Step title="Add error handling at every boundary">
+
+Add error handling around every external boundary so every step that can fail has a defined, visible failure path.
+
+</Step>
+
+<Step title="Cache the stable reference data">
+
+Cache the stable, shared reference data with a sensible Time To Live, not the per-request data.
+
+</Step>
+
+<Step title="Decide synchronous versus chainable">
+
+Decide synchronous versus chainable by the length of the work, keeping a short orchestration synchronous.
+
+</Step>
+
+<Step title="Test each action before activating">
+
+Test each action's input and output in the Preview and Debug Console before activating the version.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 None of these practices live in a single property. They are a design discipline you apply while you build, and a review checklist you run before you activate. Walk through the sequence on a concrete example: an IP that looks up an order and its line items, resolves each line's product through a shared lookup, and returns a tidy summary to a FlexCard.
 
 ![Building GetOrderSummary: the seven best-practice steps from scoping and naming the procedure, defining contracts, reusing a Data Mapper, adding error handling, caching stable reference data, deciding synchronous versus chainable, to testing each action before activating](</diagrams/day-29-ip-8-integration-procedure-best-practices/5-getordersummary-walkthrough.png>)
@@ -108,6 +159,8 @@ None of these practices live in a single property. They are a design discipline 
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Monolithic IPs that do everything.** One massive IP that extracts, calls external systems, writes objects, formats documents, and sends email is hard to test, hard to maintain, and hard to reuse, and it is the first anti-pattern the requirement names. [^1] Best practices favor focused, well-named IPs that own one logical operation. When a question offers "one massive IP for everything" as a design, it is testing that you reject it. [^1]
 
 - **Inconsistent error handling across IPs.** If some IPs return a structured error with a code and message and others return bare strings or fail silently, no caller can write one reliable handler. [^3] The best practice is a consistent error dialect across the integration layer, with no silent failures anywhere. [^3]
@@ -118,20 +171,31 @@ None of these practices live in a single property. They are a design discipline 
 
 - **Chaining everything, or caching everything, by default.** Both chaining and caching are conditional tools, not defaults. Chaining splits work across transactions, which can reduce performance, so it belongs on long-running processes that exceed synchronous limits, and short orchestrations should stay synchronous. [^5] Caching serves frequently accessed, infrequently updated data, so volatile or user-specific data should not be cached, and a short procedure needs neither. [^1][^4]
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Hold the five habits as your memory hook: focused, contracted, cached, chained, and tested. [^1][^7] Focused means one well-named logical operation per IP, because a monolithic IP is hard to test and maintain. [^1] Contracted means stable input and output JSON with the error branch built into that same shape, so every caller handles success and failure with one piece of logic. [^2][^3] Cached means store the frequently accessed, infrequently updated data and nothing else, with a Time To Live that matches how often the source changes. [^1][^4] Chained means split long-running processes that exceed synchronous limits, and keep short orchestrations synchronous. [^5] Tested means verify each action's input and output with the Preview and Debug Console before you promote anything, so ordering bugs and contract mismatches never reach production. [^7] Reuse Data Mappers for data logic so it stays single-sourced, keep errors consistent and never silent, and you have turned the entire Integration Procedures domain into the dependable building blocks a real integration layer is made of. [^1][^3][^6]
 
 ## Try It
-
 Open the Integration Procedure Designer in a sandbox and audit an existing IP with the five habits. Find a procedure you have built in earlier lessons, or build a fresh `GetOrderSummary` IP. Ask it the best-practice questions in order. Is it scoped to one logical operation, or does it do several unrelated jobs? [^1] Does it have a defined input and output contract, and does the error branch return the same wrapper as success? [^2][^3] Does its reusable data logic live in a Data Mapper both this IP and others call, or is it duplicated inline? [^6] Does it cache only stable, shared reference data with a sane Time To Live? [^4] If it is long-running, is it designed to chain with per-link handling, and if it is short, does it stay synchronous? [^5] Then run it in the Preview with valid sample input, open the Action Debugger, and inspect each action's input and output to confirm nothing is dropped and the final response matches the contract. [^7] Run the failure case and confirm the error comes back in the same shape. That audit is the whole requirement in practice: looking at a procedure and judging, against the five habits, whether it was built to be reliable in production. [^1][^7]
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Keep each IP to one logical operation, clearly named, because a monolithic procedure is hard to test, maintain, and reuse
+- Reuse a Data Mapper for reusable data logic rather than duplicating it inline, so one operation has a single source of truth
+- Keep input and output contracts stable with the error branch in the same shape, and keep error handling consistent across every IP
+- Chain only long-running processes that exceed synchronous limits, keep short orchestrations synchronous, and test each action before activating
+
+</KeyTakeaways>
+
+
+## What's Next
 This lesson closes the Integration Procedures domain, which covered how to design, compose, and harden the server-side orchestration engine of OmniStudio. A focused, well-built IP leans heavily on the Data Mappers it calls, and that is exactly where the course turns next. Lesson 30, Data Mapper Fundamentals & Source/Target Types (DM-1), starts the Data Mappers domain and defines what a Data Mapper is, then maps the source and target types a Data Mapper works with: JSON, XML, a Custom Apex class, and SObject data on the read and write side, plus PDF and DocuSign among the outputs it can produce. That lesson is where the data operations this IP best-practices lesson told you to reuse actually get their single-sourced definitions.
 
 ## Related Requirements
-
 - IP Design: Server-Side Orchestration, lesson 22 of 46 (IP-1)
 - IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP, lesson 23 of 46 (IP-2)
 - Chainable Integration Procedures, lesson 25 of 46 (IP-4)
@@ -141,7 +205,6 @@ This lesson closes the Integration Procedures domain, which covered how to desig
 - Data Mapper Fundamentals & Source/Target Types, lesson 30 of 46 (DM-1)
 
 ## References
-
 [^1]: [Integration Procedure Best Practices (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedure_best_practices.htm&type=5)
 [^2]: [Response Action for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_response_action_for_integration_procedures_54655.htm&type=5)
 [^3]: [Handle Errors in Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_error_handling_in_integration_procedures_55179.htm&language=en_US&type=5)
