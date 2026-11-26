@@ -18,6 +18,15 @@ That pattern is what this objective covers. Two built-in tools cover most migrat
 
 This lesson serves requirement dm-1b, in the Data Management domain, which carries 18 percent of the exam. The objective asks you to explain the use cases and considerations for data migrations and integrations. By the end you can pick the right tool for a volume and an object, name the operations and options Data Loader gives you, know when the job outgrows both built-ins, sequence a load by dependency, and design an upsert so a failed run is safe to repeat.
 
+<TLDR>
+
+- The Data Import Wizard and Data Loader, and the ceilings that separate them
+- Load order is driven by object dependencies, so every parent precedes its children
+- External IDs and upsert make a failed load safe to rerun
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Two built-in tools and the ceilings that separate them
@@ -80,7 +89,52 @@ The sequence below is the build, from tool choice to a clean load.
 5. Set the operation options: Bulk API for throughput, the import batch size, and serial mode when parallel batches are contending, and keep the first test run small.
 6. Work the dependency order object by object, Accounts then Contacts then Opportunities, and Price Books then Price Book Entries then Opportunity Line Items, checking the error files between loads.
 
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="In Setup">
+
+In Setup, review the object list in scope and confirm that Data Loader supports each one, since the Data Import Wizard does not cover every object and stops at 50,000 records.
+
+</Step>
+
+<Step title="Create a custom external ID field on each target object to h">
+
+Create a custom external ID field on each target object to hold the source system's primary key, and mark it unique where the source guarantees one row per key.
+
+</Step>
+
+<Step title="In Data Loader">
+
+In Data Loader, log in with OAuth, choose the operation (insert, update, or upsert), and select the external ID field when the operation is upsert.
+
+</Step>
+
+<Step title="Build the CSV so parents and children are ordered correctly">
+
+Build the CSV so parents and children are ordered correctly, and for a combined file reference the parent by its external ID on the lookup field.
+
+</Step>
+
+<Step title="Set the operation options: bulk mode for speed">
+
+Set the operation options: bulk mode for speed, batch size, whether to bypass validation or duplicate rules, and cap the batches on a first test run.
+
+</Step>
+
+<Step title="Work the dependency order object by object (Accounts">
+
+Work the dependency order object by object (Accounts, then Contacts, then Opportunities; Price Books, then Price Book Entries, then Opportunity Line Items), checking error files between loads.
+
+</Step>
+
+</Steps>
+
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three traps dominate this objective. The first is believing Data Loader bypasses duplicate rules. It does not. Data import tools and API loads are not on the platform's list of situations where duplicate rules do not run, so an active rule blocks a Data Loader row exactly as it blocks a save in the UI, with one difference: the load shows no alert first, the row simply fails.[^8] Reaching for a different built-in tool is not a way around a rule that is blocking a migration.
 
@@ -88,12 +142,22 @@ The second trap is loading children before parents. A Contact or an Opportunity 
 
 The third trap is believing record IDs survive a migration. Salesforce IDs are org specific, which is why the external ID field exists, so an answer that carries the source IDs across as the match key is wrong. The correct design stores the source key in an external ID field and lets upsert match on it, which is also what makes the load safe to rerun after a failure.
 
+</Callout>
+
+
 ## What a consultant should walk away with
 
-Pick the tool by the volume and the object. Under fifty thousand records into a supported object, the Data Import Wizard is the right call. Beyond that, or into an object the wizard does not cover, Data Loader is, and neither tool is a way around the org's duplicate rules, so a rule that blocks a migration is fixed by cleaning the data or by disabling that rule deliberately for the window. When the volume climbs into the millions or the transformation gets complex, move up to Bulk API 2.0 or an ETL tool rather than forcing the built-ins. Store the source primary key in an external ID field, mark it unique when the source guarantees one row per key, and use upsert so a failed run is safe to repeat instead of duplicating records. Sequence every load parent to child: accounts, then contacts, then opportunities, and price books, then price book entries, then line items. Then run the cutover cleanly: defer the automations, load in dependency order, read the error files, rerun the failures on the external ID, and turn the automations back on last. Get the tool, the key, and the order right and a migration becomes a checklist rather than a rescue.
+<KeyTakeaways>
+
+- Pick the tool by volume: the wizard stops at 50,000 records, Data Loader covers more, and millions go to Bulk API 2.0 or an ETL
+- Neither tool bypasses duplicate rules; store the source key in an external ID field, mark it unique, and use upsert so reruns are safe
+- Sequence every load parent to child: accounts, then contacts, then opportunities, and price books, then price book entries, then line items
+- Run the cutover cleanly: defer the automations, load in dependency order, read the error files, rerun failures on the external ID, and re-enable automations last
+
+</KeyTakeaways>
+
 
 ## What's next
-
 Lesson 31 - Salesforce Integration Patterns and Their Considerations (dm-1c)
 
 [^1]: Salesforce Help, "Data Import Wizard," (https://help.salesforce.com/s/articleView?id=sf.data_import_wizard.htm&type=5)
