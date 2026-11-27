@@ -16,6 +16,15 @@ Requirement T-4 asks you to resolve Integration Procedure execution errors. That
 
 The method is two halves. Find the failing action first, from the per-action logs, then read its request and response. Data flow problems show upstream. [^1][^2] Everything in this requirement is some version of those two sentences, so the lesson builds toward them and the walkthrough applies them to a real failure.
 
+<TLDR>
+
+- Find the failing action in the per-action log, then read its request and response
+- For HTTP failures the status code and response body name the cause: credential, timeout, or wrong path
+- Trace missing JSON paths upstream, and fix governor limits with chaining
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### An Integration Procedure: a single transaction full of steps
@@ -100,8 +109,44 @@ The mechanism that carries the controlled outcome is the Response Action, which 
 
 ![Try/Catch containment: without it one external failure kills the whole synchronous procedure, and with it the catch branch handles the failure and a Response Action returns a controlled error to the caller instead of a bare exception](</diagrams/day-41-t-4-resolve-integration-procedure-execution-errors/5-try-catch-containment.png>)
 
-## Configuration Walkthrough
+### The build sequence in five steps
 
+<Steps>
+
+<Step title="Open the Debug Console for the failed IP invocation.">
+
+Open the Debug Console for the failed IP invocation.
+
+</Step>
+
+<Step title="Identify the failing action from the per-action logs.">
+
+Identify the failing action from the per-action logs.
+
+</Step>
+
+<Step title="Check the action's request/response (auth">
+
+Check the action's request/response (auth, status, payload).
+
+</Step>
+
+<Step title="Verify upstream actions produced the expected JSON.">
+
+Verify upstream actions produced the expected JSON.
+
+</Step>
+
+<Step title="For limits: refactor to chainable or simplify.">
+
+For limits: refactor to chainable or simplify.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Work through a real failure, because the mechanics only stick when you follow them on a concrete flow. Here is a procedure that reads a Salesforce account with a Data Mapper Extract, calls a weather API with an HTTP Action, transforms the result, and loads a note back to Salesforce. You are told it fails. [^1][^7]
 
 1. **Open the Debug Console for the failed invocation.** In the Integration Procedure designer, click Action Debugger in Preview to open the debug console. [^7] If you are debugging a live failure, open the recorded entry for that invocation instead, or read `OmniComponentErrorLog` records if error logging is enabled. [^5][^7] Do not change anything yet. You are pulling the evidence.
@@ -120,18 +165,21 @@ Work through a real failure, because the mechanics only stick when you follow th
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Blaming the last action when an upstream one produced bad data.** The error surfaces in the action that read the bad data, and that action is innocent. Trace the data flow backward to the action that created it, and fix the producer, not the consumer. [^2][^7]
 
 - **Ignoring the HTTP status and response body.** The status code and body name the cause: auth, timeout, or a wrong path. Change the endpoint on a hunch instead of reading the 401 body and you repair nothing. [^2][^8]
 
 - **Missing Try/Catch.** A single external failure kills the whole synchronous procedure. Wrap the external calls so one transient failure does not take the pipeline down, and return a controlled error through a Response Action. [^2][^4][^6]
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Compress T-4 into a sequence you can run on any failed procedure. Find the failing action first, from the per-action log, and read its request and response. [^7] That is the whole first half of the technique. [^2] For an HTTP failure, the status code and response body name the cause, so check the Named Credential and the endpoint before anything else. [^2][^8] For a Remote Action, read the Apex exception message and verify the inputs the procedure passed. [^11] Then handle the data-flow class of problem: if a later action reads a JSON path that is missing, trace upstream to the action that should have produced it, because that is where the data flow breaks. [^2] When the failure names a callout or DML limit in the synchronous transaction, the fix is chaining, which splits the work across transactions, and in a chained procedure each link is its own transaction, so a mid-chain failure means checking each link's logs. [^3] Wrap the risky work in Try/Catch so one failure does not end the whole procedure. [^2][^4]
 
 ## Try It
-
 Reproduce each failure mode in a sandbox, because reading about a bad credential is not the same as seeing a 401 body and knowing what it means. [^2][^7][^8]
 
 Start with an HTTP failure. Build an HTTP Action against a test endpoint, preview it, and watch the per-action log show the request and response. [^7][^8] Break the Named Credential, rerun, and read the auth error in the body. Point the HTTP Path at a route that returns 404, rerun, and watch the status node. Change the Timeout to something tiny against a slow endpoint, rerun, and see the timeout error. [^8] You have now seen the three HTTP failure signatures.
@@ -142,19 +190,28 @@ Then add a Try/Catch around the external work and make one call throw, watching 
 
 Finally, if your sandbox has a heavy procedure, exercise the governor limit and apply chaining: set the Chainable option, configure the chainable limits, and watch the work continue in a fresh transaction past the limit. [^3] Note where a mid-chain link would stop the pipeline, and confirm you would check that link's logs. [^3] After all four, you can name the failing action, read its request and response, and follow the data to the cause, which is the whole of T-4.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Find the failing action from the per-action log and read its request and response, because the action that threw is rarely the one to change
+- For an HTTP failure, the status code and response body name the cause, so check the Named Credential and endpoint first
+- A later action reading a JSON path that is missing points back at an upstream action that never produced the data
+- Callout and DML governor limits end the synchronous transaction, and the fix is chaining, which splits the work across transactions
+
+</KeyTakeaways>
+
+
+## What's Next
 You can now locate the failing action in a per-action log, read an HTTP failure from its status and response body, follow a Remote Action exception to its message and inputs, trace a missing JSON path to the upstream action that failed to produce it, treat governor limits as a signal to chain, and wrap risky work in Try/Catch so one failure does not kill the procedure. [^2][^3][^7][^11] Lesson 42, Resolve Caching Problems (T-5), stays in the same troubleshooting domain but shifts from errors to stale results. [^2] It covers the signature symptom of old data appearing after the source changed, and the three controls that cause it: a TTL that is too long for how fast the data changes, a cache scope that leaks one user's data to another, and a cache key that ignores what varies and returns the wrong record. [^2] You will diagnose by asking three questions instead of one, stale data points at TTL and invalidation, and wrong data points at keys and scope. [^2]
 
 ## Related Requirements
-
 - IP Design, Server-Side Orchestration, lesson 22 of 46 (IP-1)
 - Chainable Integration Procedures, lesson 25 of 46 (IP-4)
 - Exception Handling: Try/Catch and Rollback, lesson 27 of 46 (IP-6)
 - Resolve Caching Problems, lesson 42 of 46 (T-5)
 
 ## References
-
 [^1]: [Integration Procedures (Managed Package), Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedures.htm&language=en_US&type=5)
 [^2]: [Handle Errors in Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_error_handling_in_integration_procedures_55179.htm&language=en_US&type=5)
 [^3]: [Manage Long-Running Integration Procedures, Trailhead](https://trailhead.salesforce.com/content/learn/modules/advanced-features-of-omnistudio-integration-procedures/manage-long-running-integration-procedures)

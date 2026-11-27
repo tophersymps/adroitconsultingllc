@@ -14,6 +14,15 @@ An Integration Procedure orchestrates work across systems, and some of that work
 
 Requirement IP-6 reads: implement robust exception handling using Try/Catch blocks to manage failures and ensure proper rollback. [^1] The exam tests it through three claims you need to be able to defend, and the in-lesson quiz maps directly to them. First, when an IP calls an external system that may be down, the correct handling is to wrap the call in a Try/Catch block and return a controlled error, not to let the IP crash, not to ignore the error, and not to reach for a FlexCard state. Second, Load and write actions belong after risky calls because that ordering avoids partial persistence and keeps the procedure rollback friendly. Third, a Catch block logs the failure and produces a controlled error response; it never swallows the error silently. Every section below teaches toward those three claims, because they are the exam's way of checking that you understand the failure model and not just where the Try-Catch element sits in the palette. [^1]
 
+<TLDR>
+
+- A Try-Catch Block wraps risky steps so a failure routes to the Catch branch and returns a controlled error
+- Load and write actions belong after risky calls, so a failure happens before anything is persisted and leaves nothing partial
+- A Catch branch must log the failure and return a controlled error; it never swallows the error silently
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### What Try/Catch means in an Integration Procedure
@@ -68,8 +77,38 @@ The quiet failure is the one that costs the most, because nothing tells you it h
 
 The other half is the response. The Catch branch must return why, not just that something failed. A controlled error with a code, a message, and a detail is the observable contract; the log entry is the durable contract. Robust IPs hold both. They log what failed, they return why, and they leave the system in a known state, whether that state is "nothing was written" because the writes never ran or "everything was rolled back" because Rollback On Error undid a partial write. [^1]
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Wrap risky actions (HTTP">
+
+Wrap risky actions (HTTP, Remote) in Try/Catch blocks.
+
+</Step>
+
+<Step title="In Catch: log the error and set an error path/flag.">
+
+In Catch: log the error and set an error path/flag.
+
+</Step>
+
+<Step title="Ensure writes happen only after the risky work succeeds (rol">
+
+Ensure writes happen only after the risky work succeeds (rollback-safe ordering).
+
+</Step>
+
+<Step title="Return a controlled error shape via the Response Action.">
+
+Return a controlled error shape via the Response Action.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Work through a concrete build. You are writing an IP that accepts a request to open a customer account, runs a credit check against an external system, and if the check passes, creates the Account and an Opportunity. The credit system is occasionally down, and your customer wants a clean error when it is. This is the ClearLight pattern from Trailhead. [^5]
 
 ![The account-opening IP runs the credit check first; a passing check creates the Account and Opportunity, while a failing check logs to OmniComponentErrorLog and returns a controlled error](</diagrams/day-27-ip-6-exception-handling-try-catch-rollback/3-account-opening-scenario.png>)
@@ -88,6 +127,8 @@ Work through a concrete build. You are writing an IP that accepts a request to o
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **No Try/Catch around an external call.** The most direct failure mode the requirement warns about. An external system going down is not a question of if but when, and without a Try-Catch Block a failed HTTP call kills the whole IP mid-flow. [^1] Wrap external calls in a Try-Catch Block, check Fail On Block Error and Fail On Step Error, and return a controlled error. That is the entire answer to quiz question 1, and it rules out both "let the IP crash" and the tempting wrong answer "use a FlexCard state," because a FlexCard state is a UI rendering concept, not a server-side failure handler.
 
 - **Swallowing the error.** A Catch branch that catches and does nothing is worse than no Catch at all, because the failure becomes invisible. [^1] Silent data inconsistency is the result: a step failed, nothing wrote, and nobody knows. The Catch branch must log (so the platform records the failure, by default to OmniComponentErrorLog) and must return a controlled error response. [^1][^6] This is the trap behind quiz question 3, where the correct Catch behavior is to log the failure and produce a controlled error, never to do nothing, retry forever, or delete data.
@@ -100,20 +141,31 @@ Work through a concrete build. You are writing an IP that accepts a request to o
 
 ![Four exam traps: no Try/Catch around an external call, swallowing the error, writes before risky calls, and misreading a business condition as a non-failure, each with its fix](</diagrams/day-27-ip-6-exception-handling-try-catch-rollback/5-exam-traps.png>)
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Keep one sentence in front of you: Try is risk, Catch is controlled failure, order is rollback safety, and no silent swallows. [^1] When you see an IP that calls an external system, wrap it in a Try-Catch Block and return a controlled error. When you see Load actions near external calls, check that the writes come after the fallible work, and add Rollback On Error where a write must precede a call. When you see a Catch branch, make sure it logs the failure and produces a predictable error shape instead of doing nothing. If a step can fail for a business reason rather than a technical crash, reach for a Failure Conditional Formula. Those four reflexes answer every question in this requirement, because they are the whole content of robust exception handling: contain the failure, record it, report it, and never leave partial data behind. [^1][^5]
 
 ## Try It
-
 Open the Integration Procedure Designer in a sandbox and build the account-opening IP described above. Give it an input carrying an account name and a credit check payload. Add a Try-Catch Block. Inside it, put an HTTP action that calls a deliberately unreachable URL to stand in for a downed credit system. Check Fail on Block Error on the block and Fail on Step Error on the HTTP action. Configure the block's Failure Response with an ErrorCode, a Message, and a Detail that merges in the step's error. After the block, add a Response Action. Then build the success path: a Data Mapper Load that creates an Account after the credit call, with the credit call pointed at a URL that returns 200. Run the success path in the Preview and confirm the Account is created and the response is clean. Point the credit call at the failing URL and run again. Confirm the procedure returns your structured error instead of crashing, confirm nothing was written, and check the log for the failure. Then deliberately place a Load before the credit call, add Rollback On Error to it, and run the failure case to watch the earlier write roll back. That last experiment is the one that makes the ordering rule and the rollback mechanism stick. [^5]
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Wrap every external call in a Try-Catch Block, check Fail on Block Error and Fail On Step Error, and return a controlled error
+- Order the procedure so fallible external work runs first and writes last, making partial persistence impossible by construction
+- Use a Failure Conditional Formula to turn a zero-record result into a catchable failure, because a Data Mapper that finds nothing throws no error
+- When a write must precede a call, set Rollback On Error so a later failure rolls back the earlier write instead of orphaning data
+
+</KeyTakeaways>
+
+
+## What's Next
 This lesson was about containing a failure inside a procedure and deciding whether it rolls back. But a controlled error is only useful if the caller can read it, and that turns on what the Response Action actually sends back. Lesson 28, Response Action: The IP Output Contract (IP-7), is the next requirement in the Integration Procedures domain, and it teaches how the Response Action defines the shape of everything an IP returns: which nodes go out, how to trim the response, how to return additional output, and how headers and status codes round out the contract a caller depends on. Exception handling decides what happens on the way out; the Response Action decides what the caller sees when the procedure ends, and the two together are how a production IP fails and reports cleanly.
 
 ## Related Requirements
-
 - IP Design: Server-Side Orchestration (earlier lesson)
 - IP Action Types: Groups, Data Mapper, HTTP, Remote, Sub-IP (earlier lesson)
 - Chainable Integration Procedures, lesson 25 of 46 (IP-4)
@@ -122,7 +174,6 @@ This lesson was about containing a failure inside a procedure and deciding wheth
 - IP Error Handling, a later lesson in this series
 
 ## References
-
 [^1]: [Handle Errors in Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_error_handling_in_integration_procedures_55179.htm&language=en_US&type=5)
 [^2]: [Handle Errors by Using a Try-Catch Block, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_handle_errors_using_try_catch_blocks_49845.htm&language=en_US&type=5)
 [^3]: [Integration Procedure Actions, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_integration_procedure_actions_50165.htm&language=en_US&type=5)

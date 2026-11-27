@@ -18,6 +18,15 @@ The naive approach is to treat every integration as the same job: call the API, 
 
 This lesson serves the exam guide's requirement dm-1c, in the Data Management domain, which carries 18 percent of the exam. The objective asks you to explain the use cases and considerations for data migrations and integrations. By the end of this lesson you will be able to look at a scenario, name the pattern that fits, choose between a synchronous and an asynchronous shape, pick the right API, and list the production considerations that decide whether the integration survives contact with real data.
 
+<TLDR>
+
+- The five integration patterns, and the sync or async shape that decides who waits
+- Picking the API: REST, SOAP, Bulk API 2.0, Streaming, and Pub/Sub
+- The limits, idempotency, and monitoring that separate a demo from production
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### The five patterns, and what each one costs you
@@ -84,7 +93,52 @@ Put the patterns against a sales scenario and the choices sharpen. Syncing close
 
 ![Two panels: picking the API by shape and size, where anything over two thousand records goes to Bulk API 2.0, beside four worked scenarios that map a nightly finance sync to batch, order status on the phone to synchronous REST, a stage change reaching three systems to event driven Change Data Capture, and a one off contact list load to a migration](</diagrams/day-31-dm-1c-salesforce-integration-patterns-and-their-consider/4-api-picker-and-scenarios.png>)
 
+### The build sequence in six steps
+
+<Steps>
+
+<Step title="In Setup">
+
+In Setup, open API Usage to see the current daily API request consumption against the org's limit, then estimate the requests the proposed integration will add per day.
+
+</Step>
+
+<Step title="In Setup">
+
+In Setup, create a Connected App and configure OAuth so the integration authenticates without storing a user password.
+
+</Step>
+
+<Step title="Create a Named Credential for the external endpoint so the c">
+
+Create a Named Credential for the external endpoint so the callout URL and the secret live outside the code and the apex and flows can reference them.
+
+</Step>
+
+<Step title="In Setup">
+
+In Setup, define a Platform Event to carry the business event, or enable Change Data Capture on the objects whose changes downstream systems must react to.
+
+</Step>
+
+<Step title="Subscribe to the event stream through the Pub/Sub API or Str">
+
+Subscribe to the event stream through the Pub/Sub API or Streaming API, and build the subscriber to handle ordering and duplicate messages.
+
+</Step>
+
+<Step title="For a large scheduled volume">
+
+For a large scheduled volume, build a Bulk API 2.0 job or an ETL schedule instead of a synchronous call, and set up monitoring and error replay for the job.
+
+</Step>
+
+</Steps>
+
+
 ## Exam Traps
+
+<Callout kind="warning">
 
 Three traps dominate this objective. The first is answering with a synchronous call when the scenario describes large volume or a nightly schedule. Synchronous requests time out on big jobs and occupy a 20 second plus concurrent slot that is capped at 25 in production, so a scenario about millions of records or a nightly sync is asking for Bulk API 2.0 or another asynchronous pattern, never a synchronous per record call.
 
@@ -92,12 +146,22 @@ The second trap is thinking Change Data Capture reverses direction. Change Data 
 
 The third trap is ignoring API limits and idempotency. A polling integration can exhaust the daily request allowance that the business depends on for its own users, and a retry that is not idempotent creates duplicates. An answer that skips external ID matching or request budgeting is incomplete even when the pattern it names is right, because the exam is testing whether you think about the second and third day of running, not just the first.
 
+</Callout>
+
+
 ## What a consultant should walk away with
 
-Choose the shape first, sync or async, then the API, then the pattern, because the volume and the timing requirement decide almost everything else. If the user needs the answer now, call synchronously with REST. If it is large or scheduled, hand it to Bulk API 2.0 or an ETL. If several systems must react to the same change, publish an event with Platform Events or Change Data Capture instead of letting each of them poll. Reach for middleware when the connections or the transformations have outgrown point to point, and say out loud what it adds to operate. Then design for the unglamorous details: an external ID so retries upsert instead of duplicating, credentials in a connected app and a named credential rather than in code, failed payloads retained so they can be replayed, and monitoring that pages a human when a job fails at 2am. Name the pattern, the API, the shape, and the limit together, and the answer holds up.
+<KeyTakeaways>
+
+- Choose the shape first: synchronous REST when the user needs the answer now, and Bulk API 2.0 when the work is large or scheduled
+- When several systems must react to the same change, publish an event with Platform Events or Change Data Capture instead of letting each poll
+- Reach for middleware when connections or transformations outgrow point to point, and say out loud what it adds to operate and monitor
+- Design the details: an external ID so retries upsert instead of duplicating, credentials in a connected app and named credential, retained payloads, and monitoring
+
+</KeyTakeaways>
+
 
 ## What's next
-
 Lesson 32 - Large Data Volume: Query Selectivity, Indexes, and Skinny Tables (dm-2a)
 
 [^1]: Salesforce, "Introduction to Bulk API 2.0 and Bulk API," (https://developer.salesforce.com/docs/platform/api-asynch/guide/asynch-api-intro.html)

@@ -16,6 +16,15 @@ Get the action-to-job mapping right and you can read any IP the exam shows you a
 
 ![The action-to-job map: each Integration Procedure action type and the job it does, from Group for structure and conditional execution through Data Mapper Extract, Load, and Transform for the data layer, HTTP Action for external calls, Remote Action for Apex logic, Sub-IP for composition, and Response Action for output](</diagrams/day-23-ip-2-ip-action-types-groups-data-mapper-http-remote-sub/1-action-to-job-map.png>)
 
+<TLDR>
+
+- IP actions map to jobs: Groups structure flow, Data Mapper moves data, HTTP reaches outside, Remote calls Apex, Sub-IPs compose.
+- Data Mapper actions split three ways: Extract reads, Load writes, Transform reshapes; the Response Action returns output to the caller.
+- HTTP Actions make REST callouts authenticated by a Named Credential; Remote Actions call Apex; Sub-IPs compose procedures for reuse.
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Groups: structure and conditional execution
@@ -60,7 +69,7 @@ Declarative actions cover a lot, but not everything. When an IP needs custom log
 
 The official guidance frames Remote Actions as the tool for Apex classes that implement the OmniStudio API, and for invocable actions.[^5] An invocable action is an Apex action with an @InvocableMethod that other code, and OmniStudio, can call. The Remote Action makes that callable from inside the IP, with inputs specified as Additional Input and the output landing in the IP's JSON.
 
-There is a data-shape subtlety that the exam can touch. If the data a Remote Action returns is not in Map<String, Object> format, the IP or a Data Mapper sometimes cannot process it, and the returned value is not an sObject so you cannot use it to update Product2 records without reserializing.[^5] The fix is to add a Remote Option key named reserialize with a value of true, or to run a RESERIALIZE function on the output in a subsequent Set Values step. An error that starts with "Invalid conversion from runtime type String" often means exactly this reserialize step is missing.[^5]
+There is a data-shape subtlety that the exam can touch. If the data a Remote Action returns is not in `Map<String, Object>` format, the IP or a Data Mapper sometimes cannot process it, and the returned value is not an sObject so you cannot use it to update Product2 records without reserializing.[^5] The fix is to add a Remote Option key named reserialize with a value of true, or to run a RESERIALIZE function on the output in a subsequent Set Values step. An error that starts with "Invalid conversion from runtime type String" often means exactly this reserialize step is missing.[^5]
 
 Two operational notes round out the Remote Action. The Apex class the action calls must be accessible to the invoking user, meaning the user needs object and record access at the profile, permission set, or permission set group level, or the call fails with an access error.[^5] And if you need rollback on error, set errorCode in the class output map so the IP knows the step failed. None of that is trivia; it is the difference between a Remote Action that works in the designer and one that fails in production.
 
@@ -80,8 +89,44 @@ The Response Action ends an Integration Procedure and returns data to the entity
 
 Because the Response Action is the IP's output contract, it gets a full lesson of its own later in this course (Day 28). For now, know its role in the flow and know that it sits last, because nothing after it in the procedure runs.
 
-## Configuration Walkthrough
+### The build sequence in five steps
 
+<Steps>
+
+<Step title="Add Groups to structure the IP.">
+
+Add Groups to structure the IP.
+
+</Step>
+
+<Step title="Add Data Mapper actions (Extract/Load/Transform) referencing">
+
+Add Data Mapper actions (Extract/Load/Transform) referencing existing mappers.
+
+</Step>
+
+<Step title="Add HTTP Actions with Named Credentials for external calls.">
+
+Add HTTP Actions with Named Credentials for external calls.
+
+</Step>
+
+<Step title="Add Remote Actions for Apex logic; Sub-IPs for composed flow">
+
+Add Remote Actions for Apex logic; Sub-IPs for composed flows.
+
+</Step>
+
+<Step title="Wire outputs to subsequent action inputs via JSON paths.">
+
+Wire outputs to subsequent action inputs via JSON paths.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Building a well structured IP with the right actions follows a consistent path. Walk through it in this order.
 
 1. **Add Groups to structure the IP.** Start by laying out the phases of the operation as groups, then drag the actions you add into them. For an order-processing IP, you might have a "Load order" group, a "Check payment" group, and a "Persist result" group. Give each group a clear name and nest inner groups where a phase has sub-steps. This is where you decide conditional execution too: if a group should only run under a condition, set its Execution Conditional Formula now rather than scattering conditions across every action inside it.
@@ -96,33 +141,45 @@ Building a well structured IP with the right actions follows a consistent path. 
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Using an HTTP Action without a Named Credential.** An HTTP Action needs a Named Credential to authenticate to the endpoint. Without it, the call fails authentication. The exam likes to test that the Named Credential is part of the HTTP Action configuration, not an optional nicety. When a question describes a REST callout, pair the HTTP Action with the Named Credential in your answer.
 
 - **Duplicating mapper logic inline instead of reusing Data Mappers.** The Data Mapper actions reference existing mappers, and that reuse is intentional. Copying mapping logic directly into the IP, or into an Apex class, throws away the maintainability and reuse the architecture gives you. The right pattern is a mapper written once and called by an action. When you see a setup that reimplements mapping where a mapper already exists, that is the anti-pattern the exam is pointing at.
 
 - **Sub-IP output not mapped, so the parent never sees the result.** A Sub-IP runs and returns data, but if the parent never references the sub-IP's output node, the result is effectively lost. The sub-IP's response only feeds the parent flow when a downstream action reads it by JSON path. Run the IP and check that the node the sub-IP produces actually appears and is consumed, rather than assuming the parent picks it up automatically.
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Map action to job and you can answer most of this domain. Extract, Load, and Transform Data Mapper actions are the data layer: Extract reads, Load writes, Transform reshapes. The HTTP Action is the external REST call, authenticated by a Named Credential. The Remote Action invokes Apex for custom logic. The Sub-IP calls another IP for reuse and composition. The Response Action returns the output to the caller. Name the action by the job it does, and the right answer falls out.
 
 ## Try It
-
 Open the Integration Procedure Designer in a sandbox and build an IP that reads an account with a Data Mapper Extract, calls a mock external endpoint with an HTTP Action backed by a Named Credential, reshapes the result with a Data Mapper Transform, and returns a trimmed answer with a Response Action. Then split the shape change into a second IP and call it from the first with a Sub-IP action, wiring the sub-IP's output into a downstream action by JSON path. Run it with sample input in the test tool and watch the JSON flow through each action. That exercise turns the action-to-job map from a list you read into a pattern you can build.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- A Group holds related actions that run together and can carry one Execution Conditional Formula, so a phase gate lives on the group.
+- Data Mapper actions reference existing mappers rather than rebuilding logic: Extract reads Salesforce, Load writes to it, and Transform reshapes the data JSON between steps.
+- An HTTP Action needs a Named Credential for auth, and its response merges into the IP's data JSON for downstream actions to read.
+- A Sub-IP calls another IP for reuse and composition, and its output only feeds the parent when a downstream action reads it by JSON path.
+
+</KeyTakeaways>
+
+
+## What's Next
 This lesson mapped the action types you place inside an IP. Lesson 24 moves to the control flow that decides which of those actions run and how often: Conditional Logic, Loops, and Branching in IPs (IP-3). That lesson builds directly on the Groups and conditional execution you met here, and it is where the Execution Conditional Formula becomes a full branching toolkit.
 
 ## Related Requirements
-
 - Day 22, IP Design: Server-Side Orchestration
 - Day 24, Conditional Logic, Loops, and Branching in IPs
 - Day 28, Response Action: The IP Output Contract
 - Day 31, Data Mapper Extract Interface
 
 ## References
-
 [^1]: [Integration Procedure Actions, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_integration_procedure_actions_50165.htm&type=5)
 [^2]: [Data Mapper Post Action for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_post_action_for_integration_procedures_51333.htm&language=en_US&type=5)
 [^3]: [HTTP Action for Integration Procedures, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_http_action_for_integration_procedures_53002.htm&language=en_US&type=5)

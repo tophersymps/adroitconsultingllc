@@ -12,13 +12,22 @@ tags: [OmniStudio]
 
 The most frustrating debugging session in OmniStudio is the one where a component is perfectly configured and still will not run, because the problem is not the component at all. It is the access layer. This requirement asks you to explain OmniStudio license requirements, Permission Set Licenses, and Permission Sets, which together form a layered access model. When access fails, the failure is almost always a gap in this chain rather than a bug in your configuration. Learn the chain and you can diagnose any "it works for admin but not for the user" report in seconds.
 
+<TLDR>
+
+- OmniStudio access is a four-layer chain: license, Permission Set License, Permission Set, then object CRUD and field-level security
+- A Permission Set License enables the feature for a user; a Permission Set controls what they can do with it
+- Diagnose access failures top down and stop at the first missing layer rather than treating the component as broken
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### The access chain
 
 OmniStudio access is a four-layer chain, and a failure at any layer blocks the component. From the top down: the license, the Permission Set License, the Permission Set, and the object CRUD and field-level security. Remember the order and you will never misdiagnose an access problem again.
 
-The license is org-level. OmniStudio is an add-on feature license on top of the base Salesforce license. The org must hold it to use the tools at all. Without the license, there are no components and no designers, regardless of what any profile says. No license, no components.
+The license is org-level. OmniStudio is an add-on feature license on top of the base Salesforce license. The org must hold it to use the tools at all.[^1] Without the license, there are no components and no designers, regardless of what any profile says. No license, no components.
 
 The Permission Set License, or PSL, is the next layer down. A PSL enables the OmniStudio feature set for an individual user. This is the step that turns "the org owns OmniStudio" into "this user can see OmniStudio." Without the PSL assigned, a user cannot access the feature even if a permission set references it. The PSL is the feature-enablement gate for the user.
 
@@ -56,7 +65,7 @@ The value of the chain is that it gives you an order of investigation. You check
 
 ### Licensing across channels
 
-Licensing is not uniform across every place a component can run, and the channel matters for the exam. A component placed on Lightning uses the org's OmniStudio entitlement and the user's access chain. A component placed on Experience Cloud adds a requirement of its own: the customer must hold a Communities license and an OmniStudio runtime entitlement for external users. External users are not granted the same access chain as internal ones, and assuming they are is a common misconfiguration.
+Licensing is not uniform across every place a component can run, and the channel matters for the exam. A component placed on Lightning uses the org's OmniStudio entitlement and the user's access chain. A component placed on Experience Cloud adds a requirement of its own: the customer must hold a Communities license and an OmniStudio runtime entitlement for external users.[^2] External users are not granted the same access chain as internal ones, and assuming they are is a common misconfiguration.
 
 This is why lesson two treated licensing as a constraint. When a requirement says a form must run on an Experience Cloud site, the constraint includes the community license and the external-user entitlement. A component that is perfectly configured on Lightning can fail on Experience Cloud purely because the external user lacks the license and permission layer. The exam pairs this with the troubleshooting chain: "works for the admin, not for the user" usually means a permission-set or licensing gap, and when the user is external, the gap is often the runtime entitlement for that channel.
 
@@ -76,8 +85,38 @@ The cleanest way to hold the model is to separate what each layer enables. The l
 
 That separation is worth stating plainly because every OmniStudio access symptom maps to exactly one layer. A user cannot see OmniStudio in the navigation at all: the PSL is missing. A user can run scripts but cannot open the admin tools: the Admin permission set is missing. A user runs a component but sees no records: object access or field-level security is the blocker. A whole team cannot use any component: the org license is missing. When you can name which layer a symptom points at, you have already found the fix, and you will never confuse a licensing gap with a configuration defect again.
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Verify the org holds the OmniStudio license">
+
+Verify org has the OmniStudio license (Setup → Installed Packages / feature licenses).
+
+</Step>
+
+<Step title="Assign the OmniStudio PSL to users who need the feature.">
+
+Assign the OmniStudio PSL to users who need the feature.
+
+</Step>
+
+<Step title="Assign permission sets: admin/builder for developers">
+
+Assign permission sets: admin/builder for developers, run-time for end users.
+
+</Step>
+
+<Step title="When access fails">
+
+When access fails, walk the chain: license → PSL → permission set → CRUD/FLS.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Getting access right follows a top-down sequence that mirrors the chain itself.
 
 1. Verify the org holds the OmniStudio license. Check Setup under Installed Packages or the feature licenses, depending on how the org is provisioned.
@@ -87,29 +126,41 @@ Getting access right follows a top-down sequence that mirrors the chain itself.
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Assuming a System Administrator profile alone grants OmniStudio access.** It does not. The license, the PSL, and the permission sets are still required, regardless of profile.
 - **Confusing a Permission Set License with a Permission Set.** A PSL enables the feature set for the user. A Permission Set grants granular access to what the user can do with it. They are different layers and the exam tests the distinction directly.
 - **Diagnosing "can't see data" as a component bug.** When a user cannot see data, check the permission layer first. It is far more likely a PSL, permission set, or field-level security gap than a defect in the component.
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Hold the access chain in order: License, then PSL, then Permission Set, then CRUD and FLS. Diagnose from the top down, and when a component works for one user but not another, the cause is a gap in this chain, not a broken component.
 
 ## Try It
-
 In a sandbox, create a new test user who has no OmniStudio access. Confirm that user cannot open the OmniStudio designer or run a component. Then assign the OmniStudio PSL and a run-time permission set, and confirm the user can now run a component but still cannot open the admin tools. Finally, assign a builder or admin permission set and confirm the user can now build and publish. Walk the four layers one at a time, noting what changes at each step. That exercise makes the access chain concrete and turns the troubleshooting habit into muscle memory.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- A System Administrator profile alone does not grant OmniStudio access; the license, the PSL, and the appropriate permission sets are still required.
+- The OmniStudio Admin permission set enables building, editing, publishing, and opening admin tools; the User set enables running components and reading their data.
+- When a component runs but shows no records, the cause is usually a data-layer gap in object access or field-level security, not a component defect.
+- External users on Experience Cloud need the customer to hold a Communities license and an OmniStudio runtime entitlement for external users.
+
+</KeyTakeaways>
+
+
+## What's Next
 This lesson established who is allowed to build and run. The next lesson covers how the work those people create moves between orgs. Lesson 5 covers the implementation toolchain, Salesforce CLI, the Vlocity Build Tool, and migration tooling, and it explains the central rule that separates metadata from records. Licensing tells you who can touch the components, and the toolchain tells you how the components travel.
 
 ## Related Requirements
-
 - Day 2, Project Needs & Constraints
 - Day 43, Permissions & Access Issues
 - Day 46, Debug Console
 
 ## References
-
 [^1]: [Salesforce Flow and OmniStudio Release Notes, Salesforce Help](https://help.salesforce.com/s/articleView?id=release-notes.rn_automate.htm&language=en_US&release=240&type=5)
-[^2]: [Set Up OmniStudio Foundation Customer Community User, Salesforce Help](https://help.salesforce.com/s/articleView?id=ind.doc_gen_set_up_omnistudio_foundation_customer_community_user_395445.htm&language=en_US&type=5)
+[^2]: [Set Up Document Generation Customer Community User, Salesforce Help](https://help.salesforce.com/s/articleView?id=ind.doc_gen_set_up_omnistudio_foundation_customer_community_user_395445.htm&language=en_US&type=5)

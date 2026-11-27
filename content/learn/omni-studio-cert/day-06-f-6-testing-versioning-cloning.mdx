@@ -12,6 +12,15 @@ tags: [OmniStudio]
 
 Save, publish, clone, version. Four verbs that sound interchangeable and are not. Most of the questions in this requirement are really asking one thing: do you know which action makes a change visible to end users, which action preserves a change so you can undo it, and which action saves you from rebuilding something that already exists. Get those three straight and the requirement answers itself. Miss them and you will ship a fix that nobody can see, or rebuild a component you already had.
 
+<TLDR>
+
+- Save persists your edit to the working definition; publishing, or activation, is the gate that makes it visible to users
+- Cloning branches an existing component into a new one so you adjust what differs instead of rebuilding from scratch
+- Versioning snapshots component definitions for controlled deployment and rollback, and it applies across OmniStudio component types, not FlexCards alone
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Save and publish are two different gates
@@ -36,13 +45,13 @@ A worked example. A lender has a Personal Loan Application OmniScript. The busin
 
 ![Cloning branches a component instead of rebuilding it: the Auto Loan clone carries the shared identity, income, and consent steps from the Personal Loan script and adds the collateral and vehicle sections](</diagrams/day-06-f-6-testing-versioning-cloning/2-clone-branch.png>)
 
-Two rules keep cloning from turning into a maintenance problem. First, once a clone has been adjusted, it is a separate component. Fixing a bug in the original does not fix the clone, and vice versa. If you expect the two to share logic long term, the shared logic belongs in a reusable child component embedded by both parents, which is the modularity pattern from the OmniScript best practices guidance. Second, never clone at all when the original is still changing. You will be copying a moving target.
+Two rules keep cloning from turning into a maintenance problem. First, once a clone has been adjusted, it is a separate component. Fixing a bug in the original does not fix the clone, and vice versa. If you expect the two to share logic long term, the shared logic belongs in a reusable child component embedded by both parents, which is the modularity pattern from the OmniScript best practices guidance.[^1] Second, never clone at all when the original is still changing. You will be copying a moving target.
 
 ### Versioning: snapshots you can retrieve, deploy, and roll back
 
 OmniStudio components carry versions. A version is a snapshot of the component definition at a point in time. The practical capability that matters for the exam is that a snapshot is retrievable: you can look at the history of a component, pull up a prior version, and deploy a specific one instead of whatever happens to be current.
 
-That is what versioning buys you, and it is the true statement the exam is looking for: versioning snapshots component definitions, which enables controlled deployment and controlled rollback. A definition you can pin is a definition you can ship on purpose, to the org you chose, at the moment you chose, and revert if it goes wrong.
+That is what versioning buys you, and it is the true statement the exam is looking for: versioning snapshots component definitions, which enables controlled deployment and controlled rollback.[^3] A definition you can pin is a definition you can ship on purpose, to the org you chose, at the moment you chose, and revert if it goes wrong.
 
 Versioning is not a FlexCard-only feature and it is not a license-gated one. It applies across the OmniStudio component types you build: OmniScripts, FlexCards, Integration Procedures, and Data Mappers. Treat any answer that scopes versioning to one component type as wrong.
 
@@ -65,13 +74,13 @@ The reason this matters is that git gives you something the designer cannot: a r
 
 ### Testing: debug mode, the Debug Console, and the testing framework
 
-OmniStudio gives you tools to test a component before anyone else touches it, and the exam expects you to name them.
+OmniStudio gives you tools to test a component before anyone else touches it, and the exam expects you to name them.[^4]
 
 Debug mode in the OmniScript designer lets you run the script element by element and inspect the JSON as it accumulates. You see the data at each step, which is how you catch a formula returning the wrong type, a merge field pointing at a node that does not exist, or an action dropping data that should have flowed forward.
 
-The Debug Console shows the request and the response for each action the component fires. This is the tool for anything that talks to another system. If an OmniScript calls an Integration Procedure and the result comes back empty, the request and response pair tells you whether the script sent a malformed request or the service returned nothing. The Salesforce help page on viewing and debugging action request and response data documents this workflow.
+The Debug Console shows the request and the response for each action the component fires. This is the tool for anything that talks to another system. If an OmniScript calls an Integration Procedure and the result comes back empty, the request and response pair tells you whether the script sent a malformed request or the service returned nothing. The Salesforce help page on viewing and debugging action request and response data documents this workflow.[^2]
 
-OmniStudio also ships a testing framework for components, which lets you capture a test and assert on its output rather than eyeballing results in a preview. Integration Procedures in particular can be unit tested, which means a change to a service can be checked mechanically instead of by a person clicking through a UI.
+OmniStudio also ships a testing framework for components, which lets you capture a test and assert on its output rather than eyeballing results in a preview. Integration Procedures in particular can be unit tested, which means a change to a service can be checked mechanically instead of by a person clicking through a UI.[^6]
 
 Use all three, and use them in this order: preview the component's behavior in debug mode while you build it, check action-level request and response pairs when something crosses a boundary, and keep framework tests for the components you expect to keep changing.
 
@@ -85,8 +94,38 @@ The tooling is only half of the requirement. The other half is what you test, an
 
 Then the discipline that is easiest to skip: test as someone who is not an administrator. Administrators typically hold permissions that hide problems real users hit. A FlexCard that renders fine for you can render empty for a sales rep whose profile cannot see the field you bound to. Run the component as a low-privilege user, on each channel it will be embedded in, before you call it done. Access layers hide real user issues, and the only way to find them is to be the real user.
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Save a component">
+
+Save a component, then publish/activate it for users.
+
+</Step>
+
+<Step title="Clone a component from the OmniStudio UI to branch a variant">
+
+Clone a component from the OmniStudio UI to branch a variant.
+
+</Step>
+
+<Step title="Retrieve, commit, tag, and deploy a pinned version">
+
+Retrieve/commit versions to git; tag releases; deploy pinned versions.
+
+</Step>
+
+<Step title="Run component tests + debug console checks before promoting.">
+
+Run component tests + debug console checks before promoting.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 1. **Clone when a variant exists.** Open the component list or designer, use the clone action on the source component, and name the new component. Adjust only what differs.
 2. **Test the component.** Run it in debug mode, step through the data JSON, and inspect action request and response pairs in the Debug Console. Cover the happy path, empty states, and error states, and repeat as a non-admin user.
 3. **Save, then activate.** Saving persists your edits to the working definition. Activating it is what makes the change visible to end users.
@@ -96,33 +135,45 @@ Then the discipline that is easiest to skip: test as someone who is not an admin
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Treating save as publish.** They are separate gates. Saving a component does not make it live; the component has to be activated before users see the change. This is the trap the exam leans on hardest.
 - **Rebuilding instead of cloning.** When a new component is mostly an existing component, cloning is the fastest supported route. Rebuilding duplicates work and guarantees drift.
 - **Only testing as System Administrator.** Admin access hides field-level and object-level problems. Test as a real, low-privilege user on every channel the component serves.
 - **Scoping versioning too narrowly.** Versioning snapshots component definitions for controlled deployment and rollback, and it applies across OmniStudio component types, not to FlexCards alone.
 - **Cloning a component that is still changing.** A clone taken from a moving source carries whatever half-finished state the source was in. Clone from a settled definition, or extract the shared logic into a child component.
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Version = snapshot, Clone = branch, Publish = ship. Three verbs, three different actions. Versioning captures a definition you can retrieve and roll back to; cloning branches an existing definition into a variant; publishing or activating is the step that puts a change in front of users. If you can say which verb a scenario is asking for, you can answer the question.
 
 ## Try It
+In a sandbox, open an OmniScript you built earlier. Clone it and give the clone a new name, then change one label in the clone and notice that the original is untouched. Now edit the clone's data JSON in debug mode and run it partway, stopping before the end, so you see what the data looks like mid-flow. Activate the clone and embed it on a page. Then activate nothing on the original, refresh, and confirm the original still shows its previous behavior: that is save without publish, demonstrated. Finally, retrieve both components to a git repository, commit, and read the diff for the label change you made. That diff is the review surface you rely on in a real release.[^5]
 
-In a sandbox, open an OmniScript you built earlier. Clone it and give the clone a new name, then change one label in the clone and notice that the original is untouched. Now edit the clone's data JSON in debug mode and run it partway, stopping before the end, so you see what the data looks like mid-flow. Activate the clone and embed it on a page. Then activate nothing on the original, refresh, and confirm the original still shows its previous behavior: that is save without publish, demonstrated. Finally, retrieve both components to a git repository, commit, and read the diff for the label change you made. That diff is the review surface you rely on in a real release.
+## What a consultant should walk away with
+
+<KeyTakeaways>
+
+- Save and activate are separate gates; only activation promotes the working definition to the active definition that end users run on every channel.
+- Clone when a new component is mostly an existing one; once adjusted it is separate, and never clone a source that is still changing.
+- Test the happy path, empty and error states, and realistic test data, and repeat as a low-privilege user because admin access hides real problems.
+- Retrieve component JSON to a repository, review the diff, commit and tag the release, then deploy a pinned version forward.
+
+</KeyTakeaways>
+
 
 ## What's Next
-
 This lesson covered keeping a component trustworthy: test it, version it, clone it, and publish it deliberately. The next lesson moves into FlexCards and starts where every FlexCard starts, with data. Lesson 7 covers FlexCard data sources and the JSON they return, which is the payload every binding in the remaining FlexCard lessons depends on.
 
 ## Related Requirements
-
 - Day 5, Implementation Tools: sf cli, VBT, and migration
 - Day 3, Managed Package versus Standard Runtime and Upgrades
 - Day 45, Publishing and Deployment
 - Day 15, FlexCard Best Practices
 
 ## References
-
 [^1]: [OmniScript Best Practices, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_omniscript_best_practices_8368.htm&language=en&type=5)
 [^2]: [View and Debug Action Requests and Response Data, Salesforce Help](https://help.salesforce.com/s/articleView?language=en_US&id=xcloud.os_view_and_debug_action_requests_and_response_data.htm&type=5)
 [^3]: [OmniStudio Developer Certification Exam Guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)

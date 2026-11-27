@@ -12,6 +12,15 @@ tags: [OmniStudio]
 
 Every scenario on the OmniStudio exam is a constraint puzzle, and this requirement is where that fact becomes explicit. It asks you to determine a project's needs by evaluating a customer's requirements, assumptions, risks, and constraints. The exam gives you a story about a customer and a requirement, then hides the real difficulty inside one unstated constraint. The candidate who reads only the surface requirement picks the flashiest answer. The candidate who reads for the constraint picks the answer that actually works. This lesson teaches you to separate the four inputs and treat the constraints as the deciding factor.
 
+<TLDR>
+
+- Determine project needs by separating requirements, assumptions, risks, and constraints, treating constraints as the deciding factor
+- Functional requirements say what the flow does; non-functional requirements say how it performs, secures, and renders on a channel
+- The output is a fit-gap analysis that names the declarative fit and the code filling each gap
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### Functional versus non-functional requirements
@@ -40,9 +49,9 @@ Licensing gaps are a risk. If a channel needs OmniStudio access but no license c
 
 A constraint is a hard boundary that the solution must respect. Constraints are the heart of this requirement because they disqualify answers. If a solution violates a stated constraint, it is wrong no matter how elegant it is.
 
-License tier is a constraint. It determines which channels and components are allowed. If the customer does not hold the license for a given channel, you cannot put a component there. Org edition is a constraint. The features available depend on the edition. The runtime is a constraint: a legacy Managed Package Runtime org and a Standard Runtime org deploy and upgrade differently, which matters for day three's lesson. Whether the customer has a Communities license is a constraint, because without it you cannot embed OmniStudio in Experience Cloud. Security policy is a constraint. If the org enforces field-level security, you cannot use a raw SOQL data source that ignores FLS.
+License tier is a constraint. It determines which channels and components are allowed. If the customer does not hold the license for a given channel, you cannot put a component there. Org edition is a constraint. The features available depend on the edition. The runtime is a constraint: a legacy Managed Package Runtime org and a Standard Runtime org deploy and upgrade differently, which matters for day three's lesson. Whether the customer has a Communities license is a constraint, because without it you cannot embed OmniStudio in Experience Cloud. Security policy is a constraint. If the org enforces field-level security, the data source behind a component has to enforce it too, and a component that reads fields through an unchecked path fails that constraint.[^1]
 
-The critical trap with constraints is field-level security. FlexCards can pull data from several sources. A raw SOQL Query data source runs as a direct query that does not respect the running user's field-level security, so a low-privilege user can see fields they should not. A Data Mapper Extract, by contrast, respects FLS. When a requirement demands FLS enforcement on data shown in a FlexCard, the data source that satisfies the constraint is a Data Mapper, not a SOQL Query or SOSL Search. That specific distinction is exactly what the exam tests, and it is why reading the constraint beats reading the surface requirement.
+The critical trap with constraints is field-level security. FlexCards can pull data from several sources. A raw SOQL Query data source used to run as a direct query that did not respect the running user's field-level security, so a low-privilege user could see fields they should not; Salesforce closed that gap in 2025, and the SOQL data source now respects and enforces FLS.[^3] A Data Mapper Extract, by contrast, enforces FLS once its field-level security check is enabled. The exam grades the framing rather than the 2025 fix: when a requirement demands FLS enforcement on data shown in a FlexCard, the data source that satisfies the constraint is a Data Mapper, not a SOQL Query or SOSL Search.[^2] That is why reading the constraint beats reading the surface requirement.
 
 ![Decision tree for the field-level security constraint: when a FlexCard must respect FLS, the qualifying data source is a Data Mapper Extract, never a raw SOQL Query or SOSL Search](</diagrams/day-02-f2-project-needs-requirements-assumptions-risks-const/2-fls-picks-the-data-source.png>)
 
@@ -72,8 +81,44 @@ Treating the four inputs as one blob is the mistake this requirement punishes. R
 
 Working an example shows the independence. A requirement to capture an address and present a quote pulls you toward an OmniScript and a FlexCard. The assumption that the quoting engine returns flat JSON pulls you toward confirming the response shape before you design the Data Mapper. The risk that the quote service is sometimes unavailable pulls you toward wrapping the call in error handling with a retry or a cached fallback. The constraint that the whole flow must run on an Experience Cloud site without a Communities license pulls you toward either removing the site requirement or flagging it as unsatisfiable. Were any one of the four absent, the answer would be simpler, and the exam keeps all four in play so that an answer which satisfies only the requirement looks good and is wrong.
 
-## Configuration Walkthrough
+### The build sequence in five steps
 
+<Steps>
+
+<Step title="Elicit: who">
+
+Elicit: who, what, when, where, how - capture functional + non-functional requirements.
+
+</Step>
+
+<Step title="Validate assumptions against the actual environment (auth, data shape, volumes, limits)">
+
+Validate assumptions against the actual environment (auth, data shape, volumes, limits).
+
+</Step>
+
+<Step title="Rank risks by likelihood/impact; design mitigations (retry, fallback, cache, error states)">
+
+Rank risks by likelihood/impact; design mitigations (retry, fallback, cache, error states).
+
+</Step>
+
+<Step title="Check constraints (license, runtime, channels, security)">
+
+Check constraints (license, runtime, channels, security) before choosing components.
+
+</Step>
+
+<Step title="Produce the solution approach: declarative-first">
+
+Produce the solution approach: declarative-first, code where gaps exist.
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Needs determination happens before you open the designer, but it follows a repeatable sequence.
 
 1. Elicit the requirements. Capture who the users are, what the flow must do, when it runs, where it runs, and how it behaves. Record both functional and non-functional requirements.
@@ -86,30 +131,42 @@ Needs determination happens before you open the designer, but it follows a repea
 
 ## Exam Traps
 
-- **Ignoring field-level security as a constraint.** A SOQL-backed card leaks fields to low-privilege users because raw SOQL does not respect FLS. When the requirement demands FLS, the data source must be a Data Mapper, which respects it.
+<Callout kind="warning">
+
+- **Ignoring field-level security as a constraint.** A SOQL-backed card exposed fields to low-privilege users until Salesforce fixed the SOQL data source's FLS bypass in 2025, and the exam still grades the Data Mapper as the FLS-safe choice. When the requirement demands FLS, the data source must be a Data Mapper, which enforces it.
 - **Assuming sandbox equals production.** Data volumes, connected systems, and licenses all differ between sandbox and production. A component that works in a clean sandbox can fail on real data or lack a license it had in development.
 - **Choosing a component that works on Lightning when the requirement is Experience Cloud.** If the customer has no Communities license, embedding the component in Experience Cloud fails regardless of how well it performs on Lightning.
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Treat every exam scenario as a constraint puzzle. The best answer always respects the stated constraint, even when a fancier option exists. Read the scenario for the hidden non-functional requirement and the hard limit, then pick the answer that survives both.
 
 ## Try It
-
 Take a sample customer requirement from your own work and run it through the five-step walkthrough. Write down the functional and non-functional requirements, then list every assumption you are making about the environment. For each assumption, write how you would validate it. List the risks and a mitigation for each, then list the constraints that would disqualify an otherwise reasonable component. End with a one-paragraph fit-gap statement that names the OmniStudio components you would use and where you would need code. That statement is the deliverable the exam's "determine a project's needs" questions are asking for.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Requirements, assumptions, risks, and constraints each pull the answer a different way; the constraint disqualifies any solution that crosses a hard boundary.
+- When a requirement demands field-level security on FlexCard data, choose a Data Mapper Extract, not a raw SOQL Query or SOSL Search.
+- Assumptions about external system availability, authentication, data volume, and record access must be validated against the actual environment before you design.
+- Treat an uncertain external API as a risk: wrap the call in error handling and confirm a service-level agreement instead of assuming it works.
+
+</KeyTakeaways>
+
+
+## What's Next
 This lesson treated the runtime as a constraint without explaining it. The next lesson removes that shorthand. Lesson 3 covers the difference between Managed Package Runtime and Standard Runtime, plus how automatic and manual-intervention upgrades behave. That distinction is one of the four inputs you just learned to evaluate, and understanding it lets you read a constraint like "legacy managed package org" and know exactly what it means downstream.
 
 ## Related Requirements
-
 - Day 1, OmniStudio Solution & Industry Use Cases
 - Day 3, Managed Package vs Standard Runtime; Upgrades
 - Day 43, Permissions & Access Issues
 
 ## References
-
 [^1]: [Code Reviews: Data Transform Without Field-Level Security, Gearset Docs](https://docs.gearset.com/en/articles/15971148-code-reviews-rule-data-transform-without-field-level-security)
 [^2]: [Data Mapper Integration within OmniStudio, Salesforce Trailhead](https://trailhead.salesforce.com/content/learn/modules/omnistudio-data-mapper-fundamentals/explore-data-mapper-integration-within-omnistudio)
 [^3]: [Your Trust is Our Foundation, Salesforce Blog](https://salesforce.com/blog/introduction-your-trust-is-our-foundation)

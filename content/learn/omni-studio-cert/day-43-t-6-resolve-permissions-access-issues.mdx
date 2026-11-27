@@ -14,6 +14,15 @@ A user opens a FlexCard and the card renders, but one field is blank. Another us
 
 Requirement T-6 is about resolving incorrect permissions and access issues. It is the troubleshooting counterpart to Day 4, which taught the licensing model, and Day 7, which taught data sources and field-level security. This lesson takes that background and turns it into a diagnostic habit. When access fails, you figure out which layer of the chain is missing for that user, and you fix that layer, not the component. [^1]
 
+<TLDR>
+
+- Access is a chain from license to permission set to CRUD, field-level security, and sharing; a break blocks the component
+- Works for admin, not for users usually means a missing access layer, so reproduce as the user
+- Blank fields point to field-level security, no records point to sharing, and run-not-build points to the permission set
+
+</TLDR>
+
+
 ## Deep Dive
 
 ### The access chain, from license to record
@@ -92,8 +101,38 @@ The economical way to hold this is to map each capability to its layer. Running 
 
 ![Run access comes from the OmniStudio User permission set for loading and submitting forms, while build access comes from the Admin or builder permission set for the designer, editing, and publishing](</diagrams/day-43-t-6-resolve-permissions-access-issues/4-run-vs-build.png>)
 
-## Configuration Walkthrough
+### The build sequence in four steps
 
+<Steps>
+
+<Step title="Reproduce as a low-privilege test user.">
+
+Reproduce as a low-privilege test user.
+
+</Step>
+
+<Step title="Walk the chain: license → PSL → permission set → CRUD → FLS ">
+
+Walk the chain: license → PSL → permission set → CRUD → FLS → sharing.
+
+</Step>
+
+<Step title="For blank fields: check FLS on the fields the component read">
+
+For blank fields: check FLS on the fields the component reads.
+
+</Step>
+
+<Step title="Grant only what's needed (least privilege).">
+
+Grant only what's needed (least privilege).
+
+</Step>
+
+</Steps>
+
+
+## Configuration Walkthrough
 Walk a real access report end to end, in order, because the order is what separates a diagnosis from a guess. [^1][^2]
 
 1. **Reproduce as a low-privilege test user.** Create a test user whose profile matches the affected population, or impersonate one, and run the exact component that is failing. [^1][^2] Do not use the System Administrator profile for this. If the report only happens for low-privilege users, you have to become one to see it. Test as the user, not as admin. [^1]
@@ -105,16 +144,19 @@ Worked example: a claims analyst says the intake OmniScript opens and runs, but 
 
 ## Exam Traps
 
+<Callout kind="warning">
+
 - **Testing only as admin.** If you test a component as System Administrator, you bypass most of the access chain and you will never see the permission failure your real users will hit. [^1][^2] Reproduce as a low-privilege test user. The report "works for admin, not for users" exists precisely because someone tested as admin. [^1]
 - **Assuming a broken card is a component bug when it is FLS.** A blank field on a SOQL-backed FlexCard for a low-privilege user is the classic FLS case, and the instinct to open the card and look for a bug sends you the wrong way. [^2][^6][^7] Check field-level security on the fields the card reads before you touch the card. [^2]
 - **Granting broad access instead of targeted fixes.** When you cannot find the layer, the temptation is to widen everything until it works. [^1] That fixes the symptom and creates the next access problem. Grant only what the affected user's need requires, least privilege, and fix the specific missing layer. [^1][^5]
 
-## Exam Tip
+</Callout>
 
+
+## Exam Tip
 Hold the whole requirement in one sentence: "Works for admin, not for users" means an access layer, so diagnose as the user, walk the chain from the top down, and fix the layer. [^1][^2] The chain is license, then Permission Set License, then permission set, then object CRUD, then field-level security, then sharing. [^1] Match the symptom to the layer: blank fields point to FLS, no records point to object access or sharing, can run but not build points to the permission set, nothing at all points to the license or PSL. [^1][^2][^3] Reproduce as the affected user, walk the chain, and the first missing layer is the fix.
 
 ## Try It
-
 Set up a low-privilege test user in a sandbox and make each access failure happen on purpose, because an access problem you have reproduced is one you will recognize. [^1][^2]
 
 First, build a FlexCard with a SOQL data source that reads an object and displays a sensitive field. Log in as the low-privilege user, whose profile does not grant read access to that field, and watch the field render blank while an admin sees its value. [^2][^6] Reproduce the FLS gap, then fix it two ways: grant FLS on the field and confirm the value appears, then undo it and switch the card to a Data Mapper Extract, which respects field-level security, and confirm the same result. [^6] That is the full FLS lesson in two working fixes.
@@ -123,19 +165,28 @@ Then reproduce the sharing layer. Restrict an object's org-wide default to Priva
 
 Finally, confirm the run versus build boundary. Give the test user only a run-time permission set and confirm they can run an OmniScript but cannot open the designer or create a component. [^1][^3] Then grant the builder permission set and confirm the build side opens. After those three reproductions, you can read an access report, name the layer, and fix that layer, which is the whole of T-6.
 
-## What's Next
+## What a consultant should walk away with
 
+<KeyTakeaways>
+
+- Walk the access chain from the top down: license, Permission Set License, permission set, object CRUD, field-level security, then sharing
+- A SOQL data source does not apply field-level security, so a restricted field renders blank; a Data Mapper Extract respects FLS
+- Rendering the card with blank fields points to FLS, while no records at all points to object access or sharing
+- Running components needs the User permission set while building needs the Admin or builder permission set; grant least privilege
+
+</KeyTakeaways>
+
+
+## What's Next
 You can now reproduce an access failure as the affected user, walk the access chain from license through sharing, spot the FLS gap behind a blank field on a SOQL-backed card, recognize the sharing gap behind an empty result, and fix each missing layer with the least privilege that restores access. [^1][^2][^4] Lesson 44, Resolve Missing or Broken JSON (T-7), stays in the Troubleshooting and Debugging domain and moves from who is allowed to see data to the data itself. It covers the same debugging habit applied to JSON payloads: where a malformed or missing JSON response comes from, how to read the payload a component actually received, and how to tell a data-source problem from a binding problem. [^2]
 
 ## Related Requirements
-
 - Licensing, Permission Set Licenses & Permission Sets, Lesson 4 of 46 (F-4)
 - FlexCard Data Sources & Testing JSON, Lesson 7 of 46 (FC-1)
 - Resolve FlexCard Display State Issues, Lesson 38 of 46 (T-1)
 - Resolve Permissions & Access Issues, Lesson 43 of 46 (T-6)
 
 ## References
-
 [^1]: [OmniStudio Developer Certification Exam Guide, Salesforce Help](https://help.salesforce.com/s/articleView?id=005298971&language=en_US&type=1)
 [^2]: [Data Mappers and Integration Procedure Security Settings, Salesforce Help](https://help.salesforce.com/s/articleView?id=xcloud.os_dataraptor_and_integration_procedure_security_settings_56587.htm&language=en_US&type=5)
 [^3]: [Set Up OmniStudio Foundation Customer Community User, Salesforce Help](https://help.salesforce.com/s/articleView?id=ind.doc_gen_set_up_omnistudio_foundation_customer_community_user_395445.htm&language=en_US&type=5)
