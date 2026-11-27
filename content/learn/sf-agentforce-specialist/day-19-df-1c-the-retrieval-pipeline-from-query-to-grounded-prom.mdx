@@ -74,7 +74,7 @@ If you cannot predict which mode a given question needs, let the default stand a
 
 A retriever is a pointer between data and features, and the retriever assigned to a library determines which Data 360 datasets a feature can reach [^4]. It does not contain the content; it knows where to look and how to ask. The distinction matters because people talk about retrievers as if they were databases, and that is the confusion the exam targets.
 
-Each Agentforce Data Library gets its own retriever regardless of settings, and retrievers can point to the same search index while each pointer stays unique [^4]. Two libraries over the same index still have two retrievers, so a request that reaches across libraries is really asking one pointer to do another pointer's job, which fails. Uniqueness is the property to remember: the pointer belongs to its library even when the index it points at is shared.
+Each Agentforce Data Library gets its own retriever regardless of settings, and retrievers can point to the same search index while each pointer stays unique [^4]. Two libraries over the same index still have two retrievers, so there is no shared pointer to fall back on: a request is served by the library the agent is configured with, not by the other library's retriever. Uniqueness is the property to remember: the pointer belongs to its library even when the index it points at is shared.
 
 The packaged Answer Questions with Knowledge action takes a dynamically supplied retriever id and uses it to fetch chunks and hydrate the prompt, which is why the same action can serve different libraries without a rebuild [^5]. The action is generic; the retriever id is the variable that aims it. That is why pointing an agent at the wrong library shows up as the agent answering from the wrong content rather than as a configuration error.
 
@@ -82,7 +82,7 @@ The uniqueness of a retriever also explains a common test failure. If an agent a
 
 ### The runtime flow runs in a straight line
 
-The runtime flow is linear, and memorizing its order answers the questions that ask what happens when a user asks something. The user's query is added to the prompt template, which references the retriever; the system searches the index, finds the most pertinent chunks, and folds them back into the prompt; the LLM receives the query, the added content and the prompt instructions and generates a response; and the Service Planner reviews that response against the prompt instructions before the end user sees an answer [^6].
+The runtime flow is linear, and memorizing its order answers the questions that ask what happens when a user asks something. The user's query is added to the prompt template, which references the retriever; the system searches the index, finds the most pertinent chunks, and folds them back into the prompt; the LLM receives the query, the added content and the prompt instructions and generates a response; and the Service Planner reviews that response against the prompt instructions before the end user sees an answer [^4].
 
 Every stage keeps the answer tied to the prompt rather than to the model's memory. The retriever supplies the content, the template frames it, and the review step checks the result against the instructions. That is the whole reason grounding works: the model is answering from content the pipeline just assembled, not from what it learned in training, and the review stage is the last gate before a human reads the reply.
 
@@ -96,7 +96,7 @@ One detail of the flow surprises people the first time they meet it: a review ha
 
 The Answer Questions with Knowledge action uses a pre-formatted prompt template and returns sourced answers with citations, which is why it is the default for a service FAQ topic [^6]. You get citation-rich responses with little setup, and the platform decides how the retrieved chunks are shaped into the prompt. For most straightforward question-answering use cases, that default is the correct and fastest answer.
 
-When you build your own template you control the formatting and which retriever is called, at the cost of more setup and more to maintain [^4]. You decide how the chunks are woven into the instructions, how the output is worded, and which dataset the pointer reaches. That control is worth it when the house style is strict or when the agent must pull from one specific source among several.
+When you build your own template you control what the answer includes and how it is worded [^7], and you choose which retriever the template calls [^8], at the cost of more setup and more to maintain. You decide how the chunks are woven into the instructions, how the output is worded, and which dataset the pointer reaches. That control is worth it when the house style is strict or when the agent must pull from one specific source among several.
 
 The exam treats both as valid and expects you to know that the action is the fast path and a custom template is the control path. A stem that emphasizes cited answers and quick setup points at the action; a stem that emphasizes formatting rules or dataset selection points at a custom template. The two are not rivals, only different amounts of control, and reading which one the scenario wants is the whole task.
 
@@ -106,7 +106,7 @@ A near miss worth naming: both paths still depend on the same underlying index a
 
 The single most valuable distinction in this lesson is between the index and the retriever. The index holds the chunks and their vectors; the retriever is the pointer that queries that index for a feature [^4]. They are different objects with different jobs, and an answer that treats them as one is wrong on the exam and unhelpful in an org.
 
-A retriever also belongs to its library, which has a hard consequence. Referencing another library's retriever fails, and the documented fix is to use a custom retriever instead [^4]. You cannot borrow a pointer; if the content you need sits behind a different library's retriever, you build your own retriever over the index or you reuse the library that already owns it.
+A retriever also belongs to its library, and that ownership is the property the exam keeps testing. Each library has its own retriever, and each pointer stays unique even when two retrievers point at the same search index [^4]. You cannot borrow a pointer, so the practical move is to let the agent use the library that owns the content rather than reaching for another team's retriever. The failure mode is quiet rather than loud: an agent uses the Agentforce Data Library associated with its configuration, so an agent pointed at another library's retriever answers from that library's content instead of raising a configuration error [^5].
 
 Hold the three roles apart and the pipeline questions stop being tricky: the index holds the chunks, the retriever points at the index, and the prompt template calls the retriever. Every failure question in this objective is answered by asking which of the three is misconfigured, and the answer follows from the roles rather than from memory of a diagram.
 
@@ -156,7 +156,7 @@ Test in the agent preview and confirm the answers cite the data you indexed.
 
 <Callout kind="warning">
 
-Three misconceptions carry the marks. The first is believing the retriever and the search index are the same thing; the search index stores the chunks and vectors, while the retriever is the pointer that queries that index for a feature. The second is believing two libraries can share one retriever; each library has its own retriever even when they point at the same search index, and referencing another library's retriever fails. The third is believing the Answer Questions with Knowledge action hardcodes a retriever; it takes a dynamically supplied retriever id and uses it to fetch chunks and hydrate the prompt, which is why the same action can serve different libraries without a rebuild.
+Three misconceptions carry the marks. The first is believing the retriever and the search index are the same thing; the search index stores the chunks and vectors, while the retriever is the pointer that queries that index for a feature. The second is believing two libraries can share one retriever; each library has its own retriever even when they point at the same search index, and each pointer stays unique, so an agent aimed at the wrong library answers from that library's content instead of failing outright. The third is believing the Answer Questions with Knowledge action hardcodes a retriever; it takes a dynamically supplied retriever id and uses it to fetch chunks and hydrate the prompt, which is why the same action can serve different libraries without a rebuild.
 
 </Callout>
 
@@ -179,5 +179,7 @@ Lesson 20 - Access Control and Permission Propagation for Retrieval (df-1d)
 [^2]: Salesforce, "Data 360 Search Index" (https://help.salesforce.com/s/articleView?id=data.c360_a_process_content_search_index.htm&language=en_US&type=5)
 [^3]: Salesforce, "Hybrid Search" (https://help.salesforce.com/s/articleView?id=data.c360_a_hybridsearch_index.htm&language=en_US&type=5)
 [^4]: Salesforce, "What Are Data Libraries?" (https://help.salesforce.com/s/articleView?id=ai.data_library_concept.htm&language=en_US&type=5)
-[^5]: Salesforce, "Agentforce Platform | Answer Questions with Knowledge" (https://help.salesforce.com/s/articleView?id=sf.copilot_actions_ref_answer_questions_with_knowledge.htm&language=en_US&type=5)
-[^6]: Salesforce, "Ground with Knowledge Using Retrieval Augmented Generation" (https://help.salesforce.com/s/articleView?id=sf.prompt_builder_ground_rag.htm&language=en_US&type=5)
+[^5]: Salesforce, "Agentforce: Setup & Troubleshoot Agentforce Data Libraries & Answer Question with Knowledge" (https://help.salesforce.com/s/articleView?id=004333412&language=en_US&type=1)
+[^6]: Salesforce, "Use the Answer Questions with Knowledge Action" (https://help.salesforce.com/s/articleView?id=ai.agent_setup_data_sources.htm&language=en_US&type=5)
+[^7]: Salesforce, "Create an Answer Questions with Knowledge Prompt Template" (https://help.salesforce.com/s/articleView?id=ai.prompt_builder_answer_questions_with_knowledge.htm&language=en_US&type=5)
+[^8]: Salesforce, "Using Retrieval Augmented Generation" (https://help.salesforce.com/s/articleView?id=data.c360_a_rag_overview.htm&language=en_US&type=5)
