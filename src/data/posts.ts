@@ -2,6 +2,29 @@ import { BlogPost } from "./types";
 
 export const posts: BlogPost[] = [
   {
+    "slug": "kv-cache-aware-routing-prefix-reuse-2026",
+    "title": "Your Load Balancer Is Throwing Away the KV Cache",
+    "excerpt": "A prefix cache only pays when a request lands on the replica that already holds it, so inference routers now read cache state to decide where each request goes.",
+    "category": "AI & Consulting",
+    "categoryColor": "ai",
+    "categoryGradient": "from-amber to-amber-dark",
+    "date": "November 27, 2026",
+    "author": "Adroit Consulting",
+    "authorInitials": "AC",
+    "readTime": "8 min read",
+    "featured": false,
+    "tags": [
+      "AI Infrastructure",
+      "LLM Serving",
+      "Inference",
+      "Caching",
+      "Kubernetes"
+    ],
+    "bannerImage": "/banners/kv-cache-aware-routing-prefix-reuse-2026.webp",
+    "ogImage": "/banners/kv-cache-aware-routing-prefix-reuse-2026-og.jpg",
+    "status": "published"
+  },
+  {
     "slug": "lwr-publish-is-the-deployment-2026",
     "title": "In LWR, Publish Is the Deployment",
     "excerpt": "Lightning Web Runtime freezes a site's framework and static UI into a CDN layer at publish. That choice sets the speed, the redirects, and what cannot follow.",

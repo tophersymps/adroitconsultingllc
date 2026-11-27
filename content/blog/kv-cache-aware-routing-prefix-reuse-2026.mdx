@@ -1,0 +1,125 @@
+---
+title: "Your Load Balancer Is Throwing Away the KV Cache"
+slug: kv-cache-aware-routing-prefix-reuse-2026
+excerpt: "A prefix cache only pays when a request lands on the replica that already holds it, so inference routers now read cache state to decide where each request goes."
+category: "AI & Consulting"
+categoryColor: ai
+categoryGradient: "from-amber to-amber-dark"
+date: "November 27, 2026"
+author: "Adroit Consulting"
+authorInitials: "AC"
+readTime: "8 min read"
+tags: [AI Infrastructure, LLM Serving, Inference, Caching, Kubernetes]
+bannerImage: "/banners/kv-cache-aware-routing-prefix-reuse-2026.webp"
+ogImage: "/banners/kv-cache-aware-routing-prefix-reuse-2026-og.jpg"
+---
+
+The support assistant answers in 900 milliseconds on Monday and three seconds on Tuesday. Same model, same weights, same prompt. The only variable is which of six identical replicas picked up the request.
+
+Every replica runs the same weights, so they should answer the same way. What they do not share is the attention state a request builds while it reads the prompt. That state is the KV cache. It lives in the memory of one GPU, and the standard way to spread load throws it away on purpose.
+
+<TLDR>
+
+- The KV cache lives on one replica, so a round-robin router hands shared prefixes to machines that must recompute them.
+- Routers read cache state from the engine and send each request to the replica with the longest matching prefix.
+- Cache affinity alone overloads hot nodes, so it gets scored against queue depth and memory.
+
+</TLDR>
+
+## The prefix is the bill
+
+An agent request is mostly repetition. The system prompt, the tool definitions, the retrieved documents and the earlier turns all sit in front of the few words the user just typed. The model reads all of it anyway.
+
+That read is the prefill phase, and it is the expensive half. Prefill produces a key and value vector for every token at every layer, which is what makes decoding one token at a time cheap. Skip it and the decode step has nothing to attend to.
+
+A hit is not a small saving. It removes the forward pass over every shared token, so the first thing that moves is the wait before the answer starts.
+
+Reuse is already normal. SGLang spent a month in Chatbot Arena and measured a 52.4% cache hit rate on LLaVA-Next-34B and 74.1% on Vicuna-33B.[^1] The hits came from shared system messages, reused example images and multi-turn history. On Vicuna-33B they cut first-token latency by 1.7x on average.
+
+The catch is where the cache lives. Prefix caching is exact and local. vLLM reuses only the longest run of full blocks at the start of a prompt, and each block's hash covers every token before it.[^2] Change one token early and every block after it recomputes. The cache belongs to the replica that built it.
+
+Round-robin routing therefore scatters requests that share a prefix across every replica, so each holds a fragment and none holds enough to skip the work. Vertex AI measured a 35% prefix cache hit rate on standard load balancing.[^3]
+
+![The same prefix under round-robin recomputes its prefill three times, while cache-aware routing sends it to the replica that holds it.](</diagrams/kv-cache-aware-routing-prefix-reuse-2026/1-prefix-and-replicas.png>)
+
+## Measure the hit rate, then route by cache state
+
+If the cache is what saves the time, the router's job is to send each request to the replica that holds its prefix. That turns routing into a placement problem, and it needs information a queue-depth metric does not carry.
+
+A router can learn what a replica holds in two ways. It can estimate, hashing the incoming prefix and remembering where similar prefixes went, or it can be told, because the engine reports its own cache.
+
+AWS shipped the second shape in November 2026. The model container publishes cache creation and eviction events to a central cache index, and SageMaker routes each request to an instance holding the longest matching cached prefix.[^4] NVIDIA's Dynamo does the same for disaggregated serving, where the PrefillRouter selects a worker using KV-aware routing on cache overlap scores and load.[^5]
+
+Cache affinity alone is a trap. Send every request that mentions the popular document to the replica holding it and you build one hot node while the others idle. Google's GKE Inference Gateway scores three signals instead: prefix match, queue depth and KV cache utilization.[^3]
+
+Vertex AI tuned those weights. The default ratio is 3:3:2, and for a new chat model the team shifted it to 3:5:2 so the scheduler would bypass a hot node even on a cache hit.[^3] Traffic spread out and the prefix cache hit rate doubled, from 35% to 70%. Time to first token fell 35% on Qwen3-Coder, and P95 improved 52% on DeepSeek V3.1 under bursty chat.
+
+Two habits keep it working. Keep the bytes at the front of the prompt stable, and keep the router's cache view fresh, since a stale index routes to a replica that has already evicted. The application-side half of this is [prompt caching](/field-notes/prompt-caching-ai-infrastructure-2026).
+
+![Two ways a router learns cache state, hash estimation versus engine-reported events, plus the weights that prevent one hot node.](</diagrams/kv-cache-aware-routing-prefix-reuse-2026/2-router-reads-cache-state.png>)
+
+## When the cache outgrows the GPU
+
+Long prompts push the cache past the memory of one GPU. LMCache's operators report that the KV cache their users store now far exceeds GPU capacity, and the portion that no longer fits grows week over week.[^6]
+
+The answer is a hierarchy. GPU memory holds the working set, CPU DRAM acts as a pinned hot cache, local NVMe holds what will not fit, and a remote store such as Redis or object storage holds the rest.[^7]
+
+vLLM's OffloadingConnector wires that hierarchy into the existing prefix cache. Offloaded blocks go to pinned host memory, then to optional secondary tiers, and a hit in any tier is promoted back to the GPU on demand. The GPU-to-CPU copies use `cudaMemcpyAsync` and run asynchronously beside the model's own compute.[^8]
+
+Two details decide whether it pays. Only the CPU tier can touch GPU memory, so secondary tiers are staged through it. And each block is a file named by its content hash, so an instance can find blocks written by an earlier run or by another instance with the same model and parallel configuration.[^8]
+
+The payoff is real when the workload repeats. LMCache with vLLM reported up to 15x higher throughput and at least 2x lower latency across multi-round question answering and document analysis.[^6]
+
+The cost is bandwidth. Every promotion moves bytes and a recompute costs compute, so offloading pays when a transfer is cheaper than the work it avoids. Prompt length, link speed and how often the chunk recurs all move that line. Chunk size, 256 tokens by default, is the dial.[^6]
+
+One production finding is worth copying before any of the rest. Context truncation, which is common, can cut the prefix cache hit ratio by half.[^6] Anything that rewrites the front of the prompt, whether a new system line, a reordered tool list or a trimmed history, invalidates every block after the point of change.
+
+![The KV cache as a four-tier hierarchy, from GPU memory down to remote storage.](</diagrams/kv-cache-aware-routing-prefix-reuse-2026/3-cache-tiers.png>)
+
+## Splitting prefill from decode
+
+The last move separates the phases onto different pools. Prefill is compute-bound and becomes efficient once a prompt supplies enough work to saturate the GPU. Decode is memory-bound and gets faster when more sequences share the machine. One worker doing both lets a long prompt stall the tokens already streaming.[^5]
+
+Disaggregation runs in three steps. A prefill worker computes the KV cache, the cache is transferred, and a decode worker generates from it.[^5]
+
+The transfer is the new cost, so it gets its own transport. Dynamo uses NIXL to move the cache straight from prefill VRAM to decode VRAM without a blocking copy, over NVLink or InfiniBand.[^5] SGLang's path writes over RDMA into the decode worker's memory while that worker polls for completion.[^9]
+
+Pools stay adjustable. Workers register with a discovery service, so the prefill-to-decode ratio can change at runtime. The transfer carries the cache rather than the prompt, so its cost tracks the tokens in the context.[^5]
+
+The tradeoff is stated plainly in NVIDIA's own documentation. At low concurrency an aggregated worker often avoids the transfer and the pool fragmentation entirely. Separate pools pay off when the two phases contend under sustained load. And when decode memory is the bottleneck, adding prefill replicas can reduce total serving capacity.[^5]
+
+That gives an order of operations. Get the hit rate right, then route by cache state, then tier the cache, and only then split the pools. Most systems stop after the first two. The routing layer and the cache layer are one system now, so the gateway that owns the model choice is worth reading alongside this: [model routing](/field-notes/llm-gateway-model-routing-2026).
+
+![Prefill and decode in separate pools, with the KV cache transferred directly between them over RDMA.](</diagrams/kv-cache-aware-routing-prefix-reuse-2026/4-prefill-decode-split.png>)
+
+<KeyTakeaways>
+
+- A prefix cache is exact and local, so it only pays when the request reaches the replica that holds it.
+- Routers read cache state from the engine and score it against queue depth and memory, not in place of them.
+- Offloading, tiering and disaggregation extend the same cache, and each adds a transfer cost.
+
+</KeyTakeaways>
+
+Three things to change, in order:
+
+1. Log the prefix cache hit rate per replica and alert on it. It tracks time to first token better than queue depth does.
+2. Freeze the front of the prompt. Put the system message, the tool list and the stable documents first, and keep those bytes identical.
+3. Turn on cache-aware routing and tune its weights against queue depth before you add tiers or split the pools, then re-measure the hit rate.
+
+[^1]: Lianmin Zheng et al., "SGLang: Efficient Execution of Structured Language Model Programs" (RadixAttention; up to 6.4x higher throughput; production hit rates of 52.4% and 74.1%). [arxiv.org](https://arxiv.org/abs/2312.07104)
+
+[^2]: vLLM, "Automatic Prefix Caching" (reuses only the longest run of full blocks at the start of a prompt; a block's hash covers every token before it, so one differing token forces every later block to recompute). [docs.vllm.ai](https://docs.vllm.ai/en/latest/features/automatic_prefix_caching/)
+
+[^3]: Fisayo Feyisetan and Yao Yuan, "How we cut Vertex AI latency by 35% with GKE Inference Gateway" (hit rate doubled from 35% to 70%; TTFT down 35% on Qwen3-Coder; P95 improved 52%; scorer weights tuned from 3:3:2 to 3:5:2). [cloud.google.com](https://cloud.google.com/blog/products/containers-kubernetes/how-gke-inference-gateway-improved-latency-for-vertex-ai)
+
+[^4]: Amazon Web Services, "Amazon SageMaker Inference: 2026 launches in review, part 2" (KV-cache-aware routing; containers publish cache creation and eviction events to a central index; requests route to the instance with the longest matching cached prefix). [aws.amazon.com](https://aws.amazon.com/blogs/machine-learning/amazon-sagemaker-inference-2026-launches-in-review-part-2/)
+
+[^5]: NVIDIA, "Disaggregated Serving" (three-step prefill, transfer, decode flow; NIXL KV transfer directly between prefill and decode VRAM; PrefillRouter selection by cache overlap and load). [docs.nvidia.com](https://docs.nvidia.com/dynamo/dev/knowledge-base/concepts/system-architecture/disaggregated-serving)
+
+[^6]: Yuhan Liu, Jiayi Yao, Yihua Cheng et al., "LMCache: An Efficient KV Cache Layer for Enterprise-Scale LLM Inference" (up to 15x throughput with vLLM; stored KV exceeds GPU memory; context truncation can halve the hit ratio). [arxiv.org](https://arxiv.org/abs/2510.09665)
+
+[^7]: LMCache, "Architecture Overview" (GPU memory, pinned CPU DRAM, local disk and remote tiers; offload of overflow KV with asynchronous LRU writes and on-demand reuse). [docs.lmcache.ai](https://docs.lmcache.ai/v0.3.7/developer_guide/architecture.html)
+
+[^8]: vLLM, "KV Offloading Usage Guide" (OffloadingConnector extends the prefix cache to CPU host memory and secondary tiers; `cudaMemcpyAsync` DMA; only the CPU tier reaches GPU memory; blocks stored as files named by content hash). [docs.vllm.ai](https://docs.vllm.ai/en/latest/features/kv_offloading_usage/)
+
+[^9]: NVIDIA, "Disaggregation" (SGLang backend; prefill compute-bound, decode memory-bound; KV transferred zero-copy over RDMA into the decode worker's memory). [docs.nvidia.com](https://docs.nvidia.com/dynamo/latest/knowledge-base/modular-components/backends/sg-lang/disaggregation)
