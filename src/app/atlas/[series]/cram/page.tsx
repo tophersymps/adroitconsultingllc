@@ -106,8 +106,10 @@ export default async function CramPage({ params }: Props) {
 
   return (
     <>
-      <Header />
-      <main className="mx-auto max-w-[860px] px-6 pb-20 pt-10">
+      <div className="cram-chrome">
+        <Header />
+      </div>
+      <main className="cram-sheet mx-auto max-w-[860px] px-6 pb-20 pt-10">
         <p className="font-mono text-[12px] font-bold uppercase tracking-[0.12em] text-[var(--accent)]">
           Exam cram sheet
         </p>
@@ -123,7 +125,7 @@ export default async function CramPage({ params }: Props) {
           for the teaching behind each line.
         </p>
 
-        <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="cram-stats mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Questions" value={String(sheet.examFacts.scoredQuestions)} />
           <Stat label="Minutes" value={String(CERT_EXAM_MINUTES)} />
           <Stat label="Pass mark" value={`${CERT_EXAM_PASS_PCT}%`} />
@@ -136,7 +138,7 @@ export default async function CramPage({ params }: Props) {
 
         <div className="article-body mt-10">
           <h2>How the exam is weighted</h2>
-          <table>
+          <table className="cram-weighting">
             <thead>
               <tr>
                 <th>Domain</th>
@@ -156,12 +158,12 @@ export default async function CramPage({ params }: Props) {
           </table>
 
           {byDomain.map((d) => (
-            <section key={d.domain}>
+            <section key={d.domain} className="cram-domain">
               <h2>
                 {d.domain} ({d.weightPct}%)
               </h2>
               {d.objectives.map((o) => (
-                <section key={o.id}>
+                <section key={o.id} className="cram-objective">
                   <h3>{o.objective}</h3>
                   <ul>
                     {o.rules.map((r) => (
@@ -175,7 +177,9 @@ export default async function CramPage({ params }: Props) {
           ))}
         </div>
       </main>
-      <Footer />
+      <div className="cram-chrome">
+        <Footer />
+      </div>
     </>
   );
 }
